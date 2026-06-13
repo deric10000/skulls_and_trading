@@ -1,3 +1,10 @@
 # Skulls and Trading
 
-Minimal starter page for the first repo commit.
+Modern React starter built with Vite and TypeScript.
+
+## Run locally
+
+```bash
+npm install
+npm run dev
+```
