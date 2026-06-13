@@ -70,3 +70,40 @@ p {
   font-size: 1.125rem;
   color: #cbd5e1;
 }
+
+.copy-slot {
+  margin-top: 2rem;
+  padding: 1.25rem;
+  border: 1px solid rgb(148 163 184 / 0.2);
+  border-radius: 1rem;
+  background: rgb(15 23 42 / 0.88);
+  text-align: left;
+}
+
+.copy-slot-label {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+
+.copy-slot-text {
+  margin-top: 0.75rem;
+  font-size: 1rem;
+  color: #e2e8f0;
+}
+
+.copy-slot-hint {
+  margin-top: 1rem;
+  color: #94a3b8;
+  font-size: 0.875rem;
+  text-align: left;
+}
+
+.copy-slot-hint code {
+  padding: 0.15rem 0.35rem;
+  border-radius: 0.35rem;
+  background: rgb(30 41 59 / 0.9);
+  color: #f8fafc;
+}
