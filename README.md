@@ -15,5 +15,5 @@ This repo is configured as a Cloudflare Worker with static assets in `dist`.
 
 ```bash
 npm run build
-npx wrangler deploy
+npx wrangler deploy --config wrangler.jsonc
 ```
