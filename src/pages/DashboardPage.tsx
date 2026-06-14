@@ -27,27 +27,25 @@ export function DashboardPage() {
 
   return (
     <div className="page dashboard-page">
-      <div className="dashboard-grid">
-        <div className="db-bar">
-          <MarketFlowBar />
-        </div>
-        <div className="db-watch">
+      <MarketFlowBar />
+      <div className="dashboard-body">
+        <div className="db-col db-col-watch">
           <WatchlistWidget />
         </div>
-        <div className="db-signal">
+        <div className="db-col db-col-center">
           <SignalWidget />
-        </div>
-        <div className="db-chart">
           <ChartCard />
         </div>
-        <div className="db-summary">
-          <StockSummaryPanel />
-        </div>
-        <div className="db-log">
-          <CaptainLogWidget />
-        </div>
-        <div className="db-assign">
-          <StrategyAssignmentWidget />
+        <div className="db-col db-col-right">
+          <div className="db-item db-item-summary">
+            <StockSummaryPanel />
+          </div>
+          <div className="db-item db-item-log">
+            <CaptainLogWidget />
+          </div>
+          <div className="db-item db-item-assign">
+            <StrategyAssignmentWidget />
+          </div>
         </div>
       </div>
     </div>

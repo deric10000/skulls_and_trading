@@ -78,9 +78,10 @@ rather than ad-hoc pixel values.
 
 ## Layout grid (12 columns, responsive, mobile-first)
 
-- Content width is `min(var(--content-max), 100%)` (`--content-max: 1600px`) centered,
-  with fluid horizontal padding `--content-pad: clamp(1rem, 3vw, 2.5rem)`. The header,
-  main content, and footer all share this width so left/right edges align.
+- Content spans the full viewport width on desktop (`--content-max: 100%`) with only
+  fluid edge padding `--content-pad: clamp(1rem, 2.5vw, 2.5rem)` — no centered gutter.
+  The header, main content, and footer all share this width so left/right edges align.
+- Every page uses the 12-column grid (Home, Dashboard, and Strategy Forge).
 - The desktop layout is a 12-column grid. Reusable utilities in `src/index.css`:
   - `.grid-12` — grid container.
   - `.col-3 / .col-4 / .col-6 / .col-8 / .col-9 / .col-12` — column spans.

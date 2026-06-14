@@ -35,8 +35,8 @@
   --space-4: 1.6rem;
   --space-5: 2.4rem;
 
-  --content-max: 1600px;
-  --content-pad: clamp(1rem, 3vw, 2.5rem);
+  --content-max: 100%;
+  --content-pad: clamp(1rem, 2.5vw, 2.5rem);
 
   font-family:
     Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -481,35 +481,34 @@ a {
   max-width: 60ch;
 }
 
-/* Dashboard: mobile-first single column (ordered), 12-column grid at desktop.
-   Desktop: bar (12) on top; watchlist (3) left; signal + chart (6) center;
-   summary / log / assignment (3) right. */
-.dashboard-grid {
+/* Dashboard: mobile-first single column; 12-column grid at desktop.
+   Desktop: Market Flow bar (12) on top, then Watchlist (3) | Signal+Chart (6)
+   | Summary/Assignment/Log (3). Each column stacks independently, so the chart
+   sits directly under the signal regardless of the right column's height. */
+.dashboard-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-4);
+  align-items: start;
+}
+
+.db-col {
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
+  min-width: 0;
 }
 
-.db-bar {
+/* Right column order: Summary -> Strategy Assignment -> Captain's Log.
+   (Assignment sits near the signal it drives; the log is reflective notes.) */
+.db-item-summary {
   order: 1;
 }
-.db-watch {
+.db-item-assign {
   order: 2;
 }
-.db-signal {
+.db-item-log {
   order: 3;
-}
-.db-chart {
-  order: 4;
-}
-.db-summary {
-  order: 5;
-}
-.db-assign {
-  order: 6;
-}
-.db-log {
-  order: 7;
 }
 
 .dashboard-empty {
@@ -520,38 +519,20 @@ a {
 }
 
 @media (min-width: 1024px) {
-  .dashboard-grid {
-    display: grid;
+  .dashboard-body {
     grid-template-columns: repeat(12, minmax(0, 1fr));
-    grid-template-areas:
-      "bar   bar   bar   bar    bar    bar    bar    bar    bar    bar     bar     bar"
-      "watch watch watch signal signal signal signal signal signal summary summary summary"
-      "watch watch watch chart  chart  chart  chart  chart  chart  log     log     log"
-      "watch watch watch chart  chart  chart  chart  chart  chart  assign  assign  assign";
-    gap: var(--space-4);
-    align-items: start;
   }
 
-  .db-bar {
-    grid-area: bar;
+  .db-col-watch {
+    grid-column: span 3;
   }
-  .db-watch {
-    grid-area: watch;
+
+  .db-col-center {
+    grid-column: span 6;
   }
-  .db-signal {
-    grid-area: signal;
-  }
-  .db-chart {
-    grid-area: chart;
-  }
-  .db-summary {
-    grid-area: summary;
-  }
-  .db-log {
-    grid-area: log;
-  }
-  .db-assign {
-    grid-area: assign;
+
+  .db-col-right {
+    grid-column: span 3;
   }
 
   .dashboard-empty {
@@ -1255,6 +1236,12 @@ select.input {
 .card-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--space-3);
+}
+
+.card-stack {
+  display: flex;
+  flex-direction: column;
   gap: var(--space-3);
 }
 
