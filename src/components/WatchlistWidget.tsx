@@ -4,8 +4,14 @@ import { formatChange, formatPrice } from "../lib/format";
 import { StatusBadge } from "./StatusBadge";
 
 export function WatchlistWidget() {
-  const { watchlist, selectedTicker, selectTicker, addTicker, removeTicker } =
-    useAppState();
+  const {
+    watchlist,
+    selectedTicker,
+    selectTicker,
+    addTicker,
+    removeTicker,
+    getSignal,
+  } = useAppState();
   const [draft, setDraft] = useState("");
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -42,6 +48,7 @@ export function WatchlistWidget() {
       <ul className="watchlist-items">
         {watchlist.map((item) => {
           const isActive = item.ticker === selectedTicker;
+          const signal = getSignal(item.ticker);
           return (
             <li key={item.ticker}>
               <div
@@ -54,7 +61,12 @@ export function WatchlistWidget() {
                   aria-pressed={isActive}
                 >
                   <span className="watch-top">
-                    <span className="watch-ticker">{item.ticker}</span>
+                    <span className="watch-ticker">
+                      {isActive ? (
+                        <span className="watch-selected-dot" aria-hidden="true" />
+                      ) : null}
+                      {item.ticker}
+                    </span>
                     <StatusBadge status={item.status} />
                   </span>
                   <span className="watch-name">{item.name}</span>
@@ -80,6 +92,9 @@ export function WatchlistWidget() {
                     <span className="conviction-label">
                       Conviction {item.conviction}
                     </span>
+                  </span>
+                  <span className={`watch-signal watch-signal--${signal.tone}`}>
+                    Signal · {signal.state}
                   </span>
                 </button>
                 <button

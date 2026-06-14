@@ -1,6 +1,9 @@
 import { CaptainLogWidget } from "../components/CaptainLogWidget";
 import { ChartCard } from "../components/ChartCard";
+import { MarketFlowBar } from "../components/MarketFlowBar";
+import { SignalWidget } from "../components/SignalWidget";
 import { StockSummaryPanel } from "../components/StockSummaryPanel";
+import { StrategyAssignmentWidget } from "../components/StrategyAssignmentWidget";
 import { WatchlistWidget } from "../components/WatchlistWidget";
 import { useAppState } from "../state/AppState";
 
@@ -10,7 +13,8 @@ export function DashboardPage() {
   if (!selectedItem) {
     return (
       <div className="page dashboard-page">
-        <div className="dashboard-grid dashboard-grid--empty">
+        <MarketFlowBar />
+        <div className="dashboard-empty">
           <WatchlistWidget />
           <div className="empty-board panel">
             <h2>Your watch is empty</h2>
@@ -24,12 +28,27 @@ export function DashboardPage() {
   return (
     <div className="page dashboard-page">
       <div className="dashboard-grid">
-        <WatchlistWidget />
-        <div className="dashboard-center">
-          <StockSummaryPanel />
+        <div className="db-bar">
+          <MarketFlowBar />
+        </div>
+        <div className="db-watch">
+          <WatchlistWidget />
+        </div>
+        <div className="db-signal">
+          <SignalWidget />
+        </div>
+        <div className="db-chart">
           <ChartCard />
         </div>
-        <CaptainLogWidget />
+        <div className="db-summary">
+          <StockSummaryPanel />
+        </div>
+        <div className="db-log">
+          <CaptainLogWidget />
+        </div>
+        <div className="db-assign">
+          <StrategyAssignmentWidget />
+        </div>
       </div>
     </div>
   );

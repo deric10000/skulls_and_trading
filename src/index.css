@@ -472,23 +472,342 @@ a {
   max-width: 60ch;
 }
 
-/* Dashboard grid */
+/* Dashboard grid: bar across top, watchlist left, signal+chart center,
+   summary/log/assignment right. */
 .dashboard-grid {
   display: grid;
-  grid-template-columns: 320px minmax(0, 1fr) 320px;
+  grid-template-columns: 320px minmax(0, 1fr) 340px;
+  grid-template-areas:
+    "bar    bar    bar"
+    "watch  signal summary"
+    "watch  chart  log"
+    "watch  chart  assign";
   gap: var(--space-4);
   align-items: start;
 }
 
-.dashboard-grid--empty {
-  grid-template-columns: 320px minmax(0, 1fr);
+.db-bar {
+  grid-area: bar;
 }
 
-.dashboard-center {
+.db-watch {
+  grid-area: watch;
+}
+
+.db-signal {
+  grid-area: signal;
+}
+
+.db-chart {
+  grid-area: chart;
+}
+
+.db-summary {
+  grid-area: summary;
+}
+
+.db-log {
+  grid-area: log;
+}
+
+.db-assign {
+  grid-area: assign;
+}
+
+.dashboard-empty {
+  display: grid;
+  grid-template-columns: 320px minmax(0, 1fr);
+  gap: var(--space-4);
+  align-items: start;
+}
+
+/* Market flow bar (Dashboard) */
+.market-flow-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) clamp(1rem, 2.4vw, 1.5rem);
+}
+
+.market-flow-bar-title {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--accent-strong);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.market-flow-bar-steps {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+}
+
+.market-flow-bar-step {
+  display: flex;
+  align-items: baseline;
+  gap: 0.45rem;
+}
+
+.market-flow-bar-label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-faint);
+}
+
+.market-flow-bar-detail {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-base);
+}
+
+.market-flow-bar-arrow {
+  color: var(--text-faint);
+}
+
+/* Signal widget */
+.signal-headline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+
+.signal-state {
+  font-size: clamp(1.4rem, 2.6vw, 1.9rem);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  padding: 0.2rem 0.8rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-soft);
+}
+
+.signal-state--positive {
+  color: var(--positive);
+  border-color: rgb(62 213 152 / 0.4);
+  background: rgb(62 213 152 / 0.1);
+}
+
+.signal-state--neutral {
+  color: var(--info);
+  border-color: rgb(86 182 240 / 0.35);
+  background: rgb(86 182 240 / 0.08);
+}
+
+.signal-state--negative {
+  color: var(--negative);
+  border-color: rgb(255 107 107 / 0.4);
+  background: rgb(255 107 107 / 0.1);
+}
+
+.signal-confidence {
+  flex: 1;
+  min-width: 140px;
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
-  min-width: 0;
+  gap: 0.3rem;
+}
+
+.signal-confidence-label {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+.conviction-fill--positive {
+  background: linear-gradient(90deg, var(--positive), #7ef0c0);
+}
+
+.conviction-fill--neutral {
+  background: linear-gradient(90deg, var(--info), #8fd0f7);
+}
+
+.conviction-fill--negative {
+  background: linear-gradient(90deg, var(--negative), #ff9f9f);
+}
+
+.signal-stack {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: var(--space-3);
+}
+
+.signal-detail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.signal-detail-row dt {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-faint);
+  margin-bottom: 0.15rem;
+}
+
+.signal-detail-row dd {
+  font-size: 0.9rem;
+  color: var(--text-base);
+}
+
+.signal-empty {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+/* Strategy assignment widget */
+.assign-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: var(--space-3);
+}
+
+.assign-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.5rem 0.4rem 0.5rem 0.8rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-soft);
+  background: var(--surface-2);
+}
+
+.assign-name {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-strong);
+}
+
+.assign-remove {
+  width: 1.8rem;
+  height: 1.8rem;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-faint);
+  font-size: 1.1rem;
+  cursor: pointer;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.assign-remove:hover {
+  color: var(--negative);
+  background: rgb(255 107 107 / 0.08);
+}
+
+.assign-empty {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  margin-bottom: var(--space-3);
+}
+
+.assign-add {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: var(--space-2);
+}
+
+select.input {
+  appearance: none;
+  cursor: pointer;
+}
+
+.assign-forge-link {
+  width: 100%;
+}
+
+/* Captain's Log editor */
+.log-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin: var(--space-3) 0;
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-soft);
+  background: var(--surface-2);
+}
+
+.log-textarea {
+  resize: vertical;
+  min-height: 70px;
+}
+
+.log-form-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.captain-log .btn--small {
+  margin-bottom: var(--space-3);
+}
+
+.log-card-actions {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 0.25rem;
+}
+
+.log-action {
+  border: none;
+  background: none;
+  padding: 0;
+  font: inherit;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.log-action:hover {
+  color: var(--accent-strong);
+}
+
+.log-action--danger:hover {
+  color: var(--negative);
+}
+
+/* Watchlist mini signal + selected indicator */
+.watch-signal {
+  font-size: 0.74rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.watch-signal--positive {
+  color: var(--positive);
+}
+
+.watch-signal--neutral {
+  color: var(--info);
+}
+
+.watch-signal--negative {
+  color: var(--negative);
+}
+
+.watch-item--active {
+  background: var(--surface-1);
+}
+
+.watch-selected-dot {
+  display: inline-block;
+  width: 0.5rem;
+  height: 0.5rem;
+  margin-right: 0.45rem;
+  border-radius: 50%;
+  background: var(--accent-strong);
+  box-shadow: 0 0 8px rgb(241 178 74 / 0.6);
+  vertical-align: middle;
 }
 
 /* Watchlist */
@@ -1160,8 +1479,35 @@ button.nav-link {
 
 /* Responsive */
 @media (max-width: 1080px) {
-  .dashboard-grid,
-  .dashboard-grid--empty {
+  .dashboard-grid {
+    display: flex;
+    flex-direction: column;
+    grid-template-areas: none;
+  }
+
+  .db-bar {
+    order: 1;
+  }
+  .db-watch {
+    order: 2;
+  }
+  .db-signal {
+    order: 3;
+  }
+  .db-chart {
+    order: 4;
+  }
+  .db-summary {
+    order: 5;
+  }
+  .db-assign {
+    order: 6;
+  }
+  .db-log {
+    order: 7;
+  }
+
+  .dashboard-empty {
     grid-template-columns: minmax(0, 1fr);
   }
 
