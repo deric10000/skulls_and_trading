@@ -1,3 +1,5 @@
+import brandLogo from "../assets/st-logo.png";
+import brandWordmark from "../assets/st-wordmark.svg";
 import { useAppState } from "../state/AppState";
 import type { PageId } from "../types";
 
@@ -19,12 +21,13 @@ export function TopNav() {
           onClick={() => setActivePage("home")}
           aria-label="Skulls and Trading home"
         >
-          <span className="brand-mark" aria-hidden="true">
-            &#9763;
-          </span>
-          <span className="brand-text">
-            Skulls <span className="brand-amp">&amp;</span> Trading
-          </span>
+          <img className="brand-logo" src={brandLogo} alt="" aria-hidden="true" />
+          <img
+            className="brand-wordmark"
+            src={brandWordmark}
+            alt=""
+            aria-hidden="true"
+          />
         </button>
         <nav className="site-nav" aria-label="Primary">
           {NAV_ITEMS.map((item) => (
