@@ -1048,11 +1048,52 @@ button.nav-link {
   font: inherit;
 }
 
-.home-secondary {
+/* Home: market flow (left) | hero (center) | watchlist (right).
+   DOM order is hero-first so mobile stacks Hero -> CTA -> Market Flow -> Watchlist. */
+.home-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  grid-template-columns: minmax(240px, 300px) minmax(0, 1fr) minmax(260px, 320px);
   gap: var(--space-4);
   align-items: start;
+}
+
+.home-grid .home-hero {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.home-grid .home-flow {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.home-grid .home-watch {
+  grid-column: 3;
+  grid-row: 1;
+}
+
+.hero--center {
+  grid-template-columns: 1fr;
+}
+
+.hero--center .hero-preview {
+  order: 0;
+  margin-top: var(--space-2);
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+}
+
+.hero--center .hero-preview-card {
+  margin-top: 0;
+  flex: 1;
+  min-width: 200px;
+}
+
+.hero--center .compass {
+  width: clamp(104px, 13vw, 140px);
 }
 
 .chart-name {
@@ -1122,6 +1163,17 @@ button.nav-link {
   .dashboard-grid,
   .dashboard-grid--empty {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .home-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .home-grid .home-hero,
+  .home-grid .home-flow,
+  .home-grid .home-watch {
+    grid-column: auto;
+    grid-row: auto;
   }
 
   .captain-log {

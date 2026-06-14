@@ -1,10 +1,13 @@
 import { useAppState } from "../state/AppState";
 
-export function HeroCard() {
+export function HeroCard({ variant = "full" }: { variant?: "full" | "center" }) {
   const { setActivePage, watchlist } = useAppState();
 
   return (
-    <section className="hero" aria-labelledby="hero-title">
+    <section
+      className={variant === "center" ? "hero hero--center" : "hero"}
+      aria-labelledby="hero-title"
+    >
       <div className="hero-grid" aria-hidden="true" />
       <div className="hero-content">
         <p className="eyebrow">A command center for aggressive investors and traders</p>
@@ -22,13 +25,6 @@ export function HeroCard() {
             onClick={() => setActivePage("dashboard")}
           >
             Open the Dashboard
-          </button>
-          <button
-            type="button"
-            className="btn btn--ghost"
-            onClick={() => setActivePage("dashboard")}
-          >
-            View Watchlist
           </button>
         </div>
         <dl className="hero-stats">
