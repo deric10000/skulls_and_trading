@@ -1,63 +1,99 @@
+import { useEffect, useState } from "react";
 import { FUNDAMENTALS, TECHNICAL_SIGNALS } from "../data";
 import { FundamentalsCard } from "../components/FundamentalsCard";
+import { StrategyForgePanel } from "../components/StrategyForgePanel";
+import { StrategyList } from "../components/StrategyList";
 import { TechnicalSignalCard } from "../components/TechnicalSignalCard";
 import { useAppState } from "../state/AppState";
 
 export function StrategyForgePage() {
-  const { strategies } = useAppState();
+  const {
+    strategies,
+    createStrategy,
+    duplicateStrategy,
+    resetStrategy,
+    deleteStrategy,
+  } = useAppState();
+
+  const [selectedId, setSelectedId] = useState<string>(
+    strategies[0]?.id ?? "",
+  );
+
+  // Keep a valid selection if the selected strategy is removed.
+  useEffect(() => {
+    if (!strategies.some((strategy) => strategy.id === selectedId)) {
+      setSelectedId(strategies[0]?.id ?? "");
+    }
+  }, [strategies, selectedId]);
+
+  const selectedStrategy = strategies.find(
+    (strategy) => strategy.id === selectedId,
+  );
+
+  function handleCreate() {
+    const id = createStrategy();
+    setSelectedId(id);
+  }
+
+  function handleDuplicate(id: string) {
+    const newId = duplicateStrategy(id);
+    if (newId) setSelectedId(newId);
+  }
 
   return (
     <div className="page forge-page">
-      <div className="grid-12 forge-grid">
-        <section className="panel education col-3" aria-labelledby="fundamentals-title">
-          <div className="panel-head">
-            <h2 id="fundamentals-title">Fundamentals</h2>
-            <span className="panel-tag">Investor lens</span>
-          </div>
-          <p className="panel-intro">
-            The building blocks of a company thesis, in plain English.
-          </p>
-          <div className="card-stack">
-            {FUNDAMENTALS.map((card) => (
-              <FundamentalsCard key={card.title} card={card} />
-            ))}
-          </div>
-        </section>
+      <div className="forge-grid">
+        <div className="forge-strategies">
+          <StrategyList
+            strategies={strategies}
+            selectedId={selectedId}
+            onSelect={setSelectedId}
+            onCreate={handleCreate}
+            onDuplicate={handleDuplicate}
+            onReset={resetStrategy}
+            onDelete={deleteStrategy}
+          />
+        </div>
 
-        <section className="panel education col-3" aria-labelledby="indicators-title">
-          <div className="panel-head">
-            <h2 id="indicators-title">Reading the signals</h2>
-            <span className="panel-tag">Trader lens</span>
-          </div>
-          <p className="panel-intro">
-            The technical tools traders check before acting.
-          </p>
-          <div className="card-stack">
-            {TECHNICAL_SIGNALS.map((card) => (
-              <TechnicalSignalCard key={card.title} card={card} />
-            ))}
-          </div>
-        </section>
+        <div className="forge-config">
+          <StrategyForgePanel strategy={selectedStrategy} />
+        </div>
 
-        <section className="panel strategy col-6" aria-labelledby="forge-title">
-          <div className="panel-head">
-            <h2 id="forge-title">Strategy Forge</h2>
-            <span className="panel-tag chip--soon">Preview</span>
-          </div>
-          <p className="panel-intro">
-            Manage default and custom strategies here, then assign them to tickers
-            from the Dashboard. The full list, editor, and configuration panel land
-            in the next phase.
-          </p>
-          <div className="card-grid">
-            {strategies.map((strategy) => (
-              <article key={strategy.id} className="edu-card">
-                <h3>{strategy.name}</h3>
-                <p>{strategy.description}</p>
-              </article>
-            ))}
-          </div>
-        </section>
+        <div className="forge-fundamentals">
+          <section className="panel education" aria-labelledby="fundamentals-title">
+            <div className="panel-head">
+              <h2 id="fundamentals-title">Fundamentals</h2>
+              <span className="panel-tag">Investor lens</span>
+            </div>
+            <p className="panel-intro">
+              The building blocks of a company thesis, in plain English. Use these to
+              decide which fundamental inputs your strategies should weigh.
+            </p>
+            <div className="card-stack">
+              {FUNDAMENTALS.map((card) => (
+                <FundamentalsCard key={card.title} card={card} />
+              ))}
+            </div>
+          </section>
+        </div>
+
+        <div className="forge-technical">
+          <section className="panel education" aria-labelledby="indicators-title">
+            <div className="panel-head">
+              <h2 id="indicators-title">Reading the signals</h2>
+              <span className="panel-tag">Trader lens</span>
+            </div>
+            <p className="panel-intro">
+              The technical tools traders check before acting. Pair them with the
+              thesis, never in isolation.
+            </p>
+            <div className="card-stack">
+              {TECHNICAL_SIGNALS.map((card) => (
+                <TechnicalSignalCard key={card.title} card={card} />
+              ))}
+            </div>
+          </section>
+        </div>
       </div>
     </div>
   );

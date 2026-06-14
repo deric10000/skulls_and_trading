@@ -38,7 +38,7 @@ interface AppStateValue {
   selectedItem: WatchlistItem | undefined;
 
   strategies: Strategy[];
-  addStrategy: (strategy: Strategy) => void;
+  createStrategy: () => string;
   updateStrategy: (id: string, patch: Partial<Strategy>) => void;
   deleteStrategy: (id: string) => void;
   duplicateStrategy: (id: string) => string | undefined;
@@ -117,9 +117,22 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     [selectedTicker],
   );
 
-  const addStrategy = useCallback((strategy: Strategy) => {
+  const createStrategy = useCallback(() => {
+    const id = nextId("strategy");
+    const strategy: Strategy = {
+      id,
+      name: "New Strategy",
+      description: "Describe when this strategy applies and how it behaves.",
+      isDefault: false,
+      enabled: true,
+      timeframe: [],
+      tags: [],
+      decisionSignals: [],
+      exitLogic: [],
+    };
     setStrategies((current) => [...current, strategy]);
-  }, []);
+    return id;
+  }, [nextId]);
 
   const updateStrategy = useCallback((id: string, patch: Partial<Strategy>) => {
     setStrategies((current) =>
@@ -259,7 +272,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       selectTicker: setSelectedTicker,
       selectedItem,
       strategies,
-      addStrategy,
+      createStrategy,
       updateStrategy,
       deleteStrategy,
       duplicateStrategy,
@@ -283,7 +296,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       selectedTicker,
       selectedItem,
       strategies,
-      addStrategy,
+      createStrategy,
       updateStrategy,
       deleteStrategy,
       duplicateStrategy,

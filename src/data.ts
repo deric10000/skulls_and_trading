@@ -1,10 +1,13 @@
 import type {
+  DecisionSignal,
   EducationCard,
+  ExitRule,
   LogEntry,
   MarketFlowStep,
   Strategy,
   StrategyAssignments,
   TickerAnalysis,
+  Timeframe,
   WatchlistItem,
 } from "./types";
 
@@ -390,6 +393,29 @@ export const MARKET_FLOW: MarketFlowStep[] = [
     detail: "Aligned with current setup",
     tone: "neutral",
   },
+];
+
+export const TIMEFRAME_OPTIONS: Timeframe[] = ["Swing", "Long Term", "Speculation"];
+
+export const TAG_OPTIONS: string[] = [
+  "Aggressive Growth",
+  "Momentum",
+  "Turnaround",
+  "AI Infrastructure",
+];
+
+export const DECISION_SIGNAL_OPTIONS: DecisionSignal[] = [
+  "Thesis",
+  "Volume",
+  "Catalyst",
+  "Risk / Reward",
+];
+
+export const EXIT_RULE_OPTIONS: ExitRule[] = [
+  "Break Thesis",
+  "Lose Trend",
+  "Hit Target",
+  "Macro Changes",
 ];
 
 export const FUNDAMENTALS: EducationCard[] = [
