@@ -92,6 +92,11 @@ rather than ad-hoc pixel values.
   - Home: Market Flow `col-3` (left) · Hero `col-6` (center) · Watchlist `col-3` (right).
   - Dashboard: Market Flow bar spans 12 on top · Watchlist `3` left · Signal + Chart `6`
     center · Stock Summary / Captain's Log / Strategy Assignment `3` right.
+  - Strategy Forge: its own `.forge-grid` (not the shared 12-col utilities) —
+    Fundamentals + Technical (education) · Strategies list/toolbar · Config panel.
+    Four columns at `>= 1280px`, two columns on tablets (`768–1279px`), stacked on
+    mobile. DOM order is Strategies → Config → Fundamentals → Technical so the mobile
+    stack leads with the editor; desktop column positions are set explicitly.
 - Keep spacing on the 4pt-aligned tokens for consistent padding/margins/gaps across
   widgets (grids use `gap: var(--space-4)`; cards use `--space-3`).
 

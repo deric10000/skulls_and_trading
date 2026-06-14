@@ -89,6 +89,10 @@ export function StockSummaryPanel() {
               <p>{analysis.traderView}</p>
             </article>
           </div>
+          <p className="analysis-ai-note">
+            <span className="chip chip--soon">Coming soon</span>
+            AI briefings will auto-summarize this thesis and your Captain&rsquo;s Log.
+          </p>
         </>
       ) : (
         <div className="empty-analysis">
