@@ -37,6 +37,9 @@
 
   --content-max: 100%;
   --content-pad: clamp(1rem, 2.5vw, 2.5rem);
+  /* Consistent gap between the sticky header and the start of page content.
+     Shared by every page so widgets align and start at the same Y. (32px) */
+  --page-gap: 2rem;
 
   font-family:
     Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -119,7 +122,7 @@ a {
 .app-main {
   width: min(var(--content-max), 100%);
   margin: 0 auto;
-  padding: 0 var(--content-pad) 4rem;
+  padding: var(--page-gap) var(--content-pad) 4rem;
   display: flex;
   flex-direction: column;
   gap: var(--space-5);
@@ -311,7 +314,6 @@ a {
 .hero {
   position: relative;
   overflow: hidden;
-  margin-top: var(--space-5);
   display: grid;
   grid-template-columns: 1.4fr 0.9fr;
   gap: var(--space-5);

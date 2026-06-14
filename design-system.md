@@ -81,6 +81,15 @@ rather than ad-hoc pixel values.
 - Content spans the full viewport width on desktop (`--content-max: 100%`) with only
   fluid edge padding `--content-pad: clamp(1rem, 2.5vw, 2.5rem)` — no centered gutter.
   The header, main content, and footer all share this width so left/right edges align.
+- **Page top spacing rule (applies to every page):** the gap between the sticky header
+  and the first row of content is a single shared token `--page-gap: 2rem` (32px,
+  4pt-aligned), applied once on `.app-main`. Do **not** add per-page or per-widget top
+  margins to create this space (e.g. no `margin-top` on a hero or first card). This
+  keeps the top edges of all top-row widgets aligned on every page and consistent
+  across Home, Dashboard, and Strategy Forge.
+- **Top-row widget alignment:** top-row grids use `align-items: start` so columns share
+  the same top edge. Any new page or top-row widget must rely on `--page-gap` for its
+  spacing from the header rather than its own top margin.
 - Every page uses the 12-column grid (Home, Dashboard, and Strategy Forge).
 - The desktop layout is a 12-column grid. Reusable utilities in `src/index.css`:
   - `.grid-12` — grid container.
