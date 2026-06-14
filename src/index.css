@@ -153,20 +153,26 @@ a {
 .brand {
   display: inline-flex;
   align-items: center;
-  gap: 0.6rem;
+  gap: clamp(0.35rem, 1vw, 0.6rem);
+  min-width: 0;
   font-weight: 700;
   letter-spacing: 0.02em;
   color: var(--text-strong);
 }
 
-.brand-mark {
-  font-size: 1.5rem;
-  color: var(--accent);
-  filter: drop-shadow(0 0 10px rgb(241 178 74 / 0.5));
+.brand-logo {
+  width: clamp(32px, 7vw, 48px);
+  height: clamp(32px, 7vw, 48px);
+  flex: 0 0 auto;
+  object-fit: contain;
 }
 
-.brand-amp {
-  color: var(--accent);
+.brand-wordmark {
+  height: clamp(24px, 5vw, 40px);
+  width: auto;
+  max-width: min(100%, 320px);
+  flex: 0 1 auto;
+  object-fit: contain;
 }
 
 .site-nav {
