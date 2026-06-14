@@ -1,0 +1,84 @@
+# Skulls and Trading — Design System
+
+This document preserves the existing visual system so refinement work keeps the
+look and feel consistent. It is documentation only; the source of truth is
+[`src/index.css`](src/index.css). Do not redesign the app — improve layout and
+hierarchy within these constraints.
+
+## Principles
+
+- Dark-mode command center for aggressive investors and traders.
+- Pirate / trading theme (skull mark, "Captain's Log", gold accents).
+- Serious enough to be useful, gamified enough to feel like a command center.
+- Rounded dark cards, subtle borders, soft elevation, green/red market indicators.
+- Compact dashboard layout. Spacing follows a 4pt-style scale (see tokens).
+
+## Color tokens
+
+Backgrounds and surfaces:
+
+- `--bg-deep: #05070d`
+- `--bg-base: #080b14`
+- `--surface-1: rgb(17 24 39 / 0.72)` — primary panels
+- `--surface-2: rgb(13 19 32 / 0.85)` — nested cards / list items
+- `--surface-3: rgb(10 15 26 / 0.92)` — inputs, deepest cards
+
+Borders:
+
+- `--border-soft: rgb(148 163 184 / 0.14)`
+- `--border-strong: rgb(148 163 184 / 0.28)`
+
+Text:
+
+- `--text-strong: #f4f7fb`
+- `--text-base: #d6deea`
+- `--text-muted: #93a0b5`
+- `--text-faint: #64748b`
+
+Accent and market state:
+
+- `--accent: #f1b24a` (gold) / `--accent-strong: #ffce71` / `--accent-soft: rgb(241 178 74 / 0.16)`
+- `--positive: #3ed598` (green) — up moves, bullish
+- `--negative: #ff6b6b` (red) — down moves, bearish/exit
+- `--warning: #f4c04e` — caution
+- `--info: #56b6f0` — neutral / watching
+
+## Radius, shadow, spacing
+
+- Radius: `--radius-sm: 0.55rem`, `--radius-md: 0.9rem`, `--radius-lg: 1.4rem`
+- Shadow: `--shadow-card: 0 18px 48px rgb(2 6 18 / 0.5)`, `--shadow-glow: 0 0 40px rgb(241 178 74 / 0.12)`
+- Spacing scale (4pt-aligned): `--space-1: 0.4rem`, `--space-2: 0.75rem`, `--space-3: 1.1rem`, `--space-4: 1.6rem`, `--space-5: 2.4rem`
+
+When adding spacing, prefer these tokens (or multiples that stay on the 4pt grid)
+rather than ad-hoc pixel values.
+
+## Typography
+
+- Font family: Inter, system-ui fallbacks. Line height ~1.55.
+- Headings use `--text-strong`; body uses `--text-base` / `--text-muted`.
+- Eyebrows and labels: uppercase, letter-spaced, small, often `--accent-strong` or `--text-faint`.
+- Numeric values use `font-variant-numeric: tabular-nums`.
+
+## Core component patterns (class names in `src/index.css`)
+
+- `.panel` — rounded dark card: `--surface-1`, `--border-soft`, `--radius-lg`, `--shadow-card`.
+- `.panel-head` / `.panel-tag` / `.panel-intro` — card header row, small uppercase tag, intro text.
+- `.btn` with `.btn--primary` (gold gradient), `.btn--ghost` (subtle outline), `.btn--small`.
+- `.chip` — pill badge. Status tones: `.status--positive`, `.status--negative`, `.status--warning`, `.status--neutral`. `.chip--soon` for "coming soon".
+- `.watch-item` / `.watch-item--active` — watchlist cards; active state uses gold border + `--shadow-glow`.
+- `.conviction` — track + gold fill bar.
+- `.mini-card`, `.lens-card`, `.edu-card` — nested content cards.
+- `.flow-step` / `.flow-index` — top-down market flow steps.
+- `.chart-frame`, `.chart-line`, `.chart-volume`, `.indicator-tags` — chart placeholder + indicator chips.
+
+## Interaction + motion
+
+- Hover lifts cards/buttons slightly (`translateY(-1px/-2px)`); honors `prefers-reduced-motion`.
+- Focus-visible uses a 2px `--accent-strong` outline.
+
+## Responsiveness
+
+- Content max width `min(1180px, 100%)` centered with fluid horizontal padding.
+- Multi-column grids collapse to single column at `<= 1080px`; header stacks at `<= 640px`.
+- On mobile, each major widget should remain a clearly separated section/card so the
+  page does not become one long unstructured scroll.

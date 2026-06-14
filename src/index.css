@@ -1026,6 +1026,97 @@ a {
   font-size: 0.85rem;
 }
 
+/* Multi-page shell additions */
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+button.brand {
+  border: none;
+  background: none;
+  padding: 0;
+  cursor: pointer;
+  font: inherit;
+}
+
+button.nav-link {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+}
+
+.home-secondary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: var(--space-4);
+  align-items: start;
+}
+
+.chart-name {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  margin-top: 0.2rem;
+}
+
+.flow-steps--vertical {
+  flex-direction: column;
+}
+
+.flow-detail--positive {
+  color: var(--positive);
+}
+
+.flow-detail--negative {
+  color: var(--negative);
+}
+
+.flow-detail--neutral {
+  color: var(--info);
+}
+
+.log-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.log-card {
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-soft);
+  background: var(--surface-3);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.log-card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.log-card-title {
+  font-weight: 600;
+  color: var(--text-strong);
+}
+
+.log-strategy {
+  align-self: flex-start;
+  color: var(--accent-strong);
+  border-color: rgb(241 178 74 / 0.4);
+  background: var(--accent-soft);
+}
+
+.log-card-note {
+  font-size: 0.9rem;
+  color: var(--text-muted);
+}
+
 /* Responsive */
 @media (max-width: 1080px) {
   .dashboard-grid,

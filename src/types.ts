@@ -1,11 +1,23 @@
+export type PageId = "home" | "dashboard" | "strategy-forge";
+
 export type StatusType =
   | "Bullish"
+  | "Bearish"
   | "Caution"
   | "Watching"
   | "Breakout"
   | "Pullback";
 
 export type SignalTone = "positive" | "neutral" | "negative";
+
+export type SignalState =
+  | "Strong Buy"
+  | "Buy"
+  | "Watch"
+  | "Hold"
+  | "Trim"
+  | "Sell"
+  | "Avoid";
 
 export interface WatchlistItem {
   ticker: string;
@@ -32,17 +44,51 @@ export interface TickerAnalysis {
 }
 
 export interface LogEntry {
-  whyWatching: string;
-  whatChanged: string;
-  invalidation: string;
-  nextAction: string;
+  id: string;
+  title: string;
+  note: string;
+  strategy?: string;
   timestamp: string;
 }
 
-export type SectionId =
-  | "home"
-  | "dashboard"
-  | "watchlist"
-  | "strategy"
-  | "log"
-  | "signals";
+export type Timeframe = "Swing" | "Long Term" | "Speculation";
+
+export type DecisionSignal = "Thesis" | "Volume" | "Catalyst" | "Risk / Reward";
+
+export type ExitRule = "Break Thesis" | "Lose Trend" | "Hit Target" | "Macro Changes";
+
+export interface Strategy {
+  id: string;
+  name: string;
+  description: string;
+  isDefault: boolean;
+  enabled: boolean;
+  timeframe: Timeframe[];
+  tags: string[];
+  decisionSignals: DecisionSignal[];
+  exitLogic: ExitRule[];
+}
+
+export type StrategyAssignments = Record<string, string[]>;
+
+export interface SignalResult {
+  state: SignalState;
+  tone: SignalTone;
+  confidence: number;
+  strategyStack: string[];
+  reason: string;
+  invalidation: string;
+  nextLevel: string;
+}
+
+export interface MarketFlowStep {
+  key: "market" | "sector" | "industry" | "stock";
+  label: string;
+  detail: string;
+  tone: SignalTone;
+}
+
+export interface EducationCard {
+  title: string;
+  body: string;
+}

@@ -1,5 +1,9 @@
 import type {
+  EducationCard,
   LogEntry,
+  MarketFlowStep,
+  Strategy,
+  StrategyAssignments,
   TickerAnalysis,
   WatchlistItem,
 } from "./types";
@@ -161,48 +165,279 @@ export const TICKER_ANALYSIS: Record<string, TickerAnalysis> = {
   },
 };
 
-export const LOG_ENTRIES: Record<string, LogEntry> = {
-  NVDA: {
-    whyWatching:
-      "Leadership name in the AI cycle and a tell for broad risk appetite.",
-    whatChanged: "Reclaimed the prior breakout shelf with expanding volume.",
-    invalidation: "A close back below the breakout level on heavy selling.",
-    nextAction: "Hold core; add only on a controlled pullback to the 20 EMA.",
-    timestamp: "Today · 09:42",
-  },
-  AMD: {
-    whyWatching: "Second-source AI compute with a fresh base breakout.",
-    whatChanged: "Cleared multi-week resistance intraday.",
-    invalidation: "Loss of the breakout level back into the prior base.",
-    nextAction: "Starter position; size up if volume confirms over coming sessions.",
-    timestamp: "Today · 10:15",
-  },
-  SOFI: {
-    whyWatching: "Profitability inflection in a growing digital bank.",
-    whatChanged: "Momentum cooled into resistance; no clean trigger yet.",
-    invalidation: "A breakdown below the recent range support.",
-    nextAction: "Wait for a decisive reclaim of resistance before acting.",
-    timestamp: "Today · 11:03",
-  },
-  IONQ: {
-    whyWatching: "Long-duration quantum optionality with high volatility.",
-    whatChanged: "Speculative momentum picked back up.",
-    invalidation: "Failure to hold the most recent higher-low.",
-    nextAction: "Keep size small; let the position prove itself.",
-    timestamp: "Today · 11:48",
-  },
-  ACHR: {
-    whyWatching: "Certification-stage eVTOL with binary upside.",
-    whatChanged: "Pulled back into support after a failed push higher.",
-    invalidation: "A daily close below the support zone.",
-    nextAction: "Stand aside until support holds with buyers returning.",
-    timestamp: "Today · 12:20",
-  },
-  BBAI: {
-    whyWatching: "Defense-AI contract optionality.",
-    whatChanged: "Trying to base after a volatile stretch.",
-    invalidation: "New lows on contract disappointment.",
-    nextAction: "Watch only; revisit on a confirmed base and catalyst.",
-    timestamp: "Today · 13:05",
-  },
+export const LOG_ENTRIES: Record<string, LogEntry[]> = {
+  NVDA: [
+    {
+      id: "nvda-1",
+      title: "Why I'm watching",
+      note: "Leadership name in the AI cycle and a tell for broad risk appetite.",
+      strategy: "Trend Rider",
+      timestamp: "Today · 09:42",
+    },
+    {
+      id: "nvda-2",
+      title: "Next action",
+      note: "Hold core; add only on a controlled pullback to the 20 EMA. Invalidation: a close back below the breakout level on heavy selling.",
+      strategy: "Aggressive Growth",
+      timestamp: "Today · 09:44",
+    },
+  ],
+  AMD: [
+    {
+      id: "amd-1",
+      title: "Watching breakout setup",
+      note: "Second-source AI compute with a fresh base breakout. Cleared multi-week resistance intraday.",
+      strategy: "Momentum",
+      timestamp: "Today · 10:15",
+    },
+    {
+      id: "amd-2",
+      title: "Next action",
+      note: "Need confirmation above resistance before adding. Invalidation: loss of the breakout level back into the prior base.",
+      strategy: "Volume Confirmation",
+      timestamp: "Today · 10:17",
+    },
+  ],
+  SOFI: [
+    {
+      id: "sofi-1",
+      title: "Why I'm watching",
+      note: "Profitability inflection in a growing digital bank. Momentum cooled into resistance; no clean trigger yet.",
+      strategy: "Pullback Entry",
+      timestamp: "Today · 11:03",
+    },
+  ],
+  IONQ: [
+    {
+      id: "ionq-1",
+      title: "Speculative momentum",
+      note: "Long-duration quantum optionality with high volatility. Keep size small; let the position prove itself.",
+      strategy: "Speculative Runner",
+      timestamp: "Today · 11:48",
+    },
+  ],
+  ACHR: [
+    {
+      id: "achr-1",
+      title: "Pulled back into support",
+      note: "Certification-stage eVTOL with binary upside. Stand aside until support holds with buyers returning.",
+      strategy: "Risk-Off / Defensive",
+      timestamp: "Today · 12:20",
+    },
+  ],
+  BBAI: [
+    {
+      id: "bbai-1",
+      title: "Watch only",
+      note: "Defense-AI contract optionality. Trying to base after a volatile stretch. Revisit on a confirmed base and catalyst.",
+      strategy: "Broken Thesis / Exit Watch",
+      timestamp: "Today · 13:05",
+    },
+  ],
 };
+
+export const DEFAULT_STRATEGIES: Strategy[] = [
+  {
+    id: "aggressive-growth",
+    name: "Aggressive Growth",
+    description:
+      "Lean into high-conviction growth leaders while the trend and thesis are intact.",
+    isDefault: true,
+    enabled: true,
+    timeframe: ["Swing", "Long Term"],
+    tags: ["Aggressive Growth"],
+    decisionSignals: ["Thesis", "Catalyst"],
+    exitLogic: ["Break Thesis", "Macro Changes"],
+  },
+  {
+    id: "momentum",
+    name: "Momentum",
+    description: "Ride strength while price and volume keep confirming the move.",
+    isDefault: true,
+    enabled: true,
+    timeframe: ["Swing"],
+    tags: ["Momentum"],
+    decisionSignals: ["Volume", "Risk / Reward"],
+    exitLogic: ["Lose Trend", "Hit Target"],
+  },
+  {
+    id: "breakout-watch",
+    name: "Breakout Watch",
+    description: "Stalk bases and wait for a clean breakout with volume confirmation.",
+    isDefault: true,
+    enabled: true,
+    timeframe: ["Swing"],
+    tags: ["Momentum"],
+    decisionSignals: ["Volume", "Catalyst"],
+    exitLogic: ["Lose Trend", "Hit Target"],
+  },
+  {
+    id: "pullback-entry",
+    name: "Pullback Entry",
+    description: "Buy controlled pullbacks into support within an established uptrend.",
+    isDefault: true,
+    enabled: true,
+    timeframe: ["Swing"],
+    tags: ["Aggressive Growth"],
+    decisionSignals: ["Thesis", "Risk / Reward"],
+    exitLogic: ["Lose Trend", "Break Thesis"],
+  },
+  {
+    id: "trend-rider",
+    name: "Trend Rider",
+    description: "Stay with the primary trend until it clearly breaks.",
+    isDefault: true,
+    enabled: true,
+    timeframe: ["Long Term"],
+    tags: ["Aggressive Growth"],
+    decisionSignals: ["Thesis", "Volume"],
+    exitLogic: ["Lose Trend", "Macro Changes"],
+  },
+  {
+    id: "volume-confirmation",
+    name: "Volume Confirmation",
+    description: "Only trust moves that are backed by real participation.",
+    isDefault: true,
+    enabled: true,
+    timeframe: ["Swing"],
+    tags: ["Momentum"],
+    decisionSignals: ["Volume"],
+    exitLogic: ["Lose Trend"],
+  },
+  {
+    id: "long-term-compounder",
+    name: "Long-Term Compounder",
+    description: "Hold durable businesses through volatility while the thesis compounds.",
+    isDefault: true,
+    enabled: true,
+    timeframe: ["Long Term"],
+    tags: ["Aggressive Growth"],
+    decisionSignals: ["Thesis"],
+    exitLogic: ["Break Thesis", "Macro Changes"],
+  },
+  {
+    id: "ai-infrastructure",
+    name: "AI Infrastructure",
+    description: "Concentrate on the picks-and-shovels leaders of the AI build-out.",
+    isDefault: true,
+    enabled: true,
+    timeframe: ["Long Term"],
+    tags: ["AI Infrastructure", "Aggressive Growth"],
+    decisionSignals: ["Thesis", "Catalyst"],
+    exitLogic: ["Break Thesis", "Macro Changes"],
+  },
+  {
+    id: "speculative-runner",
+    name: "Speculative Runner",
+    description: "Small, high-risk positions in narrative-driven names with defined risk.",
+    isDefault: true,
+    enabled: true,
+    timeframe: ["Speculation"],
+    tags: ["Momentum", "Turnaround"],
+    decisionSignals: ["Catalyst", "Risk / Reward"],
+    exitLogic: ["Hit Target", "Lose Trend"],
+  },
+  {
+    id: "risk-off",
+    name: "Risk-Off / Defensive",
+    description: "Reduce exposure and protect capital when macro turns hostile.",
+    isDefault: true,
+    enabled: true,
+    timeframe: ["Long Term"],
+    tags: ["Turnaround"],
+    decisionSignals: ["Risk / Reward"],
+    exitLogic: ["Macro Changes", "Lose Trend"],
+  },
+  {
+    id: "broken-thesis",
+    name: "Broken Thesis / Exit Watch",
+    description: "Flag positions where the original reason to own is no longer valid.",
+    isDefault: true,
+    enabled: true,
+    timeframe: ["Swing", "Long Term"],
+    tags: ["Turnaround"],
+    decisionSignals: ["Thesis", "Risk / Reward"],
+    exitLogic: ["Break Thesis"],
+  },
+];
+
+export const DEFAULT_ASSIGNMENTS: StrategyAssignments = {
+  NVDA: ["aggressive-growth", "trend-rider", "ai-infrastructure"],
+  AMD: ["aggressive-growth", "momentum", "volume-confirmation"],
+  SOFI: ["pullback-entry"],
+  IONQ: ["speculative-runner", "momentum"],
+  ACHR: ["risk-off"],
+  BBAI: ["broken-thesis", "risk-off"],
+};
+
+export const MARKET_FLOW: MarketFlowStep[] = [
+  { key: "market", label: "Market", detail: "Risk-on", tone: "positive" },
+  {
+    key: "sector",
+    label: "Sector",
+    detail: "Semiconductors leading",
+    tone: "positive",
+  },
+  {
+    key: "industry",
+    label: "Industry",
+    detail: "AI infrastructure strong",
+    tone: "positive",
+  },
+  {
+    key: "stock",
+    label: "Stock",
+    detail: "Aligned with current setup",
+    tone: "neutral",
+  },
+];
+
+export const FUNDAMENTALS: EducationCard[] = [
+  {
+    title: "Big picture health",
+    body: "A quick read on whether the business is getting stronger, steadier, or shakier.",
+  },
+  {
+    title: "Revenue Growth",
+    body: "Whether demand is expanding, slowing, or becoming less predictable.",
+  },
+  {
+    title: "Profitability",
+    body: "Whether the company turns growth into earnings or is still burning cash.",
+  },
+  {
+    title: "Competitive Edge",
+    body: "What protects the business and whether the moat is widening or eroding.",
+  },
+  {
+    title: "Balance Sheet",
+    body: "Cash, debt, and staying power if conditions get harder.",
+  },
+  {
+    title: "Valuation",
+    body: "Whether expectations already look priced in.",
+  },
+  {
+    title: "Risk Factors",
+    body: "What could break the thesis, from execution to macro pressure.",
+  },
+];
+
+export const TECHNICAL_SIGNALS: EducationCard[] = [
+  {
+    title: "RSI",
+    body: "Measures momentum and whether a stock may be stretched, cooling, or gaining strength.",
+  },
+  {
+    title: "VWAP",
+    body: "The average price weighted by volume. Traders use it to judge intraday strength or weakness.",
+  },
+  {
+    title: "Moving Averages",
+    body: "Help identify trend direction, support, resistance, and potential momentum shifts.",
+  },
+  {
+    title: "Volume",
+    body: "Shows participation. Moves on stronger volume can carry more weight than thin moves.",
+  },
+];
