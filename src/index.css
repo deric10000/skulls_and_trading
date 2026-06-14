@@ -35,6 +35,9 @@
   --space-4: 1.6rem;
   --space-5: 2.4rem;
 
+  --content-max: 1600px;
+  --content-pad: clamp(1rem, 3vw, 2.5rem);
+
   font-family:
     Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   line-height: 1.55;
@@ -114,9 +117,9 @@ a {
 }
 
 .app-main {
-  width: min(1180px, 100%);
+  width: min(var(--content-max), 100%);
   margin: 0 auto;
-  padding: 0 clamp(1rem, 3vw, 2rem) 4rem;
+  padding: 0 var(--content-pad) 4rem;
   display: flex;
   flex-direction: column;
   gap: var(--space-5);
@@ -127,15 +130,21 @@ a {
   position: sticky;
   top: 0;
   z-index: 20;
+  padding: 1rem 0;
+  background: rgb(5 7 13 / 0.78);
+  backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.site-header-inner {
+  width: min(var(--content-max), 100%);
+  margin: 0 auto;
+  padding: 0 var(--content-pad);
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-3);
   align-items: center;
   justify-content: space-between;
-  padding: 1rem clamp(1rem, 3vw, 2rem);
-  background: rgb(5 7 13 / 0.78);
-  backdrop-filter: blur(14px);
-  border-bottom: 1px solid var(--border-soft);
 }
 
 .brand {
@@ -472,53 +481,82 @@ a {
   max-width: 60ch;
 }
 
-/* Dashboard grid: bar across top, watchlist left, signal+chart center,
-   summary/log/assignment right. */
+/* Dashboard: mobile-first single column (ordered), 12-column grid at desktop.
+   Desktop: bar (12) on top; watchlist (3) left; signal + chart (6) center;
+   summary / log / assignment (3) right. */
 .dashboard-grid {
-  display: grid;
-  grid-template-columns: 320px minmax(0, 1fr) 340px;
-  grid-template-areas:
-    "bar    bar    bar"
-    "watch  signal summary"
-    "watch  chart  log"
-    "watch  chart  assign";
+  display: flex;
+  flex-direction: column;
   gap: var(--space-4);
-  align-items: start;
 }
 
 .db-bar {
-  grid-area: bar;
+  order: 1;
 }
-
 .db-watch {
-  grid-area: watch;
+  order: 2;
 }
-
 .db-signal {
-  grid-area: signal;
+  order: 3;
 }
-
 .db-chart {
-  grid-area: chart;
+  order: 4;
 }
-
 .db-summary {
-  grid-area: summary;
+  order: 5;
 }
-
-.db-log {
-  grid-area: log;
-}
-
 .db-assign {
-  grid-area: assign;
+  order: 6;
+}
+.db-log {
+  order: 7;
 }
 
 .dashboard-empty {
   display: grid;
-  grid-template-columns: 320px minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-4);
   align-items: start;
+}
+
+@media (min-width: 1024px) {
+  .dashboard-grid {
+    display: grid;
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    grid-template-areas:
+      "bar   bar   bar   bar    bar    bar    bar    bar    bar    bar     bar     bar"
+      "watch watch watch signal signal signal signal signal signal summary summary summary"
+      "watch watch watch chart  chart  chart  chart  chart  chart  log     log     log"
+      "watch watch watch chart  chart  chart  chart  chart  chart  assign  assign  assign";
+    gap: var(--space-4);
+    align-items: start;
+  }
+
+  .db-bar {
+    grid-area: bar;
+  }
+  .db-watch {
+    grid-area: watch;
+  }
+  .db-signal {
+    grid-area: signal;
+  }
+  .db-chart {
+    grid-area: chart;
+  }
+  .db-summary {
+    grid-area: summary;
+  }
+  .db-log {
+    grid-area: log;
+  }
+  .db-assign {
+    grid-area: assign;
+  }
+
+  .dashboard-empty {
+    grid-template-columns: 3fr 9fr;
+  }
 }
 
 /* Market flow bar (Dashboard) */
@@ -1338,7 +1376,7 @@ select.input {
 /* Footer */
 .site-footer {
   margin-top: auto;
-  padding: 1.5rem clamp(1rem, 3vw, 2rem);
+  padding: 1.5rem var(--content-pad);
   border-top: 1px solid var(--border-soft);
   text-align: center;
   color: var(--text-faint);
@@ -1367,28 +1405,76 @@ button.nav-link {
   font: inherit;
 }
 
-/* Home: market flow (left) | hero (center) | watchlist (right).
-   DOM order is hero-first so mobile stacks Hero -> CTA -> Market Flow -> Watchlist. */
-.home-grid {
+/* 12-column responsive grid (design system).
+   Mobile-first: single column by default, 12 columns at the desktop breakpoint.
+   Use .grid-12 as the container and .col-N on children for span-based layouts. */
+.grid-12 {
   display: grid;
-  grid-template-columns: minmax(240px, 300px) minmax(0, 1fr) minmax(260px, 320px);
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-4);
   align-items: start;
 }
 
-.home-grid .home-hero {
-  grid-column: 2;
-  grid-row: 1;
+.col-3,
+.col-4,
+.col-6,
+.col-8,
+.col-9,
+.col-12 {
+  grid-column: 1 / -1;
 }
 
-.home-grid .home-flow {
-  grid-column: 1;
-  grid-row: 1;
+/* Home: market flow (3) | hero (6) | watchlist (3), stretched to content width.
+   DOM order is hero-first so mobile stacks Hero -> CTA -> Market Flow -> Watchlist. */
+.home-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-4);
+  align-items: start;
 }
 
-.home-grid .home-watch {
-  grid-column: 3;
-  grid-row: 1;
+@media (min-width: 1024px) {
+  .grid-12 {
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+  }
+
+  .col-3 {
+    grid-column: span 3;
+  }
+  .col-4 {
+    grid-column: span 4;
+  }
+  .col-6 {
+    grid-column: span 6;
+  }
+  .col-8 {
+    grid-column: span 8;
+  }
+  .col-9 {
+    grid-column: span 9;
+  }
+  .col-12 {
+    grid-column: span 12;
+  }
+
+  .home-grid {
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+  }
+
+  .home-grid .home-flow {
+    grid-column: 1 / span 3;
+    grid-row: 1;
+  }
+
+  .home-grid .home-hero {
+    grid-column: 4 / span 6;
+    grid-row: 1;
+  }
+
+  .home-grid .home-watch {
+    grid-column: 10 / span 3;
+    grid-row: 1;
+  }
 }
 
 .hero--center {
@@ -1478,50 +1564,7 @@ button.nav-link {
 }
 
 /* Responsive */
-@media (max-width: 1080px) {
-  .dashboard-grid {
-    display: flex;
-    flex-direction: column;
-    grid-template-areas: none;
-  }
-
-  .db-bar {
-    order: 1;
-  }
-  .db-watch {
-    order: 2;
-  }
-  .db-signal {
-    order: 3;
-  }
-  .db-chart {
-    order: 4;
-  }
-  .db-summary {
-    order: 5;
-  }
-  .db-assign {
-    order: 6;
-  }
-  .db-log {
-    order: 7;
-  }
-
-  .dashboard-empty {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .home-grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .home-grid .home-hero,
-  .home-grid .home-flow,
-  .home-grid .home-watch {
-    grid-column: auto;
-    grid-row: auto;
-  }
-
+@media (max-width: 1023px) {
   .captain-log {
     position: static;
   }
@@ -1544,7 +1587,7 @@ button.nav-link {
 }
 
 @media (max-width: 640px) {
-  .site-header {
+  .site-header-inner {
     flex-direction: column;
     align-items: flex-start;
   }

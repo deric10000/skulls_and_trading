@@ -76,9 +76,29 @@ rather than ad-hoc pixel values.
 - Hover lifts cards/buttons slightly (`translateY(-1px/-2px)`); honors `prefers-reduced-motion`.
 - Focus-visible uses a 2px `--accent-strong` outline.
 
+## Layout grid (12 columns, responsive, mobile-first)
+
+- Content width is `min(var(--content-max), 100%)` (`--content-max: 1600px`) centered,
+  with fluid horizontal padding `--content-pad: clamp(1rem, 3vw, 2.5rem)`. The header,
+  main content, and footer all share this width so left/right edges align.
+- The desktop layout is a 12-column grid. Reusable utilities in `src/index.css`:
+  - `.grid-12` — grid container.
+  - `.col-3 / .col-4 / .col-6 / .col-8 / .col-9 / .col-12` — column spans.
+- Mobile-first: by default every grid is a single stacked column. The 12-column
+  layout (and column spans) only apply at `min-width: 1024px`. Build/adjust mobile
+  first, then layer on the desktop grid.
+- Size widgets by content priority, not fixed pixel widths. Reference proportions:
+  - Home: Market Flow `col-3` (left) · Hero `col-6` (center) · Watchlist `col-3` (right).
+  - Dashboard: Market Flow bar spans 12 on top · Watchlist `3` left · Signal + Chart `6`
+    center · Stock Summary / Captain's Log / Strategy Assignment `3` right.
+- Keep spacing on the 4pt-aligned tokens for consistent padding/margins/gaps across
+  widgets (grids use `gap: var(--space-4)`; cards use `--space-3`).
+
 ## Responsiveness
 
-- Content max width `min(1180px, 100%)` centered with fluid horizontal padding.
-- Multi-column grids collapse to single column at `<= 1080px`; header stacks at `<= 640px`.
-- On mobile, each major widget should remain a clearly separated section/card so the
-  page does not become one long unstructured scroll.
+- Desktop grids activate at `>= 1024px`; below that, layouts stack to a single column.
+- The header stacks at `<= 640px`.
+- On mobile, each major widget remains a clearly separated section/card so the page
+  does not become one long unstructured scroll. Dashboard mobile order is set with
+  flex `order`: Market Flow, Watchlist, Signal, Chart, Stock Summary, Strategy
+  Assignment, Captain's Log.
