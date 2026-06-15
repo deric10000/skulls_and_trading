@@ -96,7 +96,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         name: "New position · Pending research",
         price: 0,
         changePct: 0,
-        status: "Watching",
+        status: "Thesis Needed",
         conviction: 40,
       };
       return [...current, newItem];

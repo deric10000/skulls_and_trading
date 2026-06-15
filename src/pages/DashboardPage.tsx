@@ -13,12 +13,18 @@ export function DashboardPage() {
   if (!selectedItem) {
     return (
       <div className="page dashboard-page">
+        <header className="page-head">
+          <h1>Command Deck</h1>
+          <p className="page-subtitle">
+            Check each name against your own strategy before you act.
+          </p>
+        </header>
         <MarketFlowBar />
         <div className="dashboard-empty">
           <WatchlistWidget />
           <div className="empty-board panel">
             <h2>Your watch is empty</h2>
-            <p>Add a ticker to start building conviction and logging your thesis.</p>
+            <p>Add a name to start building conviction and logging your thesis.</p>
           </div>
         </div>
       </div>
@@ -27,6 +33,12 @@ export function DashboardPage() {
 
   return (
     <div className="page dashboard-page">
+      <header className="page-head">
+        <h1>Command Deck</h1>
+        <p className="page-subtitle">
+          Check each name against your own strategy before you act.
+        </p>
+      </header>
       <MarketFlowBar />
       <div className="dashboard-body">
         <div className="db-col db-col-watch">

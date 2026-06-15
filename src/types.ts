@@ -1,23 +1,42 @@
 export type PageId = "home" | "dashboard" | "strategy-forge";
 
+export type SignalTone = "positive" | "neutral" | "warning" | "negative";
+
+// Watchlist plan labels (per product-voice.md). These describe how a name lines up
+// with the user's OWN rules — never a buy/sell recommendation.
 export type StatusType =
-  | "Bullish"
-  | "Bearish"
-  | "Caution"
-  | "Watching"
-  | "Breakout"
-  | "Pullback";
-
-export type SignalTone = "positive" | "neutral" | "negative";
-
-export type SignalState =
-  | "Strong Buy"
-  | "Buy"
+  | "Aligned"
   | "Watch"
-  | "Hold"
-  | "Trim"
-  | "Sell"
-  | "Avoid";
+  | "Review"
+  | "Rule Check"
+  | "Risk Check"
+  | "Thesis Needed"
+  | "Trim Review"
+  | "Exit Review";
+
+// Market Weather statuses (plan-safe market mood, used in the Market Weather widget).
+export type MarketWeatherStatus =
+  | "Calm Waters"
+  | "Storm Watch"
+  | "Risk-On Tide"
+  | "Choppy Seas"
+  | "Rotation Current"
+  | "Breakout Wind"
+  | "Defensive Harbor";
+
+// Strategy Check states (canonical action-state mapping in product-voice.md). These
+// reflect alignment with the user's strategy, not investment advice.
+export type SignalState =
+  | "High Alignment"
+  | "Entry Aligned"
+  | "Watch Setup"
+  | "Hold Plan"
+  | "Trim Review"
+  | "Exit Review"
+  | "Review Risk"
+  | "Rule Conflict"
+  | "Rule Break"
+  | "Thesis Missing";
 
 export interface WatchlistItem {
   ticker: string;

@@ -7,10 +7,12 @@ export function SignalWidget() {
     return (
       <section className="panel signal-widget" aria-labelledby="signal-title">
         <div className="panel-head">
-          <h2 id="signal-title">Signal</h2>
-          <span className="panel-tag">Strategy-driven</span>
+          <h2 id="signal-title">Strategy Check</h2>
+          <span className="panel-tag">Rule check</span>
         </div>
-        <p className="signal-empty">Select a ticker to generate a signal.</p>
+        <p className="signal-empty">
+          Select a name to check it against your own strategy rules.
+        </p>
       </section>
     );
   }
@@ -20,8 +22,8 @@ export function SignalWidget() {
   return (
     <section className="panel signal-widget" aria-labelledby="signal-title">
       <div className="panel-head">
-        <h2 id="signal-title">Signal</h2>
-        <span className="panel-tag">Strategy-driven · {selectedItem.ticker}</span>
+        <h2 id="signal-title">Strategy Check</h2>
+        <span className="panel-tag">Rule check · {selectedItem.ticker}</span>
       </div>
 
       <div className="signal-headline">

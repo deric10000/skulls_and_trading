@@ -746,6 +746,12 @@ a {
   background: rgb(255 107 107 / 0.1);
 }
 
+.signal-state--warning {
+  color: var(--warning);
+  border-color: rgb(244 192 78 / 0.4);
+  background: rgb(244 192 78 / 0.1);
+}
+
 .signal-confidence {
   flex: 1;
   min-width: 140px;
@@ -769,6 +775,10 @@ a {
 
 .conviction-fill--negative {
   background: linear-gradient(90deg, var(--negative), #ff9f9f);
+}
+
+.conviction-fill--warning {
+  background: linear-gradient(90deg, var(--warning), #f8dd8c);
 }
 
 .signal-stack {
@@ -934,6 +944,10 @@ select.input {
 
 .watch-signal--negative {
   color: var(--negative);
+}
+
+.watch-signal--warning {
+  color: var(--warning);
 }
 
 .watch-item--active {
@@ -1701,6 +1715,22 @@ select.input {
   gap: var(--space-5);
 }
 
+.page-head {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.page-head h1 {
+  font-size: clamp(1.5rem, 2.2vw, 2rem);
+  line-height: 1.15;
+}
+
+.page-subtitle {
+  color: var(--text-muted);
+  max-width: 60ch;
+}
+
 button.brand {
   border: none;
   background: none;
@@ -1828,6 +1858,10 @@ button.nav-link {
 
 .flow-detail--negative {
   color: var(--negative);
+}
+
+.flow-detail--warning {
+  color: var(--warning);
 }
 
 .flow-detail--neutral {

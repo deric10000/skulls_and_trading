@@ -1,12 +1,14 @@
 import type { StatusType } from "../types";
 
 const STATUS_TONE: Record<StatusType, string> = {
-  Bullish: "status--positive",
-  Breakout: "status--positive",
-  Watching: "status--neutral",
-  Caution: "status--warning",
-  Pullback: "status--negative",
-  Bearish: "status--negative",
+  Aligned: "status--positive",
+  Watch: "status--neutral",
+  Review: "status--warning",
+  "Rule Check": "status--warning",
+  "Risk Check": "status--warning",
+  "Thesis Needed": "status--warning",
+  "Trim Review": "status--warning",
+  "Exit Review": "status--negative",
 };
 
 export function StatusBadge({ status }: { status: StatusType }) {

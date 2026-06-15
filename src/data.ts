@@ -17,7 +17,7 @@ export const INITIAL_WATCHLIST: WatchlistItem[] = [
     name: "Nvidia · AI Infrastructure",
     price: 187.42,
     changePct: 2.31,
-    status: "Bullish",
+    status: "Aligned",
     conviction: 88,
   },
   {
@@ -25,7 +25,7 @@ export const INITIAL_WATCHLIST: WatchlistItem[] = [
     name: "Advanced Micro Devices · Compute",
     price: 164.05,
     changePct: 1.12,
-    status: "Breakout",
+    status: "Watch",
     conviction: 74,
   },
   {
@@ -33,7 +33,7 @@ export const INITIAL_WATCHLIST: WatchlistItem[] = [
     name: "SoFi Technologies · Fintech",
     price: 14.86,
     changePct: -0.94,
-    status: "Caution",
+    status: "Review",
     conviction: 52,
   },
   {
@@ -41,7 +41,7 @@ export const INITIAL_WATCHLIST: WatchlistItem[] = [
     name: "IonQ · Quantum Computing",
     price: 41.73,
     changePct: 4.68,
-    status: "Watching",
+    status: "Watch",
     conviction: 61,
   },
   {
@@ -49,7 +49,7 @@ export const INITIAL_WATCHLIST: WatchlistItem[] = [
     name: "Archer Aviation · eVTOL",
     price: 9.21,
     changePct: -2.15,
-    status: "Pullback",
+    status: "Risk Check",
     conviction: 44,
   },
   {
@@ -57,7 +57,7 @@ export const INITIAL_WATCHLIST: WatchlistItem[] = [
     name: "BigBear.ai · Defense AI",
     price: 6.34,
     changePct: 3.07,
-    status: "Watching",
+    status: "Thesis Needed",
     conviction: 48,
   },
 ];
@@ -374,23 +374,23 @@ export const DEFAULT_ASSIGNMENTS: StrategyAssignments = {
 };
 
 export const MARKET_FLOW: MarketFlowStep[] = [
-  { key: "market", label: "Market", detail: "Risk-on", tone: "positive" },
+  { key: "market", label: "Market", detail: "Risk-On Tide", tone: "positive" },
   {
     key: "sector",
     label: "Sector",
-    detail: "Semiconductors leading",
+    detail: "Breakout Wind",
     tone: "positive",
   },
   {
     key: "industry",
     label: "Industry",
-    detail: "AI infrastructure strong",
+    detail: "Rotation Current",
     tone: "positive",
   },
   {
     key: "stock",
     label: "Stock",
-    detail: "Aligned with current setup",
+    detail: "Calm Waters",
     tone: "neutral",
   },
 ];

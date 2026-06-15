@@ -26,7 +26,7 @@ export function WatchlistWidget() {
   return (
     <section className="panel watchlist" aria-labelledby="watchlist-title">
       <div className="panel-head">
-        <h2 id="watchlist-title">Watchlist</h2>
+        <h2 id="watchlist-title">Current Watch</h2>
         <span className="panel-tag">{watchlist.length} names</span>
       </div>
       <form className="watchlist-add" onSubmit={handleSubmit}>
@@ -94,7 +94,7 @@ export function WatchlistWidget() {
                     </span>
                   </span>
                   <span className={`watch-signal watch-signal--${signal.tone}`}>
-                    Signal · {signal.state}
+                    Strategy Check · {signal.state}
                   </span>
                 </button>
                 <button

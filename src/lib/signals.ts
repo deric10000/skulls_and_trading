@@ -1,13 +1,16 @@
 import type { SignalResult, SignalState, SignalTone, Strategy } from "../types";
 
 const STATE_TONE: Record<SignalState, SignalTone> = {
-  "Strong Buy": "positive",
-  Buy: "positive",
-  Watch: "neutral",
-  Hold: "neutral",
-  Trim: "negative",
-  Sell: "negative",
-  Avoid: "negative",
+  "High Alignment": "positive",
+  "Entry Aligned": "positive",
+  "Watch Setup": "neutral",
+  "Hold Plan": "neutral",
+  "Trim Review": "warning",
+  "Exit Review": "warning",
+  "Review Risk": "warning",
+  "Rule Conflict": "negative",
+  "Rule Break": "negative",
+  "Thesis Missing": "warning",
 };
 
 // Believable placeholder weighting. This is intentionally simple mock logic
@@ -31,13 +34,13 @@ function clamp(value: number, min: number, max: number): number {
 }
 
 function stateForScore(score: number): SignalState {
-  if (score >= 5) return "Strong Buy";
-  if (score >= 3) return "Buy";
-  if (score >= 1) return "Watch";
-  if (score === 0) return "Hold";
-  if (score >= -2) return "Trim";
-  if (score >= -4) return "Sell";
-  return "Avoid";
+  if (score >= 5) return "High Alignment";
+  if (score >= 3) return "Entry Aligned";
+  if (score >= 1) return "Watch Setup";
+  if (score === 0) return "Hold Plan";
+  if (score >= -2) return "Trim Review";
+  if (score >= -4) return "Exit Review";
+  return "Rule Conflict";
 }
 
 function has(ids: string[], id: string): boolean {
@@ -55,13 +58,14 @@ export function computeSignal(
 
   if (active.length === 0) {
     return {
-      state: "Hold",
-      tone: "neutral",
+      state: "Thesis Missing",
+      tone: "warning",
       confidence: 50,
       strategyStack: [],
-      reason: "No strategy assigned yet. Assign strategies to generate a signal.",
-      invalidation: "Not applicable until a strategy is assigned.",
-      nextLevel: "Assign at least one strategy from Strategy Forge.",
+      reason:
+        "No strategy assigned yet, so there are no rules to check this name against.",
+      invalidation: "Not applicable until you assign a strategy.",
+      nextLevel: "Assign at least one strategy from Strategy Forge to start the check.",
     };
   }
 
@@ -74,14 +78,14 @@ export function computeSignal(
   // Defensive / broken-thesis combination takes priority for exits.
   if (has(activeIds, "broken-thesis") && has(activeIds, "risk-off")) {
     return {
-      state: "Trim",
-      tone: "negative",
+      state: "Exit Review",
+      tone: "warning",
       confidence: 68,
       strategyStack: stack,
       reason:
-        "Thesis is breaking down and macro is risk-off. Reduce exposure and protect capital.",
+        "Your thesis and risk-off rules both flag this name. Review whether it still meets your plan.",
       invalidation: "A reclaim of the prior range with the thesis intact.",
-      nextLevel: "Trim into strength; avoid adding until the trend repairs.",
+      nextLevel: "Check your exit plan before this drifts past your stated risk.",
     };
   }
 
@@ -92,14 +96,14 @@ export function computeSignal(
     has(activeIds, "volume-confirmation")
   ) {
     return {
-      state: "Watch",
+      state: "Watch Setup",
       tone: "neutral",
       confidence: 72,
       strategyStack: stack,
       reason:
-        "Price trend is improving, volume is supportive, and the thesis remains intact.",
+        "Trend, volume, and thesis line up with your rules — but the setup hasn't triggered yet.",
       invalidation: "A break below key support on rising volume.",
-      nextLevel: "Watch for a breakout above near-term resistance.",
+      nextLevel: "Watch for your breakout trigger above near-term resistance.",
     };
   }
 
@@ -108,20 +112,20 @@ export function computeSignal(
 
   const reason =
     score > 0
-      ? "Assigned strategies lean constructive; trend and participation are supportive."
+      ? "Your assigned rules line up here; trend and participation support the plan."
       : score < 0
-        ? "Assigned strategies lean defensive; risk controls take priority."
-        : "Mixed signals from the assigned strategies. No decisive edge right now.";
+        ? "Your assigned rules lean defensive; risk checks take priority over adding."
+        : "Your assigned rules are mixed on this name. No clear alignment right now.";
 
   const invalidation =
     score >= 0
-      ? "A loss of trend or a break below key support."
+      ? "A loss of trend or a break below key support would break your plan."
       : "A reclaim of trend with the thesis re-validated.";
 
   const nextLevel =
     score >= 0
-      ? "Watch the next resistance level for continuation."
-      : "Watch support; reassess if it fails to hold.";
+      ? "Watch the next resistance level against your entry rules."
+      : "Watch support; review your exit plan if it fails to hold.";
 
   return {
     state,
