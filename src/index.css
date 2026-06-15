@@ -2736,6 +2736,19 @@ button.nav-link {
   color: var(--text-faint);
 }
 
+.dashboard-scoreboard {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-3);
+}
+
+@media (min-width: 1024px) {
+  .dashboard-scoreboard {
+    grid-template-columns: 1.2fr 1fr;
+    align-items: start;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   * {
     transition: none !important;

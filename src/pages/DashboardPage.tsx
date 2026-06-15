@@ -1,11 +1,22 @@
+import { BadgeShowcase } from "../components/badges/BadgeShowcase";
 import { CaptainLogWidget } from "../components/CaptainLogWidget";
 import { ChartCard } from "../components/ChartCard";
 import { MarketFlowBar } from "../components/MarketFlowBar";
+import { ScoreSummary } from "../components/scores/ScoreSummary";
 import { SignalWidget } from "../components/SignalWidget";
 import { StockSummaryPanel } from "../components/StockSummaryPanel";
 import { StrategyAssignmentWidget } from "../components/StrategyAssignmentWidget";
 import { WatchlistWidget } from "../components/WatchlistWidget";
 import { useAppState } from "../state/AppState";
+
+function Scoreboard() {
+  return (
+    <div className="dashboard-scoreboard">
+      <ScoreSummary compact />
+      <BadgeShowcase limit={4} />
+    </div>
+  );
+}
 
 export function DashboardPage() {
   const { selectedItem } = useAppState();
@@ -27,6 +38,7 @@ export function DashboardPage() {
             <p>Add a name to start building conviction and logging your thesis.</p>
           </div>
         </div>
+        <Scoreboard />
       </div>
     );
   }
@@ -60,6 +72,7 @@ export function DashboardPage() {
           </div>
         </div>
       </div>
+      <Scoreboard />
     </div>
   );
 }
