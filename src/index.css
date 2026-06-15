@@ -603,10 +603,10 @@ a {
   max-width: 60ch;
 }
 
-/* Dashboard: mobile-first single column; 12-column grid at desktop.
-   Desktop: Market Flow bar (12) on top, then Watchlist (3) | Signal+Chart (6)
-   | Summary/Assignment/Log (3). Each column stacks independently, so the chart
-   sits directly under the signal regardless of the right column's height. */
+/* Dashboard (Command Deck): mobile-first single column; 12-column grid at desktop.
+   Desktop: Market Weather bar (12) on top, then Current Watch (3) | Strategy Check
+   + Chart (6) | Stock Summary/Captain's Log/Strategy Assignment (3). Each column
+   stacks independently, so the chart sits directly under the Strategy Check. */
 .dashboard-body {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -1766,7 +1766,7 @@ button.nav-link {
 }
 
 /* Home: market flow (3) | hero (6) | watchlist (3), stretched to content width.
-   DOM order is hero-first so mobile stacks Hero -> CTA -> Market Flow -> Watchlist. */
+   DOM order is hero-first so mobile stacks Hero -> CTA -> Market Weather -> Current Watch. */
 .home-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr);

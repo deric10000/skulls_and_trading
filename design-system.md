@@ -200,3 +200,71 @@ Prefer these tokens (or multiples that stay on the 4pt grid) over ad-hoc pixel v
 - Login / Onboarding lives **outside** the authenticated app shell.
 - Watchlist, Captain's Log, Strategy Check, Market Weather, Treasure Ledger, Scores,
   Badges, and Strategy Assignment are **widgets/modules**, never top-level tabs.
+
+## Shipped modules & components (reconciliation)
+
+This section maps the design system to what is implemented in code.
+
+### Auth shell (outside the app shell)
+
+- `LoginScreen` — split brand panel + sign in / create account tabs + Demo card.
+- `SignUpForm`, `DemoModeCard` ("Continue as Demo Captain"), `AuthButton`,
+  `AuthErrorState`, and a 5-step `Onboarding` (profile → style → risk → strategy →
+  holdings/demo → first log). All mock; no backend, no brokerage linking. Safety
+  microcopy from [`product-voice.md`](product-voice.md).
+- Classes: `.auth-screen`, `.auth-shell`, `.auth-brand`, `.auth-panel`, `.auth-tabs`,
+  `.auth-form`, `.auth-field`, `.auth-error`, `.demo-card`, `.onboarding`.
+
+### Status taxonomy (plan-safe)
+
+- Strategy Check states (`SignalState`): High Alignment, Entry Aligned, Watch Setup,
+  Hold Plan, Trim Review, Exit Review, Review Risk, Rule Conflict, Rule Break,
+  Thesis Missing. Tones: positive (green), neutral (blue), warning (amber),
+  negative (red).
+- Watchlist plan labels (`StatusType`): Aligned, Watch, Review, Rule Check, Risk Check,
+  Thesis Needed, Trim Review, Exit Review.
+- Market Weather statuses (`MarketWeatherStatus`): Calm Waters, Storm Watch,
+  Risk-On Tide, Choppy Seas, Rotation Current, Breakout Wind, Defensive Harbor.
+
+### Scores (discipline-first)
+
+- `ScoreCard` + `ScoreSummary`. Keys map to `--score-*` tokens; Discipline renders as
+  the hero card and Progress is intentionally de-emphasized.
+- Classes: `.score-grid`, `.score-card`, `.score-card--hero`, `.score-fill[data-score]`.
+
+### Badges (behavior only)
+
+- `BadgeCard` + `BadgeShowcase`. Rarity drives medallion glow via `--rarity-*`; states
+  are `locked` / `in-progress` / `earned`. Never reward trade frequency, size, or P/L.
+- Classes: `.badge-grid`, `.badge-card--{state}`, `.badge-medallion[data-rarity]`,
+  `.badge-rarity[data-rarity]`, `.badge-state--{state}`.
+
+### Treasure Ledger (portfolio tracker)
+
+- `TreasureLedger` with `PortfolioMetricCard`, `PositionCard`, `AllocationCard`,
+  `RiskRuleCard`. Discipline/risk metrics lead; raw return is last and de-emphasized.
+  Dollar values are hidden under Private/Ghost privacy modes.
+- Classes: `.metric-grid`, `.metric-card--hero`, `.ledger-columns`, `.position-card`,
+  `.allocation-bar`, `.risk-rule-list`.
+
+### Captain Profile
+
+- `AvatarCard`, `StyleSelector`, `RiskProfileSelector`, `PrivacyModeSelector`,
+  `PortfolioLinkStatusCard`, `ShipMembershipCard`, plus `ScoreSummary` + `BadgeShowcase`.
+- Shared `ChoiceGroup` pill selector (`.choice-chip`).
+
+### Ships (crews)
+
+- `ShipCard`, `CreateShipForm`, `JoinShipForm`, `InviteMemberModal`, `MemberCard`,
+  `ShipLeaderboardCard`, `WeeklyReviewCard`, `SharedLogCard`, `ShipBadgeCard`,
+  `ShipPrivacyNotice`. Leaderboard ranks discipline categories only — never profit.
+- Privacy default is Private; values/holdings/size are never shared without opt-in.
+- Classes: `.ship-grid`, `.ship-card`, `.member-grid`, `.leaderboard-list`,
+  `.weekly-review-list`, `.shared-log-list`, `.modal-backdrop`.
+
+### Component states audited
+
+Default, Hover, Active, Selected, Disabled, Empty, In-progress, Earned/Completed,
+Locked, plus tone states (positive/neutral/warning/negative) are represented across
+buttons, chips, choice chips, score/badge cards, link options, and the dashboard
+empty state. Motion is subtle and honors `prefers-reduced-motion`.
