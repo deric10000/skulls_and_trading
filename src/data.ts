@@ -13,6 +13,10 @@ import type {
   RiskProfile,
   RiskRule,
   ScoreMetric,
+  SharedLog,
+  Ship,
+  ShipLeaderboardRow,
+  ShipMember,
   ShipMembership,
   Strategy,
   StrategyAssignments,
@@ -21,6 +25,7 @@ import type {
   Timeframe,
   TradingStyle,
   WatchlistItem,
+  WeeklyReviewItem,
 } from "./types";
 
 export const INITIAL_WATCHLIST: WatchlistItem[] = [
@@ -727,6 +732,153 @@ export const RISK_RULES: RiskRule[] = [
     label: "Open positions without a logged exit",
     detail: "1 position is missing an invalidation level.",
     status: "warning",
+  },
+];
+
+// Ships available to discover/join (mock).
+export const DISCOVER_SHIPS: Ship[] = [
+  {
+    id: "deep-current",
+    name: "Deep Current",
+    blurb: "Patient compounders who pressure-test each other's theses.",
+    members: 34,
+    privacy: "Invite Only",
+    focus: "Long-term investing",
+  },
+  {
+    id: "night-watch",
+    name: "Night Watch",
+    blurb: "Swing traders comparing risk discipline, not P/L.",
+    members: 21,
+    privacy: "Open",
+    focus: "Swing trading",
+  },
+  {
+    id: "salvage-crew",
+    name: "Salvage Crew",
+    blurb: "Turnaround hunters keeping each other honest on invalidation.",
+    members: 12,
+    privacy: "Open",
+    focus: "Turnarounds",
+  },
+];
+
+export const SHIP_MEMBERS: ShipMember[] = [
+  {
+    id: "vega",
+    name: "Captain Vega",
+    role: "First Mate",
+    disciplineScore: 82,
+    streakDays: 14,
+  },
+  {
+    id: "mara",
+    name: "Mara Holt",
+    role: "Captain",
+    disciplineScore: 91,
+    streakDays: 38,
+  },
+  {
+    id: "tibor",
+    name: "Tibor K.",
+    role: "Crew",
+    disciplineScore: 76,
+    streakDays: 9,
+  },
+  {
+    id: "anya",
+    name: "Anya R.",
+    role: "Crew",
+    disciplineScore: 68,
+    streakDays: 21,
+  },
+];
+
+// Discipline-based categories ONLY — never profit ranking.
+export const SHIP_LEADERBOARD: ShipLeaderboardRow[] = [
+  {
+    id: "rules",
+    category: "Most rules followed",
+    leader: "Mara Holt",
+    detail: "27 of 28 exits taken at plan",
+  },
+  {
+    id: "reviews",
+    category: "Best review cadence",
+    leader: "Anya R.",
+    detail: "21-day review streak",
+  },
+  {
+    id: "risk",
+    category: "Steadiest risk",
+    leader: "Captain Vega",
+    detail: "0 risk-rule breaks this month",
+  },
+  {
+    id: "research",
+    category: "Most thesis logged",
+    leader: "Tibor K.",
+    detail: "Logged a thesis on every entry",
+  },
+];
+
+export const WEEKLY_REVIEW: WeeklyReviewItem[] = [
+  {
+    id: "wr-1",
+    prompt: "Which trade best followed your plan this week, and why?",
+    status: "Submitted",
+  },
+  {
+    id: "wr-2",
+    prompt: "Where did emotion almost override a rule?",
+    status: "Open",
+  },
+  {
+    id: "wr-3",
+    prompt: "One habit to tighten before next week.",
+    status: "Open",
+  },
+];
+
+export const SHARED_LOGS: SharedLog[] = [
+  {
+    id: "sl-1",
+    author: "Mara Holt",
+    ship: "Iron Tide",
+    note: "Passed on a hot breakout — it didn't match my volume rule. No regrets.",
+    timestamp: "Mon · 09:12",
+  },
+  {
+    id: "sl-2",
+    author: "Anya R.",
+    ship: "Iron Tide",
+    note: "Trimmed into strength at my planned level instead of getting greedy.",
+    timestamp: "Tue · 14:40",
+  },
+];
+
+export const SHIP_BADGES: Badge[] = [
+  {
+    id: "crew-rulekeepers",
+    name: "Crew Rulekeepers",
+    description: "Every member logged an invalidation before entry this week.",
+    rarity: "epic",
+    state: "earned",
+  },
+  {
+    id: "review-quorum",
+    name: "Review Quorum",
+    description: "80% of the crew completed the Weekly Review.",
+    rarity: "rare",
+    state: "in-progress",
+    progress: 60,
+  },
+  {
+    id: "storm-crew",
+    name: "Storm Crew",
+    description: "Crew held discipline through a Storm Watch market.",
+    rarity: "legendary",
+    state: "locked",
   },
 ];
 

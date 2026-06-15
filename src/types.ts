@@ -102,6 +102,45 @@ export interface RiskRule {
   status: SignalTone;
 }
 
+// ---- Ships (crews) ----
+export interface Ship {
+  id: string;
+  name: string;
+  blurb: string;
+  members: number;
+  privacy: "Open" | "Invite Only" | "Private";
+  focus: string;
+}
+
+export interface ShipMember {
+  id: string;
+  name: string;
+  role: "Captain" | "First Mate" | "Crew";
+  disciplineScore: number;
+  streakDays: number;
+}
+
+export interface ShipLeaderboardRow {
+  id: string;
+  category: string;
+  leader: string;
+  detail: string;
+}
+
+export interface WeeklyReviewItem {
+  id: string;
+  prompt: string;
+  status: "Open" | "Submitted";
+}
+
+export interface SharedLog {
+  id: string;
+  author: string;
+  ship: string;
+  note: string;
+  timestamp: string;
+}
+
 export type SignalTone = "positive" | "neutral" | "warning" | "negative";
 
 // Watchlist plan labels (per product-voice.md). These describe how a name lines up
