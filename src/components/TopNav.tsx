@@ -10,7 +10,8 @@ const NAV_ITEMS: { id: PageId; label: string }[] = [
 ];
 
 export function TopNav() {
-  const { activePage, setActivePage } = useAppState();
+  const { activePage, setActivePage, captainName, demoMode, signOut } =
+    useAppState();
 
   return (
     <header className="site-header">
@@ -44,6 +45,15 @@ export function TopNav() {
             </button>
           ))}
         </nav>
+        <div className="site-account">
+          <span className="site-account-name">
+            {captainName || "Captain"}
+            {demoMode ? <span className="chip chip--soon">Demo</span> : null}
+          </span>
+          <button type="button" className="btn btn--small btn--ghost" onClick={signOut}>
+            Sign out
+          </button>
+        </div>
       </div>
     </header>
   );

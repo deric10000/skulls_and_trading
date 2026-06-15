@@ -1,4 +1,6 @@
 import { AppShell } from "./components/AppShell";
+import { LoginScreen } from "./components/auth/LoginScreen";
+import { Onboarding } from "./components/auth/Onboarding";
 import { DashboardPage } from "./pages/DashboardPage";
 import { HomePage } from "./pages/HomePage";
 import { StrategyForgePage } from "./pages/StrategyForgePage";
@@ -12,12 +14,23 @@ function ActivePage() {
   return <HomePage />;
 }
 
+function AuthGate() {
+  const { isAuthenticated, needsOnboarding } = useAppState();
+
+  if (!isAuthenticated) return <LoginScreen />;
+  if (needsOnboarding) return <Onboarding />;
+
+  return (
+    <AppShell>
+      <ActivePage />
+    </AppShell>
+  );
+}
+
 function App() {
   return (
     <AppStateProvider>
-      <AppShell>
-        <ActivePage />
-      </AppShell>
+      <AuthGate />
     </AppStateProvider>
   );
 }

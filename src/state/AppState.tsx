@@ -26,6 +26,18 @@ import type {
 type LogDraft = Pick<LogEntry, "title" | "note" | "strategy">;
 
 interface AppStateValue {
+  // Mock auth (no real backend/provider). Designed to later swap for a real
+  // auth/session layer without changing consumers.
+  isAuthenticated: boolean;
+  demoMode: boolean;
+  needsOnboarding: boolean;
+  captainName: string;
+  signIn: (name?: string) => void;
+  signUp: (name: string) => void;
+  continueAsDemo: () => void;
+  completeOnboarding: () => void;
+  signOut: () => void;
+
   activePage: PageId;
   setActivePage: (page: PageId) => void;
 
@@ -69,6 +81,10 @@ function currentTimestamp(): string {
 }
 
 export function AppStateProvider({ children }: { children: ReactNode }) {
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [demoMode, setDemoMode] = useState(false);
+  const [needsOnboarding, setNeedsOnboarding] = useState(false);
+  const [captainName, setCaptainName] = useState("");
   const [activePage, setActivePage] = useState<PageId>("home");
   const [watchlist, setWatchlist] = useState<WatchlistItem[]>(INITIAL_WATCHLIST);
   const [selectedTicker, setSelectedTicker] = useState<string>(
@@ -84,6 +100,42 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const nextId = useCallback((prefix: string) => {
     idCounter.current += 1;
     return `${prefix}-${Date.now()}-${idCounter.current}`;
+  }, []);
+
+  const signIn = useCallback((name?: string) => {
+    setCaptainName(name?.trim() || "Captain");
+    setDemoMode(false);
+    setNeedsOnboarding(false);
+    setIsAuthenticated(true);
+    setActivePage("home");
+  }, []);
+
+  const signUp = useCallback((name: string) => {
+    setCaptainName(name.trim() || "Captain");
+    setDemoMode(false);
+    setNeedsOnboarding(true);
+    setIsAuthenticated(true);
+  }, []);
+
+  const continueAsDemo = useCallback(() => {
+    setCaptainName("Demo Captain");
+    setDemoMode(true);
+    setNeedsOnboarding(false);
+    setIsAuthenticated(true);
+    setActivePage("home");
+  }, []);
+
+  const completeOnboarding = useCallback(() => {
+    setNeedsOnboarding(false);
+    setActivePage("dashboard");
+  }, []);
+
+  const signOut = useCallback(() => {
+    setIsAuthenticated(false);
+    setDemoMode(false);
+    setNeedsOnboarding(false);
+    setCaptainName("");
+    setActivePage("home");
   }, []);
 
   const addTicker = useCallback((rawTicker: string) => {
@@ -263,6 +315,15 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<AppStateValue>(
     () => ({
+      isAuthenticated,
+      demoMode,
+      needsOnboarding,
+      captainName,
+      signIn,
+      signUp,
+      continueAsDemo,
+      completeOnboarding,
+      signOut,
       activePage,
       setActivePage,
       watchlist,
@@ -289,6 +350,15 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       selectedSignal,
     }),
     [
+      isAuthenticated,
+      demoMode,
+      needsOnboarding,
+      captainName,
+      signIn,
+      signUp,
+      continueAsDemo,
+      completeOnboarding,
+      signOut,
       activePage,
       watchlist,
       addTicker,
