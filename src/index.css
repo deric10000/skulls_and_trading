@@ -2299,6 +2299,443 @@ button.nav-link {
   }
 }
 
+/* ----------------------------------------------------------------------
+   Choice group (shared pill selector)
+---------------------------------------------------------------------- */
+.choice-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: var(--space-2);
+}
+
+.choice-group-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.choice-group-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-base);
+}
+
+.choice-group-hint {
+  font-size: 0.75rem;
+  color: var(--text-faint);
+}
+
+.choice-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.choice-chip {
+  border: 1px solid var(--border-soft);
+  background: var(--surface-3);
+  color: var(--text-base);
+  border-radius: 999px;
+  padding: 0.45rem 0.85rem;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.85rem;
+}
+
+.choice-chip--selected {
+  border-color: var(--brand-gold);
+  color: var(--brand-gold-strong);
+  background: var(--accent-soft);
+}
+
+/* ----------------------------------------------------------------------
+   Scores
+---------------------------------------------------------------------- */
+.score-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: var(--space-2);
+}
+
+.score-grid--compact {
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+}
+
+.score-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  border: 1px solid var(--border-soft);
+}
+
+.score-card--hero {
+  border-color: rgb(241 178 74 / 0.35);
+  background: linear-gradient(160deg, var(--accent-soft), var(--surface-2));
+  box-shadow: var(--shadow-glow);
+}
+
+.score-card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.score-card-label {
+  font-weight: 600;
+  color: var(--text-strong);
+}
+
+.score-card-trend {
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.score-card-trend--positive {
+  color: var(--positive);
+}
+.score-card-trend--neutral {
+  color: var(--info);
+}
+.score-card-trend--warning {
+  color: var(--warning);
+}
+.score-card-trend--negative {
+  color: var(--negative);
+}
+
+.score-card-value {
+  display: flex;
+  align-items: baseline;
+  gap: 0.3rem;
+}
+
+.score-card-number {
+  font-size: 1.7rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-strong);
+}
+
+.score-card--hero .score-card-number {
+  font-size: 2.2rem;
+  color: var(--brand-gold-strong);
+}
+
+.score-card-max {
+  font-size: 0.8rem;
+  color: var(--text-faint);
+}
+
+.score-track {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--surface-3);
+  overflow: hidden;
+}
+
+.score-fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--brand-gold);
+}
+
+.score-fill[data-score="discipline"] {
+  background: var(--score-discipline);
+}
+.score-fill[data-score="risk"] {
+  background: var(--score-risk);
+}
+.score-fill[data-score="research"] {
+  background: var(--score-research);
+}
+.score-fill[data-score="review"] {
+  background: var(--score-review);
+}
+.score-fill[data-score="progress"] {
+  background: var(--score-progress);
+}
+
+.score-card-tagline {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+/* ----------------------------------------------------------------------
+   Badges
+---------------------------------------------------------------------- */
+.badge-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: var(--space-2);
+}
+
+.badge-card {
+  display: flex;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  border: 1px solid var(--border-soft);
+}
+
+.badge-card--locked {
+  opacity: 0.62;
+}
+
+.badge-card--earned {
+  border-color: rgb(62 213 152 / 0.3);
+}
+
+.badge-medallion {
+  flex: 0 0 auto;
+  width: 46px;
+  height: 46px;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--brand-metal);
+  border: 1px solid var(--border-strong);
+  color: var(--brand-bone);
+}
+
+.badge-medallion[data-rarity="common"] {
+  box-shadow: 0 0 16px rgb(138 151 173 / 0.25);
+}
+.badge-medallion[data-rarity="uncommon"] {
+  box-shadow: 0 0 16px rgb(62 213 152 / 0.35);
+  color: var(--rarity-uncommon);
+}
+.badge-medallion[data-rarity="rare"] {
+  box-shadow: 0 0 16px rgb(86 182 240 / 0.4);
+  color: var(--rarity-rare);
+}
+.badge-medallion[data-rarity="epic"] {
+  box-shadow: 0 0 18px rgb(167 139 250 / 0.45);
+  color: var(--rarity-epic);
+}
+.badge-medallion[data-rarity="legendary"] {
+  box-shadow: 0 0 22px rgb(241 178 74 / 0.5);
+  color: var(--rarity-legendary);
+}
+
+.badge-medallion-mark {
+  font-size: 1.2rem;
+  font-weight: 700;
+}
+
+.badge-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.badge-card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.badge-card-name {
+  font-weight: 600;
+  color: var(--text-strong);
+}
+
+.badge-rarity {
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.badge-rarity[data-rarity="common"] {
+  color: var(--rarity-common);
+}
+.badge-rarity[data-rarity="uncommon"] {
+  color: var(--rarity-uncommon);
+}
+.badge-rarity[data-rarity="rare"] {
+  color: var(--rarity-rare);
+}
+.badge-rarity[data-rarity="epic"] {
+  color: var(--rarity-epic);
+}
+.badge-rarity[data-rarity="legendary"] {
+  color: var(--rarity-legendary);
+}
+
+.badge-card-desc {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+.badge-progress {
+  height: 5px;
+  border-radius: 999px;
+  background: var(--surface-3);
+  overflow: hidden;
+}
+
+.badge-progress-fill {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, var(--warning), var(--brand-gold-strong));
+}
+
+.badge-state {
+  font-size: 0.74rem;
+  font-weight: 600;
+}
+
+.badge-state--earned {
+  color: var(--positive);
+}
+.badge-state--in-progress {
+  color: var(--warning);
+}
+.badge-state--locked {
+  color: var(--text-faint);
+}
+
+/* ----------------------------------------------------------------------
+   Captain Profile
+---------------------------------------------------------------------- */
+.profile-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-3);
+}
+
+.profile-col {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+@media (min-width: 1024px) {
+  .profile-grid {
+    grid-template-columns: 1.4fr 1fr;
+    align-items: start;
+  }
+}
+
+.avatar-row {
+  display: flex;
+  gap: var(--space-3);
+  align-items: flex-start;
+}
+
+.avatar-mark {
+  flex: 0 0 auto;
+  width: 64px;
+  height: 64px;
+  border-radius: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 1.4rem;
+  color: var(--brand-ink);
+  background: linear-gradient(150deg, var(--brand-gold-strong), var(--brand-gold));
+  box-shadow: var(--shadow-glow);
+}
+
+.avatar-fields {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.privacy-note {
+  font-size: 0.85rem;
+  color: var(--text-base);
+  margin: 0;
+}
+
+.link-options {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.link-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.7rem 0.9rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-soft);
+  background: var(--surface-3);
+  color: var(--text-base);
+  cursor: pointer;
+  font: inherit;
+}
+
+.link-option--active {
+  border-color: var(--brand-gold);
+  color: var(--brand-gold-strong);
+  background: var(--accent-soft);
+}
+
+.link-option:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.ship-membership-list {
+  list-style: none;
+  margin: 0 0 var(--space-2);
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.ship-membership-item {
+  padding: var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  border: 1px solid var(--border-soft);
+}
+
+.ship-membership-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.ship-membership-name {
+  font-weight: 600;
+  color: var(--text-strong);
+}
+
+.ship-membership-blurb {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  margin: 0.3rem 0;
+}
+
+.ship-membership-meta {
+  font-size: 0.74rem;
+  color: var(--text-faint);
+}
+
 @media (prefers-reduced-motion: reduce) {
   * {
     transition: none !important;

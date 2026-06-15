@@ -1,4 +1,75 @@
-export type PageId = "home" | "dashboard" | "strategy-forge";
+export type PageId =
+  | "home"
+  | "dashboard"
+  | "strategy-forge"
+  | "ships"
+  | "captain-profile";
+
+// ---- Scores (discipline-first) ----
+export type ScoreKey =
+  | "discipline"
+  | "risk"
+  | "research"
+  | "review"
+  | "progress";
+
+export interface ScoreMetric {
+  key: ScoreKey;
+  label: string;
+  value: number;
+  max: number;
+  tagline: string;
+  trend: SignalTone;
+  trendLabel: string;
+}
+
+// ---- Badges / progression (behavior only, never investment signals) ----
+export type Rarity = "common" | "uncommon" | "rare" | "epic" | "legendary";
+export type BadgeState = "locked" | "in-progress" | "earned";
+
+export interface Badge {
+  id: string;
+  name: string;
+  description: string;
+  rarity: Rarity;
+  state: BadgeState;
+  progress?: number;
+}
+
+// ---- Captain profile ----
+export type TradingStyle =
+  | "Long-Term Investor"
+  | "Swing Trader"
+  | "Day Trader"
+  | "Mixed";
+export type RiskProfile = "Conservative" | "Balanced" | "Aggressive";
+export type TimeHorizon = "Days" | "Weeks" | "Months" | "Years";
+export type PrivacyMode = "Private" | "Ghost" | "Crew" | "Full Transparency";
+export type PortfolioLinkStatus =
+  | "Manual"
+  | "CSV (soon)"
+  | "Brokerage (soon)"
+  | "Connected"
+  | "Needs Review";
+
+export interface CaptainProfile {
+  handle: string;
+  tagline: string;
+  style: TradingStyle;
+  risk: RiskProfile;
+  horizon: TimeHorizon;
+  focus: string[];
+  privacy: PrivacyMode;
+  portfolioLink: PortfolioLinkStatus;
+}
+
+export interface ShipMembership {
+  id: string;
+  name: string;
+  role: "Captain" | "First Mate" | "Crew";
+  members: number;
+  blurb: string;
+}
 
 export type SignalTone = "positive" | "neutral" | "warning" | "negative";
 

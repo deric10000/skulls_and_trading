@@ -9,12 +9,14 @@ import {
 } from "react";
 import {
   DEFAULT_ASSIGNMENTS,
+  DEFAULT_CAPTAIN,
   DEFAULT_STRATEGIES,
   INITIAL_WATCHLIST,
   LOG_ENTRIES,
 } from "../data";
 import { computeSignal } from "../lib/signals";
 import type {
+  CaptainProfile,
   LogEntry,
   PageId,
   SignalResult,
@@ -37,6 +39,9 @@ interface AppStateValue {
   continueAsDemo: () => void;
   completeOnboarding: () => void;
   signOut: () => void;
+
+  captain: CaptainProfile;
+  updateCaptain: (patch: Partial<CaptainProfile>) => void;
 
   activePage: PageId;
   setActivePage: (page: PageId) => void;
@@ -85,7 +90,12 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const [demoMode, setDemoMode] = useState(false);
   const [needsOnboarding, setNeedsOnboarding] = useState(false);
   const [captainName, setCaptainName] = useState("");
+  const [captain, setCaptain] = useState<CaptainProfile>(DEFAULT_CAPTAIN);
   const [activePage, setActivePage] = useState<PageId>("home");
+
+  const updateCaptain = useCallback((patch: Partial<CaptainProfile>) => {
+    setCaptain((current) => ({ ...current, ...patch }));
+  }, []);
   const [watchlist, setWatchlist] = useState<WatchlistItem[]>(INITIAL_WATCHLIST);
   const [selectedTicker, setSelectedTicker] = useState<string>(
     INITIAL_WATCHLIST[0]?.ticker ?? "",
@@ -324,6 +334,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       continueAsDemo,
       completeOnboarding,
       signOut,
+      captain,
+      updateCaptain,
       activePage,
       setActivePage,
       watchlist,
@@ -359,6 +371,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       continueAsDemo,
       completeOnboarding,
       signOut,
+      captain,
+      updateCaptain,
       activePage,
       watchlist,
       addTicker,

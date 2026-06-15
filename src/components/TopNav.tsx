@@ -7,6 +7,7 @@ const NAV_ITEMS: { id: PageId; label: string }[] = [
   { id: "home", label: "Home" },
   { id: "dashboard", label: "Dashboard" },
   { id: "strategy-forge", label: "Strategy Forge" },
+  { id: "captain-profile", label: "Captain Profile" },
 ];
 
 export function TopNav() {
