@@ -10,13 +10,14 @@ export function HeroCard({ variant = "full" }: { variant?: "full" | "center" }) 
     >
       <div className="hero-grid" aria-hidden="true" />
       <div className="hero-content">
-        <p className="eyebrow">A command center for aggressive investors and traders</p>
+        <p className="eyebrow">Discipline Command Center</p>
         <h1 id="hero-title">
-          Command your watchlist before the market commands you.
+          Trade your plan. Track your discipline. Level up your strategy.
         </h1>
         <p className="lede">
-          A dark-mode trading command center for tracking high-conviction stocks,
-          reading the setup, and logging the thesis before you act.
+          Skulls and Trading is a dark command center that rewards following your own
+          rules — not chasing trades. Forge a strategy, check each name against it, and
+          log the thesis before you act.
         </p>
         <div className="hero-actions">
           <button
@@ -24,12 +25,19 @@ export function HeroCard({ variant = "full" }: { variant?: "full" | "center" }) 
             className="btn btn--primary"
             onClick={() => setActivePage("dashboard")}
           >
-            Open the Dashboard
+            Open Dashboard
+          </button>
+          <button
+            type="button"
+            className="btn btn--ghost"
+            onClick={() => setActivePage("strategy-forge")}
+          >
+            Forge a Strategy
           </button>
         </div>
         <dl className="hero-stats">
           <div className="hero-stat">
-            <dt>Conviction tracked</dt>
+            <dt>On watch</dt>
             <dd>{watchlist.length} names</dd>
           </div>
           <div className="hero-stat">
@@ -37,8 +45,8 @@ export function HeroCard({ variant = "full" }: { variant?: "full" | "center" }) 
             <dd>Investor + Trader</dd>
           </div>
           <div className="hero-stat">
-            <dt>Discipline</dt>
-            <dd>Captain's Log</dd>
+            <dt>Rewards</dt>
+            <dd>Discipline, not trades</dd>
           </div>
         </dl>
       </div>
@@ -49,8 +57,8 @@ export function HeroCard({ variant = "full" }: { variant?: "full" | "center" }) 
           <span className="compass-label">Market Compass</span>
         </div>
         <div className="hero-preview-card">
-          <span className="chip status--positive">Signal Deck</span>
-          <p>Trend, volume, and catalyst aligned on the leaders.</p>
+          <span className="chip status--positive">Strategy Check</span>
+          <p>Your rules, your thesis, your invalidation — checked before you act.</p>
         </div>
       </aside>
     </section>

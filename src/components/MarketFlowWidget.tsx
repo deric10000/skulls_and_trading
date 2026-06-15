@@ -4,12 +4,12 @@ export function MarketFlowWidget() {
   return (
     <section className="panel market-flow" aria-labelledby="flow-title">
       <div className="panel-head">
-        <h2 id="flow-title">Top-down market flow</h2>
+        <h2 id="flow-title">Market Weather</h2>
         <span className="panel-tag">Macro to micro</span>
       </div>
       <p className="panel-intro">
-        Is the stock moving alone, or with the market behind it? Read it from the
-        top down.
+        Read the conditions before you sail. Is your name moving alone, or with the
+        weather behind it? Work it from the top down.
       </p>
       <ol className="flow-steps flow-steps--vertical">
         {MARKET_FLOW.map((step, index) => (

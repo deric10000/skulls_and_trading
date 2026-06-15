@@ -3,8 +3,8 @@ import { MARKET_FLOW } from "../data";
 
 export function MarketFlowBar() {
   return (
-    <section className="panel market-flow-bar" aria-label="Top-down market flow">
-      <span className="market-flow-bar-title">Market Flow</span>
+    <section className="panel market-flow-bar" aria-label="Market Weather">
+      <span className="market-flow-bar-title">Market Weather</span>
       <ol className="market-flow-bar-steps">
         {MARKET_FLOW.map((step, index) => (
           <Fragment key={step.key}>

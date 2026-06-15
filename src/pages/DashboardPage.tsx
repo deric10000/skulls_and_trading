@@ -1,11 +1,23 @@
+import { BadgeShowcase } from "../components/badges/BadgeShowcase";
 import { CaptainLogWidget } from "../components/CaptainLogWidget";
 import { ChartCard } from "../components/ChartCard";
+import { TreasureLedger } from "../components/ledger/TreasureLedger";
 import { MarketFlowBar } from "../components/MarketFlowBar";
+import { ScoreSummary } from "../components/scores/ScoreSummary";
 import { SignalWidget } from "../components/SignalWidget";
 import { StockSummaryPanel } from "../components/StockSummaryPanel";
 import { StrategyAssignmentWidget } from "../components/StrategyAssignmentWidget";
 import { WatchlistWidget } from "../components/WatchlistWidget";
 import { useAppState } from "../state/AppState";
+
+function Scoreboard() {
+  return (
+    <div className="dashboard-scoreboard">
+      <ScoreSummary compact />
+      <BadgeShowcase limit={4} />
+    </div>
+  );
+}
 
 export function DashboardPage() {
   const { selectedItem } = useAppState();
@@ -13,20 +25,33 @@ export function DashboardPage() {
   if (!selectedItem) {
     return (
       <div className="page dashboard-page">
+        <header className="page-head">
+          <h1>Command Deck</h1>
+          <p className="page-subtitle">
+            Check each name against your own strategy before you act.
+          </p>
+        </header>
         <MarketFlowBar />
         <div className="dashboard-empty">
           <WatchlistWidget />
           <div className="empty-board panel">
             <h2>Your watch is empty</h2>
-            <p>Add a ticker to start building conviction and logging your thesis.</p>
+            <p>Add a name to start building conviction and logging your thesis.</p>
           </div>
         </div>
+        <Scoreboard />
       </div>
     );
   }
 
   return (
     <div className="page dashboard-page">
+      <header className="page-head">
+        <h1>Command Deck</h1>
+        <p className="page-subtitle">
+          Check each name against your own strategy before you act.
+        </p>
+      </header>
       <MarketFlowBar />
       <div className="dashboard-body">
         <div className="db-col db-col-watch">
@@ -48,6 +73,8 @@ export function DashboardPage() {
           </div>
         </div>
       </div>
+      <Scoreboard />
+      <TreasureLedger />
     </div>
   );
 }

@@ -1,14 +1,31 @@
 import type {
+  Allocation,
+  Badge,
+  CaptainProfile,
   DecisionSignal,
   EducationCard,
   ExitRule,
   LogEntry,
   MarketFlowStep,
+  PortfolioMetric,
+  Position,
+  PrivacyMode,
+  RiskProfile,
+  RiskRule,
+  ScoreMetric,
+  SharedLog,
+  Ship,
+  ShipLeaderboardRow,
+  ShipMember,
+  ShipMembership,
   Strategy,
   StrategyAssignments,
   TickerAnalysis,
+  TimeHorizon,
   Timeframe,
+  TradingStyle,
   WatchlistItem,
+  WeeklyReviewItem,
 } from "./types";
 
 export const INITIAL_WATCHLIST: WatchlistItem[] = [
@@ -17,7 +34,7 @@ export const INITIAL_WATCHLIST: WatchlistItem[] = [
     name: "Nvidia · AI Infrastructure",
     price: 187.42,
     changePct: 2.31,
-    status: "Bullish",
+    status: "Aligned",
     conviction: 88,
   },
   {
@@ -25,7 +42,7 @@ export const INITIAL_WATCHLIST: WatchlistItem[] = [
     name: "Advanced Micro Devices · Compute",
     price: 164.05,
     changePct: 1.12,
-    status: "Breakout",
+    status: "Watch",
     conviction: 74,
   },
   {
@@ -33,7 +50,7 @@ export const INITIAL_WATCHLIST: WatchlistItem[] = [
     name: "SoFi Technologies · Fintech",
     price: 14.86,
     changePct: -0.94,
-    status: "Caution",
+    status: "Review",
     conviction: 52,
   },
   {
@@ -41,7 +58,7 @@ export const INITIAL_WATCHLIST: WatchlistItem[] = [
     name: "IonQ · Quantum Computing",
     price: 41.73,
     changePct: 4.68,
-    status: "Watching",
+    status: "Watch",
     conviction: 61,
   },
   {
@@ -49,7 +66,7 @@ export const INITIAL_WATCHLIST: WatchlistItem[] = [
     name: "Archer Aviation · eVTOL",
     price: 9.21,
     changePct: -2.15,
-    status: "Pullback",
+    status: "Risk Check",
     conviction: 44,
   },
   {
@@ -57,7 +74,7 @@ export const INITIAL_WATCHLIST: WatchlistItem[] = [
     name: "BigBear.ai · Defense AI",
     price: 6.34,
     changePct: 3.07,
-    status: "Watching",
+    status: "Thesis Needed",
     conviction: 48,
   },
 ];
@@ -374,23 +391,23 @@ export const DEFAULT_ASSIGNMENTS: StrategyAssignments = {
 };
 
 export const MARKET_FLOW: MarketFlowStep[] = [
-  { key: "market", label: "Market", detail: "Risk-on", tone: "positive" },
+  { key: "market", label: "Market", detail: "Risk-On Tide", tone: "positive" },
   {
     key: "sector",
     label: "Sector",
-    detail: "Semiconductors leading",
+    detail: "Breakout Wind",
     tone: "positive",
   },
   {
     key: "industry",
     label: "Industry",
-    detail: "AI infrastructure strong",
+    detail: "Rotation Current",
     tone: "positive",
   },
   {
     key: "stock",
     label: "Stock",
-    detail: "Aligned with current setup",
+    detail: "Calm Waters",
     tone: "neutral",
   },
 ];
@@ -446,6 +463,422 @@ export const FUNDAMENTALS: EducationCard[] = [
   {
     title: "Risk Factors",
     body: "What could break the thesis, from execution to macro pressure.",
+  },
+];
+
+// Discipline is intentionally first and weighted highest; progress is last.
+export const SCORES: ScoreMetric[] = [
+  {
+    key: "discipline",
+    label: "Discipline",
+    value: 82,
+    max: 100,
+    tagline: "Plan followed",
+    trend: "positive",
+    trendLabel: "+6 this week",
+  },
+  {
+    key: "risk",
+    label: "Risk",
+    value: 74,
+    max: 100,
+    tagline: "Exposure checked",
+    trend: "positive",
+    trendLabel: "+3 this week",
+  },
+  {
+    key: "research",
+    label: "Research",
+    value: 68,
+    max: 100,
+    tagline: "Thesis documented",
+    trend: "neutral",
+    trendLabel: "Holding steady",
+  },
+  {
+    key: "review",
+    label: "Review",
+    value: 59,
+    max: 100,
+    tagline: "Lessons captured",
+    trend: "warning",
+    trendLabel: "2 reviews due",
+  },
+  {
+    key: "progress",
+    label: "Progress",
+    value: 64,
+    max: 100,
+    tagline: "Portfolio tracked",
+    trend: "neutral",
+    trendLabel: "Tracking on plan",
+  },
+];
+
+export const BADGES: Badge[] = [
+  {
+    id: "iron-hands",
+    name: "Iron Hands",
+    description: "Held through a drawdown without breaking your stated plan.",
+    rarity: "rare",
+    state: "earned",
+  },
+  {
+    id: "no-fomo",
+    name: "No-FOMO Streak",
+    description: "Passed on 10 setups that didn't match your rules.",
+    rarity: "uncommon",
+    state: "earned",
+  },
+  {
+    id: "rulekeeper",
+    name: "Rulekeeper",
+    description: "Logged an invalidation level before every entry this month.",
+    rarity: "epic",
+    state: "in-progress",
+    progress: 70,
+  },
+  {
+    id: "journal-streak",
+    name: "Journal Streak",
+    description: "Wrote a Captain's Log entry 14 days running.",
+    rarity: "common",
+    state: "in-progress",
+    progress: 45,
+  },
+  {
+    id: "risk-captain",
+    name: "Risk Captain",
+    description: "Kept every position within your risk rule for a full quarter.",
+    rarity: "legendary",
+    state: "locked",
+  },
+  {
+    id: "storm-survivor",
+    name: "Storm Survivor",
+    description: "Followed your defensive plan through a Storm Watch market.",
+    rarity: "rare",
+    state: "locked",
+  },
+];
+
+export const FOCUS_OPTIONS: string[] = [
+  "AI Infrastructure",
+  "Semiconductors",
+  "Fintech",
+  "Energy",
+  "Biotech",
+  "Defense",
+];
+
+export const STYLE_OPTIONS: TradingStyle[] = [
+  "Long-Term Investor",
+  "Swing Trader",
+  "Day Trader",
+  "Mixed",
+];
+
+export const RISK_OPTIONS: RiskProfile[] = [
+  "Conservative",
+  "Balanced",
+  "Aggressive",
+];
+
+export const HORIZON_OPTIONS: TimeHorizon[] = ["Days", "Weeks", "Months", "Years"];
+
+export const PRIVACY_OPTIONS: PrivacyMode[] = [
+  "Private",
+  "Ghost",
+  "Crew",
+  "Full Transparency",
+];
+
+export const PRIVACY_NOTES: Record<PrivacyMode, string> = {
+  Private: "Only you can see your profile, holdings, and logs.",
+  Ghost:
+    "Crew sees your badges, discipline score, and general style — never dollar values, holdings, or size.",
+  Crew: "Selected trades, notes, and stats are shared with crew you approve.",
+  "Full Transparency": "Opt-in: your full activity is visible to your crew.",
+};
+
+export const DEFAULT_CAPTAIN: CaptainProfile = {
+  handle: "Captain Vega",
+  tagline: "Disciplined swing trader. Rules over emotion.",
+  style: "Swing Trader",
+  risk: "Balanced",
+  horizon: "Weeks",
+  focus: ["AI Infrastructure", "Semiconductors"],
+  privacy: "Private",
+  portfolioLink: "Manual",
+};
+
+export const SHIP_MEMBERSHIPS: ShipMembership[] = [
+  {
+    id: "iron-tide",
+    name: "Iron Tide",
+    role: "First Mate",
+    members: 18,
+    blurb: "Swing traders keeping each other honest on risk and reviews.",
+  },
+  {
+    id: "long-haul",
+    name: "Long Haul Compounders",
+    role: "Crew",
+    members: 42,
+    blurb: "Buy-and-hold crew focused on thesis discipline over noise.",
+  },
+];
+
+// Discipline-first ordering: plan adherence and risk discipline lead, raw return
+// is intentionally last and de-emphasized.
+export const PORTFOLIO_METRICS: PortfolioMetric[] = [
+  {
+    key: "plan-adherence",
+    label: "Plan Adherence",
+    value: "86%",
+    tagline: "Entries that matched a written rule",
+    tone: "positive",
+    emphasis: true,
+  },
+  {
+    key: "rules-followed",
+    label: "Rules Followed",
+    value: "12 / 14",
+    tagline: "Exits taken at your stated level",
+    tone: "positive",
+  },
+  {
+    key: "risk-budget",
+    label: "Risk Budget Used",
+    value: "61%",
+    tagline: "Within your stated risk profile",
+    tone: "neutral",
+  },
+  {
+    key: "open-risk",
+    label: "Open Risk",
+    value: "1.8R",
+    tagline: "Total risk across open positions",
+    tone: "warning",
+  },
+  {
+    key: "return",
+    label: "Return (period)",
+    value: "+4.2%",
+    tagline: "A by-product of discipline, not the goal",
+    tone: "neutral",
+  },
+];
+
+export const POSITIONS: Position[] = [
+  {
+    ticker: "NVDA",
+    name: "Nvidia",
+    weightPct: 22,
+    changePct: 2.31,
+    planLabel: "Aligned",
+    note: "Core position. Trailing your stated invalidation level.",
+  },
+  {
+    ticker: "AMD",
+    name: "Advanced Micro Devices",
+    weightPct: 14,
+    changePct: 1.12,
+    planLabel: "Watch",
+    note: "Breakout setup; trigger not yet confirmed.",
+  },
+  {
+    ticker: "SOFI",
+    name: "SoFi Technologies",
+    weightPct: 9,
+    changePct: -0.94,
+    planLabel: "Review",
+    note: "Momentum cooled into resistance. Thesis check due.",
+  },
+  {
+    ticker: "ACHR",
+    name: "Archer Aviation",
+    weightPct: 6,
+    changePct: -2.15,
+    planLabel: "Risk Check",
+    note: "Speculative size. Confirm it's within your risk rule.",
+  },
+];
+
+export const ALLOCATIONS: Allocation[] = [
+  { label: "AI Infrastructure", pct: 42, tone: "positive" },
+  { label: "Fintech", pct: 18, tone: "neutral" },
+  { label: "Speculative", pct: 12, tone: "warning" },
+  { label: "Cash", pct: 28, tone: "neutral" },
+];
+
+export const RISK_RULES: RiskRule[] = [
+  {
+    label: "Max single position",
+    detail: "NVDA at 22% — within your 25% cap.",
+    status: "positive",
+  },
+  {
+    label: "Speculative sleeve",
+    detail: "12% vs your 15% ceiling.",
+    status: "positive",
+  },
+  {
+    label: "Cash floor",
+    detail: "28% cash, above your 20% floor.",
+    status: "positive",
+  },
+  {
+    label: "Open positions without a logged exit",
+    detail: "1 position is missing an invalidation level.",
+    status: "warning",
+  },
+];
+
+// Ships available to discover/join (mock).
+export const DISCOVER_SHIPS: Ship[] = [
+  {
+    id: "deep-current",
+    name: "Deep Current",
+    blurb: "Patient compounders who pressure-test each other's theses.",
+    members: 34,
+    privacy: "Invite Only",
+    focus: "Long-term investing",
+  },
+  {
+    id: "night-watch",
+    name: "Night Watch",
+    blurb: "Swing traders comparing risk discipline, not P/L.",
+    members: 21,
+    privacy: "Open",
+    focus: "Swing trading",
+  },
+  {
+    id: "salvage-crew",
+    name: "Salvage Crew",
+    blurb: "Turnaround hunters keeping each other honest on invalidation.",
+    members: 12,
+    privacy: "Open",
+    focus: "Turnarounds",
+  },
+];
+
+export const SHIP_MEMBERS: ShipMember[] = [
+  {
+    id: "vega",
+    name: "Captain Vega",
+    role: "First Mate",
+    disciplineScore: 82,
+    streakDays: 14,
+  },
+  {
+    id: "mara",
+    name: "Mara Holt",
+    role: "Captain",
+    disciplineScore: 91,
+    streakDays: 38,
+  },
+  {
+    id: "tibor",
+    name: "Tibor K.",
+    role: "Crew",
+    disciplineScore: 76,
+    streakDays: 9,
+  },
+  {
+    id: "anya",
+    name: "Anya R.",
+    role: "Crew",
+    disciplineScore: 68,
+    streakDays: 21,
+  },
+];
+
+// Discipline-based categories ONLY — never profit ranking.
+export const SHIP_LEADERBOARD: ShipLeaderboardRow[] = [
+  {
+    id: "rules",
+    category: "Most rules followed",
+    leader: "Mara Holt",
+    detail: "27 of 28 exits taken at plan",
+  },
+  {
+    id: "reviews",
+    category: "Best review cadence",
+    leader: "Anya R.",
+    detail: "21-day review streak",
+  },
+  {
+    id: "risk",
+    category: "Steadiest risk",
+    leader: "Captain Vega",
+    detail: "0 risk-rule breaks this month",
+  },
+  {
+    id: "research",
+    category: "Most thesis logged",
+    leader: "Tibor K.",
+    detail: "Logged a thesis on every entry",
+  },
+];
+
+export const WEEKLY_REVIEW: WeeklyReviewItem[] = [
+  {
+    id: "wr-1",
+    prompt: "Which trade best followed your plan this week, and why?",
+    status: "Submitted",
+  },
+  {
+    id: "wr-2",
+    prompt: "Where did emotion almost override a rule?",
+    status: "Open",
+  },
+  {
+    id: "wr-3",
+    prompt: "One habit to tighten before next week.",
+    status: "Open",
+  },
+];
+
+export const SHARED_LOGS: SharedLog[] = [
+  {
+    id: "sl-1",
+    author: "Mara Holt",
+    ship: "Iron Tide",
+    note: "Passed on a hot breakout — it didn't match my volume rule. No regrets.",
+    timestamp: "Mon · 09:12",
+  },
+  {
+    id: "sl-2",
+    author: "Anya R.",
+    ship: "Iron Tide",
+    note: "Trimmed into strength at my planned level instead of getting greedy.",
+    timestamp: "Tue · 14:40",
+  },
+];
+
+export const SHIP_BADGES: Badge[] = [
+  {
+    id: "crew-rulekeepers",
+    name: "Crew Rulekeepers",
+    description: "Every member logged an invalidation before entry this week.",
+    rarity: "epic",
+    state: "earned",
+  },
+  {
+    id: "review-quorum",
+    name: "Review Quorum",
+    description: "80% of the crew completed the Weekly Review.",
+    rarity: "rare",
+    state: "in-progress",
+    progress: 60,
+  },
+  {
+    id: "storm-crew",
+    name: "Storm Crew",
+    description: "Crew held discipline through a Storm Watch market.",
+    rarity: "legendary",
+    state: "locked",
   },
 ];
 

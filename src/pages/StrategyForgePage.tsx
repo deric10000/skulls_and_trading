@@ -42,6 +42,13 @@ export function StrategyForgePage() {
 
   return (
     <div className="page forge-page">
+      <header className="page-head">
+        <h1>Strategy Forge</h1>
+        <p className="page-subtitle">
+          Forge the rules you'll be held to. Define your edge once, then let every
+          name be checked against it — not against emotion.
+        </p>
+      </header>
       <div className="forge-grid">
         <div className="forge-strategies">
           <StrategyList
