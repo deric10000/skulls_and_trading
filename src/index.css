@@ -2749,6 +2749,247 @@ button.nav-link {
   }
 }
 
+/* ----------------------------------------------------------------------
+   Treasure Ledger
+---------------------------------------------------------------------- */
+.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+
+.metric-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  border: 1px solid var(--border-soft);
+}
+
+.metric-card--hero {
+  border-color: rgb(241 178 74 / 0.35);
+  background: linear-gradient(160deg, var(--accent-soft), var(--surface-2));
+}
+
+.metric-card-label {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.metric-card-value {
+  font-size: 1.5rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.metric-card--hero .metric-card-value {
+  font-size: 1.9rem;
+}
+
+.metric-card-value--positive {
+  color: var(--positive);
+}
+.metric-card-value--neutral {
+  color: var(--text-strong);
+}
+.metric-card-value--warning {
+  color: var(--warning);
+}
+.metric-card-value--negative {
+  color: var(--negative);
+}
+
+.metric-card-tagline {
+  font-size: 0.78rem;
+  color: var(--text-faint);
+}
+
+.ledger-columns {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-3);
+}
+
+@media (min-width: 1024px) {
+  .ledger-columns {
+    grid-template-columns: 1.5fr 1fr;
+    align-items: start;
+  }
+}
+
+.ledger-side {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.ledger-subtitle {
+  font-size: 0.9rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-faint);
+  margin-bottom: var(--space-2);
+}
+
+.position-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: var(--space-2);
+}
+
+.position-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  border: 1px solid var(--border-soft);
+}
+
+.position-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.position-ticker {
+  font-weight: 700;
+  color: var(--text-strong);
+}
+
+.position-name {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+.position-meta {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.position-weight {
+  font-size: 0.8rem;
+  color: var(--text-base);
+}
+
+.position-note {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+.allocation-bar {
+  display: flex;
+  height: 12px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--surface-3);
+  margin-bottom: var(--space-2);
+}
+
+.allocation-seg {
+  height: 100%;
+}
+
+.allocation-seg--positive,
+.allocation-dot--positive {
+  background: var(--positive);
+}
+.allocation-seg--neutral,
+.allocation-dot--neutral {
+  background: var(--info);
+}
+.allocation-seg--warning,
+.allocation-dot--warning {
+  background: var(--warning);
+}
+.allocation-seg--negative,
+.allocation-dot--negative {
+  background: var(--negative);
+}
+
+.allocation-legend,
+.risk-rule-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.allocation-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+}
+
+.allocation-dot,
+.risk-rule-dot {
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 50%;
+  flex: 0 0 auto;
+}
+
+.allocation-legend-label {
+  flex: 1;
+  color: var(--text-base);
+}
+
+.allocation-legend-pct {
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.risk-rule-item {
+  display: flex;
+  gap: 0.6rem;
+  align-items: flex-start;
+}
+
+.risk-rule-dot {
+  margin-top: 0.4rem;
+}
+
+.risk-rule-dot--positive {
+  background: var(--positive);
+}
+.risk-rule-dot--neutral {
+  background: var(--info);
+}
+.risk-rule-dot--warning {
+  background: var(--warning);
+}
+.risk-rule-dot--negative {
+  background: var(--negative);
+}
+
+.risk-rule-body {
+  display: flex;
+  flex-direction: column;
+}
+
+.risk-rule-label {
+  font-weight: 600;
+  color: var(--text-strong);
+  font-size: 0.88rem;
+}
+
+.risk-rule-detail {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
 @media (prefers-reduced-motion: reduce) {
   * {
     transition: none !important;

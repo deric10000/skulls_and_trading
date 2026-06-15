@@ -71,6 +71,37 @@ export interface ShipMembership {
   blurb: string;
 }
 
+// ---- Treasure Ledger (portfolio tracker, discipline weighted over P/L) ----
+export interface PortfolioMetric {
+  key: string;
+  label: string;
+  value: string;
+  tagline: string;
+  tone: SignalTone;
+  emphasis?: boolean;
+}
+
+export interface Position {
+  ticker: string;
+  name: string;
+  weightPct: number;
+  changePct: number;
+  planLabel: StatusType;
+  note: string;
+}
+
+export interface Allocation {
+  label: string;
+  pct: number;
+  tone: SignalTone;
+}
+
+export interface RiskRule {
+  label: string;
+  detail: string;
+  status: SignalTone;
+}
+
 export type SignalTone = "positive" | "neutral" | "warning" | "negative";
 
 // Watchlist plan labels (per product-voice.md). These describe how a name lines up

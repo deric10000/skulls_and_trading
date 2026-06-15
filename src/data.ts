@@ -1,4 +1,5 @@
 import type {
+  Allocation,
   Badge,
   CaptainProfile,
   DecisionSignal,
@@ -6,8 +7,11 @@ import type {
   ExitRule,
   LogEntry,
   MarketFlowStep,
+  PortfolioMetric,
+  Position,
   PrivacyMode,
   RiskProfile,
+  RiskRule,
   ScoreMetric,
   ShipMembership,
   Strategy,
@@ -617,6 +621,112 @@ export const SHIP_MEMBERSHIPS: ShipMembership[] = [
     role: "Crew",
     members: 42,
     blurb: "Buy-and-hold crew focused on thesis discipline over noise.",
+  },
+];
+
+// Discipline-first ordering: plan adherence and risk discipline lead, raw return
+// is intentionally last and de-emphasized.
+export const PORTFOLIO_METRICS: PortfolioMetric[] = [
+  {
+    key: "plan-adherence",
+    label: "Plan Adherence",
+    value: "86%",
+    tagline: "Entries that matched a written rule",
+    tone: "positive",
+    emphasis: true,
+  },
+  {
+    key: "rules-followed",
+    label: "Rules Followed",
+    value: "12 / 14",
+    tagline: "Exits taken at your stated level",
+    tone: "positive",
+  },
+  {
+    key: "risk-budget",
+    label: "Risk Budget Used",
+    value: "61%",
+    tagline: "Within your stated risk profile",
+    tone: "neutral",
+  },
+  {
+    key: "open-risk",
+    label: "Open Risk",
+    value: "1.8R",
+    tagline: "Total risk across open positions",
+    tone: "warning",
+  },
+  {
+    key: "return",
+    label: "Return (period)",
+    value: "+4.2%",
+    tagline: "A by-product of discipline, not the goal",
+    tone: "neutral",
+  },
+];
+
+export const POSITIONS: Position[] = [
+  {
+    ticker: "NVDA",
+    name: "Nvidia",
+    weightPct: 22,
+    changePct: 2.31,
+    planLabel: "Aligned",
+    note: "Core position. Trailing your stated invalidation level.",
+  },
+  {
+    ticker: "AMD",
+    name: "Advanced Micro Devices",
+    weightPct: 14,
+    changePct: 1.12,
+    planLabel: "Watch",
+    note: "Breakout setup; trigger not yet confirmed.",
+  },
+  {
+    ticker: "SOFI",
+    name: "SoFi Technologies",
+    weightPct: 9,
+    changePct: -0.94,
+    planLabel: "Review",
+    note: "Momentum cooled into resistance. Thesis check due.",
+  },
+  {
+    ticker: "ACHR",
+    name: "Archer Aviation",
+    weightPct: 6,
+    changePct: -2.15,
+    planLabel: "Risk Check",
+    note: "Speculative size. Confirm it's within your risk rule.",
+  },
+];
+
+export const ALLOCATIONS: Allocation[] = [
+  { label: "AI Infrastructure", pct: 42, tone: "positive" },
+  { label: "Fintech", pct: 18, tone: "neutral" },
+  { label: "Speculative", pct: 12, tone: "warning" },
+  { label: "Cash", pct: 28, tone: "neutral" },
+];
+
+export const RISK_RULES: RiskRule[] = [
+  {
+    label: "Max single position",
+    detail: "NVDA at 22% — within your 25% cap.",
+    status: "positive",
+  },
+  {
+    label: "Speculative sleeve",
+    detail: "12% vs your 15% ceiling.",
+    status: "positive",
+  },
+  {
+    label: "Cash floor",
+    detail: "28% cash, above your 20% floor.",
+    status: "positive",
+  },
+  {
+    label: "Open positions without a logged exit",
+    detail: "1 position is missing an invalidation level.",
+    status: "warning",
   },
 ];
 

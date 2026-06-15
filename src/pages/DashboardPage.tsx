@@ -1,6 +1,7 @@
 import { BadgeShowcase } from "../components/badges/BadgeShowcase";
 import { CaptainLogWidget } from "../components/CaptainLogWidget";
 import { ChartCard } from "../components/ChartCard";
+import { TreasureLedger } from "../components/ledger/TreasureLedger";
 import { MarketFlowBar } from "../components/MarketFlowBar";
 import { ScoreSummary } from "../components/scores/ScoreSummary";
 import { SignalWidget } from "../components/SignalWidget";
@@ -73,6 +74,7 @@ export function DashboardPage() {
         </div>
       </div>
       <Scoreboard />
+      <TreasureLedger />
     </div>
   );
 }
