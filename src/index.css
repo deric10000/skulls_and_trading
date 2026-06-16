@@ -1942,11 +1942,13 @@ button.nav-link {
   display: flex;
   gap: var(--space-4);
   overflow-x: auto;
+  overflow-y: hidden;
   scroll-snap-type: x mandatory;
   scroll-behavior: smooth;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior-x: contain;
   overscroll-behavior-y: none;
+  touch-action: pan-x;
   padding-bottom: 0.25rem;
 }
 
@@ -1957,6 +1959,8 @@ button.nav-link {
   min-height: max(32rem, calc(100dvh - 13rem));
   scroll-snap-align: start;
   scroll-snap-stop: always;
+  overflow: hidden auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .home-slide > * {
@@ -2209,6 +2213,41 @@ button.nav-link {
 
   .home-page {
     gap: 0.25rem;
+  }
+}
+
+@media (max-width: 1023px) {
+  .app-main:has(.home-page) {
+    overflow: hidden;
+  }
+
+  .home-page {
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .site-header,
+  .site-header-inner,
+  .home-tabs-shell,
+  .home-tabs {
+    touch-action: none;
+  }
+
+  .home-grid {
+    flex: 1;
+    min-height: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    overscroll-behavior-x: contain;
+    overscroll-behavior-y: none;
+    touch-action: pan-x;
+  }
+
+  .home-slide > .hero,
+  .home-slide > .panel {
+    overflow: hidden auto;
+    touch-action: pan-y;
   }
 }
 
