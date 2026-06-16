@@ -215,6 +215,39 @@ a {
   border-radius: 4px;
 }
 
+/* Kill the translucent blue tap flash mobile browsers paint on every button. */
+button {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* One consistent scrollbar everywhere: thin, rounded, subtle slate thumb on a
+   transparent track. Firefox + WebKit/Blink kept in sync. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(148 163 184 / 0.32) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: rgb(148 163 184 / 0.32);
+  border-radius: 999px;
+  border: 3px solid transparent;
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: rgb(148 163 184 / 0.5);
+  background-clip: padding-box;
+}
+
 .visually-hidden {
   position: absolute;
   width: 1px;
@@ -241,6 +274,14 @@ a {
   display: flex;
   flex-direction: column;
   gap: var(--space-5);
+  flex: 1;
+  min-height: 0;
+}
+
+/* Home fills the space between header and footer, so trim its bottom padding
+   to keep the cards close to the footer instead of leaving dead space. */
+.app-main:has(.home-page) {
+  padding-bottom: 1.5rem;
 }
 
 /* Header */
@@ -268,16 +309,19 @@ a {
 .brand {
   display: inline-flex;
   align-items: center;
-  gap: clamp(0.35rem, 1vw, 0.6rem);
+  gap: clamp(0.5rem, 1.2vw, 0.85rem);
   min-width: 0;
   font-weight: 700;
   letter-spacing: 0.02em;
   color: var(--text-strong);
 }
 
+/* Logomark sized ~1.5x the wordmark height so the square mark (which carries
+   internal padding) reads as an equal partner to the wordmark, not a stamp.
+   Scales across all viewports and stays within the header's vertical rhythm. */
 .brand-logo {
-  width: clamp(32px, 7vw, 48px);
-  height: clamp(32px, 7vw, 48px);
+  width: clamp(44px, 8.5vw, 62px);
+  height: clamp(44px, 8.5vw, 62px);
   flex: 0 0 auto;
   object-fit: contain;
 }
@@ -301,20 +345,25 @@ a {
   border-radius: var(--radius-sm);
   font-size: 0.9rem;
   color: var(--text-muted);
+  background: transparent;
   transition: color 0.15s ease, background 0.15s ease;
 }
 
-.nav-link:hover {
+.nav-link:not(.nav-link--active):hover {
   color: var(--text-strong);
   background: rgb(148 163 184 / 0.08);
 }
 
-.nav-link--active {
+.nav-link--active,
+.nav-link--active:hover {
   color: var(--accent-strong);
   background: var(--accent-soft);
 }
 
-/* Buttons */
+/* Buttons.
+   The base (unmodified) .btn is the blue "secondary" action used for supporting
+   buttons like Add / New note / Assign. Variants fully override color + surface,
+   so primary stays gold and ghost stays neutral on every browser and on mobile. */
 .btn {
   display: inline-flex;
   align-items: center;
@@ -325,16 +374,32 @@ a {
   font: inherit;
   font-weight: 600;
   cursor: pointer;
-  border: 1px solid transparent;
-  transition: transform 0.12s ease, box-shadow 0.15s ease, background 0.15s ease;
+  appearance: none;
+  -webkit-tap-highlight-color: transparent;
+  border: 1px solid rgb(86 182 240 / 0.4);
+  background: rgb(86 182 240 / 0.14);
+  color: var(--info);
+  transition: transform 0.12s ease, box-shadow 0.15s ease, background 0.15s ease,
+    border-color 0.15s ease, color 0.15s ease;
 }
 
 .btn:hover {
   transform: translateY(-1px);
 }
 
+/* Keyboard focus only — no ring on click, consistent across browsers. */
+.btn:focus {
+  outline: none;
+}
+
+.btn:focus-visible {
+  outline: 2px solid var(--accent-strong);
+  outline-offset: 2px;
+}
+
 .btn--primary {
   background: linear-gradient(135deg, var(--accent-strong), var(--accent));
+  border-color: transparent;
   color: #1a1205;
   box-shadow: var(--shadow-glow);
 }
@@ -356,49 +421,55 @@ a {
   transform: none;
 }
 
-/* Chips */
+/* Chips — borderless tinted pills. The tone reads from the fill + text/icon
+   color, never a border. This also keeps tags clearly distinct from bordered
+   buttons. Fills are bumped slightly to stay legible without the outline. */
 .chip {
   display: inline-flex;
   align-items: center;
-  padding: 0.2rem 0.6rem;
+  gap: 0.3rem;
+  padding: 0.24rem 0.62rem;
   border-radius: 999px;
   font-size: 0.72rem;
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  border: 1px solid var(--border-soft);
-  background: rgb(148 163 184 / 0.08);
+  border: 0;
+  background: rgb(148 163 184 / 0.14);
   color: var(--text-muted);
   white-space: nowrap;
 }
 
+/* Leading status icon — scales with the chip's text size. */
+.chip svg,
+.chip-icon {
+  width: 1em;
+  height: 1em;
+  flex-shrink: 0;
+}
+
 .status--positive {
   color: var(--positive);
-  border-color: rgb(62 213 152 / 0.35);
-  background: rgb(62 213 152 / 0.12);
+  background: rgb(62 213 152 / 0.16);
 }
 
 .status--negative {
   color: var(--negative);
-  border-color: rgb(255 107 107 / 0.35);
-  background: rgb(255 107 107 / 0.12);
+  background: rgb(255 107 107 / 0.16);
 }
 
 .status--warning {
   color: var(--warning);
-  border-color: rgb(244 192 78 / 0.35);
-  background: rgb(244 192 78 / 0.12);
+  background: rgb(244 192 78 / 0.16);
 }
 
 .status--neutral {
   color: var(--info);
-  border-color: rgb(86 182 240 / 0.3);
-  background: rgb(86 182 240 / 0.1);
+  background: rgb(86 182 240 / 0.16);
 }
 
 .chip--soon {
   color: var(--accent-strong);
-  border-color: rgb(241 178 74 / 0.4);
   background: var(--accent-soft);
 }
 
@@ -512,43 +583,21 @@ a {
 
 .compass {
   position: relative;
-  width: clamp(140px, 18vw, 200px);
+  width: clamp(150px, 19vw, 220px);
   aspect-ratio: 1;
   display: grid;
   place-items: center;
+  flex: 0 0 auto;
 }
 
-.compass-ring {
-  position: absolute;
-  inset: 0;
-  border-radius: 50%;
-  border: 2px solid rgb(241 178 74 / 0.4);
-  box-shadow: inset 0 0 30px rgb(241 178 74 / 0.15), var(--shadow-glow);
-}
-
-.compass-ring::after {
-  content: "";
-  position: absolute;
-  inset: 14%;
-  border-radius: 50%;
-  border: 1px dashed rgb(148 163 184 / 0.3);
-}
-
-.compass-needle {
-  width: 4px;
-  height: 60%;
-  background: linear-gradient(180deg, var(--accent-strong), transparent);
-  transform: rotate(35deg);
-  border-radius: 4px;
-}
-
-.compass-label {
-  position: absolute;
-  bottom: -1.6rem;
-  font-size: 0.72rem;
-  text-transform: uppercase;
-  letter-spacing: 0.14em;
-  color: var(--text-faint);
+/* Bull Skull Compass artwork (replaces the old CSS compass). Square asset with
+   transparent corners — contain keeps it crisp and scales across viewports. */
+.compass-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  filter: drop-shadow(0 0 28px rgb(241 178 74 / 0.18));
 }
 
 .hero-preview-card {
@@ -1716,6 +1765,83 @@ select.input {
   gap: var(--space-5);
 }
 
+/* Tabs / segmented controls — one shared pattern for every tab group. */
+.tabs {
+  display: inline-flex;
+  gap: 0.3rem;
+  padding: 0.3rem;
+  border-radius: 999px;
+  border: 1px solid var(--border-soft);
+  background: var(--surface-2);
+}
+
+/* Equal-width segments that stretch to fill the container (e.g. auth). */
+.tabs--fill {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  width: 100%;
+}
+
+.tab {
+  appearance: none;
+  -webkit-tap-highlight-color: transparent;
+  border: 1px solid transparent;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  padding: 0.55rem 1rem;
+  border-radius: 999px;
+  text-align: center;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease,
+    transform 0.12s ease;
+  white-space: nowrap;
+}
+
+/* Hover = unselected affordance only. */
+.tab:not(.tab--active):not(:disabled):hover {
+  color: var(--text-strong);
+  background: rgb(148 163 184 / 0.08);
+}
+
+/* Selected = same gold treatment as the primary button. */
+.tab--active,
+.tab--active:hover {
+  background: linear-gradient(135deg, var(--accent-strong), var(--accent));
+  color: #1a1205;
+  box-shadow: var(--shadow-glow);
+}
+
+.tab:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Keyboard focus only — no ring on click/selection, in any browser. */
+.tab:focus {
+  outline: none;
+}
+
+.tab:focus-visible {
+  outline: 2px solid var(--accent-strong);
+  outline-offset: 2px;
+}
+
+.tab:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+@media (max-width: 480px) {
+  .tab {
+    padding: 0.5rem 0.8rem;
+    font-size: 0.8rem;
+  }
+}
+
 .page-head {
   display: flex;
   flex-direction: column;
@@ -1742,7 +1868,6 @@ button.brand {
 
 button.nav-link {
   border: none;
-  background: transparent;
   cursor: pointer;
   font: inherit;
 }
@@ -1766,13 +1891,125 @@ button.nav-link {
   grid-column: 1 / -1;
 }
 
-/* Home: market flow (3) | hero (6) | watchlist (3), stretched to content width.
-   DOM order is hero-first so mobile stacks Hero -> CTA -> Market Weather -> Current Watch. */
+/* Home: tabbed mobile carousel + full-height desktop/tablet triptych.
+   Mobile shows tabs and horizontal swipe cards. Tablet/desktop shows all three
+   cards at once, stretched to the available viewport height. */
+.home-page {
+  gap: var(--space-3);
+}
+
+.home-tabs-shell {
+  display: flex;
+  justify-content: center;
+}
+
+.home-tabs {
+  width: 100%;
+  max-width: 52rem;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.home-tabs::-webkit-scrollbar {
+  display: none;
+}
+
 .home-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
+  display: flex;
   gap: var(--space-4);
-  align-items: start;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 0.25rem;
+}
+
+.home-slide {
+  flex: 0 0 100%;
+  min-width: 100%;
+  display: flex;
+  min-height: max(32rem, calc(100dvh - 13rem));
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
+}
+
+.home-slide > * {
+  flex: 1;
+  min-height: 0;
+}
+
+.home-slide > .hero,
+.home-slide > .panel {
+  width: 100%;
+  height: 100%;
+}
+
+@media (min-width: 768px) {
+  .home-tabs-shell {
+    display: none;
+  }
+
+  /* Home fills the space between header and footer; each card takes the full
+     height and scrolls its own content vertically (never the page, never
+     horizontally). */
+  .home-page {
+    flex: 1;
+    min-height: 0;
+  }
+
+  .home-grid {
+    display: grid;
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    flex: 1;
+    min-height: 0;
+    overflow: visible;
+    scroll-snap-type: none;
+  }
+
+  .home-slide {
+    min-width: 0;
+    width: auto;
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .home-slide > .hero,
+  .home-slide > .panel {
+    height: 100%;
+    min-height: 0;
+  }
+
+  /* Panels: pin the header (and the watchlist's add box); scroll the list. */
+  .home-slide > .panel {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .home-slide .watchlist-items,
+  .home-slide .flow-steps {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden auto;
+  }
+
+  /* Hero stays vertically centered; scrolls only if the viewport is too short. */
+  .home-slide > .hero {
+    overflow: hidden auto;
+  }
+
+  .home-slide--about {
+    grid-column: 1 / span 6;
+  }
+
+  .home-slide--market {
+    grid-column: 7 / span 3;
+  }
+
+  .home-slide--watch {
+    grid-column: 10 / span 3;
+  }
 }
 
 @media (min-width: 1024px) {
@@ -1798,29 +2035,13 @@ button.nav-link {
   .col-12 {
     grid-column: span 12;
   }
-
-  .home-grid {
-    grid-template-columns: repeat(12, minmax(0, 1fr));
-  }
-
-  .home-grid .home-flow {
-    grid-column: 1 / span 3;
-    grid-row: 1;
-  }
-
-  .home-grid .home-hero {
-    grid-column: 4 / span 6;
-    grid-row: 1;
-  }
-
-  .home-grid .home-watch {
-    grid-column: 10 / span 3;
-    grid-row: 1;
-  }
 }
 
+/* Single column; the content block is vertically centered within the tall
+   card. Text stays left-aligned (only the block is centered). */
 .hero--center {
   grid-template-columns: 1fr;
+  align-content: center;
 }
 
 .hero--center .hero-preview {
@@ -1840,7 +2061,7 @@ button.nav-link {
 }
 
 .hero--center .compass {
-  width: clamp(104px, 13vw, 140px);
+  width: clamp(140px, 16vw, 192px);
 }
 
 .chart-name {
@@ -1851,6 +2072,7 @@ button.nav-link {
 
 .flow-steps--vertical {
   flex-direction: column;
+  flex-wrap: nowrap;
 }
 
 .flow-detail--positive {
@@ -2075,30 +2297,9 @@ button.nav-link {
   gap: var(--space-3);
 }
 
-.auth-tabs {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0.3rem;
-  padding: 0.3rem;
-  background: var(--surface-3);
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius-md);
-}
-
-.auth-tab {
-  border: none;
-  background: transparent;
-  cursor: pointer;
-  font: inherit;
-  font-weight: 600;
-  color: var(--text-muted);
-  padding: 0.55rem 0.75rem;
-  border-radius: var(--radius-sm);
-}
-
-.auth-tab--active {
-  color: var(--brand-ink);
-  background: linear-gradient(180deg, var(--brand-gold-strong), var(--brand-gold));
+/* Auth uses the shared .tabs/.tabs--fill segmented control. */
+.auth-mode-tabs {
+  margin-bottom: var(--space-1);
 }
 
 .auth-form {

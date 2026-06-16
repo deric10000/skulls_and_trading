@@ -1,3 +1,4 @@
+import { Clock } from "../../lib/icons";
 import { useAppState } from "../../state/AppState";
 import type { PortfolioLinkStatus } from "../../types";
 
@@ -42,7 +43,12 @@ export function PortfolioLinkStatusCard() {
               disabled={option.soon}
             >
               <span>{option.label}</span>
-              {option.soon ? <span className="chip chip--soon">Coming soon</span> : null}
+              {option.soon ? (
+                <span className="chip chip--soon">
+                  <Clock aria-hidden />
+                  Coming soon
+                </span>
+              ) : null}
             </button>
           );
         })}
