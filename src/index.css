@@ -1904,14 +1904,22 @@ button.nav-link {
 }
 
 .home-tabs-shell {
+  position: relative;
   display: flex;
   justify-content: center;
-  align-self: stretch;
-  width: calc(100% + (var(--content-pad) * 2));
-  margin-inline: calc(var(--content-pad) * -1);
-  padding-inline: var(--content-pad);
+  width: 100%;
+  padding-inline: 0;
   padding-bottom: 0.25rem;
-  border-bottom: 1px solid var(--border-soft);
+}
+
+.home-tabs-shell::after {
+  content: "";
+  position: absolute;
+  left: calc(var(--content-pad) * -1);
+  right: calc(var(--content-pad) * -1);
+  bottom: 0;
+  height: 1px;
+  background: var(--border-soft);
 }
 
 .home-tabs {
