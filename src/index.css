@@ -1952,6 +1952,11 @@ button.nav-link {
   padding-bottom: 0.25rem;
 }
 
+.home-grid__track {
+  display: flex;
+  min-width: 100%;
+}
+
 .home-slide {
   flex: 0 0 100%;
   min-width: 100%;
@@ -1990,6 +1995,10 @@ button.nav-link {
     min-height: 0;
     overflow: visible;
     scroll-snap-type: none;
+  }
+
+  .home-grid__track {
+    display: contents;
   }
 
   .home-slide {

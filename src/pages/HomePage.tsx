@@ -79,15 +79,17 @@ export function HomePage() {
         />
       </div>
       <div className="home-grid" ref={emblaRef}>
-        <section className="home-slide home-slide--about" data-home-tab="about">
-          <HeroCard variant="center" />
-        </section>
-        <section className="home-slide home-slide--market" data-home-tab="market-weather">
-          <MarketFlowWidget />
-        </section>
-        <section className="home-slide home-slide--watch" data-home-tab="current-watch">
-          <WatchlistWidget />
-        </section>
+        <div className="home-grid__track">
+          <section className="home-slide home-slide--about" data-home-tab="about">
+            <HeroCard variant="center" />
+          </section>
+          <section className="home-slide home-slide--market" data-home-tab="market-weather">
+            <MarketFlowWidget />
+          </section>
+          <section className="home-slide home-slide--watch" data-home-tab="current-watch">
+            <WatchlistWidget />
+          </section>
+        </div>
       </div>
     </div>
   );
