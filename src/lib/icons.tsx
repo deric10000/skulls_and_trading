@@ -9,7 +9,10 @@ import {
   Clock,
   Eye,
   type Icon,
+  LockKey,
+  ShieldStar,
   Skull,
+  Strategy,
   Sparkle,
   Warning,
   WarningOctagon,
@@ -18,7 +21,18 @@ import type { StatusType } from "../types";
 
 export type { Icon };
 
-export { CheckCircle, Clock, Eye, Skull, Sparkle, Warning, WarningOctagon };
+export {
+  CheckCircle,
+  Clock,
+  Eye,
+  LockKey,
+  ShieldStar,
+  Skull,
+  Sparkle,
+  Strategy,
+  Warning,
+  WarningOctagon,
+};
 
 /** Status taxonomy → status chip icon. Tone color comes from the chip class. */
 export const STATUS_ICON: Record<StatusType, Icon> = {
