@@ -2,12 +2,18 @@ import { useState } from "react";
 import brandLogo from "../../assets/st-logo.png";
 import brandWordmark from "../../assets/st-wordmark.svg";
 import { useAppState } from "../../state/AppState";
+import { Tabs, type TabItem } from "../Tabs";
 import { AuthButton } from "./AuthButton";
 import { AuthErrorState } from "./AuthErrorState";
 import { DemoModeCard } from "./DemoModeCard";
 import { SignUpForm } from "./SignUpForm";
 
 type Mode = "sign-in" | "sign-up";
+
+const AUTH_TABS: TabItem[] = [
+  { id: "sign-in", label: "Sign in" },
+  { id: "sign-up", label: "Create account" },
+];
 
 export function LoginScreen() {
   const { signIn } = useAppState();
@@ -54,26 +60,14 @@ export function LoginScreen() {
         </aside>
 
         <section className="auth-panel panel" aria-label="Sign in or create an account">
-          <div className="auth-tabs" role="tablist" aria-label="Authentication mode">
-            <button
-              type="button"
-              role="tab"
-              aria-selected={mode === "sign-in"}
-              className={mode === "sign-in" ? "auth-tab auth-tab--active" : "auth-tab"}
-              onClick={() => setMode("sign-in")}
-            >
-              Sign in
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={mode === "sign-up"}
-              className={mode === "sign-up" ? "auth-tab auth-tab--active" : "auth-tab"}
-              onClick={() => setMode("sign-up")}
-            >
-              Create account
-            </button>
-          </div>
+          <Tabs
+            items={AUTH_TABS}
+            value={mode}
+            onChange={(id) => setMode(id as Mode)}
+            ariaLabel="Authentication mode"
+            fill
+            className="auth-mode-tabs"
+          />
 
           {mode === "sign-in" ? (
             <form className="auth-form" onSubmit={handleSignIn} noValidate>

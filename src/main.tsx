@@ -1,3 +1,4 @@
+import { IconContext } from "@phosphor-icons/react";
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
@@ -11,6 +12,8 @@ if (!rootElement) {
 
 ReactDOM.createRoot(rootElement).render(
   <React.StrictMode>
-    <App />
+    <IconContext.Provider value={{ weight: "fill" }}>
+      <App />
+    </IconContext.Provider>
   </React.StrictMode>,
 );

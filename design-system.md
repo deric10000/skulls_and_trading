@@ -152,14 +152,24 @@ Prefer these tokens (or multiples that stay on the 4pt grid) over ad-hoc pixel v
 
 - `.panel` — rounded dark card: `--surface-1`, `--border-soft`, `--radius-lg`, `--shadow-card`.
 - `.panel-head` / `.panel-tag` / `.panel-intro` — card header row, small uppercase tag, intro text.
-- `.btn` with `.btn--primary` (gold gradient), `.btn--ghost` (subtle outline), `.btn--small`.
-- `.chip` — pill badge. Status tones: `.status--positive`, `.status--negative`, `.status--warning`, `.status--neutral`. `.chip--soon` for "coming soon".
+- `.btn` — base style is the **blue secondary** action (used bare for supporting actions like Add / New note / Assign). `.btn--primary` (gold gradient CTA), `.btn--ghost` (neutral outline), `.btn--small` (compact size). Variants fully override surface + color so the same button looks identical on desktop and mobile. Focus ring is keyboard-only (no ring on click); mobile tap-highlight is suppressed.
+- `.chip` — **borderless** tinted pill badge; tone is carried by fill + text/icon color, never a border (keeps tags visually distinct from bordered buttons). Status tones: `.status--positive`, `.status--negative`, `.status--warning`, `.status--neutral`. `.chip--soon` for "coming soon". Supports an optional leading status icon (`.chip svg` / `.chip-icon` auto-sizes to `1em`).
+- `.tabs` / `.tab` / `.tab--active` (+ `.tabs--fill` for equal-width segments) — the single shared segmented control. Render via the `Tabs` component (`src/components/Tabs.tsx`); never hand-roll a tab strip. States: unselected (muted), hover (subtle surface tint), selected (`.tab--active`, gold gradient matching `.btn--primary`), disabled (dimmed, non-interactive). Focus is keyboard-only — no second border on selection. Used by the home deck and the auth sign-in/create-account switch.
 - `.watch-item` / `.watch-item--active` — watchlist cards; active state uses gold border + `--shadow-glow`.
 - `.conviction` — track + gold fill bar.
 - `.mini-card`, `.lens-card`, `.edu-card` — nested content cards.
 - `.flow-step` / `.flow-index` — top-down market flow steps.
 - `.chart-frame`, `.chart-line`, `.chart-volume`, `.indicator-tags` — chart placeholder + indicator chips.
 - `.config-chip` / `.strategy-card` — Strategy Forge controls and list cards.
+
+## Iconography
+
+- **Set:** [Phosphor Icons](https://phosphoricons.com) (`@phosphor-icons/react`), chosen to pair with IBM Plex Sans — friendly geometric forms with humanist warmth, and a `fill` weight for solid status glyphs.
+- **Weight:** `fill` globally, set once via `IconContext.Provider` in `src/main.tsx`. Do not pass `weight` per icon unless intentionally overriding.
+- **Single source:** import icons from `src/lib/icons.tsx`, not the package directly, so the curated set stays consistent. New icons get added there.
+- **Sizing:** icons inside chips auto-size to `1em` via `.chip svg` / `.chip-icon`. Elsewhere, size relative to adjacent text.
+- **Status chip mapping** (`STATUS_ICON` in `src/lib/icons.tsx`): Aligned → `CheckCircle`, Watch → `Eye`, Review/Rule Check/Risk Check/Thesis Needed/Trim Review → `Warning`, Exit Review → `WarningOctagon`. Coming soon → `Clock`, Demo → `Sparkle`. Icon color always inherits the chip tone.
+- Icons are decorative when paired with a text label — mark them `aria-hidden`.
 
 ## Interaction + motion
 
@@ -192,7 +202,7 @@ Prefer these tokens (or multiples that stay on the 4pt grid) over ad-hoc pixel v
 
 ## Responsiveness
 
-- Desktop grids activate at `>= 1024px`; below that, layouts stack to a single column.
+- Desktop grids activate at `>= 1024px`; below that, layouts stack to a single column. The home page is a special case: below tablet width it becomes a tabbed swipe deck, then becomes a 3-up viewport-height layout at tablet/desktop widths.
 - The header stacks at `<= 640px`.
 - On mobile, each major widget remains a clearly separated card so the page does not
   become one long unstructured scroll.
@@ -216,8 +226,10 @@ This section maps the design system to what is implemented in code.
   `AuthErrorState`, and a 5-step `Onboarding` (profile → style → risk → strategy →
   holdings/demo → first log). All mock; no backend, no brokerage linking. Safety
   microcopy from [`product-voice.md`](product-voice.md).
-- Classes: `.auth-screen`, `.auth-shell`, `.auth-brand`, `.auth-panel`, `.auth-tabs`,
-  `.auth-form`, `.auth-field`, `.auth-error`, `.demo-card`, `.onboarding`.
+- Classes: `.auth-screen`, `.auth-shell`, `.auth-brand`, `.auth-panel`,
+  `.auth-form`, `.auth-field`, `.auth-error`, `.demo-card`, `.onboarding`. The
+  sign-in / create-account switch uses the shared `Tabs` component
+  (`.tabs--fill`), not a bespoke tab style.
 
 ### Status taxonomy (plan-safe)
 

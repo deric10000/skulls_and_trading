@@ -1,5 +1,6 @@
 import brandLogo from "../assets/st-logo.png";
 import brandWordmark from "../assets/st-wordmark.svg";
+import { Sparkle } from "../lib/icons";
 import { useAppState } from "../state/AppState";
 import type { PageId } from "../types";
 
@@ -50,7 +51,12 @@ export function TopNav() {
         <div className="site-account">
           <span className="site-account-name">
             {captainName || "Captain"}
-            {demoMode ? <span className="chip chip--soon">Demo</span> : null}
+            {demoMode ? (
+              <span className="chip chip--soon">
+                <Sparkle aria-hidden />
+                Demo
+              </span>
+            ) : null}
           </span>
           <button type="button" className="btn btn--small btn--ghost" onClick={signOut}>
             Sign out

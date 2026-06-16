@@ -1,3 +1,5 @@
+import bullCompass from "../assets/bull-skull-compass.png";
+import { Skull } from "../lib/icons";
 import { useAppState } from "../state/AppState";
 
 export function HeroCard({ variant = "full" }: { variant?: "full" | "center" }) {
@@ -52,12 +54,13 @@ export function HeroCard({ variant = "full" }: { variant?: "full" | "center" }) 
       </div>
       <aside className="hero-preview" aria-hidden="true">
         <div className="compass">
-          <div className="compass-ring" />
-          <div className="compass-needle" />
-          <span className="compass-label">Market Compass</span>
+          <img className="compass-img" src={bullCompass} alt="" />
         </div>
         <div className="hero-preview-card">
-          <span className="chip status--positive">Strategy Check</span>
+          <span className="chip status--positive">
+            <Skull aria-hidden />
+            Strategy Check
+          </span>
           <p>Your rules, your thesis, your invalidation — checked before you act.</p>
         </div>
       </aside>

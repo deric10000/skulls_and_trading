@@ -1,3 +1,4 @@
+import { STATUS_ICON } from "../lib/icons";
 import type { StatusType } from "../types";
 
 const STATUS_TONE: Record<StatusType, string> = {
@@ -12,5 +13,11 @@ const STATUS_TONE: Record<StatusType, string> = {
 };
 
 export function StatusBadge({ status }: { status: StatusType }) {
-  return <span className={`chip ${STATUS_TONE[status]}`}>{status}</span>;
+  const Icon = STATUS_ICON[status];
+  return (
+    <span className={`chip ${STATUS_TONE[status]}`}>
+      <Icon aria-hidden />
+      {status}
+    </span>
+  );
 }

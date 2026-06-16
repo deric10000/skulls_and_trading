@@ -1,4 +1,5 @@
 import { TICKER_ANALYSIS } from "../data";
+import { Clock } from "../lib/icons";
 import { useAppState } from "../state/AppState";
 import { formatChange, formatPrice } from "../lib/format";
 import type { SignalChip } from "../types";
@@ -90,7 +91,10 @@ export function StockSummaryPanel() {
             </article>
           </div>
           <p className="analysis-ai-note">
-            <span className="chip chip--soon">Coming soon</span>
+            <span className="chip chip--soon">
+              <Clock aria-hidden />
+              Coming soon
+            </span>
             AI briefings will auto-summarize this thesis and your Captain&rsquo;s Log.
           </p>
         </>
