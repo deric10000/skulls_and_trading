@@ -174,11 +174,13 @@ html,
 body,
 #root {
   min-height: 100%;
+  overflow-x: hidden;
 }
 
 body {
   margin: 0;
   min-height: 100vh;
+  overscroll-behavior-x: none;
   color: var(--text-base);
   background:
     radial-gradient(circle at 18% -10%, rgb(241 178 74 / 0.08), transparent 45%),
@@ -265,6 +267,7 @@ button {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
+  overflow-x: hidden;
 }
 
 .app-main {
@@ -1768,9 +1771,9 @@ select.input {
 /* Tabs / segmented controls — one shared pattern for every tab group. */
 .tabs {
   display: inline-flex;
-  gap: 0.3rem;
-  padding: 0.3rem;
-  border-radius: 999px;
+  gap: 0.25rem;
+  padding: 0.25rem;
+  border-radius: var(--radius-md);
   border: 1px solid var(--border-soft);
   background: var(--surface-2);
 }
@@ -1794,8 +1797,8 @@ select.input {
   font-size: 0.85rem;
   font-weight: 600;
   letter-spacing: 0.01em;
-  padding: 0.55rem 1rem;
-  border-radius: 999px;
+  padding: 0.55rem 0.95rem;
+  border-radius: 0.75rem;
   text-align: center;
   transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease,
     transform 0.12s ease;
@@ -1808,12 +1811,13 @@ select.input {
   background: rgb(148 163 184 / 0.08);
 }
 
-/* Selected = same gold treatment as the primary button. */
+/* Selected = ghost-button treatment: subtle surface, stronger border/text. */
 .tab--active,
 .tab--active:hover {
-  background: linear-gradient(135deg, var(--accent-strong), var(--accent));
-  color: #1a1205;
-  box-shadow: var(--shadow-glow);
+  background: rgb(148 163 184 / 0.06);
+  border-color: var(--border-strong);
+  color: var(--text-strong);
+  box-shadow: none;
 }
 
 .tab:disabled {
@@ -1901,13 +1905,24 @@ button.nav-link {
 .home-tabs-shell {
   display: flex;
   justify-content: center;
+  align-self: stretch;
+  width: calc(100% + (var(--content-pad) * 2));
+  margin-inline: calc(var(--content-pad) * -1);
+  padding-inline: var(--content-pad);
+  padding-bottom: 0.25rem;
+  border-bottom: 1px solid var(--border-soft);
 }
 
 .home-tabs {
   width: 100%;
-  max-width: 52rem;
+  max-width: none;
   overflow-x: auto;
   scrollbar-width: none;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 .home-tabs::-webkit-scrollbar {
@@ -1921,6 +1936,8 @@ button.nav-link {
   scroll-snap-type: x mandatory;
   scroll-behavior: smooth;
   -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+  overscroll-behavior-y: none;
   padding-bottom: 0.25rem;
 }
 
@@ -1945,10 +1962,6 @@ button.nav-link {
 }
 
 @media (min-width: 768px) {
-  .home-tabs-shell {
-    display: none;
-  }
-
   /* Home fills the space between header and footer; each card takes the full
      height and scrolls its own content vertically (never the page, never
      horizontally). */
@@ -2013,6 +2026,10 @@ button.nav-link {
 }
 
 @media (min-width: 1024px) {
+  .home-tabs-shell {
+    display: none;
+  }
+
   .grid-12 {
     grid-template-columns: repeat(12, minmax(0, 1fr));
   }
@@ -2175,6 +2192,14 @@ button.nav-link {
 
   .analysis-head {
     flex-direction: column;
+  }
+
+  .app-main:has(.home-page) {
+    padding-top: 0.25rem;
+  }
+
+  .home-page {
+    gap: 0.25rem;
   }
 }
 

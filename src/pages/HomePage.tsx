@@ -19,8 +19,12 @@ export function HomePage() {
   const weatherRef = useRef<HTMLElement | null>(null);
   const watchRef = useRef<HTMLElement | null>(null);
 
-  function scrollToTab(tabId: HomeTabId) {
+  function scrollDeckToTab(tabId: HomeTabId, behavior: ScrollBehavior = "smooth") {
     setActiveTab(tabId);
+
+    const deck = deckRef.current;
+    if (!deck) return;
+
     const target =
       tabId === "about"
         ? aboutRef.current
@@ -28,11 +32,14 @@ export function HomePage() {
           ? weatherRef.current
           : watchRef.current;
 
-    target?.scrollIntoView({
-      behavior: "smooth",
-      block: "nearest",
-      inline: "start",
-    });
+    if (!target) return;
+
+    const left = Math.max(0, target.offsetLeft);
+    deck.scrollTo({ left, behavior });
+  }
+
+  function scrollToTab(tabId: HomeTabId) {
+    scrollDeckToTab(tabId);
   }
 
   useEffect(() => {
@@ -70,6 +77,16 @@ export function HomePage() {
 
     return () => observer.disconnect();
   }, []);
+
+  useEffect(() => {
+    const deck = deckRef.current;
+    if (!deck || typeof window === "undefined") return;
+
+    const media = window.matchMedia("(max-width: 1023px)");
+    if (!media.matches) return;
+
+    scrollDeckToTab(activeTab, "auto");
+  }, [activeTab]);
 
   return (
     <div className="page home-page">
