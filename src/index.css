@@ -175,12 +175,13 @@ body,
 #root {
   min-height: 100%;
   overflow-x: hidden;
+  overscroll-behavior: none;
 }
 
 body {
   margin: 0;
   min-height: 100vh;
-  overscroll-behavior-x: none;
+  overscroll-behavior: none;
   color: var(--text-base);
   background:
     radial-gradient(circle at 18% -10%, rgb(241 178 74 / 0.08), transparent 45%),

@@ -18,6 +18,27 @@ export function HomePage() {
   const aboutRef = useRef<HTMLElement | null>(null);
   const weatherRef = useRef<HTMLElement | null>(null);
   const watchRef = useRef<HTMLElement | null>(null);
+  const programmaticScrollRef = useRef(false);
+  const programmaticUnlockTimerRef = useRef<number | null>(null);
+
+  function clearProgrammaticScrollLock() {
+    programmaticScrollRef.current = false;
+    if (programmaticUnlockTimerRef.current !== null) {
+      window.clearTimeout(programmaticUnlockTimerRef.current);
+      programmaticUnlockTimerRef.current = null;
+    }
+  }
+
+  function scheduleProgrammaticScrollUnlock() {
+    if (programmaticUnlockTimerRef.current !== null) {
+      window.clearTimeout(programmaticUnlockTimerRef.current);
+    }
+
+    programmaticUnlockTimerRef.current = window.setTimeout(() => {
+      programmaticScrollRef.current = false;
+      programmaticUnlockTimerRef.current = null;
+    }, 120);
+  }
 
   function scrollDeckToTab(tabId: HomeTabId, behavior: ScrollBehavior = "smooth") {
     setActiveTab(tabId);
@@ -35,6 +56,8 @@ export function HomePage() {
     if (!target) return;
 
     const left = Math.max(0, target.offsetLeft);
+    programmaticScrollRef.current = true;
+    scheduleProgrammaticScrollUnlock();
     deck.scrollTo({ left, behavior });
   }
 
@@ -54,8 +77,15 @@ export function HomePage() {
     ) as HTMLElement[];
     if (slides.length === 0) return;
 
+    const handleScroll = () => {
+      if (!programmaticScrollRef.current) return;
+      scheduleProgrammaticScrollUnlock();
+    };
+
     const observer = new IntersectionObserver(
       (entries) => {
+        if (programmaticScrollRef.current) return;
+
         const topEntry = entries
           .filter((entry) => entry.isIntersecting)
           .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
@@ -74,19 +104,14 @@ export function HomePage() {
     );
 
     slides.forEach((slide) => observer.observe(slide));
+    deck.addEventListener("scroll", handleScroll, { passive: true });
 
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+      deck.removeEventListener("scroll", handleScroll);
+      clearProgrammaticScrollLock();
+    };
   }, []);
-
-  useEffect(() => {
-    const deck = deckRef.current;
-    if (!deck || typeof window === "undefined") return;
-
-    const media = window.matchMedia("(max-width: 1023px)");
-    if (!media.matches) return;
-
-    scrollDeckToTab(activeTab, "auto");
-  }, [activeTab]);
 
   return (
     <div className="page home-page">
