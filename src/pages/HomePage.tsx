@@ -18,100 +18,176 @@ export function HomePage() {
   const aboutRef = useRef<HTMLElement | null>(null);
   const weatherRef = useRef<HTMLElement | null>(null);
   const watchRef = useRef<HTMLElement | null>(null);
-  const programmaticScrollRef = useRef(false);
-  const programmaticUnlockTimerRef = useRef<number | null>(null);
+  const [carouselMode, setCarouselMode] = useState(false);
+  const [dragOffset, setDragOffset] = useState(0);
+  const [deckWidth, setDeckWidth] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
+  const gestureRef = useRef({
+    pointerId: -1,
+    startX: 0,
+    startY: 0,
+    deltaX: 0,
+    deltaY: 0,
+    horizontal: false,
+    active: false,
+  });
 
-  function clearProgrammaticScrollLock() {
-    programmaticScrollRef.current = false;
-    if (programmaticUnlockTimerRef.current !== null) {
-      window.clearTimeout(programmaticUnlockTimerRef.current);
-      programmaticUnlockTimerRef.current = null;
-    }
-  }
+  const activeIndex = HOME_TABS.findIndex((tab) => tab.id === activeTab);
 
-  function scheduleProgrammaticScrollUnlock() {
-    if (programmaticUnlockTimerRef.current !== null) {
-      window.clearTimeout(programmaticUnlockTimerRef.current);
-    }
-
-    programmaticUnlockTimerRef.current = window.setTimeout(() => {
-      programmaticScrollRef.current = false;
-      programmaticUnlockTimerRef.current = null;
-    }, 120);
-  }
-
-  function scrollDeckToTab(tabId: HomeTabId, behavior: ScrollBehavior = "smooth") {
+  function setSlide(tabId: HomeTabId) {
     setActiveTab(tabId);
+    setDragOffset(0);
+    setIsDragging(false);
+  }
+
+  function scrollToTab(tabId: HomeTabId) {
+    setSlide(tabId);
+  }
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const media = window.matchMedia("(max-width: 1023px)");
+    const update = () => setCarouselMode(media.matches);
+
+    update();
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
+  }, []);
+
+  useEffect(() => {
+    if (!carouselMode || typeof window === "undefined") return;
 
     const deck = deckRef.current;
     if (!deck) return;
 
-    const target =
-      tabId === "about"
-        ? aboutRef.current
-        : tabId === "market-weather"
-          ? weatherRef.current
-          : watchRef.current;
-
-    if (!target) return;
-
-    const left = Math.max(0, target.offsetLeft);
-    programmaticScrollRef.current = true;
-    scheduleProgrammaticScrollUnlock();
-    deck.scrollTo({ left, behavior });
-  }
-
-  function scrollToTab(tabId: HomeTabId) {
-    scrollDeckToTab(tabId);
-  }
-
-  useEffect(() => {
-    const deck = deckRef.current;
-    if (!deck || typeof window === "undefined") return;
-
-    const media = window.matchMedia("(max-width: 1023px)");
-    if (!media.matches) return;
-
-    const slides = [aboutRef.current, weatherRef.current, watchRef.current].filter(
-      Boolean,
-    ) as HTMLElement[];
-    if (slides.length === 0) return;
-
-    const handleScroll = () => {
-      if (!programmaticScrollRef.current) return;
-      scheduleProgrammaticScrollUnlock();
+    const updateWidth = () => {
+      setDeckWidth(deck.clientWidth);
     };
 
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (programmaticScrollRef.current) return;
+    updateWidth();
 
-        const topEntry = entries
-          .filter((entry) => entry.isIntersecting)
-          .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
+    if (typeof ResizeObserver === "undefined") {
+      window.addEventListener("resize", updateWidth);
+      return () => window.removeEventListener("resize", updateWidth);
+    }
 
-        if (!topEntry) return;
+    const observer = new ResizeObserver(updateWidth);
+    observer.observe(deck);
 
-        const nextTab = topEntry.target.getAttribute("data-home-tab") as HomeTabId | null;
-        if (nextTab) {
-          setActiveTab(nextTab);
-        }
-      },
-      {
-        root: deck,
-        threshold: [0.45, 0.6, 0.75],
-      },
+    return () => observer.disconnect();
+  }, [carouselMode]);
+
+  function isSwipeBlocked(target: EventTarget | null) {
+    if (!(target instanceof HTMLElement)) return false;
+
+    return Boolean(
+      target.closest(
+        "button, input, textarea, select, a, [role='button'], [role='tab'], [data-no-swipe]",
+      ),
     );
+  }
 
-    slides.forEach((slide) => observer.observe(slide));
-    deck.addEventListener("scroll", handleScroll, { passive: true });
+  function handlePointerDown(event: React.PointerEvent<HTMLDivElement>) {
+    if (!carouselMode || event.pointerType === "mouse" || isSwipeBlocked(event.target)) {
+      return;
+    }
 
-    return () => {
-      observer.disconnect();
-      deck.removeEventListener("scroll", handleScroll);
-      clearProgrammaticScrollLock();
+    gestureRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      deltaX: 0,
+      deltaY: 0,
+      horizontal: false,
+      active: true,
     };
-  }, []);
+
+    setIsDragging(false);
+    event.currentTarget.setPointerCapture(event.pointerId);
+  }
+
+  function finishSwipe(event: React.PointerEvent<HTMLDivElement>) {
+    const gesture = gestureRef.current;
+    if (!gesture.active || gesture.pointerId !== event.pointerId) return;
+
+    const width = deckWidth || deckRef.current?.clientWidth || 0;
+    const threshold = Math.max(48, width * 0.18);
+    const dx = gesture.deltaX;
+    const isHorizontal = gesture.horizontal;
+
+    gestureRef.current = {
+      pointerId: -1,
+      startX: 0,
+      startY: 0,
+      deltaX: 0,
+      deltaY: 0,
+      horizontal: false,
+      active: false,
+    };
+
+    try {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    } catch {
+      // Pointer capture may already be gone on some browsers.
+    }
+
+    setDragOffset(0);
+    setIsDragging(false);
+
+    if (!isHorizontal) return;
+
+    if (dx <= -threshold) {
+      setSlide(HOME_TABS[Math.min(activeIndex + 1, HOME_TABS.length - 1)].id as HomeTabId);
+    } else if (dx >= threshold) {
+      setSlide(HOME_TABS[Math.max(activeIndex - 1, 0)].id as HomeTabId);
+    }
+  }
+
+  function handlePointerMove(event: React.PointerEvent<HTMLDivElement>) {
+    const gesture = gestureRef.current;
+    if (!carouselMode || !gesture.active || gesture.pointerId !== event.pointerId) return;
+
+    gesture.deltaX = event.clientX - gesture.startX;
+    gesture.deltaY = event.clientY - gesture.startY;
+
+    if (!gesture.horizontal) {
+      const startThreshold = 8;
+      if (Math.abs(gesture.deltaX) < startThreshold && Math.abs(gesture.deltaY) < startThreshold) {
+        return;
+      }
+
+      if (Math.abs(gesture.deltaX) <= Math.abs(gesture.deltaY)) {
+        return;
+      }
+
+      gesture.horizontal = true;
+      setIsDragging(true);
+    }
+
+    event.preventDefault();
+
+    const width = deckWidth || deckRef.current?.clientWidth || 1;
+    const maxOffset = width * 0.38;
+    const atStart = activeIndex === 0 && gesture.deltaX > 0;
+    const atEnd = activeIndex === HOME_TABS.length - 1 && gesture.deltaX < 0;
+
+    let offset = Math.max(-maxOffset, Math.min(maxOffset, gesture.deltaX));
+    if (atStart || atEnd) {
+      offset *= 0.35;
+    }
+
+    setDragOffset(offset);
+  }
+
+  function handlePointerCancel(event: React.PointerEvent<HTMLDivElement>) {
+    finishSwipe(event);
+  }
+
+  const carouselTranslate = carouselMode
+    ? { transform: `translate3d(${-(activeIndex * (deckWidth || 0)) + dragOffset}px, 0, 0)` }
+    : undefined;
+  const carouselTransition = carouselMode && isDragging ? "none" : "transform 280ms ease";
 
   return (
     <div className="page home-page">
@@ -124,7 +200,15 @@ export function HomePage() {
           className="home-tabs"
         />
       </div>
-      <div className="home-grid" ref={deckRef}>
+      <div
+        className="home-grid"
+        ref={deckRef}
+        style={carouselMode ? { ...carouselTranslate, transition: carouselTransition } : undefined}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={finishSwipe}
+        onPointerCancel={handlePointerCancel}
+      >
         <section className="home-slide home-slide--about" data-home-tab="about" ref={aboutRef}>
           <HeroCard variant="center" />
         </section>
