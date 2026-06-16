@@ -153,6 +153,7 @@ Prefer these tokens (or multiples that stay on the 4pt grid) over ad-hoc pixel v
 - `.panel` — rounded dark card: `--surface-1`, `--border-soft`, `--radius-lg`, `--shadow-card`.
 - `.panel-head` / `.panel-tag` / `.panel-intro` — card header row, small uppercase tag, intro text.
 - `.btn` — base style is the **blue secondary** action (used bare for supporting actions like Add / New note / Assign). `.btn--primary` (gold gradient CTA), `.btn--ghost` (neutral outline), `.btn--small` (compact size). Variants fully override surface + color so the same button looks identical on desktop and mobile. Focus ring is keyboard-only (no ring on click); mobile tap-highlight is suppressed.
+- `.btn--link` — text-forward link button used for header/account actions like Sign Out. It keeps the same hit area and rounded interaction target as a button, but visually reads as a blue text link with no border or fill.
 - `.chip` — **borderless** tinted pill badge; tone is carried by fill + text/icon color, never a border (keeps tags visually distinct from bordered buttons). Status tones: `.status--positive`, `.status--negative`, `.status--warning`, `.status--neutral`. `.chip--soon` for "coming soon". Supports an optional leading status icon (`.chip svg` / `.chip-icon` auto-sizes to `1em`).
 - `.tabs` / `.tab` / `.tab--active` (+ `.tabs--fill` for equal-width segments) — the single shared segmented control. Render via the `Tabs` component (`src/components/Tabs.tsx`); never hand-roll a tab strip. States: unselected (muted), hover (subtle surface tint), selected (`.tab--active`, gold gradient matching `.btn--primary`), disabled (dimmed, non-interactive). Focus is keyboard-only — no second border on selection. Used by the home deck and the auth sign-in/create-account switch.
 - `.watch-item` / `.watch-item--active` — watchlist cards; active state uses gold border + `--shadow-glow`.
@@ -223,7 +224,7 @@ This section maps the design system to what is implemented in code.
 
 - `LoginScreen` — split brand panel + sign in / create account tabs + Demo card.
 - `SignUpForm`, `DemoModeCard` ("Continue as Demo Captain"), `AuthButton`,
-  `AuthErrorState`, and a 5-step `Onboarding` (profile → style → risk → strategy →
+  `AuthErrorState`, `LinkButton`, and a 5-step `Onboarding` (profile → style → risk → strategy →
   holdings/demo → first log). All mock; no backend, no brokerage linking. Safety
   microcopy from [`product-voice.md`](product-voice.md).
 - Classes: `.auth-screen`, `.auth-shell`, `.auth-brand`, `.auth-panel`,
