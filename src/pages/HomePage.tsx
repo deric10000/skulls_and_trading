@@ -32,7 +32,7 @@ export function HomePage() {
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    const media = window.matchMedia("(max-width: 1023px)");
+    const media = window.matchMedia("(max-width: 767px)");
     const update = () => setCarouselEnabled(media.matches);
 
     update();
