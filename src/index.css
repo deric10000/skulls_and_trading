@@ -360,10 +360,15 @@ button {
   min-width: 0;
 }
 
-/* Desktop: one cohesive bar — brand left, nav centered, account right. */
-@media (min-width: 1024px) {
+/* Desktop: one cohesive bar — brand left, nav centered, account right.
+   The side tracks reserve the brand's / account's natural width
+   (minmax(max-content, 1fr)) so the nav stays viewport-centered while there is
+   room, then slides toward the right as the brand track grows — it never
+   overlaps the wordmark. Once even that no longer fits we drop below this
+   breakpoint and the two-row tablet layout takes over. */
+@media (min-width: 1200px) {
   .site-header-inner {
-    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    grid-template-columns: minmax(max-content, 1fr) auto minmax(max-content, 1fr);
     grid-template-areas: "brand nav account";
     column-gap: var(--space-4);
     row-gap: 0;
@@ -1960,24 +1965,25 @@ button.nav-link {
   width: 100%;
 }
 
+/* Tab bar sits flush beneath the global header. It full-bleeds to the viewport
+   edges (background + bottom border) while its inner tabs stay aligned with the
+   page content. The card deck below is what scrolls, so no scrollbar ever sits
+   beside the tab bar. */
 .home-tabs-shell {
-  position: sticky;
-  top: 0;
+  position: relative;
   z-index: 6;
   display: flex;
-  justify-content: center;
-  width: 100%;
-  padding-inline: 0;
-  padding-top: 0.25rem;
-  padding-bottom: 0.25rem;
+  flex: 0 0 auto;
+  margin-inline: calc(var(--content-pad) * -1);
+  padding: 0.45rem var(--content-pad);
   background: var(--bg-base);
 }
 
 .home-tabs-shell::after {
   content: "";
   position: absolute;
-  left: calc(var(--content-pad) * -1);
-  right: calc(var(--content-pad) * -1);
+  left: 0;
+  right: 0;
   bottom: 0;
   height: 1px;
   background: var(--border-soft);
@@ -2000,16 +2006,16 @@ button.nav-link {
 }
 
 /* Mobile-first: a horizontal swipe deck (Embla). The viewport clips
-   horizontally while vertical scrolling is left to the page/shell — the cards
-   themselves are as tall as their content, and never scroll internally. */
+   horizontally and owns the vertical scroll, so its scrollbar sits beside the
+   cards (below the tab bar) rather than beside the tab bar. */
 .home-grid {
   display: flex;
   gap: 0;
-  overflow: hidden;
-  overscroll-behavior-x: contain;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   touch-action: pan-y;
-  padding-bottom: 0.25rem;
-  flex: 0 0 auto;
+  flex: 1 1 auto;
   min-height: 0;
   align-items: flex-start;
 }
@@ -2345,19 +2351,21 @@ button.nav-link {
     flex-direction: column;
   }
 
-  .app-main:has(.home-page) {
-    padding-top: 0.25rem;
-  }
-
   .home-page {
     gap: 0.25rem;
   }
 }
 
 @media (max-width: 767px) {
-  /* Mobile is a swipeable deck. Cards are as tall as their content; vertical
-     scrolling happens at the page/shell level (app-main), not trapped inside
-     the widgets. Embla owns horizontal swipes; the browser keeps vertical. */
+  /* Mobile is a swipeable deck. The tab bar pins flush under the header and the
+     card deck (.home-grid) owns the vertical scroll, so the deck's scrollbar
+     sits beside the cards — never beside the tab bar. Cards are as tall as their
+     content and never scroll internally. Embla owns horizontal swipes. */
+  .app-main:has(.home-page) {
+    overflow: hidden;
+    padding-top: 0;
+  }
+
   .home-page {
     flex: 1 1 auto;
     min-height: 0;
