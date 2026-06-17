@@ -1,0 +1,37 @@
+---
+description: Branch-per-change git workflow so anything that breaks is easy to revert
+alwaysApply: true
+---
+
+# Git Workflow
+
+Never commit straight to `main`. Every change lands on its own branch so a bad
+change can be reverted by dropping one branch/merge instead of untangling
+`main`.
+
+## Branch naming
+
+- `feature/<short-name>` — major features or multi-part work
+  (e.g. `feature/strategy-forge`).
+- `bug/<short-name>` — minor fixes, small tweaks, single-issue changes
+  (e.g. `bug/mobile-footer`).
+- `chore/<short-name>` — housekeeping that isn't a feature or a fix
+  (docs, rules, config) (e.g. `chore/git-workflow-rule`).
+
+## Flow
+
+1. Branch from an up-to-date `main`:
+   `git checkout main && git pull origin main && git checkout -b <type>/<name>`
+2. Commit focused changes on the branch.
+3. Push the branch: `git push -u origin <type>/<name>`.
+4. Merge into `main` with a merge commit (keeps the branch as a revert point):
+   `git checkout main && git merge --no-ff <type>/<name>`
+5. Push `main`: `git push origin main`.
+
+## Rules
+
+- **Ask before committing.** Only commit/merge when the user explicitly asks.
+- **One concern per branch** — don't mix an unrelated fix into a feature branch.
+- Keep merged branches around for now (don't delete) so we retain easy
+  revert points unless the user says otherwise.
+- Never force-push `main`.
