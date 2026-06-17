@@ -29,6 +29,8 @@ read the relevant rule/doc files first** and follow them:
   responsive behavior, and per-viewport card scrolling rules.
 - **`design-system.md`** — design tokens, color, spacing, and styling rules.
 - **`product-voice.md`** — copy, tone, and content rules.
+- **`.cursor/rules/git-workflow.mdc`** — branch-per-change git workflow
+  (`feature/*`, `bug/*`, `chore/*`; never commit straight to `main`).
 - **`.cursor/rules/*.mdc`** — any other scoped rule docs that apply to the
   files you're touching.
 
