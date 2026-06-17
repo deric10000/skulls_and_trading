@@ -2357,18 +2357,39 @@ button.nav-link {
 }
 
 @media (max-width: 767px) {
-  /* Mobile is a swipeable deck. The tab bar pins flush under the header and the
-     card deck (.home-grid) owns the vertical scroll, so the deck's scrollbar
-     sits beside the cards — never beside the tab bar. Cards are as tall as their
-     content and never scroll internally. Embla owns horizontal swipes. */
+  /* Mobile is a swipeable deck that scrolls at the PAGE level (not inside a
+     fixed shell), so the footer is end-of-page content that flows below the
+     cards instead of pinning to the viewport and stealing card height. The
+     header stays sticky at the top; the section tabs stay sticky just beneath
+     it (offset by the live header height). Embla owns horizontal swipes; the
+     page owns vertical scroll. */
+  .app:has(.home-page) {
+    height: auto;
+    min-height: 100vh;
+    min-height: 100svh;
+    overflow: visible;
+  }
+
   .app-main:has(.home-page) {
-    overflow: hidden;
+    flex: 0 0 auto;
+    overflow: visible;
     padding-top: 0;
   }
 
   .home-page {
-    flex: 1 1 auto;
+    flex: 0 0 auto;
     min-height: 0;
+  }
+
+  /* Cards size to their content height; the page scrolls, the deck doesn't. */
+  .home-grid {
+    flex: 0 0 auto;
+    min-height: 0;
+  }
+
+  .home-tabs-shell {
+    position: sticky;
+    top: var(--app-header-h, 0px);
   }
 
   .site-account {
@@ -2379,6 +2400,13 @@ button.nav-link {
   .home-slide > .hero,
   .home-slide > .panel {
     overflow: visible;
+  }
+
+  /* Compact, end-of-page footer on mobile — no longer pinned chrome. */
+  .site-footer {
+    margin-top: 0;
+    padding: 1rem var(--content-pad) calc(1rem + env(safe-area-inset-bottom, 0px));
+    font-size: 0.8rem;
   }
 }
 
