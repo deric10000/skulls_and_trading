@@ -1,0 +1,86 @@
+---
+description: Reusable component contracts + responsive layout/scroll behavior for the app shell, header, and home cards
+globs: src/components/**/*.tsx,src/pages/**/*.tsx,src/index.css
+alwaysApply: false
+---
+
+# Component & Layout Rules
+
+These components are **shared and considered stable**. Reuse them as-is.
+Do not restyle, restructure, or "improve" them as a side effect of an
+unrelated task. Only change them when the user explicitly asks, and only the
+specific thing they ask for — never bundle in extra tweaks.
+
+## Stability contract (do NOT change without explicit instruction)
+
+| Component | File | Locked aspects |
+|-----------|------|----------------|
+| `TopNav` | `src/components/TopNav.tsx` | DOM order `brand → nav → account`; all three are direct siblings of `.site-header-inner`. Do not re-nest. |
+| Brand | `.brand`, `.brand-logo`, `.brand-wordmark` | Logo/wordmark `clamp()` sizing and ratio. |
+| Nav links | `.nav-link`, `.nav-link--active` | Padding, color, active state. |
+| Account | `.site-account`, `.chip--soon` | "Demo" chip + `LinkButton` "Sign Out" (link-button, **never** a filled button). |
+| `LinkButton` | `src/components/LinkButton.tsx` | Renders `.btn.btn--link`. |
+| Home widgets | `HeroCard`, `MarketFlowWidget`, `WatchlistWidget`, `Tabs` | Internal markup, content, and visual styling. |
+
+When the user references the Figma wireframes, treat them as **structure only**
+— never copy their colors/styling and never change widget content.
+
+## App shell (`.app` / `.app-main`)
+
+- `.app` is a fixed-height (`100dvh`) flex column with `overflow: hidden`.
+- `.app-main` is the **single scrolling region** (`overflow: hidden auto`,
+  `overscroll-behavior-y: contain`). This is what keeps the header/footer
+  globally pinned. Do not add a second page-level scroller.
+- This applies to the authenticated shell only — don't apply these to the
+  login/onboarding screens.
+
+## Header responsive behavior
+
+The header (`.site-header`) is `position: sticky; top: 0` on every viewport.
+`.site-header-inner` is a CSS grid with two layouts:
+
+- **Default (mobile + tablet, `< 1200px`)** — two rows:
+  `"brand account"` / `"nav nav"`. Nav is left-aligned on its own row.
+- **Desktop single bar (`≥ 1200px`)** —
+  `grid-template-columns: minmax(max-content, 1fr) auto minmax(max-content, 1fr)`,
+  areas `"brand nav account"`. The `max-content` side tracks reserve the
+  brand's/account's real width so the centered nav **slides right rather than
+  overlapping the wordmark**, and the bar falls back to the two-row layout once
+  the single row can no longer fit. If you change brand/nav width, re-verify
+  this `1200px` threshold (it's tuned, not arbitrary).
+
+UX intent: nav stays visually centered while there is room, degrades
+gracefully (shift, then stack) — it must never collide or clip.
+
+## Home cards — scroll behavior per viewport
+
+The deck is `.home-grid` → `.home-grid__track` → three `.home-slide`s
+(`--about` / `--market` / `--watch`). Scrolling differs by viewport **on
+purpose**; keep these distinctions:
+
+- **Desktop (`≥ 1024px`)** — full-height dashboard. Three columns on one row
+  (Market 1–3 · About 4–9 · Watch 10–12). Each card fills the viewport height
+  and shrinks with it. The **page never scrolls**; instead a card's own content
+  scrolls *inside* it only when the viewport is too short (`overflow: hidden`
+  on the card, `overflow: hidden auto` + `scrollbar-gutter: stable` on the
+  scrollable inner regions like `.watchlist-items` / `.flow-steps` / `.hero`).
+- **Tablet (`768–1199px`)** — About full-width top row; Market + Watch
+  side-by-side below. Cards are **content-height and never scroll internally**;
+  the page (`.app-main`) scrolls vertically.
+- **Mobile (`< 768px`)** — Embla horizontal **swipe deck** (one card per
+  screen), driven by the sticky `.home-tabs-shell` tabs. Cards are
+  content-height and **must not scroll internally**; the deck (`.home-grid`)
+  owns vertical scroll while `.app-main` is locked (`overflow: hidden`). Embla
+  owns horizontal swipes (`touch-action: pan-y`). The tab bar full-bleeds to
+  the viewport edges (`margin-inline: calc(var(--content-pad) * -1)`) with a
+  full-width bottom border.
+
+Rule of thumb: **content scrolls inside the card only on desktop**. On
+tablet/mobile the card grows to its content and the surrounding region scrolls.
+
+## Responsive breakpoints (reference)
+
+- `< 768px` — mobile
+- `768px` — tablet layout begins
+- `1024px` — desktop **card** dashboard (3-col, internal scroll)
+- `1200px` — desktop **header** single bar (independent of the card breakpoint)
