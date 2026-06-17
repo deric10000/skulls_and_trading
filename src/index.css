@@ -174,7 +174,10 @@ html,
 body,
 #root {
   min-height: 100%;
-  overflow-x: hidden;
+  /* clip (not hidden) so we still prevent horizontal bleed without turning the
+     root into a scroll container — hidden would coerce overflow-y to auto and
+     break position: sticky for the header/tabs when the page scrolls. */
+  overflow-x: clip;
   overscroll-behavior: none;
 }
 
