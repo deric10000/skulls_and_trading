@@ -11,59 +11,61 @@ export function HeroCard({ variant = "full" }: { variant?: "full" | "center" }) 
       aria-labelledby="hero-title"
     >
       <div className="hero-grid" aria-hidden="true" />
-      <div className="hero-content">
-        <p className="eyebrow">Discipline Command Center</p>
-        <h1 id="hero-title">
-          Trade your plan. Track your discipline. Level up your strategy.
-        </h1>
-        <p className="lede">
-          Skulls and Trading is a dark command center that rewards following your own
-          rules — not chasing trades. Forge a strategy, check each name against it, and
-          log the thesis before you act.
-        </p>
-        <div className="hero-actions">
-          <button
-            type="button"
-            className="btn btn--primary"
-            onClick={() => setActivePage("dashboard")}
-          >
-            Open Dashboard
-          </button>
-          <button
-            type="button"
-            className="btn btn--ghost"
-            onClick={() => setActivePage("strategy-forge")}
-          >
-            Forge a Strategy
-          </button>
+      <div className="hero-body">
+        <div className="hero-content">
+          <p className="eyebrow">Discipline Command Center</p>
+          <h1 id="hero-title">
+            Trade your plan. Track your discipline. Level up your strategy.
+          </h1>
+          <p className="lede">
+            Skulls and Trading is a dark command center that rewards following your
+            own rules — not chasing trades. Forge a strategy, check each name against
+            it, and log the thesis before you act.
+          </p>
+          <div className="hero-actions">
+            <button
+              type="button"
+              className="btn btn--primary"
+              onClick={() => setActivePage("dashboard")}
+            >
+              Open Dashboard
+            </button>
+            <button
+              type="button"
+              className="btn btn--ghost"
+              onClick={() => setActivePage("strategy-forge")}
+            >
+              Forge a Strategy
+            </button>
+          </div>
+          <dl className="hero-stats">
+            <div className="hero-stat">
+              <dt>On watch</dt>
+              <dd>{watchlist.length} names</dd>
+            </div>
+            <div className="hero-stat">
+              <dt>Lenses</dt>
+              <dd>Investor + Trader</dd>
+            </div>
+            <div className="hero-stat">
+              <dt>Rewards</dt>
+              <dd>Discipline, not trades</dd>
+            </div>
+          </dl>
         </div>
-        <dl className="hero-stats">
-          <div className="hero-stat">
-            <dt>On watch</dt>
-            <dd>{watchlist.length} names</dd>
+        <aside className="hero-preview" aria-hidden="true">
+          <div className="compass">
+            <img className="compass-img" src={bullCompass} alt="" />
           </div>
-          <div className="hero-stat">
-            <dt>Lenses</dt>
-            <dd>Investor + Trader</dd>
+          <div className="hero-preview-card">
+            <span className="chip status--positive">
+              <Skull aria-hidden />
+              Strategy Check
+            </span>
+            <p>Your rules, your thesis, your invalidation — checked before you act.</p>
           </div>
-          <div className="hero-stat">
-            <dt>Rewards</dt>
-            <dd>Discipline, not trades</dd>
-          </div>
-        </dl>
+        </aside>
       </div>
-      <aside className="hero-preview" aria-hidden="true">
-        <div className="compass">
-          <img className="compass-img" src={bullCompass} alt="" />
-        </div>
-        <div className="hero-preview-card">
-          <span className="chip status--positive">
-            <Skull aria-hidden />
-            Strategy Check
-          </span>
-          <p>Your rules, your thesis, your invalidation — checked before you act.</p>
-        </div>
-      </aside>
     </section>
   );
 }

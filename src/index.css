@@ -136,9 +136,11 @@
   --warning: var(--amber-400);
   --info: var(--blue-400);
 
-  --radius-sm: 0.55rem;
-  --radius-md: 0.9rem;
-  --radius-lg: 1.4rem;
+  /* Concentric 8/6/4 scale: card containers cap at 8px (lg); nested elements
+     step down so inner corners are always <= their container. */
+  --radius-sm: 0.25rem; /* 4px — small controls (buttons, chips, inputs) */
+  --radius-md: 0.375rem; /* 6px — sub-cards / inner panels */
+  --radius-lg: 0.5rem; /* 8px — card containers (.hero, .panel) */
 
   --shadow-card: 0 18px 48px rgb(2 6 18 / 0.5);
   --shadow-glow: 0 0 40px rgb(241 178 74 / 0.12);
@@ -218,7 +220,7 @@ a {
 :focus-visible {
   outline: 2px solid var(--accent-strong);
   outline-offset: 2px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
 }
 
 /* Kill the translucent blue tap flash mobile browsers paint on every button. */
@@ -570,17 +572,26 @@ button {
 .hero {
   position: relative;
   overflow: hidden;
-  display: grid;
-  grid-template-columns: 1.4fr 0.9fr;
-  gap: var(--space-5);
-  align-items: center;
-  padding: clamp(2rem, 5vw, 3.5rem);
+  display: flex;
+  flex-direction: column;
+  padding: 1rem;
   border: 1px solid var(--border-soft);
   border-radius: var(--radius-lg);
   background:
     radial-gradient(circle at 80% 10%, rgb(86 182 240 / 0.12), transparent 50%),
     var(--surface-2);
   box-shadow: var(--shadow-card);
+}
+
+/* The scrollable body holds the hero's two-column layout; .hero is just the
+   padded shell so the scroll body (and its scrollbar) can be inset from the
+   card edge. */
+.hero-body {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1.4fr 0.9fr;
+  gap: var(--space-5);
+  align-items: center;
 }
 
 .hero-grid {
@@ -681,13 +692,44 @@ button {
   color: var(--text-muted);
 }
 
-/* Panels */
+/* Panels — the app-wide card. 16px padding on every side so content breathes
+   (matches the Figma card spec). On the right, when an inner region scrolls,
+   that 16px is split as 4px gap + 8px scrollbar + 4px gap (see .card-scroll). */
 .panel {
-  padding: clamp(1.2rem, 2.4vw, 1.8rem);
+  padding: 1rem;
   border: 1px solid var(--border-soft);
   border-radius: var(--radius-lg);
   background: var(--surface-1);
   box-shadow: var(--shadow-card);
+}
+
+/* Card scroll standard — shared appearance for any region that scrolls inside a
+   card (.panel/.hero): an 8px rounded bar. The per-breakpoint rules park it 4px
+   from the card edge with 4px to content via `margin-right: -12px;
+   padding-right: 4px;` inside the 16px card padding. When a new region needs to
+   scroll inside a card, add its selector to this group + give it the inset. */
+.hero-body,
+.flow-steps,
+.watchlist-items,
+.strategy-list {
+  scrollbar-width: thin;
+}
+
+.hero-body::-webkit-scrollbar,
+.flow-steps::-webkit-scrollbar,
+.watchlist-items::-webkit-scrollbar,
+.strategy-list::-webkit-scrollbar {
+  width: 8px;
+}
+
+.hero-body::-webkit-scrollbar-thumb,
+.flow-steps::-webkit-scrollbar-thumb,
+.watchlist-items::-webkit-scrollbar-thumb,
+.strategy-list::-webkit-scrollbar-thumb {
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background-color: rgb(148 163 184 / 0.4);
+  background-clip: padding-box;
 }
 
 .panel-head {
@@ -1616,10 +1658,15 @@ select.input {
 }
 
 @media (min-width: 1280px) {
+  /* Card scroll standard: park the 8px bar 4px from the panel edge with 4px to
+     content. The negative margin pulls the list into the panel's 16px padding
+     (4 + 8 bar + 4 = 16px right inset); scrollbar-gutter holds it stable. */
   .strategy-list {
     max-height: 62vh;
     overflow-y: auto;
-    padding-right: 0.3rem;
+    margin-right: -12px;
+    padding-right: 4px;
+    scrollbar-gutter: stable;
   }
 }
 
@@ -1859,7 +1906,7 @@ select.input {
   font-weight: 600;
   letter-spacing: 0.01em;
   padding: 0.55rem 0.95rem;
-  border-radius: 0.75rem;
+  border-radius: var(--radius-sm);
   text-align: center;
   transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease,
     transform 0.12s ease;
@@ -2129,30 +2176,36 @@ button.nav-link {
     overflow: hidden;
   }
 
+  /* The card is a fixed-height shell that clips; an inner region scrolls. */
   .home-slide > .hero,
   .home-slide > .panel {
     height: 100%;
     min-height: 0;
-    scrollbar-gutter: stable;
-  }
-
-  /* The card owns the height; its content scrolls inside only when needed. */
-  .home-slide > .panel {
     display: flex;
     flex-direction: column;
     overflow: hidden;
   }
 
-  .home-slide .watchlist-items,
-  .home-slide .flow-steps {
+  /* Internal scroll regions park an 8px scrollbar 4px from the card edge with
+     4px between the bar and content. The card has 16px padding; the negative
+     right margin pulls the scroll box 12px into that padding so the bar sits
+     4px from the edge, and padding-right re-opens the 4px gap to content
+     (4 + 8px bar + 4 = the 16px right inset). scrollbar-gutter keeps it stable
+     whether or not the bar is showing. */
+  /* The 8px scrollbar appearance is shared globally (see "Card scroll
+     standard"); here we only position it: the negative right margin pulls the
+     scroll box 12px into the card's 16px padding so the bar sits 4px from the
+     edge, and padding-right re-opens the 4px gap to content (4 + 8px bar + 4 =
+     the 16px right inset). scrollbar-gutter keeps it stable when not scrolling. */
+  .home-slide .hero-body,
+  .home-slide .flow-steps,
+  .home-slide .watchlist-items {
     flex: 1 1 auto;
     min-height: 0;
     overflow: hidden auto;
+    margin-right: -12px;
+    padding-right: 4px;
     scrollbar-gutter: stable;
-  }
-
-  .home-slide > .hero {
-    overflow: hidden auto;
   }
 
   .home-slide--market {
@@ -2202,7 +2255,7 @@ button.nav-link {
 
 /* Single column; the content block is vertically centered within the tall
    card. Text stays left-aligned (only the block is centered). */
-.hero--center {
+.hero--center .hero-body {
   grid-template-columns: 1fr;
   align-content: safe center;
 }
@@ -3016,7 +3069,7 @@ button.nav-link {
   flex: 0 0 auto;
   width: 46px;
   height: 46px;
-  border-radius: 14px;
+  border-radius: var(--radius-md);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -3159,7 +3212,7 @@ button.nav-link {
   flex: 0 0 auto;
   width: 64px;
   height: 64px;
-  border-radius: 18px;
+  border-radius: var(--radius-md);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -3616,7 +3669,7 @@ button.nav-link {
   flex: 0 0 auto;
   width: 38px;
   height: 38px;
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   display: flex;
   align-items: center;
   justify-content: center;
