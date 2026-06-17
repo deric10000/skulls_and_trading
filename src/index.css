@@ -263,12 +263,16 @@ button {
   border: 0;
 }
 
-/* Layout */
+/* Layout — the shell is a definite-height column so the header and footer stay
+   fixed (globally "sticky") while .app-main is the single scrolling region.
+   This is what keeps the header from scrolling away and lets desktop cards fill
+   the viewport height instead of growing the page. */
 .app {
-  min-height: 100vh;
+  height: 100vh;
+  height: 100dvh;
   display: flex;
   flex-direction: column;
-  overflow-x: hidden;
+  overflow: hidden;
 }
 
 .app-main {
@@ -280,14 +284,14 @@ button {
   gap: var(--space-5);
   flex: 1;
   min-height: 0;
+  overflow: hidden auto;
+  overscroll-behavior-y: contain;
 }
 
 /* Home fills the space between header and footer, so trim its bottom padding
    to keep the cards close to the footer instead of leaving dead space. */
 .app-main:has(.home-page) {
   padding-bottom: 1.5rem;
-  overflow-y: auto;
-  overscroll-behavior-y: auto;
 }
 
 /* Header */
@@ -301,31 +305,26 @@ button {
   border-bottom: 1px solid var(--border-soft);
 }
 
+/* Header layout grid.
+   Tablet/mobile (default): two rows — brand + account on the first band,
+   nav on the second. Desktop (>=1024px) collapses to a single cohesive bar:
+   brand left, nav centered, account right. */
 .site-header-inner {
   width: min(var(--content-max), 100%);
   margin: 0 auto;
   padding: 0 var(--content-pad);
-  display: flex;
-  flex-direction: column;
-  gap: 0.55rem;
-}
-
-.site-header-top {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "brand account"
+    "nav   nav";
   align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
-  min-width: 0;
-}
-
-.site-header-bottom {
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  min-width: 0;
+  column-gap: var(--space-3);
+  row-gap: 0.55rem;
 }
 
 .brand {
+  grid-area: brand;
   display: inline-flex;
   align-items: center;
   gap: clamp(0.6rem, 1.1vw, 0.95rem);
@@ -354,10 +353,26 @@ button {
 }
 
 .site-nav {
+  grid-area: nav;
   display: flex;
   flex-wrap: wrap;
   gap: 0.4rem;
   min-width: 0;
+}
+
+/* Desktop: one cohesive bar — brand left, nav centered, account right. */
+@media (min-width: 1024px) {
+  .site-header-inner {
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    grid-template-areas: "brand nav account";
+    column-gap: var(--space-4);
+    row-gap: 0;
+  }
+
+  .site-nav {
+    justify-self: center;
+    flex-wrap: nowrap;
+  }
 }
 
 .nav-link {
@@ -1946,12 +1961,16 @@ button.nav-link {
 }
 
 .home-tabs-shell {
-  position: relative;
+  position: sticky;
+  top: 0;
+  z-index: 6;
   display: flex;
   justify-content: center;
   width: 100%;
   padding-inline: 0;
+  padding-top: 0.25rem;
   padding-bottom: 0.25rem;
+  background: var(--bg-base);
 }
 
 .home-tabs-shell::after {
@@ -1980,36 +1999,34 @@ button.nav-link {
   display: none;
 }
 
+/* Mobile-first: a horizontal swipe deck (Embla). The viewport clips
+   horizontally while vertical scrolling is left to the page/shell — the cards
+   themselves are as tall as their content, and never scroll internally. */
 .home-grid {
   display: flex;
   gap: 0;
-  overflow-x: auto;
-  overflow-y: hidden;
-  scroll-snap-type: x mandatory;
-  scroll-behavior: smooth;
-  -webkit-overflow-scrolling: touch;
+  overflow: hidden;
   overscroll-behavior-x: contain;
-  overscroll-behavior-y: none;
-  touch-action: pan-x;
+  touch-action: pan-y;
   padding-bottom: 0.25rem;
-  flex: 1;
+  flex: 0 0 auto;
   min-height: 0;
+  align-items: flex-start;
 }
 
 .home-grid__track {
   display: flex;
   min-width: 100%;
+  align-items: flex-start;
 }
 
 .home-slide {
   flex: 0 0 100%;
   min-width: 100%;
   display: flex;
-  min-height: max(32rem, calc(100dvh - 13rem));
-  scroll-snap-align: start;
-  scroll-snap-stop: always;
-  overflow: hidden auto;
-  -webkit-overflow-scrolling: touch;
+  min-height: max(28rem, calc(100svh - 16rem));
+  height: auto;
+  overflow: visible;
 }
 
 .home-slide > * {
@@ -2019,28 +2036,26 @@ button.nav-link {
 .home-slide > .hero,
 .home-slide > .panel {
   width: 100%;
-  height: 100%;
+  height: auto;
   min-height: 0;
 }
 
+/* Tablet (>=768px): About spans the top row full width; Market Weather +
+   Current Watch sit side-by-side below. Cards are content-height and never
+   scroll internally — the page (.app-main) scrolls vertically so you "swipe up
+   and down" to read everything. */
 @media (min-width: 768px) {
-  /* Home fills the space between header and footer; each card takes the full
-     height and scrolls its own content vertically (never the page, never
-     horizontally). */
-  .home-page {
-    flex: 1;
-    min-height: 0;
-  }
-
   .home-grid {
     display: grid;
     grid-template-columns: repeat(12, minmax(0, 1fr));
-    grid-template-rows: minmax(0, 1fr);
+    grid-auto-rows: auto;
     gap: var(--space-3);
-    flex: 1;
+    flex: 0 0 auto;
     min-height: 0;
-    overflow: hidden;
-    scroll-snap-type: none;
+    overflow: visible;
+    overscroll-behavior-x: auto;
+    touch-action: auto;
+    align-items: start;
   }
 
   .home-grid__track {
@@ -2050,6 +2065,56 @@ button.nav-link {
   .home-slide {
     min-width: 0;
     width: auto;
+    height: auto;
+    min-height: 0;
+    overflow: visible;
+  }
+
+  .home-slide > .hero,
+  .home-slide > .panel {
+    width: 100%;
+    height: auto;
+    min-height: 0;
+    overflow: visible;
+  }
+
+  .home-slide--about {
+    grid-column: 1 / -1;
+    grid-row: 1;
+  }
+
+  .home-slide--market {
+    grid-column: 1 / span 6;
+    grid-row: 2;
+  }
+
+  .home-slide--watch {
+    grid-column: 7 / span 6;
+    grid-row: 2;
+  }
+}
+
+/* Desktop (>=1024px): a true full-height dashboard. Three columns on one row —
+   Market Weather (1-3) · About (4-9, the wide center card) · Current Watch
+   (10-12). Each card fills the viewport height and shrinks with it; the page
+   never scrolls — instead a card scrolls its own content only when the viewport
+   gets too short to show it all. */
+@media (min-width: 1024px) {
+  .home-page {
+    flex: 1;
+    min-height: 0;
+  }
+
+  .home-grid {
+    grid-template-rows: minmax(0, 1fr);
+    flex: 1 1 auto;
+    min-height: 0;
+    height: auto;
+    overflow: hidden;
+    align-items: stretch;
+  }
+
+  .home-slide {
     height: 100%;
     min-height: 0;
     overflow: hidden;
@@ -2062,11 +2127,10 @@ button.nav-link {
     scrollbar-gutter: stable;
   }
 
-  /* Desktop/tablet: the card owns the height, and the content inside it scrolls. */
+  /* The card owns the height; its content scrolls inside only when needed. */
   .home-slide > .panel {
     display: flex;
     flex-direction: column;
-    min-height: 0;
     overflow: hidden;
   }
 
@@ -2082,16 +2146,19 @@ button.nav-link {
     overflow: hidden auto;
   }
 
-  .home-slide--about {
-    grid-column: 1 / span 6;
+  .home-slide--market {
+    grid-column: 1 / span 3;
+    grid-row: 1;
   }
 
-  .home-slide--market {
-    grid-column: 7 / span 3;
+  .home-slide--about {
+    grid-column: 4 / span 6;
+    grid-row: 1;
   }
 
   .home-slide--watch {
     grid-column: 10 / span 3;
+    grid-row: 1;
   }
 }
 
@@ -2128,7 +2195,7 @@ button.nav-link {
    card. Text stays left-aligned (only the block is centered). */
 .hero--center {
   grid-template-columns: 1fr;
-  align-content: center;
+  align-content: safe center;
 }
 
 .hero--center .hero-preview {
@@ -2243,11 +2310,9 @@ button.nav-link {
 
 @media (max-width: 640px) {
   .site-header-inner {
-    gap: 0.5rem;
-  }
-
-  .site-header-top {
-    align-items: flex-start;
+    align-items: start;
+    column-gap: var(--space-2);
+    row-gap: 0.5rem;
   }
 
   .site-account {
@@ -2290,46 +2355,17 @@ button.nav-link {
 }
 
 @media (max-width: 767px) {
-  .app:has(.home-page) {
-    position: fixed;
-    inset: 0;
-    width: 100%;
-    height: 100dvh;
-    overflow: hidden;
-  }
-
-  .app-main:has(.home-page) {
-    overflow: hidden;
-    touch-action: pan-y;
-  }
-
+  /* Mobile is a swipeable deck. Cards are as tall as their content; vertical
+     scrolling happens at the page/shell level (app-main), not trapped inside
+     the widgets. Embla owns horizontal swipes; the browser keeps vertical. */
   .home-page {
-    flex: 1;
+    flex: 1 1 auto;
     min-height: 0;
-    overflow: hidden;
-    touch-action: pan-y;
-  }
-
-  .site-header,
-  .site-header-inner,
-  .site-header-top,
-  .site-header-bottom,
-  .home-tabs-shell,
-  .home-tabs {
-    touch-action: none;
   }
 
   .site-account {
     flex-direction: column-reverse;
     align-items: flex-end;
-  }
-
-  .home-grid {
-    flex: 1;
-    min-height: 0;
-    overflow: hidden;
-    overscroll-behavior: none;
-    touch-action: pan-y;
   }
 
   .home-slide > .hero,
@@ -2347,6 +2383,8 @@ button.nav-link {
 }
 
 .site-account {
+  grid-area: account;
+  justify-self: end;
   display: inline-flex;
   align-items: center;
   justify-content: flex-end;
