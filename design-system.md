@@ -131,7 +131,9 @@ serious finance tool. To keep it premium, disciplined, and compliance-safe:
 
 ## Radius, shadow, spacing
 
-- Radius: `--radius-sm: 0.55rem`, `--radius-md: 0.9rem`, `--radius-lg: 1.4rem`.
+- Radius (concentric 8/6/4, capped at 8px): `--radius-sm: 0.25rem` (4px, small controls), `--radius-md: 0.375rem` (6px, sub-cards/inner panels & avatar/badge tiles), `--radius-lg: 0.5rem` (8px, card containers). Card containers (`.hero`, `.panel`) use `--radius-lg`; elements nested inside a card must use a radius ≤ 8px (step down so inner corners stay smaller than their container).
+  - **Always use the radius tokens — never hardcode a radius value.** Mapping: card/large containers → `--radius-lg`; sub-cards, inner panels, avatar/badge squircles (e.g. `.avatar-mark`, `.badge-medallion`, `.member-avatar`) → `--radius-md`; buttons, chips, tabs (`.tab`), inputs, focus rings → `--radius-sm`.
+  - Allowed non-token exceptions only: fully-round pills (`999px`) and circles (`50%`) where that exact shape is intended, and thin data-viz bars (`.chart-bar`, 2px) that are smaller than the scale. Nothing else may exceed 8px.
 - Shadow: `--shadow-card: 0 18px 48px rgb(2 6 18 / 0.5)`, `--shadow-glow: 0 0 40px rgb(241 178 74 / 0.12)`.
 - Spacing scale (4pt-aligned): `--space-1: 0.4rem`, `--space-2: 0.75rem`, `--space-3: 1.1rem`, `--space-4: 1.6rem`, `--space-5: 2.4rem`.
 
@@ -150,8 +152,9 @@ Prefer these tokens (or multiples that stay on the 4pt grid) over ad-hoc pixel v
 
 ## Core component patterns (class names in `src/index.css`)
 
-- `.panel` — rounded dark card: `--surface-1`, `--border-soft`, `--radius-lg`, `--shadow-card`.
+- `.panel` — rounded dark card: `--surface-1`, `--border-soft`, `--radius-lg`, `--shadow-card`. **16px padding on all sides** (baked into the base rule), so content breathes consistently on every card app-wide; don't re-set card padding per page/breakpoint. `.hero` matches.
 - `.panel-head` / `.panel-tag` / `.panel-intro` — card header row, small uppercase tag, intro text.
+- **Card scroll standard** — when a region scrolls *inside* a card it gets an **8px bar parked 4px from the card edge with 4px to content** (4 + 8 + 4 = the card's 16px right inset). Desktop effect only (where the region actually scrolls); mobile/tablet scroll at the page level. Appearance is shared once in the "Card scroll standard" block in `src/index.css` (`.hero-body`, `.flow-steps`, `.watchlist-items`, `.strategy-list`); positioning per scrolling region is `overflow: hidden auto; margin-right: -12px; padding-right: 4px; scrollbar-gutter: stable;`. Never scroll the padded card itself — always an inner region. New scrollable card regions join the same group + inset. See `.cursor/rules/components.mdc` for the full contract.
 - `.btn` — base style is the **blue secondary** action (used bare for supporting actions like Add / New note / Assign). `.btn--primary` (gold gradient CTA), `.btn--ghost` (neutral outline), `.btn--small` (compact size). Variants fully override surface + color so the same button looks identical on desktop and mobile. Focus ring is keyboard-only (no ring on click); mobile tap-highlight is suppressed.
 - `.btn--link` — text-forward link button used for header/account actions like Sign Out. It keeps the same hit area and rounded interaction target as a button, but visually reads as a blue text link with no border or fill.
 - `.chip` — **borderless** tinted pill badge; tone is carried by fill + text/icon color, never a border (keeps tags visually distinct from bordered buttons). Status tones: `.status--positive`, `.status--negative`, `.status--warning`, `.status--neutral`. `.chip--soon` for "coming soon". Supports an optional leading status icon (`.chip svg` / `.chip-icon` auto-sizes to `1em`).

@@ -25,6 +25,21 @@ specific thing they ask for — never bundle in extra tweaks.
 When the user references the Figma wireframes, treat them as **structure only**
 — never copy their colors/styling and never change widget content.
 
+## Radius & shape tokens
+
+Corner radii come from a concentric **8 / 6 / 4** scale, capped at 8px. **Never
+hardcode a radius** — always use the token, so nested corners stay smaller than
+their container:
+
+- `--radius-lg` (8px) — card / large containers (`.hero`, `.panel`).
+- `--radius-md` (6px) — sub-cards, inner panels, avatar/badge squircles
+  (`.avatar-mark`, `.badge-medallion`, `.member-avatar`).
+- `--radius-sm` (4px) — buttons, chips, tabs (`.tab`), inputs, focus rings.
+
+Only non-token exceptions allowed: full pills (`999px`) and circles (`50%`)
+where that shape is intended, and thin data-viz bars (`.chart-bar`, 2px).
+Nothing may exceed 8px. New components must follow this mapping.
+
 ## App shell (`.app` / `.app-main`)
 
 - `.app` is a fixed-height (`100dvh`) flex column with `overflow: hidden`.
@@ -61,9 +76,39 @@ purpose**; keep these distinctions:
 - **Desktop (`≥ 1024px`)** — full-height dashboard. Three columns on one row
   (Market 1–3 · About 4–9 · Watch 10–12). Each card fills the viewport height
   and shrinks with it. The **page never scrolls**; instead a card's own content
-  scrolls *inside* it only when the viewport is too short (`overflow: hidden`
-  on the card, `overflow: hidden auto` + `scrollbar-gutter: stable` on the
-  scrollable inner regions like `.watchlist-items` / `.flow-steps` / `.hero`).
+  scrolls *inside* it only when the viewport is too short. The card (`.hero` /
+  `.panel`) is a fixed-height shell with `overflow: hidden`; an **inner region**
+  scrolls (`.hero-body`, `.flow-steps`, `.watchlist-items`) via `overflow:
+  hidden auto` + `scrollbar-gutter: stable`. The hero scrolls as one body
+  (`.hero-body` wrapper); panels keep their head/intro/form fixed and scroll
+  only the list.
+
+### Card padding & scrollbar placement (matches Figma)
+
+Applies to **every card app-wide** (`.panel` and `.hero`), not just the home
+deck.
+
+- **16px padding on all sides** of every card, all viewports, so content
+  breathes — baked into the base `.panel` rule (`padding: 1rem`) and `.hero`.
+  Don't re-set card padding per page/breakpoint.
+- When a region scrolls **inside** a card, it gets the **card scroll standard**:
+  an **8px bar parked 4px from the card edge with 4px between the bar and
+  content** (4 + 8 + 4 = the 16px right inset). This is a **desktop effect**
+  (the breakpoint where the region actually scrolls); mobile/tablet decks scroll
+  at the page level, not inside cards.
+  - Appearance (the 8px rounded bar) is shared once in the **"Card scroll
+    standard"** block in `index.css` — grouped over `.hero-body`, `.flow-steps`,
+    `.watchlist-items`, `.strategy-list`. Firefox uses `scrollbar-width: thin`.
+  - Positioning is per-region at the breakpoint where it scrolls:
+    `overflow: hidden auto; margin-right: -12px; padding-right: 4px;
+    scrollbar-gutter: stable;`. The negative margin pulls the scroll box into
+    the card's 16px padding so the bar lands 4px from the edge; `padding-right`
+    re-opens the 4px gap to content; `scrollbar-gutter` keeps it stable.
+  - **Never put the scroll on the padded card itself** (the bar would sit far
+    inside the padding) — always scroll an inner region with this inset.
+- **Adding a new scrollable card region:** add its selector to the "Card scroll
+  standard" group (for the 8px bar) and give it the inset above in the
+  breakpoint where it scrolls. Keep the card's own padding at 16px.
 - **Tablet (`768–1199px`)** — About full-width top row; Market + Watch
   side-by-side below. Cards are **content-height and never scroll internally**;
   the page (`.app-main`) scrolls vertically.
