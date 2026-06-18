@@ -178,14 +178,28 @@ body,
   min-height: 100%;
   /* clip (not hidden) so we still prevent horizontal bleed without turning the
      root into a scroll container — hidden would coerce overflow-y to auto and
-     break position: sticky for the header/tabs when the page scrolls. */
+     break position: sticky for the header/tabs when the page scrolls (mobile). */
   overflow-x: clip;
   overscroll-behavior: none;
 }
 
+/* Desktop / tablet: the authenticated shell pins .app to 100dvh and .app-main
+   is the ONLY scroller, so the document must never scroll. Lock the root to the
+   viewport so a second (document-level) scrollbar can't appear and drag the
+   header/footer. Scoped to :has(.app) so the auth screens (which live at #root
+   outside .app and manage their own height) are unaffected; mobile (<= 767px)
+   intentionally scrolls at the page level, so it's excluded too. */
+@media (min-width: 768px) {
+  html:has(.app),
+  body:has(.app),
+  #root:has(.app) {
+    height: 100%;
+    overflow: hidden;
+  }
+}
+
 body {
   margin: 0;
-  min-height: 100vh;
   overscroll-behavior: none;
   color: var(--text-base);
   background:
@@ -2413,22 +2427,32 @@ button.nav-link {
 }
 
 @media (max-width: 767px) {
-  /* Mobile is a swipeable deck that scrolls at the PAGE level (not inside a
-     fixed shell), so the footer is end-of-page content that flows below the
-     cards instead of pinning to the viewport and stealing card height. The
-     header stays sticky at the top; the section tabs stay sticky just beneath
-     it (offset by the live header height). Embla owns horizontal swipes; the
-     page owns vertical scroll. */
-  .app:has(.home-page) {
+  /* On mobile the whole shell scrolls at the PAGE level (not inside a fixed
+     shell) on EVERY page, so the footer is end-of-page content that flows below
+     the content instead of pinning to the viewport and stealing height. The
+     header stays sticky at the top. This is the standard mobile model; the home
+     deck below is a special case layered on top of it. */
+  .app {
     height: auto;
     min-height: 100vh;
     min-height: 100svh;
     overflow: visible;
   }
 
+  .app-main {
+    /* basis auto so the region sizes to its content (taller-than-viewport
+       content just makes the page scroll, footer after it); grow so short pages
+       still push the footer to the bottom of the viewport. */
+    flex: 1 1 auto;
+    overflow: visible;
+  }
+
+  /* Home is a swipeable deck: cards are content-height and the section tabs pin
+     just beneath the header (offset by the live header height). Embla owns
+     horizontal swipes; the page owns vertical scroll. Its main sizes to content
+     and sits flush under the sticky tabs. */
   .app-main:has(.home-page) {
     flex: 0 0 auto;
-    overflow: visible;
     padding-top: 0;
   }
 

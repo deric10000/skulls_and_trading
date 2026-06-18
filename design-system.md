@@ -210,6 +210,11 @@ Prefer these tokens (or multiples that stay on the 4pt grid) over ad-hoc pixel v
 - The header stacks at `<= 640px`.
 - On mobile, each major widget remains a clearly separated card so the page does not
   become one long unstructured scroll.
+- **Scroll model / page layout contract:** `.app-main` is the only scroller on
+  desktop/tablet (the document is locked to the viewport); the whole page scrolls on
+  mobile. New pages must not add `100vh`/`min-height: 100vh` or a page-level scroller.
+  Full contract lives in [`.cursor/rules/components.mdc`](.cursor/rules/components.mdc)
+  ("App shell" + "Pages — layout & scroll contract") — don't duplicate it here.
 
 ## Navigation model
 

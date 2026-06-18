@@ -3,4 +3,8 @@ dist
 .DS_Store
 *.log
 *.tsbuildinfo
-.cursor/
+# Ignore Cursor's machine-specific data (projects, transcripts, plugin cache),
+# but keep the shared project rules under version control so they ship with the
+# repo for everyone.
+.cursor/*
+!.cursor/rules/

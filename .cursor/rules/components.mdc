@@ -20,6 +20,7 @@ specific thing they ask for — never bundle in extra tweaks.
 | Nav links | `.nav-link`, `.nav-link--active` | Padding, color, active state. |
 | Account | `.site-account`, `.chip--soon` | "Demo" chip + `LinkButton` "Sign Out" (link-button, **never** a filled button). |
 | `LinkButton` | `src/components/LinkButton.tsx` | Renders `.btn.btn--link`. |
+| `SiteFooter` | `src/components/SiteFooter.tsx` | Single shared footer in `AppShell`; content + behavior. Never add a second footer. |
 | Home widgets | `HeroCard`, `MarketFlowWidget`, `WatchlistWidget`, `Tabs` | Internal markup, content, and visual styling. |
 
 When the user references the Figma wireframes, treat them as **structure only**
@@ -40,14 +41,68 @@ Only non-token exceptions allowed: full pills (`999px`) and circles (`50%`)
 where that shape is intended, and thin data-viz bars (`.chart-bar`, 2px).
 Nothing may exceed 8px. New components must follow this mapping.
 
-## App shell (`.app` / `.app-main`)
+## App shell (`.app` / `.app-main` / `SiteFooter`)
 
-- `.app` is a fixed-height (`100dvh`) flex column with `overflow: hidden`.
-- `.app-main` is the **single scrolling region** (`overflow: hidden auto`,
-  `overscroll-behavior-y: contain`). This is what keeps the header/footer
-  globally pinned. Do not add a second page-level scroller.
-- This applies to the authenticated shell only — don't apply these to the
-  login/onboarding screens.
+The shell is `AppShell` → `TopNav` + `.app-main` (the active page) + `SiteFooter`.
+It wraps **every authenticated page**, so the header and footer are single shared
+instances — never add a page-local header or footer. The scroll model differs by
+viewport on purpose:
+
+- **Desktop / tablet (`≥ 768px`)** — `.app` is a fixed-height (`100dvh`) flex
+  column with `overflow: hidden`; `.app-main` is the **single scrolling region**
+  (`overflow: hidden auto`, `overscroll-behavior-y: contain`). The header and
+  footer are pinned chrome (always visible) and the content scrolls between them.
+  The **document must never scroll** here (no second scrollbar dragging the
+  header/footer): the root is locked to the viewport via
+  `@media (min-width: 768px) { html:has(.app), body:has(.app), #root:has(.app) { height: 100%; overflow: hidden } }`.
+  Don't put `min-height: 100vh`/`100dvh` on `body` or on a page root — it fights
+  `.app`'s `100dvh` and reintroduces the outer scrollbar.
+- **Mobile (`≤ 767px`)** — the **whole page scrolls** on every page: `.app` is
+  `height: auto; min-height: 100svh; overflow: visible` and `.app-main` is
+  `flex: 1 1 auto; overflow: visible`. The header stays sticky at top; the footer
+  is end-of-page content that flows **below** the content (scroll to reveal)
+  instead of stealing viewport height. Don't reintroduce a fixed shell on mobile.
+- Home layers its deck on top of the mobile model (`.app-main:has(.home-page)` is
+  content-height + flush tabs); other pages get the standard model for free.
+- Applies to the authenticated shell only — never to the login/onboarding screens
+  (they render outside `AppShell` and have no footer by design).
+
+### `SiteFooter` (`src/components/SiteFooter.tsx`)
+
+The one and only footer. Rendered once by `AppShell`, so it appears identically on
+every page (and any future page that renders in the shell). Content is locked.
+Its responsive behavior is the `.site-footer` rule described above — pinned on
+desktop/tablet, flowing end-of-page on mobile. Keep all footer changes in this
+component + `.site-footer`; never add a second footer.
+
+## Pages — layout & scroll contract (applies to every new page)
+
+A "page" is the component rendered into `.app-main` (see `App.tsx` →
+`ActivePage`). New pages inherit the shell's scroll model for free, so they must
+**not** fight it:
+
+- **The page is just content.** Render a single root element (convention:
+  `<div className="page <name>-page">`) that sizes to its content. Let the shell
+  own scrolling — `.app-main` scrolls on desktop/tablet, the page scrolls on
+  mobile. A new page needs **no** special height/overflow CSS to scroll.
+- **Never create a second scroller for the whole page.** Don't put `100vh` /
+  `100dvh` / `min-height: 100vh` or `overflow: auto/scroll` on a page root or a
+  full-page wrapper. That produces the double-scrollbar bug (document + main).
+  The only viewport-height owner is `.app`.
+- **Bounded internal scroll is allowed for a region, not the page.** If a region
+  inside a card must scroll independently (long list, log, etc.), scroll that
+  inner region with the **Card scroll standard** below (8px bar, 4px insets) —
+  don't make the page scroll to accommodate it.
+- **Cards/panels** on a page use the shared `.panel`/`.hero` contract: 16px
+  padding, radius tokens, and the card-scroll standard when they scroll. Reuse
+  existing widgets; don't restyle them per page.
+- **No page-local header or footer** — those come from `AppShell`.
+- **Top spacing** is owned by the shell's `--page-gap` (see design-system "Page
+  top spacing rule"); don't add ad-hoc top margins to push content off the
+  header.
+
+If a new page seems to *need* its own page-level scroll or a viewport height,
+that's a signal to revisit this contract rather than override it — flag it.
 
 ## Header responsive behavior
 
