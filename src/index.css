@@ -2602,14 +2602,16 @@ button.nav-link {
 
 .auth-brand h1 {
   font-size: clamp(1.6rem, 3vw, 2.3rem);
-  line-height: 1.08;
+  line-height: 1.12;
+  letter-spacing: -0.01em;
+  color: var(--text-strong);
   max-width: 20ch;
   margin: 0;
   text-wrap: balance;
 }
 
 .auth-brand p {
-  color: var(--text-muted);
+  color: var(--text-base);
   max-width: 36rem;
   margin: 0;
   text-wrap: pretty;
@@ -2618,12 +2620,13 @@ button.nav-link {
 .auth-brand-kicker {
   color: var(--text-base);
   font-weight: 600;
-  font-size: 0.84rem;
+  font-size: 0.875rem;
 }
 
 .auth-brand-note {
-  color: var(--text-faint);
-  font-size: 0.78rem;
+  color: var(--text-muted);
+  font-size: 0.8125rem;
+  line-height: 1.5;
   max-width: 36rem;
   margin: 0;
 }
@@ -2645,7 +2648,7 @@ button.nav-link {
   align-items: flex-start;
   gap: 0.55rem;
   color: var(--text-base);
-  font-size: 0.92rem;
+  font-size: 0.875rem;
 }
 
 .auth-brand-point-icon {
@@ -2679,8 +2682,8 @@ button.nav-link {
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
-  font-size: 0.85rem;
-  color: var(--text-muted);
+  font-size: 0.875rem;
+  color: var(--text-base);
 }
 
 .auth-field span {
@@ -2698,7 +2701,7 @@ button.nav-link {
   background: rgb(255 107 107 / 0.1);
   border: 1px solid rgb(255 107 107 / 0.35);
   color: var(--negative);
-  font-size: 0.85rem;
+  font-size: 0.875rem;
 }
 
 .auth-error-icon {
@@ -2713,24 +2716,6 @@ button.nav-link {
   font-weight: 800;
   font-size: 0.75rem;
   flex: 0 0 auto;
-}
-
-.auth-divider {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  color: var(--text-faint);
-  font-size: 0.8rem;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-}
-
-.auth-divider::before,
-.auth-divider::after {
-  content: "";
-  flex: 1;
-  height: 1px;
-  background: var(--border-soft);
 }
 
 .demo-card {
@@ -2751,17 +2736,18 @@ button.nav-link {
 
 .demo-card-head h3 {
   font-size: 1rem;
+  color: var(--text-strong);
 }
 
 .demo-card p {
   color: var(--text-muted);
-  font-size: 0.88rem;
+  font-size: 0.875rem;
   margin: 0;
 }
 
 .auth-safety {
-  color: var(--text-faint);
-  font-size: 0.78rem;
+  color: var(--text-muted);
+  font-size: 0.8125rem;
   line-height: 1.5;
   margin: 0;
 }
