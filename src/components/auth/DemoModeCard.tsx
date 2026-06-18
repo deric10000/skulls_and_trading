@@ -7,8 +7,8 @@ export function DemoModeCard() {
   return (
     <div className="demo-card">
       <div className="demo-card-head">
-        <span className="chip status--neutral">No account needed</span>
         <h3>Just exploring?</h3>
+        <span className="chip status--neutral">No account needed</span>
       </div>
       <p>
         Step aboard with sample data to tour the command deck. Nothing is saved and

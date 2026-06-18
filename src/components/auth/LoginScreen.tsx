@@ -128,10 +128,6 @@ export function LoginScreen() {
               <SignUpForm />
             )}
 
-            <div className="auth-divider" aria-hidden="true">
-              <span>or</span>
-            </div>
-
             <p className="auth-safety">
               Skulls and Trading does not place trades or provide personalized financial
               advice. It helps you track your own strategy and discipline.
