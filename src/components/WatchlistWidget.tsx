@@ -2,8 +2,10 @@ import { useState } from "react";
 import { useAppState } from "../state/AppState";
 import { formatChange, formatPrice } from "../lib/format";
 import { StatusBadge } from "./StatusBadge";
+import { TrendUp } from "../lib/icons";
+import bullCompass from "../assets/bull-skull-compass.png";
 
-export function WatchlistWidget() {
+export function WatchlistWidget({ readOnly = false }: { readOnly?: boolean }) {
   const {
     watchlist,
     selectedTicker,
@@ -29,22 +31,39 @@ export function WatchlistWidget() {
         <h2 id="watchlist-title">Current Watch</h2>
         <span className="panel-tag">{watchlist.length} names</span>
       </div>
-      <form className="watchlist-add" onSubmit={handleSubmit}>
-        <label className="visually-hidden" htmlFor="add-ticker">
-          Add a ticker
-        </label>
-        <input
-          id="add-ticker"
-          className="input"
-          placeholder="Add ticker (e.g. TSLA)"
-          value={draft}
-          maxLength={6}
-          onChange={(event) => setDraft(event.target.value)}
-        />
-        <button type="submit" className="btn btn--small">
-          Add
-        </button>
-      </form>
+      {readOnly ? (
+        // Static placeholder snapshot — the emblem + chip will be driven by live
+        // alignment insights in a future iteration.
+        <div className="watchlist-snapshot">
+          <div className="compass">
+            <img className="compass-img" src={bullCompass} alt="" />
+          </div>
+          <div className="watchlist-snapshot-body">
+            <span className="watch-signal watch-signal--positive">Strategy Check</span>
+            <span className="chip status--positive">
+              <TrendUp aria-hidden />
+              High Alignment
+            </span>
+          </div>
+        </div>
+      ) : (
+        <form className="watchlist-add" onSubmit={handleSubmit}>
+          <label className="visually-hidden" htmlFor="add-ticker">
+            Add a ticker
+          </label>
+          <input
+            id="add-ticker"
+            className="input"
+            placeholder="Add ticker (e.g. TSLA)"
+            value={draft}
+            maxLength={6}
+            onChange={(event) => setDraft(event.target.value)}
+          />
+          <button type="submit" className="btn btn--small">
+            Add
+          </button>
+        </form>
+      )}
       <ul className="watchlist-items">
         {watchlist.map((item) => {
           const isActive = item.ticker === selectedTicker;
@@ -97,14 +116,16 @@ export function WatchlistWidget() {
                     Strategy Check · {signal.state}
                   </span>
                 </button>
-                <button
-                  type="button"
-                  className="watch-remove"
-                  onClick={() => removeTicker(item.ticker)}
-                  aria-label={`Remove ${item.ticker} from watchlist`}
-                >
-                  &times;
-                </button>
+                {readOnly ? null : (
+                  <button
+                    type="button"
+                    className="watch-remove"
+                    onClick={() => removeTicker(item.ticker)}
+                    aria-label={`Remove ${item.ticker} from watchlist`}
+                  >
+                    &times;
+                  </button>
+                )}
               </div>
             </li>
           );

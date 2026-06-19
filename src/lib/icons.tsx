@@ -14,6 +14,7 @@ import {
   Skull,
   Strategy,
   Sparkle,
+  TrendUp,
   Warning,
   WarningOctagon,
 } from "@phosphor-icons/react";
@@ -30,6 +31,7 @@ export {
   Skull,
   Sparkle,
   Strategy,
+  TrendUp,
   Warning,
   WarningOctagon,
 };

@@ -87,7 +87,7 @@ export function HomePage() {
             <MarketFlowWidget />
           </section>
           <section className="home-slide home-slide--watch" data-home-tab="current-watch">
-            <WatchlistWidget />
+            <WatchlistWidget readOnly />
           </section>
         </div>
       </div>
