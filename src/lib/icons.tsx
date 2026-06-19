@@ -5,6 +5,7 @@
  * `IconContext` in `main.tsx`.
  */
 import {
+  CaretLeft,
   CheckCircle,
   Clock,
   Eye,
@@ -23,6 +24,7 @@ import type { StatusType } from "../types";
 export type { Icon };
 
 export {
+  CaretLeft,
   CheckCircle,
   Clock,
   Eye,

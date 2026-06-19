@@ -440,6 +440,44 @@ button {
   outline-color: var(--info);
 }
 
+/* Breadcrumb — compact "back" affordance. Borrows the link-button treatment
+   (transparent, borderless, weight 600) but uses the gold primary-button color
+   and a smaller, breadcrumb-scaled size. */
+.breadcrumb {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  align-self: flex-start;
+  padding: 0.25rem 0.4rem;
+  margin-left: -0.4rem;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--accent-strong);
+  border-radius: var(--radius-sm);
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.breadcrumb:hover {
+  color: var(--accent);
+  background: rgb(241 178 74 / 0.08);
+}
+
+.breadcrumb:focus-visible {
+  outline: 2px solid var(--accent-strong);
+  outline-offset: 2px;
+}
+
+.breadcrumb svg {
+  width: 1em;
+  height: 1em;
+  flex-shrink: 0;
+}
+
 /* Buttons.
    The base (unmodified) .btn is the blue "secondary" action used for supporting
    buttons like Add / New note / Assign. Variants fully override color + surface,
@@ -715,6 +753,7 @@ button {
 .hero-body,
 .flow-steps,
 .watchlist-items,
+.watch-summary,
 .strategy-list {
   scrollbar-width: thin;
 }
@@ -722,6 +761,7 @@ button {
 .hero-body::-webkit-scrollbar,
 .flow-steps::-webkit-scrollbar,
 .watchlist-items::-webkit-scrollbar,
+.watch-summary::-webkit-scrollbar,
 .strategy-list::-webkit-scrollbar {
   width: 8px;
 }
@@ -729,6 +769,7 @@ button {
 .hero-body::-webkit-scrollbar-thumb,
 .flow-steps::-webkit-scrollbar-thumb,
 .watchlist-items::-webkit-scrollbar-thumb,
+.watch-summary::-webkit-scrollbar-thumb,
 .strategy-list::-webkit-scrollbar-thumb {
   border: 1px solid transparent;
   border-radius: 999px;
@@ -1147,6 +1188,121 @@ select.input {
   align-items: flex-start;
   gap: 0.3rem;
   min-width: 0;
+}
+
+/* Read-only ticker summary (home watchlist drill-in). Mostly text, no CRUD. */
+.watchlist-breadcrumb {
+  margin-bottom: var(--space-2);
+}
+
+.watch-summary {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.watch-summary-head {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.watch-summary-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.watch-summary-ticker {
+  font-size: 1.1rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  color: var(--text-strong);
+}
+
+.watch-summary-quote {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+.watch-summary-signal {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.watch-summary-metrics {
+  font-size: 0.74rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.watch-summary-detail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+}
+
+.watch-summary-row dt {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-faint);
+  margin-bottom: 0.1rem;
+}
+
+.watch-summary-row dd {
+  margin: 0;
+  font-size: 0.85rem;
+  line-height: 1.45;
+  color: var(--text-base);
+}
+
+.watch-summary-log {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border-soft);
+}
+
+.watch-summary-log-label {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-faint);
+}
+
+.watch-summary-log-entry {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.watch-summary-log-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-strong);
+}
+
+.watch-summary-log-time {
+  font-size: 0.7rem;
+  color: var(--text-faint);
+  white-space: nowrap;
+}
+
+.watch-summary-log-note {
+  margin: 0;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: var(--text-muted);
 }
 
 .input {
@@ -2264,7 +2420,8 @@ button.nav-link {
      the 16px right inset). scrollbar-gutter keeps it stable when not scrolling. */
   .home-slide .hero-body,
   .home-slide .flow-steps,
-  .home-slide .watchlist-items {
+  .home-slide .watchlist-items,
+  .home-slide .watch-summary {
     flex: 1 1 auto;
     min-height: 0;
     overflow: hidden auto;
