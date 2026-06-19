@@ -579,7 +579,7 @@ button {
 .lede {
   color: var(--text-muted);
   font-size: clamp(1rem, 1.6vw, 1.18rem);
-  max-width: 46ch;
+  max-width: none;
 }
 
 /* Hero */
@@ -640,39 +640,18 @@ button {
   margin-top: var(--space-2);
 }
 
-.hero-stats {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-4);
-  margin-top: var(--space-3);
-  padding-top: var(--space-3);
-  border-top: 1px solid var(--border-soft);
-}
-
-.hero-stat dt {
-  font-size: 0.75rem;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-  color: var(--text-faint);
-}
-
-.hero-stat dd {
-  font-size: 1.05rem;
-  font-weight: 600;
-  color: var(--text-strong);
-}
-
 .hero-preview {
   position: relative;
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
-  align-items: center;
+  align-items: stretch;
 }
 
+/* Small emblem badge that sits beside the chip inside a preview card. */
 .compass {
   position: relative;
-  width: clamp(150px, 19vw, 220px);
+  width: clamp(48px, 5.5vw, 60px);
   aspect-ratio: 1;
   display: grid;
   place-items: center;
@@ -686,19 +665,30 @@ button {
   height: 100%;
   object-fit: contain;
   display: block;
-  filter: drop-shadow(0 0 28px rgb(241 178 74 / 0.18));
+  filter: drop-shadow(0 0 12px rgb(241 178 74 / 0.28));
+}
+
+/* Bearish counter-example: a red glow instead of the bullish gold. */
+.compass--risk .compass-img {
+  filter: drop-shadow(0 0 12px rgb(255 107 107 / 0.3));
 }
 
 .hero-preview-card {
   width: 100%;
-  margin-top: 1.6rem;
   padding: var(--space-3);
   border-radius: var(--radius-md);
   border: 1px solid var(--border-soft);
   background: var(--surface-3);
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.6rem;
+}
+
+/* Emblem badge + status chip, stacked above the caption paragraph. */
+.hero-preview-card-head {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
 }
 
 .hero-preview-card p {
@@ -1140,6 +1130,23 @@ select.input {
   display: flex;
   gap: 0.5rem;
   margin-bottom: var(--space-3);
+}
+
+/* Read-only snapshot header (home) — sits where the add form is on the
+   dashboard. Emblem + chip are static placeholders for a future live insight. */
+.watchlist-snapshot {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: var(--space-3);
+}
+
+.watchlist-snapshot-body {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.3rem;
+  min-width: 0;
 }
 
 .input {
@@ -2322,20 +2329,17 @@ button.nav-link {
   order: 0;
   margin-top: var(--space-2);
   flex-direction: row;
-  align-items: center;
+  align-items: stretch;
   justify-content: flex-start;
   flex-wrap: wrap;
-  gap: var(--space-4);
+  gap: var(--space-3);
 }
 
+/* Two caption cards sit side by side and only wrap to a stack once the row can
+   no longer fit them (tablet portrait / mobile), keeping equal heights. */
 .hero--center .hero-preview-card {
-  margin-top: 0;
-  flex: 1;
-  min-width: 200px;
-}
-
-.hero--center .compass {
-  width: clamp(140px, 16vw, 192px);
+  flex: 1 1 240px;
+  min-width: 0;
 }
 
 .chart-name {
