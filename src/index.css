@@ -478,6 +478,39 @@ button {
   flex-shrink: 0;
 }
 
+/* Selectable card interaction standard.
+   ONE shared rest / hover / selected treatment for every card the user can
+   pick — watchlist names (`.watch-item`), strategy cards (`.strategy-card`),
+   market-flow steps (`.flow-step`), and any future selectable card. Layout,
+   padding, and content stay per-component; only the interaction *surface*
+   (border, background, hover lift, selected glow) lives here so every
+   selectable card looks and behaves identically. Focus is the global
+   `:focus-visible` gold ring — don't re-style focus per card.
+
+   Usage: put `.select-card` on the interactive element (the card itself, or
+   the wrapper that owns the border) and toggle `.is-selected` when chosen.
+   Always mirror the selected state in the accessibility tree with
+   `aria-pressed` (single-select toggles) or `aria-current` (navigation).
+   Do NOT hand-roll `:hover` / active border + glow on a new selectable card —
+   adopt this standard so the set stays consistent. */
+.select-card {
+  border: 1px solid var(--border-soft);
+  background: var(--surface-2);
+  border-radius: var(--radius-md);
+  transition: border-color 0.15s ease, transform 0.12s ease;
+}
+
+.select-card:hover {
+  border-color: var(--border-strong);
+  transform: translateY(-1px);
+}
+
+.select-card.is-selected {
+  border-color: rgb(241 178 74 / 0.55);
+  background: var(--surface-1);
+  box-shadow: var(--shadow-glow);
+}
+
 /* Buttons.
    The base (unmodified) .btn is the blue "secondary" action used for supporting
    buttons like Add / New note / Assign. Variants fully override color + surface,
@@ -1151,10 +1184,6 @@ select.input {
   color: var(--warning);
 }
 
-.watch-item--active {
-  background: var(--surface-1);
-}
-
 .watch-selected-dot {
   display: inline-block;
   width: 0.5rem;
@@ -1326,23 +1355,10 @@ select.input {
   gap: 0.6rem;
 }
 
+/* Layout only — rest/hover/selected come from `.select-card` (+ `.is-selected`). */
 .watch-item {
   position: relative;
   display: flex;
-  border-radius: var(--radius-md);
-  border: 1px solid var(--border-soft);
-  background: var(--surface-2);
-  transition: border-color 0.15s ease, transform 0.12s ease;
-}
-
-.watch-item:hover {
-  border-color: var(--border-strong);
-  transform: translateY(-1px);
-}
-
-.watch-item--active {
-  border-color: rgb(241 178 74 / 0.55);
-  box-shadow: var(--shadow-glow);
 }
 
 .watch-select {
@@ -1847,31 +1863,17 @@ select.input {
   }
 }
 
+/* Layout/type only — rest/hover/selected come from `.select-card` (+ `.is-selected`). */
 .strategy-card {
   width: 100%;
   display: flex;
   flex-direction: column;
   gap: 0.45rem;
   padding: 0.85rem 0.95rem;
-  border-radius: var(--radius-md);
-  border: 1px solid var(--border-soft);
-  background: var(--surface-2);
   color: inherit;
   font: inherit;
   text-align: left;
   cursor: pointer;
-  transition: border-color 0.15s ease, transform 0.12s ease;
-}
-
-.strategy-card:hover {
-  border-color: var(--border-strong);
-  transform: translateY(-1px);
-}
-
-.strategy-card--active {
-  border-color: rgb(241 178 74 / 0.55);
-  background: var(--surface-1);
-  box-shadow: var(--shadow-glow);
 }
 
 .strategy-card-head {
