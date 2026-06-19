@@ -159,12 +159,12 @@ Prefer these tokens (or multiples that stay on the 4pt grid) over ad-hoc pixel v
 - `.btn--link` — text-forward link button used for header/account actions like Sign Out. It keeps the same hit area and rounded interaction target as a button, but visually reads as a blue text link with no border or fill.
 - `.chip` — **borderless** tinted pill badge; tone is carried by fill + text/icon color, never a border (keeps tags visually distinct from bordered buttons). Status tones: `.status--positive`, `.status--negative`, `.status--warning`, `.status--neutral`. `.chip--soon` for "coming soon". Supports an optional leading status icon (`.chip svg` / `.chip-icon` auto-sizes to `1em`).
 - `.tabs` / `.tab` / `.tab--active` (+ `.tabs--fill` for equal-width segments) — the single shared segmented control. Render via the `Tabs` component (`src/components/Tabs.tsx`); never hand-roll a tab strip. States: unselected (muted), hover (subtle surface tint), selected (`.tab--active`, gold gradient matching `.btn--primary`), disabled (dimmed, non-interactive). Focus is keyboard-only — no second border on selection. Used by the home deck and the auth sign-in/create-account switch.
-- `.watch-item` / `.watch-item--active` — watchlist cards; active state uses gold border + `--shadow-glow`.
+- `.watch-item` — watchlist cards; a **selectable card** (`.select-card` + `.is-selected`), so hover/selected match strategy/flow cards (see "Selectable card interaction standard").
 - `.conviction` — track + gold fill bar.
 - `.mini-card`, `.lens-card`, `.edu-card` — nested content cards.
-- `.flow-step` / `.flow-index` — top-down market flow steps.
+- `.flow-step` / `.flow-index` / `.flow-select` / `.flow-summary` — top-down market flow steps; each step is a **selectable card** (`.select-card` + `.is-selected` on the li, inner `.flow-select` button) that opens a `.flow-summary` detail view (ship art background + scrim + back breadcrumb), mirroring the read-only watchlist master/detail.
 - `.chart-frame`, `.chart-line`, `.chart-volume`, `.indicator-tags` — chart placeholder + indicator chips.
-- `.config-chip` / `.strategy-card` — Strategy Forge controls and list cards.
+- `.config-chip` / `.strategy-card` — Strategy Forge controls and list cards; `.strategy-card` is a **selectable card** (`.select-card` + `.is-selected`).
 
 ## Iconography
 
@@ -179,6 +179,21 @@ Prefer these tokens (or multiples that stay on the 4pt grid) over ad-hoc pixel v
 
 - Hover lifts cards/buttons slightly (`translateY(-1px/-2px)`); honors `prefers-reduced-motion`.
 - Focus-visible uses a 2px `--accent-strong` outline.
+- **Selectable card interaction standard (`.select-card` / `.is-selected`)** —
+  every card the user can *pick* shares one rest/hover/selected treatment so the
+  set stays consistent. Defined once in the "Selectable card interaction
+  standard" block in `src/index.css`; layout/padding/content stay per-component.
+  - **Rest:** `1px var(--border-soft)` border on `--surface-2`, `--radius-md`.
+  - **Hover:** border → `--border-strong`, `transform: translateY(-1px)`.
+  - **Selected:** gold border `rgb(241 178 74 / 0.55)`, background `--surface-1`,
+    `box-shadow: var(--shadow-glow)`.
+  - **Focus:** the global `:focus-visible` gold ring — never re-styled per card.
+  - **How to apply:** add `.select-card` to the interactive element (or the
+    wrapper that owns the border) and toggle `.is-selected` when chosen; always
+    mirror the state with `aria-pressed` (toggles) or `aria-current` (nav). Never
+    hand-roll hover/selected border + glow on a new selectable card — adopt this.
+  - **Current adopters:** `.watch-item`, `.strategy-card`, `.flow-step`. See
+    `.cursor/rules/components.mdc` for the contract.
 
 ## Layout grid (12 columns, responsive, mobile-first)
 

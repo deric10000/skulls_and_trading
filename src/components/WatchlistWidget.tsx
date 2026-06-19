@@ -205,7 +205,11 @@ export function WatchlistWidget({ readOnly = false }: { readOnly?: boolean }) {
           return (
             <li key={item.ticker}>
               <div
-                className={isActive ? "watch-item watch-item--active" : "watch-item"}
+                className={
+                  isActive
+                    ? "watch-item select-card is-selected"
+                    : "watch-item select-card"
+                }
               >
                 <button
                   type="button"

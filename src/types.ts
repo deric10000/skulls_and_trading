@@ -246,6 +246,7 @@ export interface MarketFlowStep {
   label: string;
   detail: string;
   tone: SignalTone;
+  summary: string;
 }
 
 export interface EducationCard {

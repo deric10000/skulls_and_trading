@@ -41,6 +41,36 @@ Only non-token exceptions allowed: full pills (`999px`) and circles (`50%`)
 where that shape is intended, and thin data-viz bars (`.chart-bar`, 2px).
 Nothing may exceed 8px. New components must follow this mapping.
 
+## Selectable card interaction standard (`.select-card` / `.is-selected`)
+
+Every card the user can **pick** — watchlist names (`.watch-item`), strategy
+cards (`.strategy-card`), market-flow steps (`.flow-step` once selectable), and
+any future selectable card — **must share one** rest / hover / selected
+treatment. It lives once in the **"Selectable card interaction standard"** block
+in `index.css`. Layout, padding, and content stay per-component; only the
+interaction *surface* is shared, so the whole set looks and behaves identically.
+
+| State | Treatment |
+|-------|-----------|
+| Rest | `1px solid var(--border-soft)` on `var(--surface-2)`, `--radius-md` |
+| Hover | border → `var(--border-strong)`, `transform: translateY(-1px)` |
+| Selected | gold border `rgb(241 178 74 / 0.55)`, `background: var(--surface-1)`, `box-shadow: var(--shadow-glow)` |
+| Focus | global `:focus-visible` gold ring (2px `--accent-strong`) — never re-styled per card |
+
+Rules:
+
+- **Apply, don't reinvent.** Put `.select-card` on the interactive element (the
+  card itself, or the wrapper that owns the border) and toggle `.is-selected`
+  when chosen. The component keeps only its own layout/typography classes.
+- **Mirror the state for a11y.** Reflect selection with `aria-pressed` (single-
+  select toggles like the watchlist/strategy lists) or `aria-current` (nav).
+- **Never hand-roll** `:hover` / active border + glow on a new selectable card,
+  and never fork the values — change them in the shared block so every adopter
+  moves together.
+- **Current adopters:** `.watch-item`, `.strategy-card`, and `.flow-step` (the
+  market-flow steps — the li owns `.select-card` + the border/art; the inner
+  `.flow-select` button handles the click + `aria-pressed`).
+
 ## App shell (`.app` / `.app-main` / `SiteFooter`)
 
 The shell is `AppShell` → `TopNav` + `.app-main` (the active page) + `SiteFooter`.

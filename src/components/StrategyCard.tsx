@@ -12,7 +12,11 @@ export function StrategyCard({
   return (
     <button
       type="button"
-      className={isActive ? "strategy-card strategy-card--active" : "strategy-card"}
+      className={
+        isActive
+          ? "strategy-card select-card is-selected"
+          : "strategy-card select-card"
+      }
       onClick={onSelect}
       aria-pressed={isActive}
     >
