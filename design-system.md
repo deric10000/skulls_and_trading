@@ -162,7 +162,7 @@ Prefer these tokens (or multiples that stay on the 4pt grid) over ad-hoc pixel v
 - `.watch-item` — watchlist cards; a **selectable card** (`.select-card` + `.is-selected`), so hover/selected match strategy/flow cards (see "Selectable card interaction standard").
 - `.conviction` — track + gold fill bar.
 - `.mini-card`, `.lens-card`, `.edu-card` — nested content cards.
-- `.flow-step` / `.flow-index` — top-down market flow steps; will adopt the **selectable card** standard (`.select-card` + `.is-selected`) when made selectable.
+- `.flow-step` / `.flow-index` / `.flow-select` / `.flow-summary` — top-down market flow steps; each step is a **selectable card** (`.select-card` + `.is-selected` on the li, inner `.flow-select` button) that opens a `.flow-summary` detail view (ship art background + scrim + back breadcrumb), mirroring the read-only watchlist master/detail.
 - `.chart-frame`, `.chart-line`, `.chart-volume`, `.indicator-tags` — chart placeholder + indicator chips.
 - `.config-chip` / `.strategy-card` — Strategy Forge controls and list cards; `.strategy-card` is a **selectable card** (`.select-card` + `.is-selected`).
 
@@ -192,8 +192,8 @@ Prefer these tokens (or multiples that stay on the 4pt grid) over ad-hoc pixel v
     wrapper that owns the border) and toggle `.is-selected` when chosen; always
     mirror the state with `aria-pressed` (toggles) or `aria-current` (nav). Never
     hand-roll hover/selected border + glow on a new selectable card — adopt this.
-  - **Current adopters:** `.watch-item`, `.strategy-card` (and `.flow-step` when
-    it becomes selectable). See `.cursor/rules/components.mdc` for the contract.
+  - **Current adopters:** `.watch-item`, `.strategy-card`, `.flow-step`. See
+    `.cursor/rules/components.mdc` for the contract.
 
 ## Layout grid (12 columns, responsive, mobile-first)
 

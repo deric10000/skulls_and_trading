@@ -391,24 +391,37 @@ export const DEFAULT_ASSIGNMENTS: StrategyAssignments = {
 };
 
 export const MARKET_FLOW: MarketFlowStep[] = [
-  { key: "market", label: "Market", detail: "Risk-On Tide", tone: "positive" },
+  {
+    key: "market",
+    label: "Market",
+    detail: "Risk-On Tide",
+    tone: "positive",
+    summary:
+      "Broad market conditions are leaning constructive after the latest rebound, with growth and small caps catching a bid while major indexes stabilized into the holiday pause. Risk appetite is improving, but the move still depends on rates, Fed tone, and geopolitical calm holding together.",
+  },
   {
     key: "sector",
     label: "Sector",
     detail: "Breakout Wind",
     tone: "positive",
+    summary:
+      "Technology is carrying the strongest wind, but leadership is uneven. Semiconductors are breaking higher on AI infrastructure momentum, while software remains more selective as investors question which companies truly benefit from AI disruption.",
   },
   {
     key: "industry",
     label: "Industry",
     detail: "Rotation Current",
     tone: "positive",
+    summary:
+      "Capital is rotating toward AI infrastructure, semiconductors, data-center suppliers, and high-beta growth areas. The current is still favorable, but it is not broad enough to ignore risk: weaker software, energy, and defensive groups show traders are choosing winners carefully.",
   },
   {
     key: "stock",
     label: "Stock",
     detail: "Calm Waters",
     tone: "neutral",
+    summary:
+      "Individual names are entering a more selective zone. Strong setups can still work, but the easy tide has cooled. This is where discipline matters: check the thesis, position size, support levels, and whether the stock is moving with its group or drifting on its own.",
   },
 ];
 

@@ -67,8 +67,9 @@ Rules:
 - **Never hand-roll** `:hover` / active border + glow on a new selectable card,
   and never fork the values — change them in the shared block so every adopter
   moves together.
-- **Current adopters:** `.watch-item`, `.strategy-card`. `.flow-step` joins when
-  the market-flow steps become selectable.
+- **Current adopters:** `.watch-item`, `.strategy-card`, and `.flow-step` (the
+  market-flow steps — the li owns `.select-card` + the border/art; the inner
+  `.flow-select` button handles the click + `aria-pressed`).
 
 ## App shell (`.app` / `.app-main` / `SiteFooter`)
 
