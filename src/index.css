@@ -1103,9 +1103,26 @@ button {
   margin-bottom: var(--space-2);
 }
 
+/* Select / dropdown standard — the one droplist affordance app-wide. A native
+   <select> reuses the .input field styling (so dropdowns match text inputs), with
+   the inconsistent native chevron replaced by a design-system CaretDown so the
+   affordance reads the same in every browser. Every dropdown uses `select.input`
+   (optionally wrapped to control width) — don't hand-roll a custom popover menu.
+   The caret fill is hard-coded to --text-muted (#93a0b5) since background images
+   can't read currentColor. Keyboard focus = the global gold :focus-visible ring. */
 select.input {
   appearance: none;
+  -webkit-appearance: none;
   cursor: pointer;
+  padding-right: 2.1rem;
+  background-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 256 256'><path fill='%2393a0b5' d='M213.66 101.66l-80 80a8 8 0 0 1-11.32 0l-80-80a8 8 0 0 1 11.32-11.32L128 164.69l74.34-74.35a8 8 0 0 1 11.32 11.32Z'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 0.7rem center;
+  background-size: 1.1rem;
+}
+
+select.input:hover:not(:disabled) {
+  border-color: rgb(148 163 184 / 0.45);
 }
 
 .assign-forge-link {
@@ -1207,6 +1224,13 @@ select.input {
 
 /* Read-only snapshot header (home) — sits where the add form is on the
    dashboard. Emblem + chip are static placeholders for a future live insight. */
+/* Portfolio switcher — full-width dropdown above the snapshot. The flex wrapper
+   lets the shared `.input` (flex: 1) stretch edge-to-edge. */
+.portfolio-switcher {
+  display: flex;
+  margin-bottom: var(--space-3);
+}
+
 .watchlist-snapshot {
   display: flex;
   align-items: center;
@@ -2413,8 +2437,8 @@ button.nav-link {
   min-height: 0;
 }
 
-/* Tablet (>=768px): About spans the top row full width; Market Weather +
-   Current Watch sit side-by-side below. Cards are content-height and never
+/* Tablet (>=768px): About spans the top row full width; Current Watch +
+   Market Weather sit side-by-side below. Cards are content-height and never
    scroll internally — the page (.app-main) scrolls vertically so you "swipe up
    and down" to read everything. */
 @media (min-width: 768px) {
@@ -2456,19 +2480,19 @@ button.nav-link {
     grid-row: 1;
   }
 
-  .home-slide--market {
+  .home-slide--watch {
     grid-column: 1 / span 6;
     grid-row: 2;
   }
 
-  .home-slide--watch {
+  .home-slide--market {
     grid-column: 7 / span 6;
     grid-row: 2;
   }
 }
 
 /* Desktop (>=1024px): a true full-height dashboard. Three columns on one row —
-   Market Weather (1-3) · About (4-9, the wide center card) · Current Watch
+   Current Watch (1-3) · About (4-9, the wide center card) · Market Weather
    (10-12). Each card fills the viewport height and shrinks with it; the page
    never scrolls — instead a card scrolls its own content only when the viewport
    gets too short to show it all. */
@@ -2540,7 +2564,7 @@ button.nav-link {
     scrollbar-gutter: stable;
   }
 
-  .home-slide--market {
+  .home-slide--watch {
     grid-column: 1 / span 3;
     grid-row: 1;
   }
@@ -2550,7 +2574,7 @@ button.nav-link {
     grid-row: 1;
   }
 
-  .home-slide--watch {
+  .home-slide--market {
     grid-column: 10 / span 3;
     grid-row: 1;
   }

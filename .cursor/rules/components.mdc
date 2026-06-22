@@ -71,6 +71,28 @@ Rules:
   market-flow steps — the li owns `.select-card` + the border/art; the inner
   `.flow-select` button handles the click + `aria-pressed`).
 
+## Select / dropdown standard (`select.input`)
+
+There is **one** dropdown/droplist affordance app-wide: a native `<select>`
+reusing the `.input` field styling, defined once in the **"Select / dropdown
+standard"** block in `index.css`.
+
+- **Always use `select.input`.** Never hand-roll a custom popover/menu for a
+  pick-one control. Native `<select>` gives us free accessibility, keyboard
+  support, and mobile-native pickers.
+- **The caret is part of the standard.** `appearance: none` strips the
+  inconsistent native chevron; an inline **CaretDown** SVG background (filled
+  `--text-muted`) replaces it so the affordance looks the same everywhere. Don't
+  add a separate caret element or a different glyph.
+- **Width:** the shared `.input` is `flex: 1`. For a standalone full-width
+  control, wrap it in a flex container (e.g. `.portfolio-switcher`) rather than
+  overriding the field width.
+- **Label it.** Pair every select with a `<label htmlFor>` — use
+  `.visually-hidden` when surrounding context already names the field.
+- **Current adopters:** portfolio/watchlist switcher (`.portfolio-switcher`, on
+  both the home and dashboard watchlists), Strategy Assignment (`#assign-select`),
+  Create Ship privacy. Any new dropdown joins this list.
+
 ## App shell (`.app` / `.app-main` / `SiteFooter`)
 
 The shell is `AppShell` → `TopNav` + `.app-main` (the active page) + `SiteFooter`.
@@ -159,7 +181,7 @@ The deck is `.home-grid` → `.home-grid__track` → three `.home-slide`s
 purpose**; keep these distinctions:
 
 - **Desktop (`≥ 1024px`)** — full-height dashboard. Three columns on one row
-  (Market 1–3 · About 4–9 · Watch 10–12). Each card fills the viewport height
+  (Watch 1–3 · About 4–9 · Market 10–12). Each card fills the viewport height
   and shrinks with it. The **page never scrolls**; instead a card's own content
   scrolls *inside* it only when the viewport is too short. The card (`.hero` /
   `.panel`) is a fixed-height shell with `overflow: hidden`; an **inner region**

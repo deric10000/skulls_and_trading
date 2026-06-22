@@ -425,6 +425,16 @@ export const MARKET_FLOW: MarketFlowStep[] = [
   },
 ];
 
+// Placeholder portfolio/watchlist switcher options. A "portfolio" is a (future)
+// live-connected brokerage account — tickers are driven by the connection, so no
+// manual "Add ticker". A "watchlist" is user-curated, so it allows adding tickers.
+// Static for now; CRUD + account connections come later.
+export const PORTFOLIOS: { id: string; label: string; type: "portfolio" | "watchlist" }[] = [
+  { id: "deric", label: "Deric\u2019s Webull Portfolio", type: "portfolio" },
+  { id: "jeff", label: "Jeff\u2019s Webull Portfolio", type: "portfolio" },
+  { id: "watchlist-one", label: "Watchlist One", type: "watchlist" },
+];
+
 export const TIMEFRAME_OPTIONS: Timeframe[] = ["Swing", "Long Term", "Speculation"];
 
 export const TAG_OPTIONS: string[] = [
