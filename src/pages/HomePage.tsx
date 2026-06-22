@@ -9,8 +9,8 @@ type HomeTabId = "about" | "market-weather" | "current-watch";
 
 const HOME_TABS: TabItem[] = [
   { id: "about", label: "About" },
-  { id: "market-weather", label: "Market Weather" },
   { id: "current-watch", label: "Current Watch" },
+  { id: "market-weather", label: "Market Weather" },
 ];
 
 export function HomePage() {
@@ -83,11 +83,11 @@ export function HomePage() {
           <section className="home-slide home-slide--about" data-home-tab="about">
             <HeroCard variant="center" />
           </section>
-          <section className="home-slide home-slide--market" data-home-tab="market-weather">
-            <MarketFlowWidget />
-          </section>
           <section className="home-slide home-slide--watch" data-home-tab="current-watch">
             <WatchlistWidget readOnly />
+          </section>
+          <section className="home-slide home-slide--market" data-home-tab="market-weather">
+            <MarketFlowWidget />
           </section>
         </div>
       </div>

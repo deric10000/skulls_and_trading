@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useAppState } from "../state/AppState";
-import { TICKER_ANALYSIS } from "../data";
+import { PORTFOLIOS, TICKER_ANALYSIS } from "../data";
 import { formatChange, formatPrice } from "../lib/format";
 import { StatusBadge } from "./StatusBadge";
 import { CaretLeft, TrendUp } from "../lib/icons";
@@ -117,6 +117,11 @@ export function WatchlistWidget({ readOnly = false }: { readOnly?: boolean }) {
   // Read-only (home) selection is local to this widget so it never mutates the
   // global selected ticker that drives the dashboard. Defaults to none selected.
   const [localSelected, setLocalSelected] = useState<string | null>(null);
+  // Placeholder portfolio/watchlist switcher; no downstream effect yet. Portfolios
+  // (live-connected accounts) can't add tickers; only a watchlist can.
+  const [portfolio, setPortfolio] = useState(PORTFOLIOS[0]?.id ?? "");
+  const selectedSource = PORTFOLIOS.find((option) => option.id === portfolio);
+  const isWatchlistSource = selectedSource?.type === "watchlist";
   const activeTicker = readOnly ? localSelected : selectedTicker;
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -165,6 +170,23 @@ export function WatchlistWidget({ readOnly = false }: { readOnly?: boolean }) {
         <h2 id="watchlist-title">Current Watch</h2>
         <span className="panel-tag">{watchlist.length} names</span>
       </div>
+      <div className="portfolio-switcher">
+        <label className="visually-hidden" htmlFor="portfolio-select">
+          Switch portfolio or watchlist
+        </label>
+        <select
+          id="portfolio-select"
+          className="input"
+          value={portfolio}
+          onChange={(event) => setPortfolio(event.target.value)}
+        >
+          {PORTFOLIOS.map((option) => (
+            <option key={option.id} value={option.id}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      </div>
       {readOnly ? (
         // Static placeholder snapshot — the emblem + chip will be driven by live
         // alignment insights in a future iteration.
@@ -180,7 +202,9 @@ export function WatchlistWidget({ readOnly = false }: { readOnly?: boolean }) {
             </span>
           </div>
         </div>
-      ) : (
+      ) : isWatchlistSource ? (
+        // Only a (user-curated) watchlist can add tickers. Portfolios are
+        // live-connected accounts, so their holdings come from the connection.
         <form className="watchlist-add" onSubmit={handleSubmit}>
           <label className="visually-hidden" htmlFor="add-ticker">
             Add a ticker
@@ -197,7 +221,7 @@ export function WatchlistWidget({ readOnly = false }: { readOnly?: boolean }) {
             Add
           </button>
         </form>
-      )}
+      ) : null}
       <ul className="watchlist-items">
         {watchlist.map((item) => {
           const isActive = item.ticker === activeTicker;
