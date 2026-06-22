@@ -11,12 +11,47 @@ npm run dev
 
 ## Deploy to Cloudflare
 
-This repo is configured as a Cloudflare Worker with static assets in `dist`.
+This repo is a Cloudflare Worker (`worker/index.ts`) that serves the built SPA
+from `dist` and handles the `/api/demo-login` gate (see "Demo Captain gate"
+below).
 
 ```bash
 npm run build
 npx wrangler deploy --config wrangler.jsonc
 ```
+
+## Demo Captain gate (B1)
+
+"Continue as Demo Captain" asks for a shared password that is validated
+**server-side** in the Worker, so it never ships in the client bundle. Set the
+secrets once per environment:
+
+```bash
+npx wrangler secret put DEMO_PASSWORD   # the shared demo password
+npx wrangler secret put AUTH_SECRET     # any long random string (cookie signing)
+```
+
+To exercise the real gate **locally**, build and run the Worker (not the Vite
+dev server) with a `.dev.vars` file (git-ignored) holding the same keys:
+
+```bash
+# .dev.vars
+DEMO_PASSWORD=...
+AUTH_SECRET=...
+```
+
+```bash
+npm run build
+npx wrangler dev --config wrangler.jsonc
+```
+
+> Under plain `npm run dev` (Vite) there is no Worker, so the gate is skipped
+> and "Continue as Demo Captain" enters demo mode directly — that's expected for
+> day-to-day UI work.
+
+> ⚠️ This is a cosmetic gate, not a security boundary: the SPA bundle is public
+> and demo data is fake. See `.cursor/rules/security-hardening.mdc` before
+> wiring up any real or realistic personal/financial data.
 
 ## Project rules & docs
 

@@ -3,7 +3,7 @@ import brandLogo from "../../assets/st-logo.png";
 import brandWordmark from "../../assets/st-wordmark.svg";
 import { useAppState } from "../../state/AppState";
 import { Tabs, type TabItem } from "../Tabs";
-import { LockKey, ShieldStar, Strategy } from "../../lib/icons";
+import { CaretLeft, LockKey, ShieldStar, Strategy } from "../../lib/icons";
 import { AuthButton } from "./AuthButton";
 import { AuthErrorState } from "./AuthErrorState";
 import { DemoModeCard } from "./DemoModeCard";
@@ -32,11 +32,17 @@ const BRAND_FEATURES = [
 ];
 
 export function LoginScreen() {
-  const { signIn } = useAppState();
+  const { signIn, continueAsDemo } = useAppState();
   const [mode, setMode] = useState<Mode>("sign-in");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+
+  // Demo Captain gate (B1) — see .cursor/rules/security-hardening.mdc.
+  const [showDemoGate, setShowDemoGate] = useState(false);
+  const [demoPassword, setDemoPassword] = useState("");
+  const [demoError, setDemoError] = useState("");
+  const [demoSubmitting, setDemoSubmitting] = useState(false);
 
   function handleSignIn(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -47,6 +53,48 @@ export function LoginScreen() {
     setError("");
     // Mock only: any well-formed credentials sign in.
     signIn(email.split("@")[0]);
+  }
+
+  function closeDemoGate() {
+    setShowDemoGate(false);
+    setDemoPassword("");
+    setDemoError("");
+  }
+
+  async function handleDemoLogin(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!demoPassword) {
+      setDemoError("Enter the demo password, Captain.");
+      return;
+    }
+    setDemoError("");
+
+    // Local `npm run dev` (Vite) has no Worker, so /api/demo-login doesn't
+    // exist there. Skip the network check in dev; the real gate runs under
+    // `wrangler dev` and in production (where import.meta.env.DEV is false).
+    if (import.meta.env.DEV) {
+      continueAsDemo();
+      return;
+    }
+
+    setDemoSubmitting(true);
+    try {
+      const res = await fetch("/api/demo-login", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ password: demoPassword }),
+      });
+      const data = (await res.json().catch(() => null)) as { ok?: boolean } | null;
+      if (!res.ok || !data?.ok) {
+        setDemoError("That password didn't match. Try again.");
+        return;
+      }
+      continueAsDemo();
+    } catch {
+      setDemoError("Couldn't reach the harbor. Check your connection and try again.");
+    } finally {
+      setDemoSubmitting(false);
+    }
   }
 
   return (
@@ -85,54 +133,103 @@ export function LoginScreen() {
           </p>
         </aside>
 
-          <section className="auth-panel panel" aria-label="Sign in or create an account">
-            <DemoModeCard />
+          {showDemoGate ? (
+            <section className="auth-panel panel" aria-label="Demo Captain sign in">
+              <button
+                type="button"
+                className="breadcrumb"
+                onClick={closeDemoGate}
+              >
+                <CaretLeft aria-hidden />
+                Back
+              </button>
 
-            <Tabs
-              items={AUTH_TABS}
-              value={mode}
-              onChange={(id) => setMode(id as Mode)}
-              ariaLabel="Authentication mode"
-              fill
-              className="auth-mode-tabs"
-            />
+              <div className="demo-card">
+                <div className="demo-card-head">
+                  <h3>Demo Captain</h3>
+                  <span className="chip status--neutral">Crew access</span>
+                </div>
+                <p>
+                  Enter the demo password to board with sample data. Nothing is saved
+                  and no trades are ever placed.
+                </p>
+              </div>
 
-            {mode === "sign-in" ? (
-              <form className="auth-form" onSubmit={handleSignIn} noValidate>
+              <form className="auth-form" onSubmit={handleDemoLogin} noValidate>
                 <label className="auth-field">
-                  <span>Email</span>
-                  <input
-                    className="input"
-                    type="email"
-                    value={email}
-                    onChange={(event) => setEmail(event.target.value)}
-                    placeholder="you@example.com"
-                    autoComplete="email"
-                  />
-                </label>
-                <label className="auth-field">
-                  <span>Password</span>
+                  <span>Demo password</span>
                   <input
                     className="input"
                     type="password"
-                    value={password}
-                    onChange={(event) => setPassword(event.target.value)}
-                    placeholder="Your password"
-                    autoComplete="current-password"
+                    value={demoPassword}
+                    onChange={(event) => setDemoPassword(event.target.value)}
+                    placeholder="Demo Captain password"
+                    autoComplete="off"
+                    // eslint-disable-next-line jsx-a11y/no-autofocus
+                    autoFocus
                   />
                 </label>
-                <AuthErrorState message={error} />
-                <AuthButton type="submit">Sign in to the command deck</AuthButton>
+                <AuthErrorState message={demoError} />
+                <AuthButton type="submit" disabled={demoSubmitting}>
+                  {demoSubmitting ? "Boarding\u2026" : "Board as Demo Captain"}
+                </AuthButton>
               </form>
-            ) : (
-              <SignUpForm />
-            )}
 
-            <p className="auth-safety">
-              Skulls and Trading does not place trades or provide personalized financial
-              advice. It helps you track your own strategy and discipline.
-            </p>
-          </section>
+              <p className="auth-safety">
+                Skulls and Trading does not place trades or provide personalized
+                financial advice. It helps you track your own strategy and discipline.
+              </p>
+            </section>
+          ) : (
+            <section className="auth-panel panel" aria-label="Sign in or create an account">
+              <DemoModeCard onContinue={() => setShowDemoGate(true)} />
+
+              <Tabs
+                items={AUTH_TABS}
+                value={mode}
+                onChange={(id) => setMode(id as Mode)}
+                ariaLabel="Authentication mode"
+                fill
+                className="auth-mode-tabs"
+              />
+
+              {mode === "sign-in" ? (
+                <form className="auth-form" onSubmit={handleSignIn} noValidate>
+                  <label className="auth-field">
+                    <span>Email</span>
+                    <input
+                      className="input"
+                      type="email"
+                      value={email}
+                      onChange={(event) => setEmail(event.target.value)}
+                      placeholder="you@example.com"
+                      autoComplete="email"
+                    />
+                  </label>
+                  <label className="auth-field">
+                    <span>Password</span>
+                    <input
+                      className="input"
+                      type="password"
+                      value={password}
+                      onChange={(event) => setPassword(event.target.value)}
+                      placeholder="Your password"
+                      autoComplete="current-password"
+                    />
+                  </label>
+                  <AuthErrorState message={error} />
+                  <AuthButton type="submit">Sign in to the command deck</AuthButton>
+                </form>
+              ) : (
+                <SignUpForm />
+              )}
+
+              <p className="auth-safety">
+                Skulls and Trading does not place trades or provide personalized
+                financial advice. It helps you track your own strategy and discipline.
+              </p>
+            </section>
+          )}
         </div>
       </div>
     </div>

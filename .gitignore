@@ -3,6 +3,9 @@ dist
 .DS_Store
 *.log
 *.tsbuildinfo
+# Local Cloudflare Worker secrets for `wrangler dev` (never commit secrets)
+.dev.vars
+.dev.vars.*
 # Ignore Cursor's machine-specific data (projects, transcripts, plugin cache),
 # but keep the shared project rules under version control so they ship with the
 # repo for everyone.
