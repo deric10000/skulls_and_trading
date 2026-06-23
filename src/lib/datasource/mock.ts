@@ -8,9 +8,11 @@ import {
   PORTFOLIO_METRICS,
   POSITIONS,
   RISK_RULES,
+  TICKERS,
   TICKER_ANALYSIS,
   watchlistFromHoldings,
 } from "../../data";
+import { getMarketWeatherSnapshot } from "../weather/mock";
 import type { DataSource } from "./DataSource";
 
 // Static mock implementation: returns the existing `src/data.ts` values exactly
@@ -26,9 +28,11 @@ export const mockDataSource: DataSource = {
   getDefaultAssignments: () => DEFAULT_ASSIGNMENTS,
   getLogs: () => LOG_ENTRIES,
   getTickerAnalysis: (ticker) => TICKER_ANALYSIS[ticker],
+  getTickerInfo: (ticker) => TICKERS[ticker],
   getPositions: () => POSITIONS,
   getAllocations: () => ALLOCATIONS,
   getRiskRules: () => RISK_RULES,
   getPortfolioMetrics: () => PORTFOLIO_METRICS,
   getMarketFlow: () => MARKET_FLOW,
+  getMarketWeather: (timeframe) => getMarketWeatherSnapshot(timeframe),
 };

@@ -2108,16 +2108,21 @@ select.input:hover:not(:disabled) {
   text-shadow: 0 1px 3px rgb(5 7 13 / 0.85);
 }
 
+/* Shared numbered badge (Figma node 88:1155 "weather index"): a 26px disc with
+   a soft-gold fill and the number in `--accent-strong` (#ffce71), IBM Plex Sans
+   SemiBold. Used by the Market Weather cards + detail header. */
 .flow-index {
-  width: 1.6rem;
-  height: 1.6rem;
+  width: 1.625rem;
+  height: 1.625rem;
   display: grid;
   place-items: center;
+  flex-shrink: 0;
   border-radius: 50%;
   background: var(--accent-soft);
   color: var(--accent-strong);
   font-size: 0.8rem;
-  font-weight: 700;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
 }
 
 .flow-label {
@@ -2207,6 +2212,319 @@ select.input:hover:not(:disabled) {
   font-size: 0.9rem;
   line-height: 1.6;
   color: var(--text-base);
+}
+
+/* ==========================================================================
+   Market Weather — dynamic condition cards.
+   The 4 layer cards reuse the shared `.flow-step.select-card` container (border,
+   hover, selected glow) and add: a dynamic per-condition background, a condition
+   accent stripe/color, confidence, a "why" line, and (sector/industry) pills.
+   Condition colors come from design-system ramps via `--w-accent` + the
+   `.weather-bg--<id>` gradients (resolved by lib/weather/graphics.ts).
+   ========================================================================== */
+
+/* Dynamic background layer (gradient fallback until real artwork is wired). It
+   sits behind the card's scrim (`.flow-step::after`) so text stays legible. */
+.weather-bg {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.5;
+  background-size: 180% 180%;
+  background-position: 0% 50%;
+  animation: weather-drift 20s ease-in-out infinite alternate;
+}
+
+@keyframes weather-drift {
+  from {
+    background-position: 0% 50%;
+  }
+  to {
+    background-position: 100% 50%;
+  }
+}
+
+/* Reduced-motion fallback: keep the gradient, drop the drift. */
+@media (prefers-reduced-motion: reduce) {
+  .weather-bg {
+    animation: none;
+  }
+}
+
+/* Weather cards are art/gradient backdrops with the content layered on top.
+   `min-height` is a FLOOR (so short cards still show enough art); the content
+   flows in-document, so a card always grows to fit its pills — it never clips
+   them. The vertical list (`.flow-steps`) owns scrolling, not the card. */
+.market-flow .flow-step {
+  flex: 1 0 auto;
+  min-height: clamp(118px, 15vh, 168px);
+}
+
+/* Full-card hit target. Fills the card behind the content overlay so a click
+   anywhere on the card opens the detail view (mirrors selection with
+   `aria-pressed`). Transparent — the visible affordance is the shared
+   `.select-card` hover/selected treatment on the `<li>`. */
+.weather-hit {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  appearance: none;
+  cursor: pointer;
+}
+
+.weather-hit:disabled {
+  cursor: default;
+}
+
+/* Content layer: stacks the head pill + toggle in the top-left. In-flow (not
+   absolutely positioned) so its height drives the card and nothing is cut off;
+   the art/scrim/hit-target sit behind it. 20px interior padding keeps the pills
+   off every edge. The overlay is click-through so the full-card hit target
+   underneath receives clicks (incl. taps on the head pill); only the toggle
+   re-enables pointer events so stepping sectors doesn't open the detail view. */
+.weather-overlay {
+  position: relative;
+  z-index: 2;
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: 1.25rem;
+  pointer-events: none;
+}
+
+/* Head pill: dark translucent capsule holding the index badge, layer label, and
+   the condition + confidence chips (matches the Figma design). A non-interactive
+   `<div>` (the whole card is the click target) that inherits IBM Plex Sans + the
+   1.55 line-height, so the chips match the design-system chips elsewhere. Wraps
+   gracefully on narrow widths rather than clipping. */
+.weather-headpill {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  max-width: 100%;
+  padding: 0.3rem 0.6rem;
+  border-radius: 1.25rem;
+  background: rgb(5 7 13 / 0.85);
+  color: var(--text-strong);
+}
+
+/* Layer / entity label = the card heading. Matches `.watch-ticker` so headings
+   across the home widgets read as one type family. */
+.weather-layer {
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--text-strong);
+}
+
+.weather-condition-chip,
+.weather-confidence-chip {
+  gap: 0.3rem;
+}
+
+.weather-confidence-chip {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Empty stock card prompt — kept legible over art with its own dark capsule. */
+.weather-empty {
+  max-width: 100%;
+  margin: 0;
+  padding: 0.4rem 0.6rem;
+  border-radius: var(--radius-sm);
+  background: rgb(5 7 13 / 0.75);
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+/* Sector / Industry toggle: a dark capsule showing the current group name,
+   flanked by Phosphor chevrons that step through the watch's groups. Sits below
+   the head pill in the overlay. */
+.weather-switch {
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  max-width: 100%;
+  padding: 0.2rem 0.35rem;
+  border-radius: 1.25rem;
+  background: rgb(5 7 13 / 0.85);
+}
+
+.weather-switch-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 1.05rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--text-strong);
+}
+
+.weather-switch-arrow {
+  display: inline-grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 1.5rem;
+  height: 1.5rem;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 1.05rem;
+  cursor: pointer;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.weather-switch-arrow:hover {
+  color: var(--text-strong);
+  background: rgb(148 163 184 / 0.12);
+}
+
+/* Detail view (selecting a layer). */
+.weather-confidence-line {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.weather-why-line,
+.weather-climate {
+  margin: 0;
+  font-size: 0.85rem;
+  line-height: 1.55;
+  color: var(--text-base);
+}
+
+.weather-why-line strong,
+.weather-climate strong {
+  color: var(--text-strong);
+}
+
+.weather-scores {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.weather-score-row {
+  display: grid;
+  grid-template-columns: 5.5rem 1fr 2rem;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.weather-score-label {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.weather-score-track {
+  height: 6px;
+  border-radius: 999px;
+  background: rgb(148 163 184 / 0.18);
+  overflow: hidden;
+}
+
+.weather-score-fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--w-accent, var(--accent));
+}
+
+.weather-score-value {
+  font-size: 0.75rem;
+  text-align: right;
+  color: var(--text-base);
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- Per-condition accent + background gradients (design-system ramps) --- */
+.weather--risk-on-tide {
+  --w-accent: var(--green-400);
+}
+.weather-bg--risk-on-tide {
+  background-image: linear-gradient(125deg, var(--green-800), var(--green-500) 50%, var(--blue-700));
+}
+
+.weather--risk-off-storm {
+  --w-accent: var(--red-500);
+}
+.weather-bg--risk-off-storm {
+  background-image: linear-gradient(125deg, var(--ink-700), var(--red-700) 55%, var(--red-500));
+}
+
+.weather--chop-seas {
+  --w-accent: var(--amber-400);
+}
+.weather-bg--chop-seas {
+  background-image: linear-gradient(125deg, var(--blue-800), var(--amber-700) 60%, var(--ink-600));
+}
+
+.weather--breakout-wind {
+  --w-accent: var(--green-300);
+}
+.weather-bg--breakout-wind {
+  background-image: linear-gradient(125deg, var(--green-700), var(--green-400) 45%, var(--blue-400));
+}
+
+.weather--headwind {
+  --w-accent: var(--brand-ember);
+}
+.weather-bg--headwind {
+  background-image: linear-gradient(125deg, var(--ink-700), var(--amber-700) 55%, var(--brand-ember));
+}
+
+.weather--tailwind {
+  --w-accent: var(--green-500);
+}
+.weather-bg--tailwind {
+  background-image: linear-gradient(125deg, var(--green-800), var(--green-500) 55%, var(--blue-600));
+}
+
+.weather--rotation-current {
+  --w-accent: var(--violet-400);
+}
+.weather-bg--rotation-current {
+  background-image: linear-gradient(125deg, var(--ink-700), var(--violet-500) 55%, var(--blue-500));
+}
+
+.weather--calm-waters {
+  --w-accent: var(--blue-400);
+}
+.weather-bg--calm-waters {
+  background-image: linear-gradient(125deg, var(--ink-700), var(--blue-700) 60%, var(--blue-500));
+}
+
+.weather--rogue-wave {
+  --w-accent: var(--violet-500);
+}
+.weather-bg--rogue-wave {
+  background-image: linear-gradient(125deg, var(--violet-500), var(--ink-700) 50%, var(--amber-500));
+}
+
+.weather--red-sky-warning {
+  --w-accent: var(--red-400);
+}
+.weather-bg--red-sky-warning {
+  background-image: linear-gradient(125deg, var(--red-700), var(--brand-ember) 55%, var(--amber-500));
 }
 
 /* Agent */

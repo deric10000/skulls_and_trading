@@ -281,6 +281,48 @@ This section maps the design system to what is implemented in code.
   `DEFAULT_ASSIGNMENTS`, `POSITIONS`) are **derived** from `DEFAULT_PORTFOLIO` /
   `TICKERS` — update the source registries, not the derived arrays.
 
+### Market Weather (condition cards)
+
+- `MarketFlowWidget` renders four stacked layer cards (Market → Sector → Industry
+  → Stock) on the shared `.flow-step.select-card` surface. Each card is a pure
+  backdrop: the dynamic per-condition art/gradient fills it and the content
+  floats over it in an absolute `.weather-overlay` (top-left, stacked). Cards
+  carry `min-height` since they hold no in-flow content.
+- The 10 weather conditions are defined ONCE in `src/lib/weather/conditions.ts`
+  (label, icon, copy, design-system colors). Each maps to a CSS pair:
+  `.weather--<id>` sets `--w-accent` (drives the score bars) and `.weather-bg--<id>`
+  is the gradient background (fallback until artwork is wired). Condition tone →
+  chip color via `SEVERITY_TONE`.
+- Four conditions reuse the original home art (`market-flow-*.png` → risk-on-tide
+  / breakout-wind / rotation-current / calm-waters via `flow-step-art`); the rest
+  fall back to the gradient. The card scrim (`.flow-step::after`) keeps text
+  legible; backgrounds are decorative (`aria-hidden`).
+- Card content is a dark translucent **head pill** (`.weather-headpill`, the
+  click target that opens the detail view) holding: the shared numbered badge
+  (`.flow-index` — soft-gold disc + `--accent-strong` number), the layer/entity
+  label (`.weather-layer`, matches
+  `.watch-ticker`), the condition chip (`ConditionChip`), and the confidence chip
+  (`ConfidenceChip` — `SealPercent` icon + `NN%`). The card stays minimal — the
+  full "why"/sub-scores live in the detail view.
+- **Chip coloring (two different rules):**
+  - `ConditionChip` is tone-colored by the condition's severity via
+    `SEVERITY_TONE` (e.g. positive conditions → green `.status--positive`).
+  - `ConfidenceChip` is colored by **range, not condition tone**, via
+    `confidenceTone(value)`: `>= 70` → `.status--positive` (high), `40–69` →
+    `.status--warning` (medium), `< 40` → `.status--negative` (low). Thresholds
+    (`CONFIDENCE_HIGH_MIN` / `CONFIDENCE_MEDIUM_MIN` in `lib/weather`) anchor to
+    the Figma examples (90/60/39) and sit just under the session confidence caps.
+- Condition icons live in the shared library (`WEATHER_CONDITIONS[id].defaultIcon`):
+  Risk-On Tide → `Waves`, Breakout Wind → `Wind`, Rotation Current → `Hurricane`,
+  Headwind → `WindReversed` (the `Wind` glyph mirrored on X, so the gust opposes
+  Breakout Wind).
+- Sector/Industry cards add a second dark capsule below the head pill, the
+  toggle (`.weather-switch`): the current group name (`.weather-switch-label`,
+  uppercased) flanked by bold Phosphor `CaretLeft`/`CaretRight` chevrons that step
+  through the watch's groups alphabetically. Default selection follows the
+  focused/first watch stock; selecting a name in Current Watch refocuses the
+  sector/industry/stock layers.
+
 ### Scores (discipline-first)
 
 - `ScoreCard` + `ScoreSummary`. Keys map to `--score-*` tokens; Discipline renders as

@@ -39,6 +39,19 @@ Full reference: `data-architecture.md`. This is the enforceable contract.
 - Async + loading/error and the live-vs-overlay field split land in `AppState`
   only, when the first real API is wired (Pass 2).
 
+## Market Weather (`src/lib/weather/`)
+
+- Scoring (`scoring.ts`) is **pure and provider-agnostic** — feed it normalized
+  0–100 sub-scores via `buildReading()`. Don't hand-build readings in the UI.
+- Condition metadata (labels, colors, icons, copy) lives ONLY in
+  `conditions.ts`; per-condition CSS is `.weather--<id>` / `.weather-bg--<id>`.
+- Read weather through `dataSource.getMarketWeather(timeframe)`, never by
+  importing `weather/mock.ts` from a component.
+- Going live: fetch **one** snapshot per session (premarket/live/afterhours),
+  refresh at each session boundary, cache **app-wide** (not per user), and filter
+  per user client-side via `TICKERS[ticker].sector`/`.industry`. See
+  `data-architecture.md` §5.
+
 ## Safety
 
 - All data is static mock placeholder. Before introducing real/realistic

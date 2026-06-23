@@ -68,8 +68,12 @@ Rules:
   and never fork the values — change them in the shared block so every adopter
   moves together.
 - **Current adopters:** `.watch-item`, `.strategy-card`, and `.flow-step` (the
-  market-flow steps — the li owns `.select-card` + the border/art; the inner
-  `.flow-select` button handles the click + `aria-pressed`).
+  market-flow / weather cards — the li owns `.select-card` + the border/art; a
+  full-card `.weather-hit` button absolutely fills the card and handles the click
+  + `aria-pressed`, so the **whole card** opens the detail view. The content
+  overlay is click-through (`pointer-events: none`) except the sector/industry
+  `.weather-switch`, which re-enables pointer events and floats above the hit
+  target so stepping groups doesn't navigate).
 
 ## Select / dropdown standard (`select.input`)
 
@@ -92,6 +96,40 @@ standard"** block in `index.css`.
 - **Current adopters:** portfolio/watchlist switcher (`.portfolio-switcher`, on
   both the home and dashboard watchlists), Strategy Assignment (`#assign-select`),
   Create Ship privacy. Any new dropdown joins this list.
+
+## Status chip coloring (`.chip.status--*`)
+
+There is **one** chip color set, defined once in `index.css`: `.status--positive`
+(green), `.status--warning` (amber), `.status--negative` (red), `.status--neutral`
+(info blue). Each pairs a solid text color with a 16%-alpha tint of the same hue.
+These exactly match the Figma chip styles — never hardcode chip colors; apply a
+`status--*` class.
+
+A chip's color is driven by **what the chip means**, and there are two distinct
+rules in play (don't conflate them):
+
+- **Categorical / tone chips** (condition, signal, status) color by their own
+  semantic tone — e.g. the weather `ConditionChip` maps condition severity →
+  tone via `SEVERITY_TONE`. A positive condition is always green regardless of
+  any number.
+- **Measure / range chips** color by **where a value lands in a range**, not by
+  the surrounding item's tone. The weather `ConfidenceChip` is the reference:
+  `confidenceTone(value)` → `>= 70` positive, `40–69` warning, `< 40` negative
+  (thresholds `CONFIDENCE_HIGH_MIN` / `CONFIDENCE_MEDIUM_MIN` in `lib/weather`).
+  A new "how good is this number" chip (score, fill %, etc.) follows this band
+  pattern with its own named thresholds — never reuse the parent's tone.
+
+When adding a chip, decide which rule applies first, then reuse the matching
+helper (or add a small `*Tone(value)` helper next to its data) so the mapping is
+defined once and stays consistent.
+
+**Chips inside a `<button>`:** a bare `<button>` resets `font-family` to the UA
+default (Arial) and `line-height` to `normal`. Because `.chip` height comes from
+the inherited `1.55` line-height, a chip in an un-reset button renders in Arial
+**and** ~6px shorter than the same chip in body context. Any button wrapping
+text/chips MUST set `font: inherit` (as `.btn`, `.flow-select`, `.weather-headpill`
+do). This is the standard fix for "the font looks like Arial" / "this chip is
+shorter than the others".
 
 ## App shell (`.app` / `.app-main` / `SiteFooter`)
 

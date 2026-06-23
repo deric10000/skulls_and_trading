@@ -46,6 +46,8 @@ export const TICKERS: Record<string, TickerInfo> = {
   ACHR: {
     company: "Archer Aviation",
     category: "eVTOL / Aviation",
+    sector: "Industrials",
+    industry: "Aerospace & eVTOL",
     lastPrice: 5.42,
     analysis: {
       setupSummary:
@@ -77,6 +79,8 @@ export const TICKERS: Record<string, TickerInfo> = {
   CELH: {
     company: "Celsius Holdings",
     category: "Consumer / Energy Drinks",
+    sector: "Consumer Staples",
+    industry: "Beverages",
     lastPrice: 29.18,
     analysis: {
       setupSummary:
@@ -108,6 +112,8 @@ export const TICKERS: Record<string, TickerInfo> = {
   CRM: {
     company: "Salesforce",
     category: "Software / AI CRM",
+    sector: "Technology",
+    industry: "Software / Cloud",
     lastPrice: 150.39,
     analysis: {
       setupSummary:
@@ -139,6 +145,8 @@ export const TICKERS: Record<string, TickerInfo> = {
   CRWV: {
     company: "CoreWeave",
     category: "AI Infrastructure",
+    sector: "Technology",
+    industry: "AI Infrastructure / Cloud",
     lastPrice: 110.06,
     analysis: {
       setupSummary:
@@ -170,6 +178,8 @@ export const TICKERS: Record<string, TickerInfo> = {
   ELF: {
     company: "e.l.f. Beauty",
     category: "Consumer / Beauty",
+    sector: "Consumer Discretionary",
+    industry: "Beauty / Personal Care",
     lastPrice: 63.15,
     analysis: {
       setupSummary:
@@ -201,6 +211,8 @@ export const TICKERS: Record<string, TickerInfo> = {
   IONQ: {
     company: "IonQ",
     category: "Quantum Computing",
+    sector: "Technology",
+    industry: "Quantum Computing",
     lastPrice: 60.46,
     analysis: {
       setupSummary:
@@ -232,6 +244,8 @@ export const TICKERS: Record<string, TickerInfo> = {
   MSFT: {
     company: "Microsoft",
     category: "Mega-Cap AI / Cloud",
+    sector: "Technology",
+    industry: "Software / Cloud",
     lastPrice: 368.86,
     analysis: {
       setupSummary:
@@ -263,6 +277,8 @@ export const TICKERS: Record<string, TickerInfo> = {
   NVDA: {
     company: "Nvidia",
     category: "AI Infrastructure",
+    sector: "Technology",
+    industry: "Semiconductors",
     lastPrice: 207.81,
     analysis: {
       setupSummary:
@@ -301,6 +317,8 @@ export const TICKERS: Record<string, TickerInfo> = {
   RGTI: {
     company: "Rigetti Computing",
     category: "Quantum Computing",
+    sector: "Technology",
+    industry: "Quantum Computing",
     lastPrice: 22.39,
     analysis: {
       setupSummary:
@@ -332,6 +350,8 @@ export const TICKERS: Record<string, TickerInfo> = {
   SOFI: {
     company: "SoFi Technologies",
     category: "Fintech",
+    sector: "Financials",
+    industry: "Fintech",
     lastPrice: 17.06,
     analysis: {
       setupSummary:
