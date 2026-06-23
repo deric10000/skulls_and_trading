@@ -3199,6 +3199,30 @@ button.nav-link {
   overflow: hidden;
 }
 
+/* Full-bleed login artwork. `cover` + `center` scales it responsively across
+   any viewport (the dark center of the scene sits under the centered content).
+   The ::after scrim darkens the scene and adds a vignette so the brand copy and
+   auth panel stay readable over the ships/effects. Sits at the back, beneath the
+   aurora color wash and the z-indexed `.auth-shell`. */
+.auth-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
+  pointer-events: none;
+}
+
+.auth-backdrop::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(90% 80% at 50% 50%, transparent 0%, rgb(5 7 13 / 0.5) 100%),
+    linear-gradient(180deg, rgb(5 7 13 / 0.5) 0%, rgb(5 7 13 / 0.62) 100%);
+}
+
 .auth-aurora {
   position: absolute;
   inset: 0;

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import brandLogo from "../../assets/st-logo.png";
 import brandWordmark from "../../assets/st-wordmark.svg";
+import loginBackground from "../../assets/skulls-and-trading-login-background.webp";
 import { useAppState } from "../../state/AppState";
 import { Tabs, type TabItem } from "../Tabs";
 import { CaretLeft, LockKey, ShieldStar, Strategy } from "../../lib/icons";
@@ -99,6 +100,11 @@ export function LoginScreen() {
 
   return (
     <div className="auth-screen">
+      <div
+        className="auth-backdrop"
+        style={{ backgroundImage: `url(${loginBackground})` }}
+        aria-hidden="true"
+      />
       <div className="auth-aurora" aria-hidden="true" />
       <div className="auth-shell">
         <header className="auth-brand-mark auth-brand-mark--masthead">
