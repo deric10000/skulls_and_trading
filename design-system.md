@@ -293,10 +293,11 @@ This section maps the design system to what is implemented in code.
   `.weather--<id>` sets `--w-accent` (drives the score bars) and `.weather-bg--<id>`
   is the gradient background (fallback until artwork is wired). Condition tone →
   chip color via `SEVERITY_TONE`.
-- Four conditions reuse the original home art (`market-flow-*.png` → risk-on-tide
-  / breakout-wind / rotation-current / calm-waters via `flow-step-art`); the rest
-  fall back to the gradient. The card scrim (`.flow-step::after`) keeps text
-  legible; backgrounds are decorative (`aria-hidden`).
+- All ten conditions ship with art (`src/assets/market-weather-bg-<conditionId>.webp`,
+  full-res WebP at q90) via `flow-step-art`; any id without an entry falls back to
+  its gradient. Add/replace a condition's art by following that filename convention
+  and registering it in `WEATHER_ART` (`lib/weather/graphics.ts`). The card scrim
+  (`.flow-step::after`) keeps text legible; backgrounds are decorative (`aria-hidden`).
 - Card content is a dark translucent **head pill** (`.weather-headpill`, the
   click target that opens the detail view) holding: the shared numbered badge
   (`.flow-index` — soft-gold disc + `--accent-strong` number), the layer/entity
