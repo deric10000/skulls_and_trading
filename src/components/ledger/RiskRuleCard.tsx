@@ -1,6 +1,7 @@
-import { RISK_RULES } from "../../data";
+import { dataSource } from "../../lib/datasource";
 
 export function RiskRuleCard() {
+  const riskRules = dataSource.getRiskRules();
   return (
     <section className="panel risk-rule-card" aria-labelledby="risk-rule-title">
       <div className="panel-head">
@@ -8,7 +9,7 @@ export function RiskRuleCard() {
         <span className="panel-tag">Your guardrails</span>
       </div>
       <ul className="risk-rule-list">
-        {RISK_RULES.map((rule) => (
+        {riskRules.map((rule) => (
           <li key={rule.label} className="risk-rule-item">
             <span className={`risk-rule-dot risk-rule-dot--${rule.status}`} aria-hidden="true" />
             <div className="risk-rule-body">

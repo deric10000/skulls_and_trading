@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { MARKET_FLOW } from "../data";
+import { dataSource } from "../lib/datasource";
 import { CaretLeft } from "../lib/icons";
 import marketArt from "../assets/market-flow-market.png";
 import sectorArt from "../assets/market-flow-sector.png";
@@ -17,10 +17,11 @@ export function MarketFlowWidget() {
   // Selection is local to this read-only home widget (mirrors the read-only
   // WatchlistWidget): picking a step swaps the list for a detail summary.
   const [selected, setSelected] = useState<string | null>(null);
+  const marketFlow = dataSource.getMarketFlow();
   const selectedIndex = selected
-    ? MARKET_FLOW.findIndex((step) => step.key === selected)
+    ? marketFlow.findIndex((step) => step.key === selected)
     : -1;
-  const selectedStep = selectedIndex >= 0 ? MARKET_FLOW[selectedIndex] : undefined;
+  const selectedStep = selectedIndex >= 0 ? marketFlow[selectedIndex] : undefined;
 
   if (selectedStep) {
     return (
@@ -74,7 +75,7 @@ export function MarketFlowWidget() {
         weather behind it? Work it from the top down.
       </p>
       <ol className="flow-steps flow-steps--vertical">
-        {MARKET_FLOW.map((step, index) => {
+        {marketFlow.map((step, index) => {
           const isActive = step.key === selected;
           return (
             <li

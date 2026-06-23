@@ -1,4 +1,4 @@
-import { TICKER_ANALYSIS } from "../data";
+import { dataSource } from "../lib/datasource";
 import { Clock } from "../lib/icons";
 import { useAppState } from "../state/AppState";
 import { formatChange, formatPrice } from "../lib/format";
@@ -33,7 +33,7 @@ export function StockSummaryPanel() {
     );
   }
 
-  const analysis = TICKER_ANALYSIS[selectedItem.ticker];
+  const analysis = dataSource.getTickerAnalysis(selectedItem.ticker);
 
   return (
     <section className="panel analysis" aria-labelledby="analysis-title">

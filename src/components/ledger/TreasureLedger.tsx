@@ -1,4 +1,4 @@
-import { PORTFOLIO_METRICS, POSITIONS } from "../../data";
+import { dataSource } from "../../lib/datasource";
 import { useAppState } from "../../state/AppState";
 import { AllocationCard } from "./AllocationCard";
 import { PortfolioMetricCard } from "./PortfolioMetricCard";
@@ -8,6 +8,8 @@ import { RiskRuleCard } from "./RiskRuleCard";
 export function TreasureLedger() {
   const { captain } = useAppState();
   const valuesHidden = captain.privacy === "Private" || captain.privacy === "Ghost";
+  const portfolioMetrics = dataSource.getPortfolioMetrics();
+  const positions = dataSource.getPositions();
 
   return (
     <section className="panel treasure-ledger" aria-labelledby="ledger-title">
@@ -21,7 +23,7 @@ export function TreasureLedger() {
       </p>
 
       <div className="metric-grid">
-        {PORTFOLIO_METRICS.map((metric) => (
+        {portfolioMetrics.map((metric) => (
           <PortfolioMetricCard key={metric.key} metric={metric} />
         ))}
       </div>
@@ -30,7 +32,7 @@ export function TreasureLedger() {
         <div className="ledger-positions">
           <h3 className="ledger-subtitle">Positions</h3>
           <div className="position-grid">
-            {POSITIONS.map((position) => (
+            {positions.map((position) => (
               <PositionCard key={position.ticker} position={position} />
             ))}
           </div>
