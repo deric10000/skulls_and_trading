@@ -8,8 +8,10 @@ import type {
   RiskRule,
   StrategyAssignments,
   TickerAnalysis,
+  TickerInfo,
   WatchlistItem,
 } from "../../types";
+import type { MarketWeatherSnapshot, MarketWeatherTimeframe } from "../weather/types";
 
 // The single boundary between the app and its "live-ish" data — portfolios,
 // holdings, quotes/analysis, logs, and the portfolio aggregates. Today this is
@@ -43,6 +45,9 @@ export interface DataSource {
   /** Deep analysis for a single ticker (Stock Summary / watch detail). */
   getTickerAnalysis(ticker: string): TickerAnalysis | undefined;
 
+  /** Company facts for a ticker (incl. its Market Weather sector/industry). */
+  getTickerInfo(ticker: string): TickerInfo | undefined;
+
   /** Treasure Ledger positions (weight, P&L, plan label). */
   getPositions(): Position[];
 
@@ -57,4 +62,12 @@ export interface DataSource {
 
   /** Market Weather (macro → micro) flow steps. */
   getMarketFlow(): MarketFlowStep[];
+
+  /**
+   * Market Weather snapshot for a session (premarket/live/afterhours). Covers
+   * every sector, industry, and tracked stock so it can be filtered per user's
+   * portfolio/watchlist client-side. A real provider fetches this ONCE per
+   * session and caches it app-wide (see weather/mock.ts).
+   */
+  getMarketWeather(timeframe: MarketWeatherTimeframe): MarketWeatherSnapshot;
 }

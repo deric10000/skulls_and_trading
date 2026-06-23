@@ -15,7 +15,8 @@ the `.mdc` is the short contract the agent follows on edits).
 holding-shaped is **derived** from them, so one edit updates every surface.
 
 - **`TICKERS`** — company-level facts that are the same regardless of who holds
-  the name: `company`, `category`, `lastPrice`, `analysis`, `logs`.
+  the name: `company`, `category`, `sector`, `industry`, `lastPrice`,
+  `analysis`, `logs`. (`sector`/`industry` drive the Market Weather layers.)
 - **`PORTFOLIOS[].holdings`** — holding-level facts that belong to a specific
   portfolio/watchlist: `shares`, `avgPrice`, `openPnlPct`, `conviction`,
   `status`, `reason`, `strategyIds`.
@@ -99,3 +100,44 @@ unchanged once data arrives over the wire.
 - **Reading data in a component:** import `dataSource` from `../lib/datasource`
   (or read derived state from `AppState`). Do **not** import live-data constants
   from `src/data.ts` directly.
+
+## 5. Market Weather (`src/lib/weather/`)
+
+Reads five instruments (trend, breadth, volatility, risk appetite, rotation)
+across four layers (market → sector → industry → stock) and turns them into one
+of 10 plain-English weather conditions. It is **not** advice and never produces
+buy/sell calls ("We don't predict the future — we read the conditions").
+
+Module map:
+
+| File | Role |
+|------|------|
+| `types.ts` | All weather types (timeframe, layer, sub-scores, trend inputs, reading, condition def, snapshot). |
+| `conditions.ts` | The shared 10-condition library (label, colors, icon, copy, `dynamicGraphicKey`). |
+| `scoring.ts` | Pure engine: trend score, weather score, priority classification, confidence (+ session caps), 200-day climate context, "why" copy. |
+| `session.ts` | ET-clock session detection (premarket / live / afterhours), DST-safe via `Intl`. |
+| `mock.ts` | Authored sub-score seeds → readings via the engine, assembled into a per-session snapshot. |
+| `graphics.ts` | Resolves a `dynamicGraphicKey` to a background treatment (gradient fallback now, image/video later). |
+
+Scoring is **provider-agnostic** — `buildReading()` takes normalized 0–100
+sub-scores and climate inputs, so the same engine runs on mock and real data.
+
+### Going live — one fetch per session, app-wide
+
+`getMarketWeather(timeframe)` returns a `MarketWeatherSnapshot` covering **every**
+sector, industry, and tracked stock. The contract for the real API layer:
+
+- Fetch **one** snapshot per session (premarket / live / afterhours), not per
+  user and not per render.
+- Refresh it at each **session boundary** (the time a session starts), so it
+  updates automatically for everyone; logging in mid-session reuses the cached
+  snapshot instead of re-fetching.
+- Cache it **app-wide** (shared across users). The mock approximates this with a
+  per-session `Map` cache in `weather/mock.ts`.
+- Filter per user **client-side** by mapping their watch tickers →
+  `TICKERS[ticker].sector` / `.industry` (no extra calls per user).
+
+The widget (`MarketFlowWidget`) is read-only on the home page: it detects the
+session, pulls the snapshot through the `dataSource` seam, and focuses
+sector/industry/stock on the name selected in Current Watch (or the first watch
+name by default), with pills to switch sector/industry.

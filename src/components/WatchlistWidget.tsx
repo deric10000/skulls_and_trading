@@ -106,7 +106,18 @@ function WatchSummary({
 const PORTFOLIOS = dataSource.getPortfolios();
 const DEFAULT_SOURCE_ID = PORTFOLIOS[0]?.id ?? "";
 
-export function WatchlistWidget({ readOnly = false }: { readOnly?: boolean }) {
+export function WatchlistWidget({
+  readOnly = false,
+  onSelectTicker,
+}: {
+  readOnly?: boolean;
+  /**
+   * Optional: called when a name is selected in the read-only (home) widget so a
+   * sibling (e.g. Market Weather) can focus that ticker's sector/industry. Does
+   * not affect the dashboard's global selected ticker.
+   */
+  onSelectTicker?: (ticker: string) => void;
+}) {
   const {
     watchlist,
     selectedTicker,
@@ -287,11 +298,14 @@ export function WatchlistWidget({ readOnly = false }: { readOnly?: boolean }) {
                 <button
                   type="button"
                   className="watch-select"
-                  onClick={() =>
-                    readOnly
-                      ? setLocalSelected(item.ticker)
-                      : selectTicker(item.ticker)
-                  }
+                  onClick={() => {
+                    if (readOnly) {
+                      setLocalSelected(item.ticker);
+                      onSelectTicker?.(item.ticker);
+                    } else {
+                      selectTicker(item.ticker);
+                    }
+                  }}
                   aria-pressed={isActive}
                 >
                   <span className="watch-top">

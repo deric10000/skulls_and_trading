@@ -218,6 +218,8 @@ export interface LogEntry {
 export interface TickerInfo {
   company: string; // "Nvidia"
   category: string; // "AI Infrastructure"
+  sector: string; // Market Weather parent sector, e.g. "Technology"
+  industry: string; // Market Weather peer group, e.g. "Semiconductors"
   lastPrice: number;
   analysis: TickerAnalysis;
   logs: LogEntry[];

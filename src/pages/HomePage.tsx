@@ -15,6 +15,9 @@ const HOME_TABS: TabItem[] = [
 
 export function HomePage() {
   const [activeTab, setActiveTab] = useState<HomeTabId>("about");
+  // Shared so selecting a name in Current Watch refocuses Market Weather's
+  // sector/industry/stock layers (the two live on separate home tabs).
+  const [weatherFocusTicker, setWeatherFocusTicker] = useState<string | null>(null);
   const [carouselEnabled, setCarouselEnabled] = useState(false);
   const [emblaRef, emblaApi] = useEmblaCarousel({
     axis: "x",
@@ -84,10 +87,10 @@ export function HomePage() {
             <HeroCard variant="center" />
           </section>
           <section className="home-slide home-slide--watch" data-home-tab="current-watch">
-            <WatchlistWidget readOnly />
+            <WatchlistWidget readOnly onSelectTicker={setWeatherFocusTicker} />
           </section>
           <section className="home-slide home-slide--market" data-home-tab="market-weather">
-            <MarketFlowWidget />
+            <MarketFlowWidget focusTicker={weatherFocusTicker} />
           </section>
         </div>
       </div>
