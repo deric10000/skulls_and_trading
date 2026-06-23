@@ -1,0 +1,45 @@
+---
+description: Data model + DataSource seam rules — single source of truth for tickers/portfolios, derive-don't-duplicate, and how mock data gets swapped for real APIs
+globs: src/data.ts,src/state/**,src/lib/datasource/**,src/components/**/*.tsx
+alwaysApply: false
+---
+
+# Data Architecture Rules
+
+Full reference: `data-architecture.md`. This is the enforceable contract.
+
+## Single source of truth
+
+- `TICKERS` (company facts) and `PORTFOLIOS[].holdings` (holding facts) in
+  `src/data.ts` are authoritative. **Derive, don't duplicate.**
+- `INITIAL_WATCHLIST`, `TICKER_ANALYSIS`, `LOG_ENTRIES`, `DEFAULT_ASSIGNMENTS`,
+  and `POSITIONS` are **derived** — never hand-edit them; edit the registries.
+- Keep derivation transforms (e.g. `watchlistFromHoldings()`) **pure**.
+- `ALLOCATIONS`, `RISK_RULES`, `PORTFOLIO_METRICS` are intentionally hand-authored
+  literals for now (see the reference doc). Don't "fix" them into derived values
+  without explicit instruction — it changes displayed numbers.
+
+## The DataSource seam (`src/lib/datasource/`)
+
+- Components and `AppState` must read **live/portfolio data** through
+  `dataSource` (from `../lib/datasource`) — never by importing live-data
+  constants (`POSITIONS`, `ALLOCATIONS`, `RISK_RULES`, `PORTFOLIO_METRICS`,
+  `MARKET_FLOW`, `TICKER_ANALYSIS`, `PORTFOLIOS`, `INITIAL_WATCHLIST`,
+  `LOG_ENTRIES`, `DEFAULT_ASSIGNMENTS`) straight from `src/data.ts`.
+- **Static configuration / reference content** (strategy catalog, profile option
+  lists, `DEFAULT_CAPTAIN`, education cards, ships/badges, score copy) is NOT
+  behind the seam — import it directly from `src/data.ts`.
+- Adding a new live-data accessor → add it to the `DataSource` interface AND
+  `mockDataSource`.
+
+## Going live
+
+- Swap the single `dataSource` binding in `src/lib/datasource/index.ts` to an
+  `ApiDataSource`. Don't scatter API calls into components.
+- Async + loading/error and the live-vs-overlay field split land in `AppState`
+  only, when the first real API is wired (Pass 2).
+
+## Safety
+
+- All data is static mock placeholder. Before introducing real/realistic
+  personal or financial data, follow `.cursor/rules/security-hardening.mdc`.

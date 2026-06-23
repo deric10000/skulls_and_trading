@@ -7,13 +7,8 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import {
-  DEFAULT_ASSIGNMENTS,
-  DEFAULT_CAPTAIN,
-  DEFAULT_STRATEGIES,
-  INITIAL_WATCHLIST,
-  LOG_ENTRIES,
-} from "../data";
+import { DEFAULT_CAPTAIN, DEFAULT_STRATEGIES } from "../data";
+import { dataSource } from "../lib/datasource";
 import { computeSignal } from "../lib/signals";
 import type {
   CaptainProfile,
@@ -96,15 +91,19 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const updateCaptain = useCallback((patch: Partial<CaptainProfile>) => {
     setCaptain((current) => ({ ...current, ...patch }));
   }, []);
-  const [watchlist, setWatchlist] = useState<WatchlistItem[]>(INITIAL_WATCHLIST);
+  const [watchlist, setWatchlist] = useState<WatchlistItem[]>(() =>
+    dataSource.getInitialWatchlist(),
+  );
   const [selectedTicker, setSelectedTicker] = useState<string>(
-    INITIAL_WATCHLIST[0]?.ticker ?? "",
+    () => dataSource.getInitialWatchlist()[0]?.ticker ?? "",
   );
   const [strategies, setStrategies] = useState<Strategy[]>(DEFAULT_STRATEGIES);
-  const [assignments, setAssignments] =
-    useState<StrategyAssignments>(DEFAULT_ASSIGNMENTS);
-  const [logsByTicker, setLogsByTicker] =
-    useState<Record<string, LogEntry[]>>(LOG_ENTRIES);
+  const [assignments, setAssignments] = useState<StrategyAssignments>(() =>
+    dataSource.getDefaultAssignments(),
+  );
+  const [logsByTicker, setLogsByTicker] = useState<Record<string, LogEntry[]>>(
+    () => dataSource.getLogs(),
+  );
 
   const idCounter = useRef(0);
   const nextId = useCallback((prefix: string) => {

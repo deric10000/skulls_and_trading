@@ -64,6 +64,10 @@ read the relevant rule/doc files first** and follow them:
   responsive behavior, and per-viewport card scrolling rules.
 - **`design-system.md`** — design tokens, color, spacing, and styling rules.
 - **`product-voice.md`** — copy, tone, and content rules.
+- **`data-architecture.md`** (+ **`.cursor/rules/data-architecture.mdc`**) — the
+  mock-data model (`TICKERS`/`PORTFOLIOS` single source of truth), the
+  `DataSource` seam, and how mock data gets swapped for real-time market and
+  brokerage data later.
 - **`.cursor/rules/git-workflow.mdc`** — branch-per-change git workflow
   (`feature/*`, `bug/*`, `chore/*`; never commit straight to `main`).
 - **`.cursor/rules/*.mdc`** — any other scoped rule docs that apply to the

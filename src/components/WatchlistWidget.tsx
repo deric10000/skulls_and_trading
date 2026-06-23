@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useAppState } from "../state/AppState";
-import { PORTFOLIOS, TICKER_ANALYSIS, watchlistFromHoldings } from "../data";
+import { dataSource } from "../lib/datasource";
 import { formatChange, formatPrice } from "../lib/format";
 import { STATUS_TONE } from "../lib/status";
 import { StatusBadge } from "./StatusBadge";
@@ -17,7 +17,7 @@ function WatchSummary({
   signal: SignalResult;
   logs: LogEntry[];
 }) {
-  const analysis = TICKER_ANALYSIS[item.ticker];
+  const analysis = dataSource.getTickerAnalysis(item.ticker);
   const latestLog = logs[0];
 
   return (
@@ -103,6 +103,7 @@ function WatchSummary({
   );
 }
 
+const PORTFOLIOS = dataSource.getPortfolios();
 const DEFAULT_SOURCE_ID = PORTFOLIOS[0]?.id ?? "";
 
 export function WatchlistWidget({ readOnly = false }: { readOnly?: boolean }) {
@@ -129,11 +130,11 @@ export function WatchlistWidget({ readOnly = false }: { readOnly?: boolean }) {
   // re-seeded whenever the selected source changes — keeps add/remove from
   // mutating the read-only portfolio data.
   const [watchlistItems, setWatchlistItems] = useState<WatchlistItem[]>(() =>
-    watchlistFromHoldings(selectedSource.holdings),
+    dataSource.getWatchlistForPortfolio(selectedSource.id),
   );
   useEffect(() => {
     if (isWatchlistSource) {
-      setWatchlistItems(watchlistFromHoldings(selectedSource.holdings));
+      setWatchlistItems(dataSource.getWatchlistForPortfolio(selectedSource.id));
     }
   }, [isWatchlistSource, selectedSource]);
 
@@ -143,7 +144,7 @@ export function WatchlistWidget({ readOnly = false }: { readOnly?: boolean }) {
   const items = useMemo<WatchlistItem[]>(() => {
     if (isDefaultSource) return watchlist;
     if (isWatchlistSource) return watchlistItems;
-    return watchlistFromHoldings(selectedSource.holdings);
+    return dataSource.getWatchlistForPortfolio(selectedSource.id);
   }, [isDefaultSource, isWatchlistSource, watchlist, watchlistItems, selectedSource]);
 
   const activeTicker = readOnly ? localSelected : selectedTicker;
