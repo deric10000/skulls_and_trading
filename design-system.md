@@ -263,10 +263,23 @@ This section maps the design system to what is implemented in code.
   Hold Plan, Trim Review, Exit Review, Review Risk, Rule Conflict, Rule Break,
   Thesis Missing. Tones: positive (green), neutral (blue), warning (amber),
   negative (red).
-- Watchlist plan labels (`StatusType`): Aligned, Watch, Review, Rule Check, Risk Check,
-  Thesis Needed, Trim Review, Exit Review.
+- Watchlist / portfolio alignment labels (`StatusType`): High Alignment, Aligned, Watch,
+  Review, Risk Check, Thesis Check. Tone is resolved through `STATUS_TONE`
+  (`src/lib/status.ts`) — the single source used by `StatusBadge` and the inline
+  "Strategy Check · <status>" label so chip + text never disagree.
 - Market Weather statuses (`MarketWeatherStatus`): Calm Waters, Storm Watch,
   Risk-On Tide, Choppy Seas, Rotation Current, Breakout Wind, Defensive Harbor.
+
+### Mock data: single source of truth
+
+- `src/data.ts` defines `TICKERS` (company-level facts: company, category, last price,
+  analysis, logs) and `PORTFOLIOS` (a portfolio/watchlist with per-holding cost basis,
+  shares, open P&L %, conviction, alignment status, and reason). A **portfolio** is a
+  (future) live-connected brokerage account and can't add tickers; a **watchlist** is
+  user-curated and can.
+- Legacy exports (`INITIAL_WATCHLIST`, `TICKER_ANALYSIS`, `LOG_ENTRIES`,
+  `DEFAULT_ASSIGNMENTS`, `POSITIONS`) are **derived** from `DEFAULT_PORTFOLIO` /
+  `TICKERS` — update the source registries, not the derived arrays.
 
 ### Scores (discipline-first)
 

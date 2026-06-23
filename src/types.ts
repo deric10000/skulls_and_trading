@@ -143,17 +143,16 @@ export interface SharedLog {
 
 export type SignalTone = "positive" | "neutral" | "warning" | "negative";
 
-// Watchlist plan labels (per product-voice.md). These describe how a name lines up
-// with the user's OWN rules — never a buy/sell recommendation.
+// Watchlist / portfolio alignment statuses (per product-voice.md). They describe how a
+// name lines up with the selected portfolio's assigned strategy — never a buy/sell
+// recommendation.
 export type StatusType =
+  | "High Alignment"
   | "Aligned"
   | "Watch"
   | "Review"
-  | "Rule Check"
   | "Risk Check"
-  | "Thesis Needed"
-  | "Trim Review"
-  | "Exit Review";
+  | "Thesis Check";
 
 // Market Weather statuses (plan-safe market mood, used in the Market Weather widget).
 export type MarketWeatherStatus =
@@ -182,10 +181,13 @@ export type SignalState =
 export interface WatchlistItem {
   ticker: string;
   name: string;
-  price: number;
-  changePct: number;
+  price: number; // last price
+  changePct: number; // open P&L % (positive → green, negative → red)
   status: StatusType;
   conviction: number;
+  shares: number; // mock share count (0 for watch-only names)
+  avgPrice: number; // DCA / average cost (0 for watch-only names)
+  reason: string; // why this name carries its current alignment status
 }
 
 export interface SignalChip {
@@ -209,6 +211,39 @@ export interface LogEntry {
   note: string;
   strategy?: string;
   timestamp: string;
+}
+
+// ---- Ticker / portfolio mock data (single source of truth) ----
+// Company-level facts that are the same regardless of who holds the name.
+export interface TickerInfo {
+  company: string; // "Nvidia"
+  category: string; // "AI Infrastructure"
+  lastPrice: number;
+  analysis: TickerAnalysis;
+  logs: LogEntry[];
+}
+
+// Holding-level facts that belong to a specific portfolio (cost basis, size, and
+// how the name aligns with THAT portfolio's assigned strategy).
+export interface PortfolioHolding {
+  ticker: string;
+  shares: number;
+  avgPrice: number; // DCA / average cost
+  openPnlPct: number; // open profit/loss vs. avg price
+  conviction: number;
+  status: StatusType; // alignment with the portfolio's assigned strategy
+  reason: string;
+  strategyIds: string[]; // drives the dashboard Strategy Check signal
+}
+
+export interface Portfolio {
+  id: string;
+  label: string;
+  // A "portfolio" is a (future) live-connected brokerage account; a "watchlist" is
+  // user-curated and can add tickers manually.
+  type: "portfolio" | "watchlist";
+  strategyId?: string; // the strategy this portfolio is run against
+  holdings: PortfolioHolding[];
 }
 
 export type Timeframe = "Swing" | "Long Term" | "Speculation";

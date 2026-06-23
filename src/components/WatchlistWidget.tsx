@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAppState } from "../state/AppState";
-import { PORTFOLIOS, TICKER_ANALYSIS } from "../data";
+import { PORTFOLIOS, TICKER_ANALYSIS, watchlistFromHoldings } from "../data";
 import { formatChange, formatPrice } from "../lib/format";
+import { STATUS_TONE } from "../lib/status";
 import { StatusBadge } from "./StatusBadge";
-import { CaretLeft, TrendUp } from "../lib/icons";
+import { CaretLeft } from "../lib/icons";
 import type { LogEntry, SignalResult, WatchlistItem } from "../types";
 import bullCompass from "../assets/bull-skull-compass.png";
 
@@ -39,13 +40,18 @@ function WatchSummary({
             {formatChange(item.changePct)}
           </span>
         </div>
+        {item.shares > 0 ? (
+          <span className="watch-holding">
+            {item.shares} shares · DCA {formatPrice(item.avgPrice)}
+          </span>
+        ) : null}
       </header>
 
       <div className="watch-summary-signal">
-        <span className={`chip status--${signal.tone}`}>{signal.state}</span>
-        <span className="watch-summary-metrics">
-          Confidence {signal.confidence}% · Conviction {item.conviction}
+        <span className={`chip status--${STATUS_TONE[item.status]}`}>
+          {item.status}
         </span>
+        <span className="watch-summary-metrics">Conviction {item.conviction}</span>
       </div>
 
       {signal.strategyStack.length > 0 ? (
@@ -59,31 +65,25 @@ function WatchSummary({
       ) : null}
 
       <dl className="watch-summary-detail">
-        {analysis ? (
-          <div className="watch-summary-row">
-            <dt>Setup</dt>
-            <dd>{analysis.setupSummary}</dd>
-          </div>
-        ) : null}
         <div className="watch-summary-row">
           <dt>Why</dt>
-          <dd>{signal.reason}</dd>
-        </div>
-        <div className="watch-summary-row">
-          <dt>Invalidation</dt>
-          <dd>{signal.invalidation}</dd>
+          <dd>{item.reason}</dd>
         </div>
         {analysis ? (
-          <div className="watch-summary-row">
-            <dt>Thesis</dt>
-            <dd>{analysis.thesis}</dd>
-          </div>
-        ) : null}
-        {analysis ? (
-          <div className="watch-summary-row">
-            <dt>Risk</dt>
-            <dd>{analysis.risk}</dd>
-          </div>
+          <>
+            <div className="watch-summary-row">
+              <dt>Setup</dt>
+              <dd>{analysis.setupSummary}</dd>
+            </div>
+            <div className="watch-summary-row">
+              <dt>Thesis</dt>
+              <dd>{analysis.thesis}</dd>
+            </div>
+            <div className="watch-summary-row">
+              <dt>Risk</dt>
+              <dd>{analysis.risk}</dd>
+            </div>
+          </>
         ) : null}
       </dl>
 
@@ -103,13 +103,13 @@ function WatchSummary({
   );
 }
 
+const DEFAULT_SOURCE_ID = PORTFOLIOS[0]?.id ?? "";
+
 export function WatchlistWidget({ readOnly = false }: { readOnly?: boolean }) {
   const {
     watchlist,
     selectedTicker,
     selectTicker,
-    addTicker,
-    removeTicker,
     getSignal,
     logsByTicker,
   } = useAppState();
@@ -117,28 +117,76 @@ export function WatchlistWidget({ readOnly = false }: { readOnly?: boolean }) {
   // Read-only (home) selection is local to this widget so it never mutates the
   // global selected ticker that drives the dashboard. Defaults to none selected.
   const [localSelected, setLocalSelected] = useState<string | null>(null);
-  // Placeholder portfolio/watchlist switcher; no downstream effect yet. Portfolios
-  // (live-connected accounts) can't add tickers; only a watchlist can.
-  const [portfolio, setPortfolio] = useState(PORTFOLIOS[0]?.id ?? "");
-  const selectedSource = PORTFOLIOS.find((option) => option.id === portfolio);
-  const isWatchlistSource = selectedSource?.type === "watchlist";
+  // Which portfolio/watchlist is shown. Portfolios (live-connected accounts) are
+  // read-only; only a watchlist can add/remove tickers.
+  const [portfolio, setPortfolio] = useState(DEFAULT_SOURCE_ID);
+  const selectedSource =
+    PORTFOLIOS.find((option) => option.id === portfolio) ?? PORTFOLIOS[0];
+  const isWatchlistSource = selectedSource.type === "watchlist";
+  const isDefaultSource = selectedSource.id === DEFAULT_SOURCE_ID;
+
+  // A watchlist is user-editable, so its (mock) list lives in local state and is
+  // re-seeded whenever the selected source changes — keeps add/remove from
+  // mutating the read-only portfolio data.
+  const [watchlistItems, setWatchlistItems] = useState<WatchlistItem[]>(() =>
+    watchlistFromHoldings(selectedSource.holdings),
+  );
+  useEffect(() => {
+    if (isWatchlistSource) {
+      setWatchlistItems(watchlistFromHoldings(selectedSource.holdings));
+    }
+  }, [isWatchlistSource, selectedSource]);
+
+  // The list to render: the default portfolio mirrors live app state (so the
+  // dashboard stays in sync); a watchlist uses its editable local list; any other
+  // portfolio is derived (read-only) from its holdings.
+  const items = useMemo<WatchlistItem[]>(() => {
+    if (isDefaultSource) return watchlist;
+    if (isWatchlistSource) return watchlistItems;
+    return watchlistFromHoldings(selectedSource.holdings);
+  }, [isDefaultSource, isWatchlistSource, watchlist, watchlistItems, selectedSource]);
+
   const activeTicker = readOnly ? localSelected : selectedTicker;
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const next = draft.trim();
-    if (next) {
-      addTicker(next);
-      setDraft("");
-    }
+    const next = draft.trim().toUpperCase();
+    if (!next) return;
+    setWatchlistItems((current) =>
+      current.some((item) => item.ticker === next)
+        ? current
+        : [
+            ...current,
+            {
+              ticker: next,
+              name: "New position · Pending research",
+              price: 0,
+              changePct: 0,
+              status: "Thesis Check",
+              conviction: 40,
+              shares: 0,
+              avgPrice: 0,
+              reason: "Pending research — assign a strategy and log your thesis.",
+            },
+          ],
+    );
+    setDraft("");
+  }
+
+  function handleRemove(ticker: string) {
+    setWatchlistItems((current) => current.filter((item) => item.ticker !== ticker));
   }
 
   // Read-only detail view: a condensed, read-only summary of the selected ticker
   // (drawn from the dashboard's signal / analysis / log data, no CRUD).
   const summaryItem =
     readOnly && localSelected
-      ? watchlist.find((item) => item.ticker === localSelected)
+      ? items.find((item) => item.ticker === localSelected)
       : undefined;
+
+  // Snapshot chip reflects the selected source's headline alignment (the list is
+  // ordered strongest-first), so switching sources visibly changes the state.
+  const snapshotStatus = items[0]?.status ?? "Watch";
 
   if (summaryItem) {
     return (
@@ -168,7 +216,7 @@ export function WatchlistWidget({ readOnly = false }: { readOnly?: boolean }) {
     <section className="panel watchlist" aria-labelledby="watchlist-title">
       <div className="panel-head">
         <h2 id="watchlist-title">Current Watch</h2>
-        <span className="panel-tag">{watchlist.length} names</span>
+        <span className="panel-tag">{items.length} names</span>
       </div>
       <div className="portfolio-switcher">
         <label className="visually-hidden" htmlFor="portfolio-select">
@@ -188,18 +236,19 @@ export function WatchlistWidget({ readOnly = false }: { readOnly?: boolean }) {
         </select>
       </div>
       {readOnly ? (
-        // Static placeholder snapshot — the emblem + chip will be driven by live
-        // alignment insights in a future iteration.
+        // Snapshot headline reflects the selected source's lead alignment. The
+        // emblem is a static placeholder until driven by live insights.
         <div className="watchlist-snapshot">
           <div className="compass">
             <img className="compass-img" src={bullCompass} alt="" />
           </div>
           <div className="watchlist-snapshot-body">
-            <span className="watch-signal watch-signal--positive">Strategy Check</span>
-            <span className="chip status--positive">
-              <TrendUp aria-hidden />
-              High Alignment
+            <span
+              className={`watch-signal watch-signal--${STATUS_TONE[snapshotStatus]}`}
+            >
+              Strategy Check
             </span>
+            <StatusBadge status={snapshotStatus} />
           </div>
         </div>
       ) : isWatchlistSource ? (
@@ -223,9 +272,8 @@ export function WatchlistWidget({ readOnly = false }: { readOnly?: boolean }) {
         </form>
       ) : null}
       <ul className="watchlist-items">
-        {watchlist.map((item) => {
+        {items.map((item) => {
           const isActive = item.ticker === activeTicker;
-          const signal = getSignal(item.ticker);
           return (
             <li key={item.ticker}>
               <div
@@ -267,6 +315,11 @@ export function WatchlistWidget({ readOnly = false }: { readOnly?: boolean }) {
                       {formatChange(item.changePct)}
                     </span>
                   </span>
+                  {item.shares > 0 ? (
+                    <span className="watch-holding">
+                      {item.shares} shares · DCA {formatPrice(item.avgPrice)}
+                    </span>
+                  ) : null}
                   <span className="conviction">
                     <span className="conviction-track">
                       <span
@@ -278,24 +331,34 @@ export function WatchlistWidget({ readOnly = false }: { readOnly?: boolean }) {
                       Conviction {item.conviction}
                     </span>
                   </span>
-                  <span className={`watch-signal watch-signal--${signal.tone}`}>
-                    Strategy Check · {signal.state}
+                  <span
+                    className={`watch-signal watch-signal--${STATUS_TONE[item.status]}`}
+                  >
+                    Strategy Check · {item.status}
                   </span>
                 </button>
-                {readOnly ? null : (
+                {/* Removing names is only valid on a user-curated watchlist.
+                    Portfolios are (future) live-connected accounts, so their
+                    holdings can't be hand-removed. */}
+                {!readOnly && isWatchlistSource ? (
                   <button
                     type="button"
                     className="watch-remove"
-                    onClick={() => removeTicker(item.ticker)}
+                    onClick={() => handleRemove(item.ticker)}
                     aria-label={`Remove ${item.ticker} from watchlist`}
                   >
                     &times;
                   </button>
-                )}
+                ) : null}
               </div>
             </li>
           );
         })}
+        {items.length === 0 ? (
+          <li className="watch-empty">
+            No names yet — add a ticker to start this watchlist.
+          </li>
+        ) : null}
       </ul>
     </section>
   );
