@@ -80,8 +80,11 @@ watchlist mini-states, and any signal surface.
 | —                 | Thesis Missing      | warning (amber)     |
 | —                 | Risk Exceeded       | negative (red)      |
 
-Watchlist mini-states: Aligned, Watch, Review, Rule Check, Risk Check, Thesis Needed,
-Trim Review, Exit Review.
+Watchlist / portfolio alignment states (`StatusType`): High Alignment, Aligned, Watch,
+Review, Risk Check, Thesis Check. These describe how a holding lines up with the
+portfolio's assigned strategy — never a buy/sell call. Tone mapping lives in
+`src/lib/status.ts` (`STATUS_TONE`) so the chip and inline "Strategy Check · <status>"
+label always agree.
 
 Market Weather statuses: Calm Waters, Storm Watch, Risk-On Tide, Choppy Seas,
 Rotation Current, Breakout Wind, Defensive Harbor.

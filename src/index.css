@@ -1382,6 +1382,14 @@ select.input:hover:not(:disabled) {
   gap: 0.6rem;
 }
 
+/* Empty watchlist hint (shown when a list has no names). */
+.watch-empty {
+  padding: 1rem 0.25rem;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  text-align: center;
+}
+
 /* Layout only — rest/hover/selected come from `.select-card` (+ `.is-selected`). */
 .watch-item {
   position: relative;
@@ -1408,6 +1416,13 @@ select.input:hover:not(:disabled) {
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
+}
+
+/* Compact holding line (shares · DCA) shown on owned positions. */
+.watch-holding {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  letter-spacing: 0.01em;
 }
 
 .watch-ticker {

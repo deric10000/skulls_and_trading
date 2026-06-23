@@ -40,12 +40,10 @@ export {
 
 /** Status taxonomy → status chip icon. Tone color comes from the chip class. */
 export const STATUS_ICON: Record<StatusType, Icon> = {
+  "High Alignment": TrendUp,
   Aligned: CheckCircle,
   Watch: Eye,
   Review: Warning,
-  "Rule Check": Warning,
-  "Risk Check": Warning,
-  "Thesis Needed": Warning,
-  "Trim Review": Warning,
-  "Exit Review": WarningOctagon,
+  "Risk Check": WarningOctagon,
+  "Thesis Check": Warning,
 };

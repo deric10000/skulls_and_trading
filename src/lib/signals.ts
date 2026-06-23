@@ -16,6 +16,7 @@ const STATE_TONE: Record<SignalState, SignalTone> = {
 // Believable placeholder weighting. This is intentionally simple mock logic
 // (no real market data) so assigning/removing strategies visibly moves the signal.
 const STRATEGY_WEIGHT: Record<string, number> = {
+  "aggressive-ai-high-beta": 2,
   "aggressive-growth": 2,
   momentum: 2,
   "breakout-watch": 1,

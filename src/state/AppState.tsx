@@ -158,8 +158,11 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         name: "New position · Pending research",
         price: 0,
         changePct: 0,
-        status: "Thesis Needed",
+        status: "Thesis Check",
         conviction: 40,
+        shares: 0,
+        avgPrice: 0,
+        reason: "Pending research — assign a strategy and log your thesis.",
       };
       return [...current, newItem];
     });
