@@ -3227,14 +3227,16 @@ button.nav-link {
 }
 
 /* Full-bleed login artwork. `cover` + `center` scales it responsively across
-   any viewport (the dark center of the scene sits under the centered content).
-   The ::after scrim darkens the scene and adds a vignette so the brand copy and
-   auth panel stay readable over the ships/effects. Sits at the back, beneath the
-   aurora color wash and the z-indexed `.auth-shell`. */
+   any viewport. The ::after scrim mutes the scene — a flat dark wash knocks the
+   bright wave highlights down to a subtle glow, then a vignette + bottom-weighted
+   gradient add depth — so the brand copy and the (translucent, ~72%) auth panel
+   stay readable over it. Tune readability with the flat-wash alpha below. Sits at
+   the back, beneath the aurora color wash and the z-indexed `.auth-shell`. */
 .auth-backdrop {
   position: absolute;
   inset: 0;
   z-index: 0;
+  background-color: var(--bg-deep);
   background-position: center;
   background-size: cover;
   background-repeat: no-repeat;
@@ -3246,8 +3248,9 @@ button.nav-link {
   position: absolute;
   inset: 0;
   background:
-    radial-gradient(90% 80% at 50% 50%, transparent 0%, rgb(5 7 13 / 0.5) 100%),
-    linear-gradient(180deg, rgb(5 7 13 / 0.5) 0%, rgb(5 7 13 / 0.62) 100%);
+    linear-gradient(0deg, rgb(5 7 13 / 0.62), rgb(5 7 13 / 0.62)),
+    radial-gradient(95% 85% at 50% 42%, transparent 0%, rgb(5 7 13 / 0.55) 100%),
+    linear-gradient(180deg, rgb(5 7 13 / 0.55) 0%, rgb(5 7 13 / 0.8) 100%);
 }
 
 .auth-aurora {
