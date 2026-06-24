@@ -260,7 +260,21 @@ function buildSnapshot(tf: MarketWeatherTimeframe): MarketWeatherSnapshot {
     stocks[ticker] = readingFor(seed, "stock", ticker, tf, generatedAt, parent?.score);
   }
 
-  return { timeframe: tf, generatedAt, market, sectors, industries, stocks };
+  // Universe taxonomy (industry → sector) so the client can cascade the layers.
+  const industrySectors: Record<string, string> = {};
+  for (const [name, seed] of Object.entries(INDUSTRY_SEEDS)) {
+    industrySectors[name] = seed.sector;
+  }
+
+  return {
+    timeframe: tf,
+    generatedAt,
+    market,
+    sectors,
+    industries,
+    stocks,
+    industrySectors,
+  };
 }
 
 // App-wide cache: one snapshot per session, computed once (mirrors the "one API

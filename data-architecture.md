@@ -125,7 +125,9 @@ sub-scores and climate inputs, so the same engine runs on mock and real data.
 ### Going live — one fetch per session, app-wide
 
 `getMarketWeather(timeframe)` returns a `MarketWeatherSnapshot` covering **every**
-sector, industry, and tracked stock. The contract for the real API layer:
+sector, industry, and tracked stock, plus `industrySectors` (the industry→sector
+taxonomy the client uses to cascade the layers). The contract for the real API
+layer:
 
 - Fetch **one** snapshot per session (premarket / live / afterhours), not per
   user and not per render.
@@ -140,4 +142,8 @@ sector, industry, and tracked stock. The contract for the real API layer:
 The widget (`MarketFlowWidget`) is read-only on the home page: it detects the
 session, pulls the snapshot through the `dataSource` seam, and focuses
 sector/industry/stock on the name selected in Current Watch (or the first watch
-name by default), with pills to switch sector/industry.
+name by default). The Sector/Industry droplists span the full universe while the
+Stock layer is scoped to the watch; the three **cascade** (Sector → first
+Industry → first watch stock, with the Stock card disabled when the watch holds
+no name in that slice). All of it is local to the widget — it never writes back
+to the Current Watch selection.

@@ -125,4 +125,10 @@ export interface MarketWeatherSnapshot {
   sectors: Record<string, WeatherLayerReading>; // keyed by sector name
   industries: Record<string, WeatherLayerReading>; // keyed by industry name
   stocks: Record<string, WeatherLayerReading>; // keyed by ticker
+  /**
+   * Universe taxonomy: which sector each industry rolls up to (industry name →
+   * sector name). Lets the client cascade Sector → Industry → Stock without
+   * inferring the hierarchy from the (watch-only) ticker list.
+   */
+  industrySectors: Record<string, string>;
 }

@@ -319,16 +319,24 @@ This section maps the design system to what is implemented in code.
   Breakout Wind).
 - Sector/Industry cards add a selector below the head pill: a full-width
   **droplist** (the shared `Dropdown`, `on-graphics` variant, wrapped in
-  `.weather-select`) that steps through the watch's groups alphabetically. The
-  Stock card instead gets a compact gold **Previous / Next** toggle
-  (`.weather-prevnext`, `--accent-strong` text + bold `CaretLeft`/`CaretRight`)
-  that cycles the watch's names. All three selectors are **local to Market
-  Weather** — stepping them never changes the Current Watch selection — and they
-  re-enable pointer events above the click-through overlay so changing a layer
-  doesn't open the detail view. Default selection follows the focused/first watch
-  stock; selecting a name in Current Watch still refocuses every layer (and
-  resets the local overrides). The droplist is always full card width; the
-  Prev/Next toggle hugs the trailing edge. Both get a ~44px tap-target floor
+  `.weather-select`). Each lists the **full market universe** (every sector /
+  industry the weather covers, alphabetical), not just the watch. The Stock card
+  instead gets a compact gold **Previous / Next** toggle (`.weather-prevnext`,
+  `--accent-strong` text + bold `CaretLeft`/`CaretRight`) that cycles the watch's
+  names alphabetically.
+- The three layers **cascade** (stock is the leaf): picking a Sector sets the
+  Industry to that sector's first industry (alpha) and the Stock to the first
+  watch name (alpha) in it; picking an Industry switches the Sector to its parent
+  and the Stock likewise. If you hold **no** watch name in the chosen slice the
+  Stock card goes **disabled** (no reading, hit target off) but Previous/Next
+  stays live — from there Next = first watch name, Previous = last. Stepping a
+  stock re-pins its Sector + Industry. All of this is **local to Market Weather**
+  — it never changes the Current Watch selection; selecting a name in Current
+  Watch still refocuses every layer (and is the default: focused name, else the
+  first watch name). The droplist is always full card width; the Prev/Next toggle
+  hugs the trailing edge. The selectors re-enable pointer events above the
+  click-through overlay so changing a layer doesn't open the detail view, and get
+  a ~44px tap-target floor
   below 1024px (the wider mobile/tablet, touch contexts) while desktop keeps the
   dense Figma layout.
 
