@@ -3265,6 +3265,21 @@ button.nav-link {
   .home-tabs-shell {
     position: sticky;
     top: var(--app-header-h, 0px);
+    /* Tighten the strip: 4px breathing room above (below the header) and below
+       (above the content) — no borders bracketing it. */
+    padding-block: 4px;
+  }
+
+  /* Drop the strip's own bottom divider... */
+  .home-tabs-shell::after {
+    display: none;
+  }
+
+  /* ...and the header's bottom border, which reads as the strip's top edge.
+     Scoped to the home page (where the strip lives) so other mobile pages keep
+     their header divider. */
+  .app:has(.home-page) .site-header {
+    border-bottom: 0;
   }
 
   .site-account {
@@ -3273,6 +3288,28 @@ button.nav-link {
     flex-direction: row;
     align-items: center;
     align-self: center;
+  }
+
+  /* Mobile only: center the "Skulls & Trading" wordmark horizontally on the
+     screen (iOS-style centered title). The skull logo stays left and the DEMO
+     chip stays right — both keep their normal flow. The wordmark is lifted out
+     of the brand's inline flow and pinned to viewport-center: `.brand` is its
+     positioning context (so it centers vertically on the logo's line), and its
+     left edge sits at `--content-pad` from the viewport, so
+     `50vw - --content-pad` lands the center exactly mid-screen. Sizing stays
+     responsive via `vw` and the natural aspect ratio (the absolute element's
+     `100%` would resolve against the tiny logo-width brand box, so cap with
+     `vw` instead). */
+  .brand {
+    position: relative;
+  }
+
+  .brand-wordmark {
+    position: absolute;
+    top: 50%;
+    left: calc(50vw - var(--content-pad));
+    transform: translate(-50%, -50%);
+    max-width: min(70vw, 340px);
   }
 
   /* Mobile header: a touch more transparent than desktop (base 0.78) so a little
@@ -3309,6 +3346,29 @@ button.nav-link {
     margin-top: 0;
     padding: 1rem var(--content-pad) calc(1rem + env(safe-area-inset-bottom, 0px));
     font-size: 0.8rem;
+  }
+}
+
+/* Very small phones (<=380px): below ~370px the screen-centered wordmark starts
+   to collide with the right-side DEMO chip, and the nav pill's icons + Sign Out
+   stop fitting. Two fixes, both scoped here so larger phones keep the centered
+   title + roomy pill:
+   1. Return the wordmark to the in-flow brand lockup (left, next to the logo —
+      same as desktop/laptop) so the DEMO chip can't overlap it.
+   2. Keep Sign Out pinned to the pill's right edge (space-between unchanged) but
+      shrink the inter-icon gap so the 5 fixed 36px icons + Sign Out fit inside.
+      The pill is full-width minus 16px page padding and 12px pill padding per
+      side, so the space available for the 4 gaps is ~(100vw - 304px); dividing
+      by 4 gives the max gap, tracked fluidly with a small safety margin. */
+@media (max-width: 380px) {
+  .brand-wordmark {
+    position: static;
+    transform: none;
+    max-width: min(100%, 340px);
+  }
+
+  .mobile-nav-icons {
+    gap: clamp(4px, calc(25vw - 78px), 20px);
   }
 }
 
