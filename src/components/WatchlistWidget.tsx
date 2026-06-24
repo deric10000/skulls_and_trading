@@ -251,7 +251,9 @@ export function WatchlistWidget({
             <img className="compass-img" src={bullCompass} alt="" />
           </div>
           <div className="watchlist-snapshot-body">
-            <span className="watchlist-snapshot-label">Strategy Alignment</span>
+            <span className="watchlist-snapshot-label">
+              Portfolio Strategy Alignment
+            </span>
             <StatusBadge status={snapshotStatus} />
           </div>
         </div>
