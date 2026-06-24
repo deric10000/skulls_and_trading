@@ -5,7 +5,7 @@ import { formatChange, formatPrice } from "../lib/format";
 import { STATUS_TONE } from "../lib/status";
 import { StatusBadge } from "./StatusBadge";
 import { Dropdown } from "./Dropdown";
-import { CaretLeft } from "../lib/icons";
+import { CaretLeft, STATUS_ICON } from "../lib/icons";
 import type { LogEntry, SignalResult, WatchlistItem } from "../types";
 import bullCompass from "../assets/bull-skull-compass.png";
 
@@ -229,7 +229,7 @@ export function WatchlistWidget({
     <section className="panel watchlist" aria-labelledby="watchlist-title">
       <div className="panel-head">
         <h2 id="watchlist-title">Current Watch</h2>
-        <span className="panel-tag">{items.length} names</span>
+        <span className="panel-tag watchlist-tag">{items.length} stocks</span>
       </div>
       <div className="portfolio-switcher">
         <Dropdown
@@ -251,11 +251,7 @@ export function WatchlistWidget({
             <img className="compass-img" src={bullCompass} alt="" />
           </div>
           <div className="watchlist-snapshot-body">
-            <span
-              className={`watch-signal watch-signal--${STATUS_TONE[snapshotStatus]}`}
-            >
-              Strategy Check
-            </span>
+            <span className="watchlist-snapshot-label">Strategy Alignment</span>
             <StatusBadge status={snapshotStatus} />
           </div>
         </div>
@@ -282,6 +278,12 @@ export function WatchlistWidget({
       <ul className="watchlist-items">
         {items.map((item) => {
           const isActive = item.ticker === activeTicker;
+          const owned = item.shares > 0;
+          const marketValue = item.price * item.shares;
+          const totalPnl = (item.price - item.avgPrice) * item.shares;
+          const changeUp = item.changePct >= 0;
+          const changeClass = changeUp ? "watch-change--up" : "watch-change--down";
+          const AlignIcon = STATUS_ICON[item.status];
           return (
             <li key={item.ticker}>
               <div
@@ -304,48 +306,89 @@ export function WatchlistWidget({
                   }}
                   aria-pressed={isActive}
                 >
-                  <span className="watch-top">
-                    <span className="watch-ticker">
-                      {isActive ? (
-                        <span className="watch-selected-dot" aria-hidden="true" />
+                  <span className="watch-head">
+                    <span className="watch-id">
+                      <span className="watch-ticker">
+                        {isActive ? (
+                          <span className="watch-selected-dot" aria-hidden="true" />
+                        ) : null}
+                        {item.ticker}
+                      </span>
+                      <span className="watch-name">{item.name}</span>
+                    </span>
+                    {owned ? (
+                      <span className="watch-mvqty">
+                        <span className="watch-field-label">Market Value | Qty</span>
+                        <span className="watch-figure watch-figure--strong">
+                          {formatPrice(marketValue)}
+                        </span>
+                        <span className="watch-figure">{item.shares}</span>
+                      </span>
+                    ) : null}
+                  </span>
+
+                  <span className="watch-body">
+                    <span className="watch-metrics">
+                      {owned ? (
+                        <span className="watch-metric-pair">
+                          <span className="watch-metric">
+                            <span className="watch-field-label">Last Price</span>
+                            <span className="watch-figure watch-figure--strong">
+                              {formatPrice(item.price)}
+                            </span>
+                          </span>
+                          <span className="watch-metric">
+                            <span className="watch-field-label">Avg. Price</span>
+                            <span className="watch-figure">
+                              {formatPrice(item.avgPrice)}
+                            </span>
+                          </span>
+                        </span>
+                      ) : (
+                        <span className="watch-metric">
+                          <span className="watch-field-label">Last Price</span>
+                          <span className="watch-figure watch-figure--strong">
+                            {formatPrice(item.price)}
+                          </span>
+                        </span>
+                      )}
+                      {owned ? (
+                        <span className="watch-metric">
+                          <span className="watch-field-label">
+                            {"Open P&L% | Total"}
+                          </span>
+                          <span className="watch-pnl">
+                            <span className={`watch-figure watch-figure--medium ${changeClass}`}>
+                              {formatChange(item.changePct)}
+                            </span>
+                            <span className={`watch-figure ${changeClass}`}>
+                              {formatPrice(totalPnl)}
+                            </span>
+                          </span>
+                        </span>
                       ) : null}
-                      {item.ticker}
                     </span>
-                    <StatusBadge status={item.status} />
-                  </span>
-                  <span className="watch-name">{item.name}</span>
-                  <span className="watch-bottom">
-                    <span className="watch-price">{formatPrice(item.price)}</span>
-                    <span
-                      className={
-                        item.changePct >= 0
-                          ? "watch-change watch-change--up"
-                          : "watch-change watch-change--down"
-                      }
-                    >
-                      {formatChange(item.changePct)}
+
+                    <span className="watch-conviction-box">
+                      <span className="watch-field-label watch-field-label--right">
+                        Strategy Conviction
+                      </span>
+                      <span className="watch-conviction-meter">
+                        <span className="watch-conviction-track">
+                          <span
+                            className="watch-conviction-fill"
+                            style={{ width: `${item.conviction}%` }}
+                          />
+                        </span>
+                        <span className="watch-conviction-score">
+                          {item.conviction}
+                        </span>
+                      </span>
+                      <span className={`watch-align watch-align--${STATUS_TONE[item.status]}`}>
+                        <AlignIcon aria-hidden />
+                        {item.status}
+                      </span>
                     </span>
-                  </span>
-                  {item.shares > 0 ? (
-                    <span className="watch-holding">
-                      {item.shares} shares · DCA {formatPrice(item.avgPrice)}
-                    </span>
-                  ) : null}
-                  <span className="conviction">
-                    <span className="conviction-track">
-                      <span
-                        className="conviction-fill"
-                        style={{ width: `${item.conviction}%` }}
-                      />
-                    </span>
-                    <span className="conviction-label">
-                      Conviction {item.conviction}
-                    </span>
-                  </span>
-                  <span
-                    className={`watch-signal watch-signal--${STATUS_TONE[item.status]}`}
-                  >
-                    Strategy Check · {item.status}
                   </span>
                 </button>
                 {/* Removing names is only valid on a user-curated watchlist.
