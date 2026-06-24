@@ -160,7 +160,7 @@ Prefer these tokens (or multiples that stay on the 4pt grid) over ad-hoc pixel v
 - `.chip` — **borderless** tinted pill badge; tone is carried by fill + text/icon color, never a border (keeps tags visually distinct from bordered buttons). Status tones: `.status--positive`, `.status--negative`, `.status--warning`, `.status--neutral`. `.chip--soon` for "coming soon". Supports an optional leading status icon (`.chip svg` / `.chip-icon` auto-sizes to `1em`).
 - `.tabs` / `.tab` / `.tab--active` (+ `.tabs--fill` for equal-width segments) — the single shared segmented control. Render via the `Tabs` component (`src/components/Tabs.tsx`); never hand-roll a tab strip. States: unselected (muted), hover (subtle surface tint), selected (`.tab--active`, gold gradient matching `.btn--primary`), disabled (dimmed, non-interactive). Focus is keyboard-only — no second border on selection. Used by the home deck and the auth sign-in/create-account switch.
 - `.input` — shared form field (text inputs **and** selects): `--surface-3` fill, `--border-strong`, `--radius-sm`, `font: inherit`. `flex: 1` so it stretches inside a flex row (wrap in a flex container to make a standalone control full-width).
-- **`select.input` — the one dropdown / droplist affordance app-wide.** A native `<select>` reusing `.input` (so dropdowns match text fields), with the native chevron replaced by a design-system **CaretDown** caret (`appearance: none` + an inline SVG background, filled `--text-muted`) so the affordance looks identical across browsers. Hover lifts the border; keyboard focus is the global gold `:focus-visible` ring. **Every dropdown uses `select.input`** — never hand-roll a custom popover menu. Pair with a `<label>` (`.visually-hidden` when the context already implies the field). Adopters: portfolio/watchlist switcher (`.portfolio-switcher`, both home + dashboard watchlists — its selection type drives whether the "Add ticker" form shows: portfolios are live-connected so they hide it, watchlists show it), Strategy Assignment, Create Ship privacy.
+- **`select.input` — the one dropdown / droplist affordance app-wide.** A native `<select>` reusing `.input` (so dropdowns match text fields), with the native chevron replaced by a design-system **CaretDown** caret (`appearance: none` + an inline SVG background, filled `--text-muted`) so the affordance looks identical across browsers. Hover lifts the border; keyboard focus is the global gold `:focus-visible` ring. **Every dropdown uses `select.input`** — never hand-roll a custom popover menu. Render via the shared **`Dropdown`** component (`src/components/Dropdown.tsx`), which wraps the labelled `<select>` and exposes two style variants: `default` (the standard surface look) and `on-graphics` (`.input--on-graphics` — dark translucent fill + borderless edge, **used ONLY over imagery** so the affordance stays legible on busy artwork, e.g. the Market Weather condition art; the caret SVG is preserved by overriding `background-color`, not the `background` shorthand). Adopters: portfolio/watchlist switcher (`.portfolio-switcher`, both home + dashboard watchlists — its selection type drives whether the "Add ticker" form shows: portfolios are live-connected so they hide it, watchlists show it), the Market Weather Sector/Industry selectors (`on-graphics`), Strategy Assignment, Create Ship privacy.
 - `.watch-item` — watchlist cards; a **selectable card** (`.select-card` + `.is-selected`), so hover/selected match strategy/flow cards (see "Selectable card interaction standard").
 - `.conviction` — track + gold fill bar.
 - `.mini-card`, `.lens-card`, `.edu-card` — nested content cards.
@@ -317,12 +317,20 @@ This section maps the design system to what is implemented in code.
   Risk-On Tide → `Waves`, Breakout Wind → `Wind`, Rotation Current → `Hurricane`,
   Headwind → `WindReversed` (the `Wind` glyph mirrored on X, so the gust opposes
   Breakout Wind).
-- Sector/Industry cards add a second dark capsule below the head pill, the
-  toggle (`.weather-switch`): the current group name (`.weather-switch-label`,
-  uppercased) flanked by bold Phosphor `CaretLeft`/`CaretRight` chevrons that step
-  through the watch's groups alphabetically. Default selection follows the
-  focused/first watch stock; selecting a name in Current Watch refocuses the
-  sector/industry/stock layers.
+- Sector/Industry cards add a selector below the head pill: a full-width
+  **droplist** (the shared `Dropdown`, `on-graphics` variant, wrapped in
+  `.weather-select`) that steps through the watch's groups alphabetically. The
+  Stock card instead gets a compact gold **Previous / Next** toggle
+  (`.weather-prevnext`, `--accent-strong` text + bold `CaretLeft`/`CaretRight`)
+  that cycles the watch's names. All three selectors are **local to Market
+  Weather** — stepping them never changes the Current Watch selection — and they
+  re-enable pointer events above the click-through overlay so changing a layer
+  doesn't open the detail view. Default selection follows the focused/first watch
+  stock; selecting a name in Current Watch still refocuses every layer (and
+  resets the local overrides). The droplist is always full card width; the
+  Prev/Next toggle hugs the trailing edge. Both get a ~44px tap-target floor
+  below 1024px (the wider mobile/tablet, touch contexts) while desktop keeps the
+  dense Figma layout.
 
 ### Scores (discipline-first)
 
