@@ -318,7 +318,7 @@ button {
   position: sticky;
   top: 0;
   z-index: 20;
-  padding: 0.9rem 0 0.85rem;
+  padding: 1rem 0 0.5rem;
   background: rgb(5 7 13 / 0.78);
   backdrop-filter: blur(14px);
   border-bottom: 1px solid var(--border-soft);
@@ -357,14 +357,14 @@ button {
    internal padding) reads as an equal partner to the wordmark, not a stamp.
    Scales across all viewports and stays within the header's vertical rhythm. */
 .brand-logo {
-  width: clamp(48px, 8vw, 66px);
-  height: clamp(48px, 8vw, 66px);
+  width: 24px;
+  height: 24px;
   flex: 0 0 auto;
   object-fit: contain;
 }
 
 .brand-wordmark {
-  height: clamp(26px, 4.8vw, 42px);
+  height: 22px;
   width: auto;
   max-width: min(100%, 340px);
   flex: 0 1 auto;
@@ -439,6 +439,7 @@ button {
   justify-content: space-between;
   gap: var(--space-2);
   width: 100%;
+  height: 36px;
   padding: 0.5rem 0.75rem; /* Figma py-8 / px-12 */
   border-radius: 999px; /* Figma 296px → fully round */
   border: 1px solid rgb(255 255 255 / 0.14);
@@ -459,15 +460,15 @@ button {
 .mobile-nav-icons {
   display: inline-flex;
   align-items: center;
-  gap: clamp(0.75rem, 4.5vw, 1.5rem); /* Figma 24px; tightens on small phones */
+  gap: 20px; /* Figma 24px; tightens on small phones */
 }
 
 .mobile-nav-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 2.5rem; /* 40px tap target + active-disc size */
-  height: 2.5rem;
+  width: 36px; /* tap target + active-disc size */
+  height: 36px;
   padding: 0;
   border: 0;
   border-radius: 999px;
@@ -2816,7 +2817,7 @@ button.nav-link {
   display: flex;
   flex: 0 0 auto;
   margin-inline: calc(var(--content-pad) * -1);
-  padding: 0.45rem var(--content-pad);
+  padding: 0.25rem var(--content-pad);
   background: var(--bg-base);
 }
 
