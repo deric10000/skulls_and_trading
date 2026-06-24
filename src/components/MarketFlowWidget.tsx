@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAppState } from "../state/AppState";
 import { dataSource } from "../lib/datasource";
 import { Dropdown } from "./Dropdown";
@@ -131,7 +131,10 @@ interface LayerCard {
   reading?: WeatherLayerReading;
   options?: string[];
   active?: string | null;
+  // Droplist pick (sector/industry).
   onPick?: (value: string) => void;
+  // Previous/Next step (stock): +1 next, -1 previous.
+  onStep?: (direction: 1 | -1) => void;
   // Which on-card selector to render: a droplist (sector/industry) or the gold
   // Previous/Next toggle (stock). Market has neither.
   control?: "dropdown" | "prevnext";
@@ -152,68 +155,106 @@ export function MarketFlowWidget({
   const session = getMarketSession();
   const snapshot = dataSource.getMarketWeather(session);
 
-  // Universe of names = the current watch; build sector/industry pills from it.
+  // The stock universe = names in the current watch that have stock-level
+  // weather, sorted ALPHABETICALLY (the order Previous/Next steps through).
   const watchTickers = useMemo(
     () => watchlist.map((item) => item.ticker).filter((t) => dataSource.getTickerInfo(t)),
     [watchlist],
   );
-
-  // Options are sorted alphabetically for predictable stepping; the *default*
-  // selection still follows the focused/first watch stock (see activeSector).
-  const sectorOptions = useMemo(() => {
-    const seen = new Set<string>();
-    for (const ticker of watchTickers) {
-      const sector = dataSource.getTickerInfo(ticker)?.sector;
-      if (sector && snapshot.sectors[sector]) seen.add(sector);
-    }
-    return [...seen].sort((a, b) => a.localeCompare(b));
-  }, [watchTickers, snapshot]);
-
-  const industryOptions = useMemo(() => {
-    const seen = new Set<string>();
-    for (const ticker of watchTickers) {
-      const industry = dataSource.getTickerInfo(ticker)?.industry;
-      if (industry && snapshot.industries[industry]) seen.add(industry);
-    }
-    return [...seen].sort((a, b) => a.localeCompare(b));
-  }, [watchTickers, snapshot]);
-
-  // Names in the watch that have stock-level weather — the universe the Stock
-  // card's Previous/Next toggle cycles through (kept in watch order).
-  const stockOptions = useMemo(
-    () => watchTickers.filter((ticker) => snapshot.stocks[ticker]),
+  const stockList = useMemo(
+    () =>
+      watchTickers
+        .filter((ticker) => snapshot.stocks[ticker])
+        .sort((a, b) => a.localeCompare(b)),
     [watchTickers, snapshot],
   );
 
-  // Sector/Industry default to the focused stock's (or the first watch name's).
-  const baseTicker = focusTicker ?? watchTickers[0] ?? null;
-  const baseInfo = baseTicker ? dataSource.getTickerInfo(baseTicker) : undefined;
+  // Sector / Industry dropdowns list the FULL market universe (every sector /
+  // industry the weather covers), not just the watch — so you can read any
+  // slice's weather even when you hold no name there. Alphabetical for a
+  // predictable list; the industry→sector taxonomy comes from the snapshot.
+  const sectorOptions = useMemo(
+    () => Object.keys(snapshot.sectors).sort((a, b) => a.localeCompare(b)),
+    [snapshot],
+  );
+  const industryOptions = useMemo(
+    () => Object.keys(snapshot.industries).sort((a, b) => a.localeCompare(b)),
+    [snapshot],
+  );
+  // sector → its industries (alpha), derived from the snapshot taxonomy.
+  const sectorIndustries = useMemo(() => {
+    const map: Record<string, string[]> = {};
+    for (const [industry, sector] of Object.entries(snapshot.industrySectors)) {
+      (map[sector] ??= []).push(industry);
+    }
+    for (const list of Object.values(map)) list.sort((a, b) => a.localeCompare(b));
+    return map;
+  }, [snapshot]);
 
-  // Local overrides for the focus-driven sector/industry/stock. These stay inside
-  // Market Weather — stepping them never changes the Current Watch selection. They
-  // reset when the focused name changes so a watch pick still drives all layers.
-  const [pillSector, setPillSector] = useState<string | null>(null);
-  const [pillIndustry, setPillIndustry] = useState<string | null>(null);
-  const [pillStock, setPillStock] = useState<string | null>(null);
+  // First watch name (alpha) sitting in a given industry, or null when you hold
+  // none there (→ the Stock card goes disabled, but Previous/Next stays live).
+  const firstStockInIndustry = useCallback(
+    (industry: string | null) =>
+      (industry
+        ? stockList.find((t) => dataSource.getTickerInfo(t)?.industry === industry)
+        : undefined) ?? null,
+    [stockList],
+  );
+
+  // The cascade selection. Stock is the leaf: picking a name pins its sector +
+  // industry. It lives entirely inside Market Weather — never mutates Current
+  // Watch.
+  type Selection = {
+    sector: string | null;
+    industry: string | null;
+    stock: string | null;
+  };
+  const selectionForStock = useCallback((ticker: string | null): Selection => {
+    const info = ticker ? dataSource.getTickerInfo(ticker) : undefined;
+    return { sector: info?.sector ?? null, industry: info?.industry ?? null, stock: ticker };
+  }, []);
+
+  // The watch-driven base = the focused name (or the first watch name, in watch
+  // order — only Prev/Next stepping is alphabetical). Selecting a name in Current
+  // Watch refocuses every layer; local dropdown / Prev-Next overrides then
+  // persist until the base changes again.
+  const baseTicker =
+    focusTicker ?? watchTickers.find((ticker) => snapshot.stocks[ticker]) ?? null;
+  const [sel, setSel] = useState<Selection>(() => selectionForStock(baseTicker));
   useEffect(() => {
-    setPillSector(null);
-    setPillIndustry(null);
-    setPillStock(null);
-  }, [focusTicker]);
+    setSel(selectionForStock(baseTicker));
+  }, [baseTicker, selectionForStock]);
 
-  const activeSector = pillSector ?? baseInfo?.sector ?? sectorOptions[0] ?? null;
-  const activeIndustry =
-    pillIndustry ?? baseInfo?.industry ?? industryOptions[0] ?? null;
-  // Stock defaults to the focused (or first watch) name so the card reads a name
-  // out of the box; Previous/Next then cycles locally without touching the watch.
-  const activeStock = pillStock ?? focusTicker ?? stockOptions[0] ?? null;
+  // Sector change → first industry in that sector (alpha) → first watch name in
+  // that industry (or disabled if none).
+  const selectSector = (sector: string) => {
+    const industry = sectorIndustries[sector]?.[0] ?? null;
+    setSel({ sector, industry, stock: firstStockInIndustry(industry) });
+  };
+  // Industry change → its parent sector → first watch name in that industry.
+  const selectIndustry = (industry: string) => {
+    setSel({
+      sector: snapshot.industrySectors[industry] ?? null,
+      industry,
+      stock: firstStockInIndustry(industry),
+    });
+  };
+  // Stock Previous/Next cycles the whole watch list (alpha), syncing sector +
+  // industry to the chosen name. From a disabled card: Next = first, Prev = last.
+  const stepStock = (direction: 1 | -1) => {
+    if (stockList.length === 0) return;
+    const next = sel.stock
+      ? stepOption(stockList, sel.stock, direction)
+      : direction === 1
+        ? stockList[0]
+        : stockList[stockList.length - 1];
+    setSel(selectionForStock(next));
+  };
 
   const marketReading = snapshot.market;
-  const sectorReading = activeSector ? snapshot.sectors[activeSector] : undefined;
-  const industryReading = activeIndustry
-    ? snapshot.industries[activeIndustry]
-    : undefined;
-  const stockReading = activeStock ? snapshot.stocks[activeStock] : undefined;
+  const sectorReading = sel.sector ? snapshot.sectors[sel.sector] : undefined;
+  const industryReading = sel.industry ? snapshot.industries[sel.industry] : undefined;
+  const stockReading = sel.stock ? snapshot.stocks[sel.stock] : undefined;
 
   const [selectedLayer, setSelectedLayer] = useState<MarketWeatherLayer | null>(null);
 
@@ -223,24 +264,24 @@ export function MarketFlowWidget({
       layer: "sector",
       reading: sectorReading,
       options: sectorOptions,
-      active: activeSector,
-      onPick: setPillSector,
+      active: sel.sector,
+      onPick: selectSector,
       control: "dropdown",
     },
     {
       layer: "industry",
       reading: industryReading,
       options: industryOptions,
-      active: activeIndustry,
-      onPick: setPillIndustry,
+      active: sel.industry,
+      onPick: selectIndustry,
       control: "dropdown",
     },
     {
       layer: "stock",
       reading: stockReading,
-      options: stockOptions,
-      active: activeStock,
-      onPick: setPillStock,
+      options: stockList,
+      active: sel.stock,
+      onStep: stepStock,
       control: "prevnext",
     },
   ];
@@ -318,10 +359,12 @@ export function MarketFlowWidget({
             : undefined;
           const isActive = selectedLayer === card.layer;
           const options = card.options ?? [];
-          // The on-card selector (sector/industry droplist or the stock
-          // Previous/Next toggle) only shows when there's more than one option
-          // to move between.
-          const showSwitch = options.length > 1 && Boolean(card.active);
+          // Sector/Industry droplist shows when there's a group to read. The
+          // stock Previous/Next stays live whenever the watch has ANY name to
+          // jump to — even on a disabled (no-match) card, so you can escape back.
+          const showDropdown =
+            card.control === "dropdown" && options.length > 1 && Boolean(card.active);
+          const showPrevNext = card.control === "prevnext" && options.length > 0;
           // The card label: the entity name (NVDA) for the stock card, else the
           // layer name (Market / Sector / Industry).
           const cardLabel =
@@ -369,10 +412,12 @@ export function MarketFlowWidget({
                 </div>
                 {!reading ? (
                   <p className="weather-empty">
-                    Select a name in Current Watch to read its weather.
+                    {card.layer === "stock" && options.length > 0
+                      ? "No watched name in this group — use Previous / Next to jump to one."
+                      : "Add a name to Current Watch to read its weather."}
                   </p>
                 ) : null}
-                {showSwitch && card.control === "dropdown" ? (
+                {showDropdown ? (
                   <div className="weather-select">
                     <Dropdown
                       variant="on-graphics"
@@ -387,7 +432,7 @@ export function MarketFlowWidget({
                     />
                   </div>
                 ) : null}
-                {showSwitch && card.control === "prevnext" ? (
+                {showPrevNext ? (
                   <div
                     className="weather-prevnext"
                     role="group"
@@ -397,7 +442,7 @@ export function MarketFlowWidget({
                       type="button"
                       className="weather-prevnext-btn"
                       aria-label="Previous stock"
-                      onClick={() => card.onPick?.(stepOption(options, card.active!, -1))}
+                      onClick={() => card.onStep?.(-1)}
                     >
                       <CaretLeft weight="bold" aria-hidden />
                       Previous
@@ -406,7 +451,7 @@ export function MarketFlowWidget({
                       type="button"
                       className="weather-prevnext-btn"
                       aria-label="Next stock"
-                      onClick={() => card.onPick?.(stepOption(options, card.active!, 1))}
+                      onClick={() => card.onStep?.(1)}
                     >
                       Next
                       <CaretRight weight="bold" aria-hidden />
