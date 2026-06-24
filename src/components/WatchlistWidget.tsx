@@ -4,6 +4,7 @@ import { dataSource } from "../lib/datasource";
 import { formatChange, formatPrice } from "../lib/format";
 import { STATUS_TONE } from "../lib/status";
 import { StatusBadge } from "./StatusBadge";
+import { Dropdown } from "./Dropdown";
 import { CaretLeft } from "../lib/icons";
 import type { LogEntry, SignalResult, WatchlistItem } from "../types";
 import bullCompass from "../assets/bull-skull-compass.png";
@@ -231,21 +232,16 @@ export function WatchlistWidget({
         <span className="panel-tag">{items.length} names</span>
       </div>
       <div className="portfolio-switcher">
-        <label className="visually-hidden" htmlFor="portfolio-select">
-          Switch portfolio or watchlist
-        </label>
-        <select
+        <Dropdown
           id="portfolio-select"
-          className="input"
+          label="Switch portfolio or watchlist"
           value={portfolio}
-          onChange={(event) => setPortfolio(event.target.value)}
-        >
-          {PORTFOLIOS.map((option) => (
-            <option key={option.id} value={option.id}>
-              {option.label}
-            </option>
-          ))}
-        </select>
+          onChange={setPortfolio}
+          options={PORTFOLIOS.map((option) => ({
+            value: option.id,
+            label: option.label,
+          }))}
+        />
       </div>
       {readOnly ? (
         // Snapshot headline reflects the selected source's lead alignment. The

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useAppState } from "../state/AppState";
 import { dataSource } from "../lib/datasource";
+import { Dropdown } from "./Dropdown";
 import { CaretLeft, CaretRight, SealPercent } from "../lib/icons";
 import {
   confidenceTone,
@@ -131,6 +132,9 @@ interface LayerCard {
   options?: string[];
   active?: string | null;
   onPick?: (value: string) => void;
+  // Which on-card selector to render: a droplist (sector/industry) or the gold
+  // Previous/Next toggle (stock). Market has neither.
+  control?: "dropdown" | "prevnext";
 }
 
 export function MarketFlowWidget({
@@ -174,29 +178,42 @@ export function MarketFlowWidget({
     return [...seen].sort((a, b) => a.localeCompare(b));
   }, [watchTickers, snapshot]);
 
+  // Names in the watch that have stock-level weather — the universe the Stock
+  // card's Previous/Next toggle cycles through (kept in watch order).
+  const stockOptions = useMemo(
+    () => watchTickers.filter((ticker) => snapshot.stocks[ticker]),
+    [watchTickers, snapshot],
+  );
+
   // Sector/Industry default to the focused stock's (or the first watch name's).
   const baseTicker = focusTicker ?? watchTickers[0] ?? null;
   const baseInfo = baseTicker ? dataSource.getTickerInfo(baseTicker) : undefined;
 
-  // Pills can override the focus-driven sector/industry; reset when focus changes.
+  // Local overrides for the focus-driven sector/industry/stock. These stay inside
+  // Market Weather — stepping them never changes the Current Watch selection. They
+  // reset when the focused name changes so a watch pick still drives all layers.
   const [pillSector, setPillSector] = useState<string | null>(null);
   const [pillIndustry, setPillIndustry] = useState<string | null>(null);
+  const [pillStock, setPillStock] = useState<string | null>(null);
   useEffect(() => {
     setPillSector(null);
     setPillIndustry(null);
+    setPillStock(null);
   }, [focusTicker]);
 
   const activeSector = pillSector ?? baseInfo?.sector ?? sectorOptions[0] ?? null;
   const activeIndustry =
     pillIndustry ?? baseInfo?.industry ?? industryOptions[0] ?? null;
+  // Stock defaults to the focused (or first watch) name so the card reads a name
+  // out of the box; Previous/Next then cycles locally without touching the watch.
+  const activeStock = pillStock ?? focusTicker ?? stockOptions[0] ?? null;
 
   const marketReading = snapshot.market;
   const sectorReading = activeSector ? snapshot.sectors[activeSector] : undefined;
   const industryReading = activeIndustry
     ? snapshot.industries[activeIndustry]
     : undefined;
-  // Stock weather only shows once a name is explicitly selected in Current Watch.
-  const stockReading = focusTicker ? snapshot.stocks[focusTicker] : undefined;
+  const stockReading = activeStock ? snapshot.stocks[activeStock] : undefined;
 
   const [selectedLayer, setSelectedLayer] = useState<MarketWeatherLayer | null>(null);
 
@@ -208,6 +225,7 @@ export function MarketFlowWidget({
       options: sectorOptions,
       active: activeSector,
       onPick: setPillSector,
+      control: "dropdown",
     },
     {
       layer: "industry",
@@ -215,8 +233,16 @@ export function MarketFlowWidget({
       options: industryOptions,
       active: activeIndustry,
       onPick: setPillIndustry,
+      control: "dropdown",
     },
-    { layer: "stock", reading: stockReading },
+    {
+      layer: "stock",
+      reading: stockReading,
+      options: stockOptions,
+      active: activeStock,
+      onPick: setPillStock,
+      control: "prevnext",
+    },
   ];
 
   const detailReading = cards.find((card) => card.layer === selectedLayer)?.reading;
@@ -292,9 +318,10 @@ export function MarketFlowWidget({
             : undefined;
           const isActive = selectedLayer === card.layer;
           const options = card.options ?? [];
-          // Chevron toggle for cycling sectors/industries — only when there's
-          // more than one watch group to scan through.
-          const showStepper = options.length > 1;
+          // The on-card selector (sector/industry droplist or the stock
+          // Previous/Next toggle) only shows when there's more than one option
+          // to move between.
+          const showSwitch = options.length > 1 && Boolean(card.active);
           // The card label: the entity name (NVDA) for the stock card, else the
           // layer name (Market / Sector / Industry).
           const cardLabel =
@@ -313,9 +340,10 @@ export function MarketFlowWidget({
               {graphic ? <WeatherBackdrop graphic={graphic} variant="card" /> : null}
               {/* Full-card hit target: clicking anywhere on the card opens the
                   detail view. It sits beneath the content overlay; the overlay
-                  is click-through (pointer-events: none) EXCEPT the sector/
-                  industry toggle, which floats above and handles its own clicks
-                  without triggering navigation. */}
+                  is click-through (pointer-events: none) EXCEPT the on-card
+                  selectors (sector/industry droplist, stock Previous/Next),
+                  which float above and handle their own clicks without
+                  triggering navigation. */}
               <button
                 type="button"
                 className="weather-hit"
@@ -344,27 +372,43 @@ export function MarketFlowWidget({
                     Select a name in Current Watch to read its weather.
                   </p>
                 ) : null}
-                {showStepper && card.active ? (
+                {showSwitch && card.control === "dropdown" ? (
+                  <div className="weather-select">
+                    <Dropdown
+                      variant="on-graphics"
+                      id={`weather-${card.layer}-select`}
+                      label={`Switch ${LAYER_LABEL[card.layer].toLowerCase()}`}
+                      value={card.active!}
+                      onChange={(value) => card.onPick?.(value)}
+                      options={options.map((option) => ({
+                        value: option,
+                        label: option,
+                      }))}
+                    />
+                  </div>
+                ) : null}
+                {showSwitch && card.control === "prevnext" ? (
                   <div
-                    className="weather-switch"
+                    className="weather-prevnext"
                     role="group"
-                    aria-label={`Switch ${LAYER_LABEL[card.layer].toLowerCase()}`}
+                    aria-label="Switch stock"
                   >
                     <button
                       type="button"
-                      className="weather-switch-arrow"
-                      aria-label={`Previous ${LAYER_LABEL[card.layer].toLowerCase()}`}
+                      className="weather-prevnext-btn"
+                      aria-label="Previous stock"
                       onClick={() => card.onPick?.(stepOption(options, card.active!, -1))}
                     >
                       <CaretLeft weight="bold" aria-hidden />
+                      Previous
                     </button>
-                    <span className="weather-switch-label">{card.active}</span>
                     <button
                       type="button"
-                      className="weather-switch-arrow"
-                      aria-label={`Next ${LAYER_LABEL[card.layer].toLowerCase()}`}
+                      className="weather-prevnext-btn"
+                      aria-label="Next stock"
                       onClick={() => card.onPick?.(stepOption(options, card.active!, 1))}
                     >
+                      Next
                       <CaretRight weight="bold" aria-hidden />
                     </button>
                   </div>
