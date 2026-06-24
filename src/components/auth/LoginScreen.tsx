@@ -2,6 +2,7 @@ import { useState } from "react";
 import brandLogo from "../../assets/st-logo.png";
 import brandWordmark from "../../assets/st-wordmark.svg";
 import loginBackground from "../../assets/skulls-and-trading-login-background-2.webp";
+import loginBackgroundMobile from "../../assets/skulls-and-trading-login-background-mobile.webp";
 import { useAppState } from "../../state/AppState";
 import { Tabs, type TabItem } from "../Tabs";
 import { CaretLeft, LockKey, ShieldStar, Strategy } from "../../lib/icons";
@@ -102,7 +103,15 @@ export function LoginScreen() {
     <div className="auth-screen">
       <div
         className="auth-backdrop"
-        style={{ backgroundImage: `url(${loginBackground})` }}
+        style={
+          {
+            // Desktop/tablet art vs. the portrait phone crop. The CSS picks which
+            // one to paint by viewport (see `.auth-backdrop` + its mobile override),
+            // so the swap is purely responsive — both are passed in as vars.
+            "--auth-bg": `url(${loginBackground})`,
+            "--auth-bg-mobile": `url(${loginBackgroundMobile})`,
+          } as React.CSSProperties
+        }
         aria-hidden="true"
       />
       <div className="auth-aurora" aria-hidden="true" />

@@ -3233,10 +3233,17 @@ button.nav-link {
    stay readable over it. Tune readability with the flat-wash alpha below. Sits at
    the back, beneath the aurora color wash and the z-indexed `.auth-shell`. */
 .auth-backdrop {
-  position: absolute;
+  /* Fixed (not absolute) so the artwork is pinned to the viewport and stays
+     stationary while the login content scrolls — on every viewport. (Element
+     `position: fixed` rather than `background-attachment: fixed`, which iOS
+     Safari ignores.) */
+  position: fixed;
   inset: 0;
   z-index: 0;
   background-color: var(--bg-deep);
+  /* Desktop/tablet art. The image arrives as a CSS var from LoginScreen so the
+     phone breakpoint below can swap to a portrait crop without touching JS. */
+  background-image: var(--auth-bg);
   background-position: center;
   background-size: cover;
   background-repeat: no-repeat;
@@ -3253,8 +3260,20 @@ button.nav-link {
     linear-gradient(180deg, rgb(5 7 13 / 0.55) 0%, rgb(5 7 13 / 0.8) 100%);
 }
 
+/* Mobile only (<=767px = the app's phone model; 768px+ tablets keep the
+   landscape art). Swap to the portrait crop so `cover` doesn't over-zoom the
+   landscape image on a tall, narrow screen. The ::after readability scrim above
+   is shared, so phones get the same muting as desktop/tablet. */
+@media (max-width: 767px) {
+  .auth-backdrop {
+    background-image: var(--auth-bg-mobile);
+  }
+}
+
 .auth-aurora {
-  position: absolute;
+  /* Fixed alongside the backdrop so the full background layer stays stationary
+     on scroll (matches `.auth-backdrop`). */
+  position: fixed;
   inset: 0;
   background:
     radial-gradient(60% 50% at 18% 12%, rgb(241 178 74 / 0.16), transparent 70%),
