@@ -924,6 +924,13 @@ button {
   color: var(--text-faint);
 }
 
+/* Watchlist count tag — lighter tracking + muted tone to match the design
+   (scoped so other panels keep the default faint tag). */
+.watchlist-tag {
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
 .panel-intro {
   color: var(--text-muted);
   font-size: 0.95rem;
@@ -1337,6 +1344,14 @@ select.input:hover:not(:disabled) {
   min-width: 0;
 }
 
+/* Snapshot heading — strong-tone label above the full alignment chip. */
+.watchlist-snapshot-label {
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  color: var(--text-strong);
+}
+
 /* Read-only ticker summary (home watchlist drill-in). Mostly text, no CRUD. */
 .watchlist-breadcrumb {
   margin-bottom: var(--space-2);
@@ -1495,13 +1510,17 @@ select.input:hover:not(:disabled) {
 .watch-item {
   position: relative;
   display: flex;
+  /* Query container so the card body stacks based on the card's own width
+     (not the viewport) — keeps the narrow desktop column and wide dashboard
+     column correct, and lets us pin the stack point at <= 380px. */
+  container-type: inline-size;
 }
 
 .watch-select {
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 0.45rem;
+  gap: 0.6rem;
   padding: 0.85rem 0.95rem;
   background: transparent;
   border: none;
@@ -1509,6 +1528,193 @@ select.input:hover:not(:disabled) {
   font: inherit;
   text-align: left;
   cursor: pointer;
+}
+
+/* Card head: ticker + name on the left, market value / qty on the right. */
+.watch-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.watch-id {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+/* The card subtitle reads as a quiet strong-tone line here; the shared
+   `.watch-name` stays muted for the drill-in summary, so scope the override. */
+.watch-select .watch-name {
+  color: var(--text-strong);
+  font-weight: 400;
+}
+
+.watch-mvqty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.05rem;
+  text-align: right;
+  flex: 0 0 auto;
+}
+
+/* Field labels (Last Price, Avg. Price, Market Value | Qty, Open P&L%…). */
+.watch-field-label {
+  font-size: 0.75rem;
+  font-weight: 400;
+  color: var(--text-muted);
+  letter-spacing: 0.01em;
+}
+
+.watch-field-label--right {
+  text-align: right;
+}
+
+/* Numeric values. `--strong` = brighter medium weight (primary value);
+   base weight is the lighter secondary value beside it. */
+.watch-figure {
+  font-size: 0.875rem;
+  font-weight: 400;
+  color: var(--text-base);
+  font-variant-numeric: tabular-nums;
+}
+
+.watch-figure--strong {
+  font-weight: 500;
+  color: var(--text-strong);
+}
+
+.watch-figure--medium {
+  font-weight: 500;
+}
+
+/* Body: metrics column on the left, strategy-conviction box on the right. They
+   shrink proportionally as the card narrows, then stack to a single column at
+   <= 380px card width (see the @container rule below) so it stays responsive
+   across the desktop dashboard column, tablet, and mobile. */
+.watch-body {
+  display: flex;
+  gap: 0.6rem 0.75rem;
+  align-items: stretch;
+}
+
+.watch-metrics {
+  flex: 1.4 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.watch-metric-pair {
+  display: flex;
+  gap: 1.25rem;
+}
+
+.watch-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.watch-pnl {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+/* Strategy Conviction sub-box: gold meter + score + reduced-priority chip. */
+.watch-conviction-box {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 0.5rem 0.6rem;
+  border-radius: var(--radius-sm);
+  background: var(--bg-deep);
+}
+
+/* Stack the metrics column above the conviction box only once the card itself
+   is <= 312px wide. The card runs ~68px narrower than the viewport (page +
+   panel padding), so a 312px card lines up with a ~380px viewport — the point
+   requested. Querying the card width (not the viewport) also keeps the narrow
+   desktop column stacking instead of overflowing. Above this they sit side by
+   side and flex responsively. */
+@container (max-width: 312px) {
+  .watch-body {
+    flex-direction: column;
+  }
+
+  .watch-metrics,
+  .watch-conviction-box {
+    flex: 1 1 auto;
+  }
+}
+
+.watch-conviction-meter {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.watch-conviction-track {
+  flex: 1 1 auto;
+  height: 6px;
+  border-radius: 999px;
+  background: #212834; /* Figma conviction track — no exact token match */
+  overflow: hidden;
+}
+
+.watch-conviction-fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--accent-strong);
+}
+
+.watch-conviction-score {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--accent-strong);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Reduced-priority alignment chip — icon + text only (no pill). Scoped to the
+   card, so the snapshot keeps the full StatusBadge pill. */
+.watch-align {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.watch-align svg {
+  width: 0.9rem;
+  height: 0.9rem;
+  flex-shrink: 0;
+}
+
+.watch-align--positive {
+  color: var(--positive);
+}
+
+.watch-align--neutral {
+  color: var(--info);
+}
+
+.watch-align--warning {
+  color: var(--warning);
+}
+
+.watch-align--negative {
+  color: var(--negative);
 }
 
 .watch-top,
