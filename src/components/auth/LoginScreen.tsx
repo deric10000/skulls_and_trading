@@ -1,7 +1,7 @@
 import { useState } from "react";
 import brandLogo from "../../assets/st-logo.png";
 import brandWordmark from "../../assets/st-wordmark.svg";
-import loginBackground from "../../assets/skulls-and-trading-login-background.webp";
+import loginBackground from "../../assets/skulls-and-trading-login-background-2.webp";
 import { useAppState } from "../../state/AppState";
 import { Tabs, type TabItem } from "../Tabs";
 import { CaretLeft, LockKey, ShieldStar, Strategy } from "../../lib/icons";
