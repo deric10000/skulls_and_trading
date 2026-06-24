@@ -1,16 +1,26 @@
 import brandLogo from "../assets/st-logo.png";
 import brandWordmark from "../assets/st-wordmark.svg";
-import { Sparkle } from "../lib/icons";
+import {
+  ChartBar,
+  Hammer,
+  House,
+  type Icon,
+  Sailboat,
+  Sparkle,
+  UserCircle,
+} from "../lib/icons";
 import { useAppState } from "../state/AppState";
 import type { PageId } from "../types";
 import { LinkButton } from "./LinkButton";
 
-const NAV_ITEMS: { id: PageId; label: string }[] = [
-  { id: "home", label: "Home" },
-  { id: "dashboard", label: "Dashboard" },
-  { id: "strategy-forge", label: "Strategy Forge" },
-  { id: "ships", label: "Ships" },
-  { id: "captain-profile", label: "Captain Profile" },
+// `icon` drives the mobile glass-pill nav (Figma node 100:1092); the text
+// `label` drives the desktop/tablet nav and the icon's accessible name.
+const NAV_ITEMS: { id: PageId; label: string; icon: Icon }[] = [
+  { id: "home", label: "Home", icon: House },
+  { id: "dashboard", label: "Dashboard", icon: ChartBar },
+  { id: "strategy-forge", label: "Strategy Forge", icon: Hammer },
+  { id: "ships", label: "Ships", icon: Sailboat },
+  { id: "captain-profile", label: "Captain Profile", icon: UserCircle },
 ];
 
 export function TopNav() {
@@ -58,6 +68,41 @@ export function TopNav() {
           <LinkButton className="site-account-link" onClick={signOut}>
             Sign Out
           </LinkButton>
+        </div>
+
+        {/* Mobile-only global nav: a liquid-glass pill with icon primary-nav on
+            the left and Sign Out on the right (Figma node 100:1092). Shown only
+            at <=767px; the desktop/tablet text nav + account link hide there. */}
+        <div className="mobile-nav-pill">
+          <nav className="mobile-nav-icons" aria-label="Primary">
+            {NAV_ITEMS.map((item) => {
+              const ItemIcon = item.icon;
+              const isActive = item.id === activePage;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  className={
+                    isActive
+                      ? "mobile-nav-icon mobile-nav-icon--active"
+                      : "mobile-nav-icon"
+                  }
+                  aria-label={item.label}
+                  aria-current={isActive ? "page" : undefined}
+                  onClick={() => setActivePage(item.id)}
+                >
+                  <ItemIcon aria-hidden />
+                </button>
+              );
+            })}
+          </nav>
+          <button
+            type="button"
+            className="mobile-nav-signout"
+            onClick={signOut}
+          >
+            Sign Out
+          </button>
         </div>
       </div>
     </header>
