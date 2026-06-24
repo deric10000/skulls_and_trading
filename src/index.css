@@ -3265,6 +3265,21 @@ button.nav-link {
   .home-tabs-shell {
     position: sticky;
     top: var(--app-header-h, 0px);
+    /* Tighten the strip: 4px breathing room above (below the header) and below
+       (above the content) — no borders bracketing it. */
+    padding-block: 4px;
+  }
+
+  /* Drop the strip's own bottom divider... */
+  .home-tabs-shell::after {
+    display: none;
+  }
+
+  /* ...and the header's bottom border, which reads as the strip's top edge.
+     Scoped to the home page (where the strip lives) so other mobile pages keep
+     their header divider. */
+  .app:has(.home-page) .site-header {
+    border-bottom: 0;
   }
 
   .site-account {
