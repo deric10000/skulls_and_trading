@@ -1654,6 +1654,35 @@ select.input:hover:not(:disabled) {
   .watch-conviction-box {
     flex: 1 1 auto;
   }
+
+  /* Now that the box spans the card's full width at the bottom, recover the
+     vertical space the chip used: put the "Strategy Conviction" label (left)
+     and the alignment chip (right) on one row, with the meter beneath. If the
+     label + chip can't share a row, they wrap to a left-aligned stack
+     (label → chip → meter). */
+  .watch-conviction-box {
+    flex-flow: row wrap;
+    align-items: center;
+    justify-content: space-between;
+    column-gap: 0.5rem;
+  }
+
+  .watch-conviction-box .watch-field-label--right {
+    order: 1;
+    text-align: left;
+    white-space: nowrap;
+  }
+
+  .watch-conviction-box .watch-align {
+    order: 2;
+    white-space: nowrap;
+  }
+
+  /* Force the meter onto its own line below the label/chip row. */
+  .watch-conviction-box .watch-conviction-meter {
+    order: 3;
+    flex-basis: 100%;
+  }
 }
 
 .watch-conviction-meter {
@@ -1674,13 +1703,13 @@ select.input:hover:not(:disabled) {
   display: block;
   height: 100%;
   border-radius: 999px;
-  background: var(--accent-strong);
+  background: var(--info);
 }
 
 .watch-conviction-score {
   font-size: 0.875rem;
   font-weight: 500;
-  color: var(--accent-strong);
+  color: var(--info);
   font-variant-numeric: tabular-nums;
 }
 
