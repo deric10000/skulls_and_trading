@@ -7,14 +7,36 @@ import { WatchlistWidget } from "../components/WatchlistWidget";
 
 type HomeTabId = "about" | "market-weather" | "current-watch";
 
+// Desktop/tablet tab order (tabs are visible 768–1023px; hidden >=1024px).
 const HOME_TABS: TabItem[] = [
   { id: "about", label: "About" },
   { id: "current-watch", label: "Current Watch" },
   { id: "market-weather", label: "Market Weather" },
 ];
 
+// Mobile (<=767px) leads with Current Watch. Desktop/tablet are untouched —
+// their card layout is fixed by explicit CSS grid placement per .home-slide--*,
+// so it ignores DOM order; only the mobile swipe order follows the DOM.
+const MOBILE_HOME_TABS: TabItem[] = [
+  { id: "current-watch", label: "Current Watch" },
+  { id: "market-weather", label: "Market Weather" },
+  { id: "about", label: "About" },
+];
+
+// DOM order of the <section> slides below (= the mobile swipe order). Embla
+// indexes slides by DOM position, so this MUST match the JSX section order.
+const SLIDE_ORDER: HomeTabId[] = ["current-watch", "market-weather", "about"];
+
 export function HomePage() {
-  const [activeTab, setActiveTab] = useState<HomeTabId>("about");
+  // Default selection differs by viewport: Current Watch leads on mobile, About
+  // on desktop/tablet (unchanged). Set at mount from the same 767px breakpoint
+  // that drives the carousel so the first paint matches.
+  const [activeTab, setActiveTab] = useState<HomeTabId>(() =>
+    typeof window !== "undefined" &&
+    window.matchMedia("(max-width: 767px)").matches
+      ? "current-watch"
+      : "about",
+  );
   // Shared so selecting a name in Current Watch refocuses Market Weather's
   // sector/industry/stock layers (the two live on separate home tabs).
   const [weatherFocusTicker, setWeatherFocusTicker] = useState<string | null>(null);
@@ -44,11 +66,13 @@ export function HomePage() {
   }, []);
 
   useEffect(() => {
-    if (!emblaApi) return;
+    // Only let the carousel drive the active tab on mobile, where it's active.
+    // On desktop/tablet the (inactive) carousel would otherwise force tab 0.
+    if (!emblaApi || !carouselEnabled) return;
 
     const onSelect = () => {
-      const nextTab = HOME_TABS[emblaApi.selectedScrollSnap()]?.id;
-      if (nextTab) setActiveTab(nextTab as HomeTabId);
+      const nextTab = SLIDE_ORDER[emblaApi.selectedScrollSnap()];
+      if (nextTab) setActiveTab(nextTab);
     };
 
     emblaApi.on("select", onSelect);
@@ -59,12 +83,12 @@ export function HomePage() {
       emblaApi.off("select", onSelect);
       emblaApi.off("reInit", onSelect);
     };
-  }, [emblaApi]);
+  }, [emblaApi, carouselEnabled]);
 
   useEffect(() => {
     if (!carouselEnabled || !emblaApi) return;
 
-    const nextIndex = HOME_TABS.findIndex((tab) => tab.id === activeTab);
+    const nextIndex = SLIDE_ORDER.findIndex((id) => id === activeTab);
     if (nextIndex >= 0) {
       emblaApi.scrollTo(nextIndex);
     }
@@ -74,7 +98,7 @@ export function HomePage() {
     <div className="page home-page">
       <div className="home-tabs-shell">
         <Tabs
-          items={HOME_TABS}
+          items={carouselEnabled ? MOBILE_HOME_TABS : HOME_TABS}
           value={activeTab}
           onChange={(tabId) => scrollToTab(tabId as HomeTabId)}
           ariaLabel="Home sections"
@@ -83,14 +107,14 @@ export function HomePage() {
       </div>
       <div className="home-grid" ref={emblaRef}>
         <div className="home-grid__track">
-          <section className="home-slide home-slide--about" data-home-tab="about">
-            <HeroCard variant="center" />
-          </section>
           <section className="home-slide home-slide--watch" data-home-tab="current-watch">
             <WatchlistWidget readOnly onSelectTicker={setWeatherFocusTicker} />
           </section>
           <section className="home-slide home-slide--market" data-home-tab="market-weather">
             <MarketFlowWidget focusTicker={weatherFocusTicker} />
+          </section>
+          <section className="home-slide home-slide--about" data-home-tab="about">
+            <HeroCard variant="center" />
           </section>
         </div>
       </div>
