@@ -125,6 +125,7 @@ export function WatchlistWidget({
     selectTicker,
     getSignal,
     logsByTicker,
+    getPortfolioAlignment,
   } = useAppState();
   const [draft, setDraft] = useState("");
   // Read-only (home) selection is local to this widget so it never mutates the
@@ -150,14 +151,31 @@ export function WatchlistWidget({
     }
   }, [isWatchlistSource, selectedSource]);
 
-  // The list to render: the default portfolio mirrors live app state (so the
-  // dashboard stays in sync); a watchlist uses its editable local list; any other
-  // portfolio is derived (read-only) from its holdings.
+  // The list to render: the default portfolio mirrors live app state (already
+  // decorated with computed alignment); a watchlist uses its editable local
+  // list; any other portfolio is derived (read-only) from its holdings. For the
+  // non-default sources we overlay the Forge-computed conviction/status here so
+  // every source reflects the engine (default is decorated upstream in AppState).
   const items = useMemo<WatchlistItem[]>(() => {
     if (isDefaultSource) return watchlist;
-    if (isWatchlistSource) return watchlistItems;
-    return dataSource.getWatchlistForPortfolio(selectedSource.id);
-  }, [isDefaultSource, isWatchlistSource, watchlist, watchlistItems, selectedSource]);
+    const base = isWatchlistSource
+      ? watchlistItems
+      : dataSource.getWatchlistForPortfolio(selectedSource.id);
+    const byTicker = getPortfolioAlignment(selectedSource.id).byTicker;
+    return base.map((item) => {
+      const aligned = byTicker[item.ticker];
+      return aligned
+        ? { ...item, conviction: aligned.conviction, status: aligned.status }
+        : item;
+    });
+  }, [
+    isDefaultSource,
+    isWatchlistSource,
+    watchlist,
+    watchlistItems,
+    selectedSource,
+    getPortfolioAlignment,
+  ]);
 
   const activeTicker = readOnly ? localSelected : selectedTicker;
 

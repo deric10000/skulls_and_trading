@@ -2193,25 +2193,28 @@ select.input:hover:not(:disabled) {
 }
 
 @media (min-width: 1280px) {
+  /* The config panel is the workbench now (chips, preview, cadence), so it gets
+     the room. Strategy list rails left; the education cards drop to a reference
+     row beneath. */
   .forge-grid {
-    grid-template-columns: 3fr 3fr 4.5fr 3.5fr;
+    grid-template-columns: 300px minmax(0, 1fr);
   }
 
-  .forge-fundamentals {
+  .forge-strategies {
     grid-column: 1;
     grid-row: 1;
   }
-  .forge-technical {
+  .forge-config {
     grid-column: 2;
     grid-row: 1;
   }
-  .forge-strategies {
-    grid-column: 3;
-    grid-row: 1;
+  .forge-fundamentals {
+    grid-column: 1;
+    grid-row: 2;
   }
-  .forge-config {
-    grid-column: 4;
-    grid-row: 1;
+  .forge-technical {
+    grid-column: 2;
+    grid-row: 2;
   }
 }
 
@@ -2355,6 +2358,393 @@ select.input:hover:not(:disabled) {
 
 .config-actions {
   margin-top: var(--space-2);
+}
+
+/* ---------------------------------------------------------------------------
+   Strategy Forge — rule-chip engine UI (config panel internals)
+   --------------------------------------------------------------------------- */
+
+/* Live conviction preview */
+.forge-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  padding: 0.85rem 0.95rem;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+}
+
+.forge-preview-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.forge-preview-ticker {
+  min-width: 96px;
+}
+
+.forge-preview-score {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.forge-preview-number {
+  font-size: 1.75rem;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--info);
+  font-variant-numeric: tabular-nums;
+}
+
+.forge-preview-track {
+  position: relative;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--surface-3);
+  overflow: hidden;
+}
+
+.forge-preview-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: 999px;
+  background: var(--info);
+  transition: width 0.25s ease;
+}
+
+.forge-preview-cats {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  margin: 0.15rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.forge-preview-cat {
+  display: grid;
+  grid-template-columns: 7.5rem minmax(0, 1fr) 2rem;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.forge-preview-cat-name {
+  font-size: 0.76rem;
+  color: var(--text-muted);
+}
+
+.forge-preview-cat-bar {
+  position: relative;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--surface-3);
+  overflow: hidden;
+}
+
+.forge-preview-cat-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: 999px;
+  background: var(--accent);
+  transition: width 0.25s ease;
+}
+
+.forge-preview-cat-val {
+  font-size: 0.76rem;
+  text-align: right;
+  color: var(--text-base);
+  font-variant-numeric: tabular-nums;
+}
+
+.forge-preview-gate {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--negative);
+}
+
+.forge-preview-empty {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+/* Check cadence */
+.forge-cadence-help,
+.forge-category-q {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+.forge-cadence-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.6rem;
+}
+
+/* Category sections */
+.forge-category-head {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.forge-category-empty {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--text-faint);
+}
+
+.forge-rules {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.forge-rule {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--border-soft);
+  border-left-width: 3px;
+  border-radius: var(--radius-md);
+  background: var(--surface-3);
+}
+
+.forge-rule--pass {
+  border-left-color: var(--positive);
+}
+.forge-rule--fail {
+  border-left-color: var(--negative);
+}
+.forge-rule--no-data {
+  border-left-color: var(--border-strong);
+}
+
+.forge-rule-toggle {
+  flex: none;
+  width: 0.9rem;
+  height: 0.9rem;
+  border-radius: 999px;
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  cursor: pointer;
+  padding: 0;
+}
+
+.forge-rule-toggle--on {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+.forge-rule-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+  flex: 1;
+}
+
+.forge-rule-label {
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: var(--text-strong);
+}
+
+.forge-rule-cond {
+  font-size: 0.74rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.forge-rule-weight {
+  flex: none;
+  font-size: 0.72rem;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.forge-rule-pill {
+  flex: none;
+  font-size: 0.66rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 0.12rem 0.4rem;
+  border-radius: 999px;
+  border: 1px solid var(--border-soft);
+  color: var(--text-muted);
+}
+
+.forge-rule-pill--pass {
+  color: var(--positive);
+  border-color: rgb(34 197 94 / 0.4);
+}
+.forge-rule-pill--fail {
+  color: var(--negative);
+  border-color: rgb(239 68 68 / 0.4);
+}
+
+.forge-rule-actions {
+  flex: none;
+  display: flex;
+  gap: 0.25rem;
+}
+
+.forge-rule-act {
+  font: inherit;
+  font-size: 0.72rem;
+  padding: 0.15rem 0.4rem;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.forge-rule-act:hover {
+  color: var(--text-strong);
+  background: var(--surface-2);
+}
+
+.forge-rule-act--danger:hover {
+  color: var(--negative);
+}
+
+/* Thesis builder */
+.forge-thesis {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.4rem;
+  padding: 0.6rem 0.7rem;
+  border: 1px dashed var(--border-soft);
+  border-radius: var(--radius-md);
+}
+
+.forge-thesis-help,
+.forge-thesis-empty {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.forge-thesis-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.forge-thesis-group-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.forge-thesis-group-name {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-faint);
+}
+
+.forge-thesis-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.forge-thesis-or {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: var(--accent-strong);
+  text-align: center;
+}
+
+/* Legacy labels disclosure */
+.forge-legacy {
+  border-top: 1px solid var(--border-soft);
+  padding-top: var(--space-2);
+}
+
+.forge-legacy summary {
+  cursor: pointer;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-faint);
+}
+
+.forge-legacy[open] {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+/* Chip editor modal */
+.chip-editor {
+  width: min(520px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.chip-editor-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.6rem;
+}
+
+.chip-editor-range {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.chip-editor-range-sep {
+  font-size: 0.8rem;
+  color: var(--text-faint);
+}
+
+.chip-editor-hint {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.chip-editor-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+@media (max-width: 540px) {
+  .forge-cadence-row,
+  .chip-editor-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .forge-rule {
+    flex-wrap: wrap;
+  }
+
+  .forge-rule-body {
+    flex-basis: 100%;
+    order: -1;
+  }
+
+  .forge-preview-cat {
+    grid-template-columns: 6rem minmax(0, 1fr) 1.8rem;
+  }
 }
 
 .analysis-ai-note {
