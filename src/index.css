@@ -2707,12 +2707,24 @@ select.input:hover:not(:disabled) {
 }
 
 /* Configure-card sections (divided like the design's rules) */
+/* The Configure body's vertical rhythm. Wrapping the form in the scroll region
+   dropped the old .strategy-config gap, so restore it here: 24px between the
+   identity fields and between each category section (16px on mobile). */
+.strategy-config-scroll {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+/* Each category section carries the divider on top with a symmetric 24px of
+   space above (the scroll gap) and below it (this padding), so sections read as
+   distinct blocks rather than a scrunched list. */
 .forge-section {
   display: flex;
   flex-direction: column;
   gap: 0.65rem;
   border-top: 1px solid var(--border-soft);
-  padding-top: var(--space-3);
+  padding-top: 24px;
 }
 
 .forge-section-head {
@@ -3495,6 +3507,16 @@ select.forge-cell-input {
      .strategy-footer:not(--icons)); just center the Update label. */
   .forge-config-actions .forge-update-btn {
     justify-content: center;
+  }
+
+  /* Tighter mobile rhythm: 16px between fields/sections and above each
+     section's divider. */
+  .strategy-config-scroll {
+    gap: 16px;
+  }
+
+  .forge-section {
+    padding-top: 16px;
   }
 }
 

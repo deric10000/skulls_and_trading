@@ -325,16 +325,10 @@ export function StrategyForgePanel({ strategy }: { strategy: Strategy | undefine
         />
       </label>
 
-      <label className="config-toggle">
-        <input
-          type="checkbox"
-          checked={strategy.enabled}
-          onChange={(event) => updateStrategy(id, { enabled: event.target.checked })}
-        />
-        <span>Enabled (counts toward Dashboard signals)</span>
-      </label>
-
       {/* ---- Applied portfolios ---- */}
+      {/* A strategy is "active" implicitly once a portfolio is applied to it
+          (via the Dashboard) — no separate Enabled toggle. `strategy.enabled`
+          stays true by default so applied portfolios count toward signals. */}
       <div className="config-field">
         <span className="config-label forge-label">
           Applied Portfolios
