@@ -414,7 +414,7 @@ export const PORTFOLIOS: Portfolio[] = [
         status: "High Alignment",
         reason:
           "AI infrastructure leader, positive open P&L, and a strong fit with the strategy.",
-        strategyIds: ["aggressive-ai-high-beta", "ai-infrastructure", "trend-rider"],
+        strategyIds: ["aggressive-ai-high-beta"],
       },
       {
         ticker: "IONQ",
@@ -425,7 +425,7 @@ export const PORTFOLIOS: Portfolio[] = [
         status: "Aligned",
         reason:
           "Quantum exposure fits the high-beta growth strategy and open P&L is positive.",
-        strategyIds: ["aggressive-ai-high-beta", "speculative-runner"],
+        strategyIds: ["aggressive-ai-high-beta"],
       },
       {
         ticker: "SOFI",
@@ -436,7 +436,7 @@ export const PORTFOLIOS: Portfolio[] = [
         status: "Aligned",
         reason:
           "Fintech-growth exposure fits the strategy, but daily weakness should be watched.",
-        strategyIds: ["aggressive-ai-high-beta", "pullback-entry"],
+        strategyIds: ["aggressive-ai-high-beta", "value-growth-dividend"],
       },
       {
         ticker: "MSFT",
@@ -447,7 +447,7 @@ export const PORTFOLIOS: Portfolio[] = [
         status: "Watch",
         reason:
           "Strong AI/cloud name, but lower-beta mega-cap and open P&L is currently negative.",
-        strategyIds: ["ai-infrastructure", "long-term-compounder"],
+        strategyIds: ["aggressive-ai-high-beta", "value-growth-dividend"],
       },
       {
         ticker: "ELF",
@@ -458,7 +458,7 @@ export const PORTFOLIOS: Portfolio[] = [
         status: "Watch",
         reason:
           "Positive P&L, but consumer/beauty is less aligned with the AI / high-beta strategy.",
-        strategyIds: ["pullback-entry"],
+        strategyIds: ["value-growth-dividend"],
       },
       {
         ticker: "CELH",
@@ -468,7 +468,7 @@ export const PORTFOLIOS: Portfolio[] = [
         conviction: 56,
         status: "Watch",
         reason: "Positive P&L, but consumer exposure is outside the core strategy.",
-        strategyIds: ["breakout-watch"],
+        strategyIds: ["value-growth-dividend"],
       },
       {
         ticker: "CRWV",
@@ -479,7 +479,7 @@ export const PORTFOLIOS: Portfolio[] = [
         status: "Review",
         reason:
           "AI infrastructure fit is strong, but open P&L is negative and weakness needs review.",
-        strategyIds: ["aggressive-ai-high-beta", "ai-infrastructure"],
+        strategyIds: ["aggressive-ai-high-beta"],
       },
       {
         ticker: "ACHR",
@@ -490,7 +490,7 @@ export const PORTFOLIOS: Portfolio[] = [
         status: "Review",
         reason:
           "High-beta growth exposure, but not core AI/quantum/fintech and open P&L is negative.",
-        strategyIds: ["speculative-runner", "risk-off"],
+        strategyIds: ["aggressive-ai-high-beta"],
       },
       {
         ticker: "RGTI",
@@ -501,7 +501,7 @@ export const PORTFOLIOS: Portfolio[] = [
         status: "Risk Check",
         reason:
           "Quantum fits the strategy, but open P&L is negative and volatility is high.",
-        strategyIds: ["speculative-runner", "risk-off"],
+        strategyIds: ["aggressive-ai-high-beta"],
       },
       {
         ticker: "CRM",
@@ -512,7 +512,7 @@ export const PORTFOLIOS: Portfolio[] = [
         status: "Thesis Check",
         reason:
           "Software/AI CRM exposure may fit partially, but the large open loss means the thesis should be reviewed.",
-        strategyIds: ["broken-thesis", "long-term-compounder"],
+        strategyIds: ["value-growth-dividend"],
       },
     ],
   },
@@ -520,7 +520,7 @@ export const PORTFOLIOS: Portfolio[] = [
     id: "jeff",
     label: "Jeff\u2019s Webull Portfolio",
     type: "portfolio",
-    strategyId: "long-term-compounder",
+    strategyId: "value-growth-dividend",
     holdings: [
       {
         ticker: "MSFT",
@@ -531,7 +531,7 @@ export const PORTFOLIOS: Portfolio[] = [
         status: "High Alignment",
         reason:
           "Durable AI/cloud compounder held for the long term — squarely on strategy.",
-        strategyIds: ["long-term-compounder", "ai-infrastructure"],
+        strategyIds: ["value-growth-dividend", "aggressive-ai-high-beta"],
       },
       {
         ticker: "NVDA",
@@ -542,7 +542,7 @@ export const PORTFOLIOS: Portfolio[] = [
         status: "Aligned",
         reason:
           "Long-held AI leader with strong open P&L; trend still supports the thesis.",
-        strategyIds: ["long-term-compounder", "trend-rider"],
+        strategyIds: ["value-growth-dividend", "aggressive-ai-high-beta"],
       },
       {
         ticker: "CRM",
@@ -553,7 +553,7 @@ export const PORTFOLIOS: Portfolio[] = [
         status: "Watch",
         reason:
           "Quality software compounder, but open P&L is negative and momentum is soft.",
-        strategyIds: ["long-term-compounder"],
+        strategyIds: ["value-growth-dividend"],
       },
       {
         ticker: "SOFI",
@@ -564,7 +564,7 @@ export const PORTFOLIOS: Portfolio[] = [
         status: "Watch",
         reason:
           "Profitable position, but higher-beta fintech runs hotter than a compounder book.",
-        strategyIds: ["pullback-entry"],
+        strategyIds: ["value-growth-dividend"],
       },
       {
         ticker: "CELH",
@@ -575,7 +575,7 @@ export const PORTFOLIOS: Portfolio[] = [
         status: "Review",
         reason:
           "Consumer growth name with a negative open P&L — review whether it still fits.",
-        strategyIds: ["breakout-watch"],
+        strategyIds: ["value-growth-dividend"],
       },
     ],
   },
@@ -593,7 +593,7 @@ export const PORTFOLIOS: Portfolio[] = [
         conviction: 52,
         status: "Watch",
         reason: "Stalking a quantum breakout — waiting for volume to confirm a base.",
-        strategyIds: ["breakout-watch", "speculative-runner"],
+        strategyIds: ["aggressive-ai-high-beta"],
       },
       {
         ticker: "IONQ",
@@ -603,7 +603,7 @@ export const PORTFOLIOS: Portfolio[] = [
         conviction: 49,
         status: "Watch",
         reason: "On watch for a pullback into support before starting a position.",
-        strategyIds: ["pullback-entry"],
+        strategyIds: ["value-growth-dividend"],
       },
       {
         ticker: "ACHR",
@@ -613,7 +613,7 @@ export const PORTFOLIOS: Portfolio[] = [
         conviction: 38,
         status: "Thesis Check",
         reason: "Speculative idea — thesis not yet written; needs a catalyst to act on.",
-        strategyIds: ["speculative-runner"],
+        strategyIds: ["aggressive-ai-high-beta"],
       },
       {
         ticker: "ELF",
@@ -623,7 +623,7 @@ export const PORTFOLIOS: Portfolio[] = [
         conviction: 45,
         status: "Watch",
         reason: "Watching for a base to form after the recent pullback.",
-        strategyIds: ["breakout-watch"],
+        strategyIds: ["value-growth-dividend"],
       },
     ],
   },
@@ -665,7 +665,38 @@ export const LOG_ENTRIES: Record<string, LogEntry[]> = Object.fromEntries(
   Object.entries(TICKERS).map(([ticker, info]) => [ticker, info.logs]),
 );
 
+// MVP default strategies. Trimmed to the two shown in the Strategy Forge design;
+// additional defaults will be re-introduced one at a time. Removing strategies is
+// a data-architecture change: bucket + holding strategyId references below are kept
+// pointed at one of these two survivors.
 export const DEFAULT_STRATEGIES: Strategy[] = [
+  {
+    id: "value-growth-dividend",
+    name: "Value, Growth, Dividend",
+    description:
+      "Build around fundamentally strong companies with attractive valuations, durable growth, and reliable shareholder returns. Favor balanced upside through capital appreciation, dividend income, cash-flow strength, and long-term portfolio stability.",
+    isDefault: true,
+    enabled: true,
+    timeframe: ["Long Term"],
+    tags: ["Value", "Growth", "Dividend"],
+    decisionSignals: ["Thesis", "Risk / Reward"],
+    exitLogic: ["Break Thesis", "Macro Changes"],
+    rules: [
+      { id: "vgd-t1", label: "Durable sales growth", category: "thesis", metric: "revenueGrowthPct", operator: ">=", value: 8, weight: 2, enabled: true },
+      { id: "vgd-t2", label: "Profitable", category: "thesis", metric: "netMarginPct", operator: ">=", value: 10, weight: 3, enabled: true },
+      { id: "vgd-t3", label: "Quality margins", category: "thesis", metric: "grossMarginPct", operator: ">=", value: 40, weight: 2, enabled: true },
+      { id: "vgd-t4", label: "Low leverage", category: "thesis", metric: "debtToEquity", operator: "<=", value: 1.5, weight: 2, enabled: true },
+      { id: "vgd-s1", label: "Long-term trend intact", category: "setup", metric: "priceVs50EmaPct", operator: ">=", value: 0, weight: 2, enabled: true },
+      { id: "vgd-s2", label: "Not stretched", category: "setup", metric: "weeklyRsi", operator: "between", value: [40, 70], weight: 1, enabled: true },
+      { id: "vgd-r1", label: "Calm-ish market", category: "risk", metric: "vix", operator: "<=", value: 28, weight: 1, enabled: true },
+      { id: "vgd-r2", label: "Not oversold-broken", category: "risk", metric: "weeklyRsi", operator: ">=", value: 30, weight: 1, enabled: true },
+      { id: "vgd-p1", label: "Within position cap", category: "position", metric: "weightPct", operator: "<=", value: 30, weight: 2, enabled: true },
+      { id: "vgd-tr1", label: "P&L within tolerance", category: "trade", metric: "openPnlPct", operator: ">=", value: -20, weight: 2, enabled: true },
+    ],
+    thesis: { groups: [["vgd-t1", "vgd-t2"], ["vgd-t2", "vgd-t3"]] },
+    checkInterval: "1D",
+    technicalsInterval: "1D",
+  },
   {
     id: "aggressive-ai-high-beta",
     name: "Aggressive AI / High-Beta Growth",
@@ -674,7 +705,7 @@ export const DEFAULT_STRATEGIES: Strategy[] = [
     isDefault: true,
     enabled: true,
     timeframe: ["Swing", "Long Term", "Speculation"],
-    tags: ["AI Infrastructure", "Aggressive Growth", "Momentum"],
+    tags: ["AI Infrastructure", "Aggressive Growth"],
     decisionSignals: ["Thesis", "Catalyst", "Risk / Reward"],
     exitLogic: ["Break Thesis", "Lose Trend", "Macro Changes"],
     rules: [
@@ -692,178 +723,6 @@ export const DEFAULT_STRATEGIES: Strategy[] = [
     thesis: { groups: [["aih-t1", "aih-t3"], ["aih-t1", "aih-t2"]] },
     checkInterval: "1D",
     technicalsInterval: "1D",
-  },
-  {
-    id: "aggressive-growth",
-    name: "Aggressive Growth",
-    description:
-      "Lean into high-conviction growth leaders while the trend and thesis are intact.",
-    isDefault: true,
-    enabled: true,
-    timeframe: ["Swing", "Long Term"],
-    tags: ["Aggressive Growth"],
-    decisionSignals: ["Thesis", "Catalyst"],
-    exitLogic: ["Break Thesis", "Macro Changes"],
-  },
-  {
-    id: "momentum",
-    name: "Momentum",
-    description: "Ride strength while price and volume keep confirming the move.",
-    isDefault: true,
-    enabled: true,
-    timeframe: ["Swing"],
-    tags: ["Momentum"],
-    decisionSignals: ["Volume", "Risk / Reward"],
-    exitLogic: ["Lose Trend", "Hit Target"],
-    rules: [
-      { id: "mo-s1", label: "Above short trend (10 EMA)", category: "setup", metric: "priceVs10EmaPct", operator: ">=", value: 0, weight: 3, enabled: true },
-      { id: "mo-s2", label: "Strong momentum (RSI \u2265 55)", category: "setup", metric: "weeklyRsi", operator: ">=", value: 55, weight: 2, enabled: true },
-      { id: "mo-s3", label: "Above VWAP", category: "setup", metric: "priceVsVwapPct", operator: ">=", value: 0, weight: 2, enabled: true },
-      { id: "mo-r1", label: "Not parabolic (RSI \u2264 80)", category: "risk", metric: "weeklyRsi", operator: "<=", value: 80, weight: 2, enabled: true },
-      { id: "mo-r2", label: "Market not in panic", category: "risk", metric: "vix", operator: "<=", value: 28, weight: 1, enabled: true },
-      { id: "mo-tr1", label: "Cut losers fast (P&L \u2265 -8)", category: "trade", metric: "openPnlPct", operator: ">=", value: -8, weight: 3, enabled: true },
-      { id: "mo-t1", label: "Has a growth story", category: "thesis", metric: "revenueGrowthPct", operator: ">=", value: 10, weight: 1, enabled: true },
-      { id: "mo-p1", label: "Small momentum slice", category: "position", metric: "weightPct", operator: "<=", value: 15, weight: 2, enabled: true },
-    ],
-    thesis: { groups: [["mo-t1"]] },
-    categoryWeights: { thesis: 10, timeframe: 5, position: 10, setup: 35, risk: 25, trade: 15 },
-    checkInterval: "15m",
-    technicalsInterval: "15m",
-  },
-  {
-    id: "breakout-watch",
-    name: "Breakout Watch",
-    description: "Stalk bases and wait for a clean breakout with volume confirmation.",
-    isDefault: true,
-    enabled: true,
-    timeframe: ["Swing"],
-    tags: ["Momentum"],
-    decisionSignals: ["Volume", "Catalyst"],
-    exitLogic: ["Lose Trend", "Hit Target"],
-  },
-  {
-    id: "pullback-entry",
-    name: "Pullback Entry",
-    description: "Buy controlled pullbacks into support within an established uptrend.",
-    isDefault: true,
-    enabled: true,
-    timeframe: ["Swing"],
-    tags: ["Aggressive Growth"],
-    decisionSignals: ["Thesis", "Risk / Reward"],
-    exitLogic: ["Lose Trend", "Break Thesis"],
-    rules: [
-      { id: "pb-t1", label: "Sales growing", category: "thesis", metric: "revenueGrowthPct", operator: ">=", value: 15, weight: 3, enabled: true },
-      { id: "pb-t2", label: "Profitable", category: "thesis", metric: "netMarginPct", operator: ">=", value: 5, weight: 2, enabled: true },
-      { id: "pb-s1", label: "Pulled back (RSI \u2264 55)", category: "setup", metric: "weeklyRsi", operator: "<=", value: 55, weight: 2, enabled: true },
-      { id: "pb-s2", label: "Trend intact (above 50 EMA)", category: "setup", metric: "priceVs50EmaPct", operator: ">=", value: 0, weight: 2, enabled: true },
-      { id: "pb-r1", label: "Calm-ish market", category: "risk", metric: "vix", operator: "<=", value: 25, weight: 1, enabled: true },
-      { id: "pb-r2", label: "Not oversold-broken", category: "risk", metric: "weeklyRsi", operator: ">=", value: 30, weight: 2, enabled: true },
-      { id: "pb-p1", label: "Within position cap", category: "position", metric: "weightPct", operator: "<=", value: 35, weight: 2, enabled: true },
-      { id: "pb-tr1", label: "P&L within tolerance", category: "trade", metric: "openPnlPct", operator: ">=", value: -20, weight: 2, enabled: true },
-    ],
-    thesis: { groups: [["pb-t1", "pb-t2"]] },
-    checkInterval: "1D",
-    technicalsInterval: "1D",
-  },
-  {
-    id: "trend-rider",
-    name: "Trend Rider",
-    description: "Stay with the primary trend until it clearly breaks.",
-    isDefault: true,
-    enabled: true,
-    timeframe: ["Long Term"],
-    tags: ["Aggressive Growth"],
-    decisionSignals: ["Thesis", "Volume"],
-    exitLogic: ["Lose Trend", "Macro Changes"],
-  },
-  {
-    id: "volume-confirmation",
-    name: "Volume Confirmation",
-    description: "Only trust moves that are backed by real participation.",
-    isDefault: true,
-    enabled: true,
-    timeframe: ["Swing"],
-    tags: ["Momentum"],
-    decisionSignals: ["Volume"],
-    exitLogic: ["Lose Trend"],
-  },
-  {
-    id: "long-term-compounder",
-    name: "Long-Term Compounder",
-    description: "Hold durable businesses through volatility while the thesis compounds.",
-    isDefault: true,
-    enabled: true,
-    timeframe: ["Long Term"],
-    tags: ["Aggressive Growth"],
-    decisionSignals: ["Thesis"],
-    exitLogic: ["Break Thesis", "Macro Changes"],
-  },
-  {
-    id: "ai-infrastructure",
-    name: "AI Infrastructure",
-    description: "Concentrate on the picks-and-shovels leaders of the AI build-out.",
-    isDefault: true,
-    enabled: true,
-    timeframe: ["Long Term"],
-    tags: ["AI Infrastructure", "Aggressive Growth"],
-    decisionSignals: ["Thesis", "Catalyst"],
-    exitLogic: ["Break Thesis", "Macro Changes"],
-  },
-  {
-    id: "speculative-runner",
-    name: "Speculative Runner",
-    description: "Small, high-risk positions in narrative-driven names with defined risk.",
-    isDefault: true,
-    enabled: true,
-    timeframe: ["Speculation"],
-    tags: ["Momentum", "Turnaround"],
-    decisionSignals: ["Catalyst", "Risk / Reward"],
-    exitLogic: ["Hit Target", "Lose Trend"],
-    rules: [
-      { id: "sp-t1", label: "Has a growth story", category: "thesis", metric: "revenueGrowthPct", operator: ">=", value: 20, weight: 1, enabled: true },
-      { id: "sp-s1", label: "Not in free-fall (above 50 EMA \u221215%)", category: "setup", metric: "priceVs50EmaPct", operator: ">=", value: -15, weight: 2, enabled: true },
-      { id: "sp-r1", label: "Market not in panic", category: "risk", metric: "vix", operator: "<=", value: 28, weight: 1, enabled: true },
-      { id: "sp-r2", label: "Not oversold-broken", category: "risk", metric: "weeklyRsi", operator: ">=", value: 25, weight: 2, enabled: true },
-      { id: "sp-p1", label: "Speculative size cap", category: "position", metric: "weightPct", operator: "<=", value: 12, weight: 3, enabled: true },
-      { id: "sp-tr1", label: "Risk-defined loss (P&L \u2265 -25)", category: "trade", metric: "openPnlPct", operator: ">=", value: -25, weight: 2, enabled: true },
-    ],
-    thesis: { groups: [["sp-t1"]] },
-    categoryWeights: { thesis: 15, timeframe: 0, position: 20, setup: 20, risk: 30, trade: 15 },
-    checkInterval: "1D",
-    technicalsInterval: "1D",
-  },
-  {
-    id: "risk-off",
-    name: "Risk-Off / Defensive",
-    description: "Reduce exposure and protect capital when macro turns hostile.",
-    isDefault: true,
-    enabled: true,
-    timeframe: ["Long Term"],
-    tags: ["Turnaround"],
-    decisionSignals: ["Risk / Reward"],
-    exitLogic: ["Macro Changes", "Lose Trend"],
-  },
-  {
-    id: "broken-thesis",
-    name: "Broken Thesis / Exit Watch",
-    description: "Flag positions where the original reason to own is no longer valid.",
-    isDefault: true,
-    enabled: true,
-    timeframe: ["Swing", "Long Term"],
-    tags: ["Turnaround"],
-    decisionSignals: ["Thesis", "Risk / Reward"],
-    exitLogic: ["Break Thesis"],
-    rules: [
-      { id: "bt-t1", label: "Sales still growing", category: "thesis", metric: "revenueGrowthPct", operator: ">=", value: 12, weight: 3, enabled: true },
-      { id: "bt-t2", label: "Still profitable", category: "thesis", metric: "netMarginPct", operator: ">=", value: 10, weight: 2, enabled: true },
-      { id: "bt-s1", label: "Trend intact (above 50 EMA)", category: "setup", metric: "priceVs50EmaPct", operator: ">=", value: 0, weight: 2, enabled: true },
-      { id: "bt-r1", label: "Manageable leverage", category: "risk", metric: "debtToEquity", operator: "<=", value: 2, weight: 2, enabled: true },
-      { id: "bt-p1", label: "Within position cap", category: "position", metric: "weightPct", operator: "<=", value: 25, weight: 2, enabled: true },
-      { id: "bt-tr1", label: "Loss within tolerance (P&L \u2265 -20)", category: "trade", metric: "openPnlPct", operator: ">=", value: -20, weight: 3, enabled: true },
-    ],
-    thesis: { groups: [["bt-t1", "bt-t2"]] },
-    checkInterval: "1W",
-    technicalsInterval: "1W",
   },
 ];
 
@@ -1602,7 +1461,7 @@ export const DEFAULT_BUCKETS: Bucket[] = [
     id: "bkt-fintech-consumer",
     name: "Fintech & Consumer",
     portfolioId: "deric",
-    strategyId: "pullback-entry",
+    strategyId: "value-growth-dividend",
     holdings: [
       { ticker: "SOFI", shares: 57, entryDate: "2026-01-22" },
       { ticker: "ELF", shares: 14, entryDate: "2026-02-28" },
@@ -1613,7 +1472,7 @@ export const DEFAULT_BUCKETS: Bucket[] = [
     id: "bkt-momentum",
     name: "Momentum (Intraday)",
     portfolioId: "deric",
-    strategyId: "momentum",
+    strategyId: "aggressive-ai-high-beta",
     holdings: [
       { ticker: "SOFI", shares: 10, entryDate: "2026-06-24" },
       { ticker: "RGTI", shares: 3, entryDate: "2026-06-23" },
@@ -1623,14 +1482,14 @@ export const DEFAULT_BUCKETS: Bucket[] = [
     id: "bkt-spec",
     name: "Speculative Runners",
     portfolioId: "deric",
-    strategyId: "speculative-runner",
+    strategyId: "aggressive-ai-high-beta",
     holdings: [{ ticker: "ACHR", shares: 75, entryDate: "2026-05-14" }],
   },
   {
     id: "bkt-review",
     name: "Thesis Review",
     portfolioId: "deric",
-    strategyId: "broken-thesis",
+    strategyId: "value-growth-dividend",
     holdings: [{ ticker: "CRM", shares: 2, entryDate: "2025-11-10" }],
   },
 ];

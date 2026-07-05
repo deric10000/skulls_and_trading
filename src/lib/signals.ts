@@ -17,6 +17,7 @@ const STATE_TONE: Record<SignalState, SignalTone> = {
 // (no real market data) so assigning/removing strategies visibly moves the signal.
 const STRATEGY_WEIGHT: Record<string, number> = {
   "aggressive-ai-high-beta": 2,
+  "value-growth-dividend": 2,
   "aggressive-growth": 2,
   momentum: 2,
   "breakout-watch": 1,

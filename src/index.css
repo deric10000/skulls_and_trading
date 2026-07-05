@@ -99,6 +99,13 @@
   --text-muted: #93a0b5;
   --text-faint: #64748b;
 
+  /* Disabled (inert) button greys — a single neutral slate treatment so every
+     disabled control reads the same regardless of its enabled variant. */
+  --disabled-surface: rgb(148 163 184 / 0.16);
+  --disabled-surface-soft: rgb(148 163 184 / 0.08);
+  --disabled-border: rgb(148 163 184 / 0.2);
+  --disabled-text: var(--text-faint);
+
   /* ---- Brand semantic tokens (pirate / treasure identity) ---- */
   --brand-gold: var(--gold-400);
   --brand-gold-strong: var(--gold-300);
@@ -307,9 +314,11 @@ button {
   overscroll-behavior-y: contain;
 }
 
-/* Home fills the space between header and footer, so trim its bottom padding
-   to keep the cards close to the footer instead of leaving dead space. */
-.app-main:has(.home-page) {
+/* Home + Strategy Forge fill the space between header and footer, so trim their
+   bottom padding to keep the cards close to the footer instead of leaving dead
+   space (both own their full-height layout at the desktop breakpoint). */
+.app-main:has(.home-page),
+.app-main:has(.forge-page) {
   padding-bottom: 1.5rem;
 }
 
@@ -522,7 +531,7 @@ button {
   font-weight: 600;
 }
 
-.btn.btn--link:hover {
+.btn.btn--link:hover:not(:disabled) {
   color: var(--blue-300);
   background: transparent;
 }
@@ -612,20 +621,20 @@ button {
   justify-content: center;
   gap: 0.5rem;
   padding: 0.7rem 1.3rem;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-lg);
   font: inherit;
   font-weight: 600;
   cursor: pointer;
   appearance: none;
   -webkit-tap-highlight-color: transparent;
-  border: 1px solid rgb(86 182 240 / 0.4);
-  background: rgb(86 182 240 / 0.14);
+  border: 1px solid rgb(86 182 240 / 0.35);
+  background: rgb(86 182 240 / 0.12);
   color: var(--info);
   transition: transform 0.12s ease, box-shadow 0.15s ease, background 0.15s ease,
     border-color 0.15s ease, color 0.15s ease;
 }
 
-.btn:hover {
+.btn:hover:not(:disabled) {
   transform: translateY(-1px);
 }
 
@@ -646,6 +655,30 @@ button {
   box-shadow: var(--shadow-glow);
 }
 
+/* Solid blue "Add" action — the emphasized (filled) member of the blue action
+   family. Pairs with the base .btn (translucent blue "outline") and .btn--danger
+   (destructive text). Reusable anywhere a strong non-brand action is needed. */
+.btn--solid {
+  background: var(--info);
+  border-color: transparent;
+  color: #1a1205;
+}
+
+.btn--solid:hover:not(:disabled) {
+  background: var(--blue-300);
+}
+
+/* Destructive text button (Delete): no fill/border, red text + icon. */
+.btn--danger {
+  background: transparent;
+  border-color: transparent;
+  color: #ff8080;
+}
+
+.btn--danger:hover:not(:disabled) {
+  background: rgb(255 107 107 / 0.12);
+}
+
 .btn--ghost {
   background: rgb(148 163 184 / 0.06);
   border-color: var(--border-strong);
@@ -657,10 +690,34 @@ button {
   font-size: 0.85rem;
 }
 
+/* Disabled = standardized inert grey (not just a dimmed version of the enabled
+   color). Each button family keeps its structural identity — solid fills stay
+   filled, outline/soft buttons keep a soft fill + border, and text-only buttons
+   stay borderless — but all recolor to the same neutral slate. The icon-only
+   button variants share these classes, so they inherit the matching grey. */
 .btn:disabled {
-  opacity: 0.5;
   cursor: not-allowed;
   transform: none;
+  box-shadow: none;
+  background: var(--disabled-surface-soft);
+  border-color: var(--disabled-border);
+  color: var(--disabled-text);
+}
+
+/* Solid filled (Add / primary) — solid grey fill. */
+.btn--solid:disabled,
+.btn--primary:disabled {
+  background: var(--disabled-surface);
+  border-color: transparent;
+  color: var(--disabled-text);
+}
+
+/* No-fill / text-only (Delete, link) — transparent, grey text + icon. */
+.btn--danger:disabled,
+.btn.btn--link:disabled {
+  background: transparent;
+  border-color: transparent;
+  color: var(--disabled-text);
 }
 
 /* Chips — borderless tinted pills. The tone reads from the fill + text/icon
@@ -2175,73 +2232,241 @@ select.input:hover:not(:disabled) {
   color: var(--accent-strong);
 }
 
-/* Strategy Forge: fundamentals | technical | strategies | config.
-   Four columns at >=1280px, two columns on tablets, stacked on mobile.
-   DOM order is strategies -> config -> fundamentals -> technical for the
-   mobile stack; desktop placement is set explicitly. */
+/* Strategy Forge: My Strategies | Configure | Current Watch (read-only).
+   Mobile/tablet (<1024px) stack in one column and let the page scroll — the
+   same "swipe up and down" model Home uses below its desktop breakpoint. At
+   >=1024px it becomes a full-height triptych fitted to the viewport, each panel
+   scrolling its own content (mirrors the Home desktop dashboard). */
+.forge-page {
+  flex: 1;
+  min-height: 0;
+  gap: var(--space-4);
+}
+
 .forge-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: var(--space-4);
   align-items: start;
+  flex: 1;
+  min-height: 0;
 }
 
-@media (min-width: 768px) and (max-width: 1279px) {
+@media (min-width: 1024px) {
+  /* Three columns on one row — My Strategies (rails left) · Configure (the wide
+     center workbench) · Current Watch (read-only, right). Proportions follow the
+     Figma (456 : 952 : 456). The grid fills the space between header and footer
+     and clips; a panel scrolls its own content only when the viewport is too
+     short to show it all. */
   .forge-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns:
+      minmax(280px, 456fr)
+      minmax(0, 952fr)
+      minmax(280px, 456fr);
+    grid-template-rows: minmax(0, 1fr);
+    gap: var(--space-3);
+    overflow: hidden;
+    align-items: stretch;
+  }
+
+  .forge-strategies,
+  .forge-config,
+  .forge-watch {
+    min-height: 0;
+    height: 100%;
+  }
+
+  /* My Strategies + Current Watch: fixed-height shells with a fixed head and an
+     inner region that scrolls (the Home card model). */
+  .forge-strategies > .panel,
+  .forge-watch > .panel {
+    height: 100%;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* Card scroll standard (shared with Home): park the 8px bar 4px from the panel
+     edge with 4px to content — the -12px margin pulls the box into the panel's
+     16px padding (4 + 8 bar + 4 = 16px inset); scrollbar-gutter holds it stable. */
+  .forge-strategies .strategy-list,
+  .forge-watch .watchlist-items,
+  .forge-watch .watch-summary {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden auto;
+    margin-right: -12px;
+    padding-right: 4px;
+    scrollbar-gutter: stable;
+  }
+
+  /* Configure is one long form, so the whole panel scrolls (the Figma shows a
+     single card-height scrollbar). Its own 16px padding keeps the bar off the
+     content. */
+  .forge-config > .panel {
+    height: 100%;
+    min-height: 0;
+    overflow: hidden auto;
+    scrollbar-gutter: stable;
   }
 }
 
-@media (min-width: 1280px) {
-  /* The config panel is the workbench now (chips, preview, cadence), so it gets
-     the room. Strategy list rails left; the education cards drop to a reference
-     row beneath. */
-  .forge-grid {
-    grid-template-columns: 300px minmax(0, 1fr);
+/* Mobile (<=767px) only: the Strategy Forge is a master -> detail flow. The
+   strategy list drills into a detail view (breadcrumb + a Home-style tab bar
+   that toggles Configure / Preview Watchlist). Rendered by StrategyForgePage
+   only below 767px, so these never affect tablet/desktop. */
+@media (max-width: 767px) {
+  /* Tighter mobile rhythm than the desktop workbench. `.page.forge-page` (0,2,0)
+     is required to beat the later `.page { gap: --space-5 }` base rule. This is
+     the gap between the header (h1 + subtitle) and the strategy list. */
+  .page.forge-page {
+    gap: 1rem;
   }
 
-  .forge-strategies {
-    grid-column: 1;
-    grid-row: 1;
+  .forge-detail {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    min-height: 0;
   }
-  .forge-config {
-    grid-column: 2;
-    grid-row: 1;
+
+  /* Contained, Home-style tab strip: transparent, borderless tabs sitting on a
+     single hairline divider (no full-bleed, stays inside the page padding). */
+  .forge-tab-bar {
+    display: flex;
+    border-bottom: 1px solid var(--border-soft);
   }
-  .forge-fundamentals {
-    grid-column: 1;
-    grid-row: 2;
+
+  .forge-tabs {
+    width: 100%;
+    max-width: none;
+    overflow-x: auto;
+    scrollbar-width: none;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
   }
-  .forge-technical {
-    grid-column: 2;
-    grid-row: 2;
+
+  .forge-tabs::-webkit-scrollbar {
+    display: none;
   }
 }
 
-.strategy-toolbar {
+/* Strategy list is a flex column so the action footer pins to the bottom of the
+   card (on desktop the .strategy-list region scrolls and the footer stays put;
+   on mobile/tablet the footer simply sits at the end of the card). */
+.strategy-list-panel {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
+}
+
+/* Sticky action bar with a top divider. Row layout: Delete pinned left,
+   Duplicate + Add to the right (Delete's margin-right:auto pushes the rest
+   over). When the column gets too narrow for one row, the container query below
+   restacks it full-width. */
+.strategy-footer {
+  display: flex;
+  align-items: center;
   gap: 0.5rem;
-  margin-bottom: var(--space-3);
+  margin-top: auto;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border-soft);
+}
+
+.strategy-footer .btn--danger {
+  margin-right: auto;
+}
+
+/* Desktop/tablet only: when the buttons can't fit on one row (measured in JS via
+   ResizeObserver, so it triggers exactly at collision) the footer gets .is-stacked
+   and the actions stretch full-width. column-reverse keeps DOM/tab order
+   (Delete → Duplicate → Add) while rendering Add on top and Delete on the bottom. */
+@media (min-width: 768px) {
+  .strategy-footer.is-stacked {
+    flex-direction: column-reverse;
+    align-items: stretch;
+  }
+
+  .strategy-footer.is-stacked .btn {
+    width: 100%;
+  }
+
+  .strategy-footer.is-stacked .btn--danger {
+    margin-right: 0;
+  }
+}
+
+/* Mobile: condense to borderless icon-only square buttons (Figma mobile spec).
+   Labels stay in the a11y tree via aria-label on each button. Overrides the
+   narrow-column stack so mobile stays a single row of icon squares. */
+@media (max-width: 767px) {
+  .strategy-footer {
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .strategy-footer .btn-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  .strategy-footer .btn {
+    width: 44px;
+    height: 44px;
+    min-height: 0;
+    padding: 0;
+    border-radius: var(--radius-sm);
+    flex: 0 0 auto;
+  }
+
+  .strategy-footer .btn svg {
+    width: 20px;
+    height: 20px;
+  }
+}
+
+/* Mobile list view: the "My Strategies" card fills the available viewport height
+   and scrolls its own list, with the footer pinned to the bottom (the same shell
+   model the desktop grid uses). Scoped via :has(.forge-strategies) — the detail
+   view renders .forge-config/.forge-watch instead, so it keeps page-level scroll.
+   The footer sits outside the scroller (the list), so it stays put while the
+   strategies scroll beneath it. The shell/viewport lock that makes this height
+   definite lives in the mobile .app:has(.forge-strategies) rule below. */
+@media (max-width: 767px) {
+  .forge-strategies {
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+
+  .forge-strategies > .panel {
+    height: 100%;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .forge-strategies .strategy-list {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden auto;
+  }
 }
 
 .strategy-list {
   display: flex;
   flex-direction: column;
   gap: 0.6rem;
-}
-
-@media (min-width: 1280px) {
-  /* Card scroll standard: park the 8px bar 4px from the panel edge with 4px to
-     content. The negative margin pulls the list into the panel's 16px padding
-     (4 + 8 bar + 4 = 16px right inset); scrollbar-gutter holds it stable. */
-  .strategy-list {
-    max-height: 62vh;
-    overflow-y: auto;
-    margin-right: -12px;
-    padding-right: 4px;
-    scrollbar-gutter: stable;
-  }
 }
 
 /* Layout/type only — rest/hover/selected come from `.select-card` (+ `.is-selected`). */
@@ -3874,6 +4099,36 @@ button.nav-link {
   .app-main:has(.home-page) {
     flex: 0 0 auto;
     padding-top: 0;
+  }
+
+  /* Strategy Forge mobile: a small breather under the header. List view (title)
+     gets ~8px; the detail view (breadcrumb) is tighter at ~4px. The detail rule
+     must follow the list rule — equal specificity, so source order wins when
+     both match (the detail view still contains .forge-page). */
+  .app-main:has(.forge-page) {
+    padding-top: 8px;
+  }
+
+  .app-main:has(.forge-detail) {
+    padding-top: 4px;
+  }
+
+  /* Forge LIST view only: re-lock the shell to the viewport (the desktop model)
+     so the page header (h1 + subtitle) stays put while the "My Strategies" card
+     fills the remaining height and scrolls its list internally with a pinned
+     footer. The detail view has no .forge-strategies, so it keeps the standard
+     mobile page-level scroll. */
+  .app:has(.forge-strategies) {
+    height: 100vh;
+    height: 100dvh;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .app-main:has(.forge-strategies) {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden;
   }
 
   .home-page {
