@@ -2435,34 +2435,6 @@ select.input:hover:not(:disabled) {
   }
 }
 
-/* Mobile list view: the "My Strategies" card fills the available viewport height
-   and scrolls its own list, with the footer pinned to the bottom (the same shell
-   model the desktop grid uses). Scoped via :has(.forge-strategies) — the detail
-   view renders .forge-config/.forge-watch instead, so it keeps page-level scroll.
-   The footer sits outside the scroller (the list), so it stays put while the
-   strategies scroll beneath it. The definite height comes from the mobile
-   .forge-page:has(.forge-strategies) min-height rule below (viewport-sized). */
-@media (max-width: 767px) {
-  .forge-strategies {
-    flex: 1 1 auto;
-    min-height: 0;
-  }
-
-  .forge-strategies > .panel {
-    height: 100%;
-    min-height: 0;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-  }
-
-  .forge-strategies .strategy-list {
-    flex: 1 1 auto;
-    min-height: 0;
-    overflow: hidden auto;
-  }
-}
-
 .strategy-list {
   display: flex;
   flex-direction: column;
@@ -4113,14 +4085,28 @@ button.nav-link {
     padding-top: 4px;
   }
 
-  /* Forge LIST view: match the Home mobile model — the page scrolls and the
-     footer flows just below the fold. The list "card" is sized to fill the
-     viewport below the sticky header (minus a small breather) so its bottom lands
-     near the viewport bottom, pushing the footer off-screen by default. The
-     strategy list still scrolls inside the card with the button footer pinned.
-     Scroll the page to reveal the footer. Detail view has no .forge-strategies. */
-  .forge-page:has(.forge-strategies) {
-    min-height: calc(100svh - var(--app-header-h, 96px) - 1rem);
+  /* Forge LIST view (mobile): the card is natural height and the PAGE scrolls.
+     The action row is lifted out of the card into a viewport-sticky dock (a
+     direct child of .app-main, a sibling of .forge-page). Making .app-main at
+     least a viewport tall guarantees the dock reaches the bottom of the viewport
+     even with only a couple of strategies; when the list is long the dock stays
+     pinned while scrolling and, at the very end, releases so the site footer
+     pulls up directly beneath it. Detail view has no .forge-strategies. */
+  .app-main:has(.forge-strategies) {
+    min-height: calc(100svh - var(--app-header-h, 96px));
+    padding-bottom: 0;
+  }
+
+  .strategy-dock {
+    position: sticky;
+    bottom: 0;
+    z-index: 5;
+    /* Pin to the bottom of .app-main (so it sits at the viewport bottom until
+       the end of the scroll), with a solid backdrop so the scrolling card reads
+       cleanly beneath it. */
+    margin-top: auto;
+    background: var(--bg-base);
+    padding-bottom: calc(var(--space-3) + env(safe-area-inset-bottom, 0px));
   }
 
   .home-page {
