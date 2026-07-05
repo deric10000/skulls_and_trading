@@ -65,6 +65,16 @@ export function computePortfolioAlignment(
   );
   const market = dataSource.getMarketContext();
 
+  // Calendar days between a bucket allocation's entry date and the snapshot
+  // date (asOf) — feeds the Hold Timeframe chips. Missing entry date → no data.
+  const asOfMs = Date.parse(market.asOf);
+  const holdingDaysFor = (entryDate?: string): number | undefined => {
+    if (!entryDate || Number.isNaN(asOfMs)) return undefined;
+    const entryMs = Date.parse(entryDate);
+    if (Number.isNaN(entryMs)) return undefined;
+    return Math.max(0, Math.round((asOfMs - entryMs) / 86_400_000));
+  };
+
   const byTicker: Record<string, TickerAlignment> = {};
   const portfolioSlices: WeightedAlignment[] = [];
   const bucketSlices: Record<string, WeightedAlignment[]> = {};
@@ -82,6 +92,7 @@ export function computePortfolioAlignment(
         market,
         weightPct: weightPctFor(ticker),
         openPnlPct: holding?.openPnlPct,
+        holdingDays: holdingDaysFor(allocation.entryDate),
       };
 
       const scored = scoreStock(strategy, ctx);

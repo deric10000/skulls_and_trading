@@ -1,6 +1,6 @@
 # Strategy Forge — Framework
 
-How a user turns a trading plan into a set of **rule chips** that score each
+How a user turns a trading plan into **rule chips** and **tags** that score each
 holding's **conviction** and **alignment**, and how those scores flow to the
 Home and Dashboard widgets. This is the conceptual reference; the data flow and
 seam rules live in [`data-architecture.md`](../data-architecture.md).
@@ -8,57 +8,89 @@ seam rules live in [`data-architecture.md`](../data-architecture.md).
 > All data is static mock today (real values, but a snapshot — not a live feed).
 > See `.cursor/rules/security-hardening.mdc` before wiring anything realistic.
 
+Source designs: the Configure card + table modals in Figma
+(`Skulls - Trading`, node `168-1323` and the six chip/tag table modals) and the
+algorithm board in FigJam (`Skulls and Trading`, node `30-1095`).
+
 ## 1. The model
 
 - A portfolio runs one or many **Strategies**, applied through **Buckets** (a
   strategy governs a bucket; a holding's shares can be split across buckets).
-- A **Strategy** is a set of **Rule Chips**. Each chip has a custom label, a
-  testable condition (metric + operator + value), and a weight. A chip evaluates
-  to **pass / fail / no-data** against a stock's data.
-- Every chip belongs to one of six **Categories**. Each category produces a
-  0–100 sub-score (weighted % of its enabled chips that pass; no-data chips are
-  excluded from the denominator).
+- A **Strategy** is a set of **Rule Chips** organized into six **Categories**,
+  plus **Tags** that group chips into reusable lenses.
+- A **Rule Chip** is one measurable, pass/fail condition: a custom label, a
+  data point (metric), a date range, a condition (e.g. "is at least"), a value,
+  and a **Rule Weight** (% importance within its category).
+- A **Tag** is a reusable, named group of rule chips within a category (e.g.
+  the Thesis tags `Value`, `Growth`, `Dividend`, `Quality`). A tag carries a
+  purpose, its member chips, a **Tag Weight**, and suggested auto-apply
+  guidance. Tags are the unit a user will later apply to individual stocks.
+  Every category has a built-in, non-deletable **"All Active Chips"** tag that
+  represents the full chip set (strict full-category scoring).
 
-## 2. The six categories
+## 2. The weight hierarchy
 
-| Category | Question it answers | Example data |
-|----------|--------------------|--------------|
-| **Thesis Fit** | Does this name belong? (flagship — a boolean composite) | EPS growth, revenue growth, margins, P/E |
-| **Timeframe** | Is it managed on the intended horizon? | Swing / Long / Speculation |
-| **Position Size** | Is the allocation inside the target range? | holding weight % vs bounds |
-| **Setup / Timing** | Do current technicals support it? | RSI, VWAP, EMAs |
-| **Risk Rules** | Still inside risk limits? (guardrails / state) | stop distance, exposure, VIX/SPY |
-| **Trade Management** | Acting per plan? (behavior / actions) | add/trim/hold/exit, take-profit vs open P&L |
+| Level | What the weight means |
+|-------|----------------------|
+| **Category Weight** | The category's share of the total conviction score. All six categories sum to **100**. Example: Technical Setup = 12% of total conviction. |
+| **Rule Weight** | Inside a category, how much each chip matters. The category's enabled chips should total **100%**. |
+| **Tag Weight** | If multiple tags are applied to a stock, how much each tag matters relative to the others. A category's tags total **100%**. |
+| **Normalized Score** | Active tags/rules always **rescale to fill 100%** of their category for that stock. |
 
-**Risk vs Trade Management:** Risk = limits that shouldn't be breached;
-Trade Management = whether you're *taking the planned action* (take-profit lives
-here). Distinct lenses.
+## 3. The six categories
 
-## 3. Conviction & alignment
+Category keys are stable identifiers (`thesis`, `setup`, `risk`, `position`,
+`trade`, `timeframe`); labels below are the UI names.
 
-**Strategy Conviction (0–100)** per stock = weighted blend of the six category
-sub-scores using the strategy's `categoryWeights`.
+| # | Category | Question it answers | Default weight (Value/Growth/Dividend) |
+|---|----------|--------------------|:--:|
+| 1 | **Thesis & Fundamentals** (`thesis`) | Does this ticker fit my thesis? | 55 |
+| 2 | **Technical Analysis (Setup / Timing)** (`setup`) | Does the current market/chart setup support the strategy? | 12 |
+| 3 | **Risk Rules** (`risk`) | Is the position still inside the user's risk limits? | 15 |
+| 4 | **Position Size** (`position`) | Is the allocation sized with discipline? | 8 |
+| 5 | **Trade Management** (`trade`) | Is the position behaving inside the plan's tolerances? | 6 |
+| 6 | **Hold Timeframe** (`timeframe`) | Is the holding being managed on the intended timeline? | 4 |
 
-Default weights (a "stock-market-wizard" prior — the two existential questions
-dominate; per-strategy adjustable, sum to 100):
+The Thesis/Technical/Risk weights (55 / 12 / 15) come straight from the design;
+Position / Trade / Timeframe split the remaining 18 points (8 / 6 / 4), keeping
+the per-stock score dominated by thesis fit and risk control — how an expert
+Value/Growth/Dividend investor actually weighs decisions. All six are
+per-strategy adjustable and must sum to 100.
 
-| Category | Weight | Why |
-|----------|:------:|-----|
-| Thesis Fit | 30 | Belonging is the foundation (also a gate). |
-| Risk Rules | 25 | Capital preservation is paramount (also a gate). |
-| Setup / Timing | 15 | Technicals support the hold/entry. |
-| Position Size | 12 | Sizing discipline (a miss is correctable). |
-| Trade Management | 10 | Acting per plan. |
-| Timeframe | 8 | Horizon fit (more a filter than an ongoing driver). |
+**Position / Trade / Timeframe design note:** these categories use the *same*
+chip + tag + table pattern as the first three (consistency beats a bespoke UI),
+but ship with deliberately small chip sets. Position-level risk-based sizing
+against the whole portfolio ("low risk score → smaller suggested size") is a
+later pass; today these categories score the per-stock, per-position facts we
+have (portfolio weight, open P&L, holding age).
 
-### Gates (override the blended score)
+## 4. The scoring algorithm (per stock, per category)
 
-A single fatal flaw can't be averaged away by a high score elsewhere:
+Rule scoring is **pass/fail for MVP** (partial credit can come later).
 
-- Thesis composite evaluates **false** → status forced to `Thesis Check`.
-- Any enabled **Risk** chip fails → status forced to `Risk Check`.
+1. **Resolve active chips.** The chips that score a stock are the union of the
+   chips inside the applied tags plus any individually applied chips —
+   **deduplicated** (a chip shared by two applied tags counts once). Default =
+   the "All Active Chips" tag, i.e. every enabled chip in the category.
+2. **Evaluate pass/fail.** Each active chip's condition is tested against the
+   stock's data. A metric that is `null` is **"no data"** — the chip is
+   excluded from the calculation entirely (numerator and denominator), never
+   counted as a fail and never fabricated.
+3. **Normalize active rule weights.**
+   `normWeight_i = ruleWeight_i / Σ(active scorable ruleWeights)` — active
+   rules always rescale to fill 100% of the category for that stock.
+4. **Category score.** `categoryScore = Σ(pass_i ? normWeight_i : 0)` → 0–100.
+5. **Conviction points.** `categoryPoints = categoryScore × categoryWeight/100`.
+6. **Stock conviction.** `conviction = Σ categoryPoints` over all categories
+   with at least one scorable chip, renormalized over the participating
+   category weights (an unconfigured category doesn't silently drag the score
+   to zero — the **completeness warnings** below make the gap visible instead).
 
-### Status mapping (after gates)
+Worked example (from the algorithm board): Thesis chips Revenue Growth (33%)
+fails, EPS Growth (33%) passes, EBITDA (34%) passes → Thesis score = 67%. With
+Thesis = 55% of conviction: `67% × 55 = 36.85` conviction points.
+
+### Status mapping
 
 | Conviction | Status |
 |-----------:|--------|
@@ -67,42 +99,47 @@ A single fatal flaw can't be averaged away by a high score elsewhere:
 | 40–59 | Watch |
 | < 40 | Review |
 
-(All values are existing `StatusType`s, so downstream widgets need no changes.)
+The old hard **gates** (thesis composite → `Thesis Check`, breached risk chip →
+`Risk Check`, with conviction clamps) are **removed**: thesis and risk now
+express their dominance through their category weights. The `ThesisLogic`
+AND/OR group builder and the 1–5 chip weight scale are retired with them.
 
-## 4. The quantitative Thesis builder
+## 5. Portfolio conviction
 
-The Thesis Fit category is a **boolean composite** of fundamental (and optional
-technical) chips:
+Portfolio conviction is **position-weighted**: it is calculated from the
+market-value-weighted scores of the individual stocks (shares × price across
+bucket allocations), so a 10-share momentum slice doesn't outweigh a 100-share
+core position. A ticker living in several buckets is scored by each; its
+headline is its **best-aligned** bucket. Example: two stocks both score 80, but
+a 10%-of-book position contributes `10% × 80 = 8.0` while a 2% position
+contributes `1.6`.
 
-- **AND within a group, OR across groups** — deliberately simple, no nested
-  expression trees. Example:
-  `(EPS Growth ≥ 20 AND Rev Growth ≥ 25) OR (Gross Margin ≥ 65 AND Debt/Equity < 0.5)`.
-- Output per stock: `thesisPass` (boolean, drives the gate) **and** a Thesis Fit
-  sub-score (weighted % of passing thesis chips, feeds conviction).
-- Chips are reusable: add / edit / delete / **save to a chip library** to drop
-  into other strategies.
+## 6. Completeness — cautions before a strategy can be applied
 
-## 5. Buckets & check cadence
+A strategy must be **complete** before it can be applied to a portfolio. The
+Configure card surfaces a caution banner with the outstanding items, and the
+"Apply to Portfolio" button (in the watchlist Preview column) stays disabled
+until every check passes:
 
-- A portfolio splits into **Buckets**; each bucket is governed by one strategy
-  and holds a **share allocation** of one or more tickers. A ticker can live in
-  multiple buckets (e.g. 100 sh long in "Core Growth", 10 sh in a 15m
-  "Momentum" bucket); it is scored by each, and the headline shows its
-  **best-aligned** bucket.
-- Each strategy carries its own cadence:
-  - `checkInterval` (15m, 30m, 1h, 4h, **1D default**, 1W, 1M) — re-scores the
-    bucket and is the only thing that "notifies". Upper bound on fetch frequency.
-  - `technicalsInterval` — candle size + refresh for technicals; defaults to
-    `checkInterval`, clamped to **≥ `checkInterval`** and **≥ 15m**.
-  - Fundamentals refresh on a fixed daily cadence (quarterly data).
-- **Portfolio alignment** = market-value-weighted average across bucket
-  allocations (shares × price), so a 10-share momentum slice doesn't outweigh a
-  100-share core position.
+- Strategy name and thesis description are non-empty.
+- Category weights total exactly 100.
+- Every category has at least one enabled rule chip.
+- Each category's enabled chip weights total 100%.
+- Each category's tag weights total 100%.
+
+## 7. Buckets & check cadence (unchanged)
+
+- Each strategy carries its own cadence: `checkInterval` (15m → 1M, **1D
+  default**) re-scores the bucket; `technicalsInterval` is the technicals
+  candle, clamped **≥ `checkInterval`** and **≥ 15m**. Fundamentals refresh on
+  a fixed daily cadence.
 - "Notify" (MVP) = the chips/tags on Home and Dashboard re-rendering at the
   check cadence. No push/notification system is built.
 
-## 6. Deferred (later dashboard pass)
+## 8. Deferred (later passes)
 
-Bucket-builder UI, per-bucket share-count editing, and editable trade-entry
-dates are authored on the **dashboard** later. This pass only models the data
-(`Bucket` / `BucketHolding`) and plumbs computed alignment downstream.
+- Per-stock tag application UI (applying `Growth` to NVDA etc.) — the engine
+  already supports scoring through a tag lens; the authoring UI is later.
+- Partial (non-binary) rule scoring.
+- Risk-score-aware position sizing suggestions.
+- Bucket-builder UI, per-bucket share editing, editable trade-entry dates.

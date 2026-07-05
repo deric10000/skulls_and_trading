@@ -7,21 +7,29 @@ import type {
   RuleCategory,
   RuleChip,
   RuleOperator,
+  RuleTag,
   StatusType,
   Strategy,
   TechnicalSnapshot,
 } from "../../types";
 import { DEFAULT_CATEGORY_WEIGHTS } from "../../data";
-import { METRICS } from "./metrics";
+import { CATEGORY_ORDER, METRICS } from "./metrics";
 
 // ---------------------------------------------------------------------------
 // Strategy Forge scoring engine — pure functions, no I/O.
 //
-// Turns a strategy's rule chips + a stock's data into a 0–100 Strategy
-// Conviction and an alignment status. See docs/strategy-forge.md for the
-// framework (six categories, Thesis-heavy weighting, gates). "No data" is a
-// first-class outcome: a metric that is null is EXCLUDED from scoring rather
-// than counted as a fail, so a bank with no gross margin isn't punished for it.
+// Implements the normalized tag/chip/weight algorithm (docs/strategy-forge.md):
+//   1. Resolve active chips per category (union of applied tags' chips +
+//      individually applied chips, DEDUPED; default = "All Active Chips").
+//   2. Evaluate each active chip pass/fail. A null metric is "no data" and is
+//      EXCLUDED from the calculation — never counted as a fail.
+//   3. Normalize active rule weights so they fill 100% of the category.
+//   4. categoryScore = Σ(passed × normalizedWeight)  → 0–100
+//   5. categoryPoints = categoryScore × categoryWeight / 100
+//   6. conviction = Σ categoryPoints, renormalized over categories that have
+//      scorable chips (completeness warnings surface the gaps instead).
+// There are NO thesis/risk gates or conviction clamps — thesis and risk
+// dominate through their category weights.
 // ---------------------------------------------------------------------------
 
 // Everything a chip might need to read, for one ticker in one portfolio context.
@@ -31,6 +39,7 @@ export interface MetricContext {
   market: MarketContext;
   weightPct?: number; // this name's share of the portfolio book
   openPnlPct?: number; // unrealized P&L vs avg cost
+  holdingDays?: number; // calendar days since the position was entered
   timeframe?: string; // intended holding horizon (qualitative)
 }
 
@@ -53,20 +62,9 @@ export interface StockAlignment {
   hasRules: boolean; // false → caller should fall back to seed data
   conviction: number; // 0–100
   status: StatusType;
-  thesisPass: boolean;
-  riskBreached: boolean;
   categories: CategoryScore[];
   results: ChipResult[];
 }
-
-const ALL_CATEGORIES: RuleCategory[] = [
-  "thesis",
-  "timeframe",
-  "position",
-  "setup",
-  "risk",
-  "trade",
-];
 
 // ---- Metric reads -------------------------------------------------------
 
@@ -74,14 +72,19 @@ export function readMetric(metric: MetricKey, ctx: MetricContext): MetricValue {
   const source = METRICS[metric]?.source;
   switch (source) {
     case "fundamental":
-      return ctx.fundamentals ? ctx.fundamentals[metric as keyof FundamentalSnapshot] as MetricValue ?? null : null;
+      return ctx.fundamentals
+        ? ((ctx.fundamentals[metric as keyof FundamentalSnapshot] as MetricValue) ?? null)
+        : null;
     case "technical":
-      return ctx.technicals ? (ctx.technicals[metric as keyof TechnicalSnapshot] as MetricValue) ?? null : null;
+      return ctx.technicals
+        ? ((ctx.technicals[metric as keyof TechnicalSnapshot] as MetricValue) ?? null)
+        : null;
     case "market":
       return (ctx.market[metric as keyof MarketContext] as MetricValue) ?? null;
     case "position":
       if (metric === "weightPct") return ctx.weightPct ?? null;
       if (metric === "openPnlPct") return ctx.openPnlPct ?? null;
+      if (metric === "holdingDays") return ctx.holdingDays ?? null;
       if (metric === "timeframe") return null; // qualitative handled separately
       return null;
     default:
@@ -104,9 +107,7 @@ function compareNumeric(
     case "<=":
       return typeof target === "number" && value <= target;
     case "between":
-      return (
-        Array.isArray(target) && value >= target[0] && value <= target[1]
-      );
+      return Array.isArray(target) && value >= target[0] && value <= target[1];
     default:
       return false;
   }
@@ -125,13 +126,55 @@ export function evaluateChip(chip: RuleChip, ctx: MetricContext): ChipResult {
   const value = readMetric(chip.metric, ctx);
   if (value == null) return { chip, outcome: "no-data", value: null };
 
+  // Boolean flags are stored as 1/0 and tested with `is TRUE` / `is FALSE`.
+  if (chip.operator === "is" && METRICS[chip.metric]?.format === "boolean") {
+    const expected = String(chip.value).toUpperCase() === "TRUE" ? 1 : 0;
+    return { chip, outcome: value === expected ? "pass" : "fail", value };
+  }
+
   const pass = compareNumeric(value, chip.operator, chip.value);
   return { chip, outcome: pass ? "pass" : "fail", value };
 }
 
+// ---- Active chip resolution ----------------------------------------------
+
+// The chips that score a stock for one category: the union of the applied
+// tags' member chips plus individually applied chips, DEDUPED (a chip shared
+// by two applied tags counts once). With no applied tags/chips, the default
+// lens is "All Active Chips" — every enabled chip in the category. A system
+// tag ("All Active Chips") in the applied set also expands to the full set.
+export function resolveActiveChips(
+  strategy: Strategy,
+  category: RuleCategory,
+  appliedTagIds?: string[],
+  appliedChipIds?: string[],
+): RuleChip[] {
+  const categoryChips = (strategy.rules ?? []).filter(
+    (chip) => chip.category === category && chip.enabled,
+  );
+  const hasApplied =
+    (appliedTagIds && appliedTagIds.length > 0) ||
+    (appliedChipIds && appliedChipIds.length > 0);
+  if (!hasApplied) return categoryChips;
+
+  const tags: RuleTag[] = (strategy.ruleTags ?? []).filter(
+    (tag) => tag.category === category,
+  );
+  const activeIds = new Set<string>(appliedChipIds ?? []);
+  for (const tagId of appliedTagIds ?? []) {
+    const tag = tags.find((item) => item.id === tagId);
+    if (!tag) continue;
+    if (tag.system) return categoryChips; // All Active Chips → full set
+    for (const chipId of tag.chipIds) activeIds.add(chipId);
+  }
+  return categoryChips.filter((chip) => activeIds.has(chip.id));
+}
+
 // ---- Category scoring ---------------------------------------------------
 
-function scoreCategory(
+// Normalized pass/fail scoring: active rule weights are rescaled so they fill
+// 100% of the category for this stock; no-data chips leave the calculation.
+export function scoreCategory(
   category: RuleCategory,
   results: ChipResult[],
 ): CategoryScore {
@@ -143,52 +186,22 @@ function scoreCategory(
     return { category, score: null, passCount: 0, scorableCount: 0 };
   }
   const totalWeight = scorable.reduce(
-    (sum, result) => sum + Math.max(1, result.chip.weight),
+    (sum, result) => sum + Math.max(0, result.chip.weightPct),
     0,
   );
+  if (totalWeight <= 0) {
+    return { category, score: null, passCount: 0, scorableCount: scorable.length };
+  }
   const passWeight = scorable
     .filter((result) => result.outcome === "pass")
-    .reduce((sum, result) => sum + Math.max(1, result.chip.weight), 0);
+    .reduce((sum, result) => sum + Math.max(0, result.chip.weightPct), 0);
   const passCount = scorable.filter((result) => result.outcome === "pass").length;
   return {
     category,
-    score: totalWeight > 0 ? Math.round((passWeight / totalWeight) * 100) : null,
+    score: Math.round((passWeight / totalWeight) * 100),
     passCount,
     scorableCount: scorable.length,
   };
-}
-
-// ---- Thesis (boolean composite) -----------------------------------------
-
-// AND within a group, OR across groups. A group is ignored-chip aware: no-data
-// chips are skipped; a group passes if it has >= 1 chip with data and all of its
-// data-bearing chips pass. A group of all no-data chips can't be confirmed → it
-// fails. If a strategy has no thesis chips at all, the thesis does not gate.
-export function evaluateThesis(
-  strategy: Strategy,
-  results: ChipResult[],
-): boolean {
-  const thesisResults = results.filter(
-    (result) => result.chip.category === "thesis" && result.chip.enabled,
-  );
-  if (thesisResults.length === 0) return true; // no thesis defined → no gate
-
-  const byId = new Map(thesisResults.map((result) => [result.chip.id, result]));
-
-  // Default grouping: a single AND-group of every thesis chip.
-  const groups =
-    strategy.thesis && strategy.thesis.groups.length > 0
-      ? strategy.thesis.groups
-      : [thesisResults.map((result) => result.chip.id)];
-
-  return groups.some((group) => {
-    const groupResults = group
-      .map((id) => byId.get(id))
-      .filter((result): result is ChipResult => Boolean(result));
-    const withData = groupResults.filter((result) => result.outcome !== "no-data");
-    if (withData.length === 0) return false; // can't confirm → group fails
-    return withData.every((result) => result.outcome === "pass");
-  });
 }
 
 // ---- Status mapping -----------------------------------------------------
@@ -212,22 +225,26 @@ export function scoreStock(
       hasRules: false,
       conviction: 0,
       status: "Watch",
-      thesisPass: true,
-      riskBreached: false,
       categories: [],
       results: [],
     };
   }
 
-  const results = rules.map((chip) => evaluateChip(chip, ctx));
-  const categories = ALL_CATEGORIES.map((category) =>
+  // Default lens per category = All Active Chips (per-stock tag application is
+  // a later authoring pass; the engine supports it via resolveActiveChips).
+  const results = CATEGORY_ORDER.flatMap((category) =>
+    resolveActiveChips(strategy, category).map((chip) => evaluateChip(chip, ctx)),
+  );
+  const categories = CATEGORY_ORDER.map((category) =>
     scoreCategory(category, results),
   );
 
   const weights: CategoryWeights =
     strategy.categoryWeights ?? DEFAULT_CATEGORY_WEIGHTS;
 
-  // Weighted blend across categories that actually have scorable chips.
+  // Sum categoryScore × categoryWeight across categories with scorable chips,
+  // renormalized over the participating weights so an unconfigured category
+  // doesn't silently zero the score (completeness warnings surface that).
   let weightedSum = 0;
   let weightTotal = 0;
   for (const categoryScore of categories) {
@@ -238,42 +255,89 @@ export function scoreStock(
   }
   const conviction = weightTotal > 0 ? Math.round(weightedSum / weightTotal) : 0;
 
-  const thesisPass = evaluateThesis(strategy, results);
-  const riskBreached = results.some(
-    (result) => result.chip.category === "risk" && result.outcome === "fail",
-  );
-
-  // Gates override the blended score (a fatal flaw can't be averaged away). They
-  // also clamp the displayed conviction so the meter stays coherent with the
-  // warning chip — a gated name never shows a high meter next to a red status.
-  let status: StatusType;
-  let gatedConviction = conviction;
-  if (!thesisPass) {
-    status = "Thesis Check";
-    gatedConviction = Math.min(conviction, 39);
-  } else if (riskBreached) {
-    status = "Risk Check";
-    gatedConviction = Math.min(conviction, 55);
-  } else {
-    status = statusFromConviction(conviction);
-  }
-
   return {
     hasRules: true,
-    conviction: gatedConviction,
-    status,
-    thesisPass,
-    riskBreached,
+    conviction,
+    status: statusFromConviction(conviction),
     categories,
     results,
   };
 }
 
+// ---- Strategy completeness ------------------------------------------------
+
+// A strategy must be complete before it can be applied to a portfolio. The
+// Configure card renders these as cautions; "Apply to Portfolio" stays
+// disabled until the list is empty. See docs/strategy-forge.md §6.
+export interface StrategyValidation {
+  complete: boolean;
+  issues: string[];
+}
+
+export function validateStrategy(strategy: Strategy): StrategyValidation {
+  const issues: string[] = [];
+  const rules = strategy.rules ?? [];
+  const tags = strategy.ruleTags ?? [];
+
+  if (!strategy.name.trim()) issues.push("Name the strategy.");
+  if (!strategy.thesisDescription?.trim()) {
+    issues.push("Describe the thesis in Thesis & Fundamentals.");
+  }
+
+  const weights: CategoryWeights =
+    strategy.categoryWeights ?? DEFAULT_CATEGORY_WEIGHTS;
+  const weightTotal = CATEGORY_ORDER.reduce(
+    (sum, category) => sum + (weights[category] ?? 0),
+    0,
+  );
+  if (weightTotal !== 100) {
+    issues.push(`Category conviction weights total ${weightTotal}% — they must total 100%.`);
+  }
+
+  const labelFor: Record<RuleCategory, string> = {
+    thesis: "Thesis & Fundamentals",
+    setup: "Technical Analysis",
+    risk: "Risk Rules",
+    position: "Position Size",
+    trade: "Trade Management",
+    timeframe: "Hold Timeframe",
+  };
+
+  for (const category of CATEGORY_ORDER) {
+    const chips = rules.filter(
+      (chip) => chip.category === category && chip.enabled,
+    );
+    if (chips.length === 0) {
+      issues.push(`Add at least one rule chip to ${labelFor[category]}.`);
+      continue;
+    }
+    const chipTotal = chips.reduce((sum, chip) => sum + chip.weightPct, 0);
+    if (Math.round(chipTotal) !== 100) {
+      issues.push(
+        `${labelFor[category]} rule weights total ${Math.round(chipTotal)}% — they must total 100%.`,
+      );
+    }
+    const customTags = tags.filter(
+      (tag) => tag.category === category && !tag.system,
+    );
+    if (customTags.length > 0) {
+      const tagTotal = customTags.reduce((sum, tag) => sum + tag.weightPct, 0);
+      if (Math.round(tagTotal) !== 100) {
+        issues.push(
+          `${labelFor[category]} tag weights total ${Math.round(tagTotal)}% — they must total 100%.`,
+        );
+      }
+    }
+  }
+
+  return { complete: issues.length === 0, issues };
+}
+
 // ---- Portfolio aggregate ------------------------------------------------
 
 export interface WeightedAlignment {
-  conviction: number; // market-value weight of this slice
-  marketValue: number;
+  conviction: number;
+  marketValue: number; // market-value weight of this slice
 }
 
 // Market-value-weighted average conviction across bucket allocations, so a

@@ -106,6 +106,15 @@
   --disabled-border: rgb(148 163 184 / 0.2);
   --disabled-text: var(--text-faint);
 
+  /* ---- Strategy Forge tokens (from the Configure card + table designs) ---- */
+  --forge-chip-text: #499dd7; /* rule chip / tag blue */
+  --forge-chip-surface: #181e32; /* rule chip / tag fill */
+  --forge-field-bg: #0d1019; /* input + chip/tag box fill */
+  --forge-table-bg: #07080e; /* table body */
+  --forge-table-row-alt: #090b14; /* zebra stripe */
+  --forge-table-head-bg: #0c0f18; /* header + total rows */
+  --forge-table-border: #192232; /* row separators */
+
   /* ---- Brand semantic tokens (pirate / treasure identity) ---- */
   --brand-gold: var(--gold-400);
   --brand-gold-strong: var(--gold-300);
@@ -2310,6 +2319,22 @@ select.input:hover:not(:disabled) {
     overflow: hidden auto;
     scrollbar-gutter: stable;
   }
+
+  /* The watch column stacks the panel + the Apply-to-Portfolio bar: the panel
+     flexes (and keeps its internal scroll), the bar stays pinned below it. */
+  .forge-watch {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .forge-watch > .panel {
+    flex: 1 1 auto;
+    height: auto;
+  }
+
+  .forge-watch .forge-apply {
+    flex: 0 0 auto;
+  }
 }
 
 /* Mobile (<=767px) only: the Strategy Forge is a master -> detail flow. The
@@ -2561,386 +2586,987 @@ select.input:hover:not(:disabled) {
    Strategy Forge — rule-chip engine UI (config panel internals)
    --------------------------------------------------------------------------- */
 
-/* Live conviction preview */
-.forge-preview {
-  display: flex;
-  flex-direction: column;
-  gap: 0.55rem;
-  padding: 0.85rem 0.95rem;
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius-md);
-  background: var(--surface-2);
-}
-
-.forge-preview-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-}
-
-.forge-preview-ticker {
-  min-width: 96px;
-}
-
-.forge-preview-score {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-}
-
-.forge-preview-number {
-  font-size: 1.75rem;
-  font-weight: 700;
-  line-height: 1;
-  color: var(--info);
-  font-variant-numeric: tabular-nums;
-}
-
-.forge-preview-track {
-  position: relative;
-  height: 6px;
-  border-radius: 999px;
-  background: var(--surface-3);
-  overflow: hidden;
-}
-
-.forge-preview-fill {
-  position: absolute;
-  inset: 0 auto 0 0;
-  border-radius: 999px;
-  background: var(--info);
-  transition: width 0.25s ease;
-}
-
-.forge-preview-cats {
-  display: flex;
-  flex-direction: column;
-  gap: 0.3rem;
-  margin: 0.15rem 0 0;
-  padding: 0;
-  list-style: none;
-}
-
-.forge-preview-cat {
-  display: grid;
-  grid-template-columns: 7.5rem minmax(0, 1fr) 2rem;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.forge-preview-cat-name {
-  font-size: 0.76rem;
-  color: var(--text-muted);
-}
-
-.forge-preview-cat-bar {
-  position: relative;
-  height: 5px;
-  border-radius: 999px;
-  background: var(--surface-3);
-  overflow: hidden;
-}
-
-.forge-preview-cat-fill {
-  position: absolute;
-  inset: 0 auto 0 0;
-  border-radius: 999px;
-  background: var(--accent);
-  transition: width 0.25s ease;
-}
-
-.forge-preview-cat-val {
-  font-size: 0.76rem;
-  text-align: right;
-  color: var(--text-base);
-  font-variant-numeric: tabular-nums;
-}
-
-.forge-preview-gate {
-  margin: 0;
-  font-size: 0.8rem;
-  color: var(--negative);
-}
-
-.forge-preview-empty {
-  margin: 0;
-  font-size: 0.82rem;
-  color: var(--text-muted);
-}
-
 /* Check cadence */
-.forge-cadence-help,
-.forge-category-q {
-  font-size: 0.8rem;
-  color: var(--text-muted);
-  margin: 0;
-}
-
 .forge-cadence-row {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.6rem;
 }
 
-/* Category sections */
-.forge-category-head {
-  display: flex;
-  flex-direction: column;
-  gap: 0.2rem;
+/* Uppercase field labels (per the Configure-card design: 11.5px Plex Sans),
+   with room for an inline info-icon tooltip trigger. Field labels are Medium
+   --text-base; box/secondary labels use the muted modifier. */
+.forge-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: var(--text-base);
 }
 
-.forge-category-empty {
-  margin: 0;
-  font-size: 0.82rem;
+.forge-label--muted {
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+/* Info-icon tooltip trigger (12px glyph per design) */
+.info-tip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: none;
+  padding: 0;
+  color: var(--text-faint);
+  cursor: help;
+}
+
+.info-tip svg {
+  width: 12px;
+  height: 12px;
+}
+
+.info-tip:hover,
+.info-tip:focus-visible {
+  color: var(--info);
+}
+
+/* Tooltip (dark rounded popover per the Figma tooltip pattern) */
+.tooltip-wrap {
+  position: relative;
+  display: inline-flex;
+  max-width: 100%;
+}
+
+.tooltip {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  z-index: 60;
+  display: none;
+  flex-direction: column;
+  gap: 0.35rem;
+  width: max-content;
+  max-width: 240px;
+  padding: 0.6rem 0.7rem;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--bg-deep);
+  color: var(--text-base);
+  font-size: 0.74rem;
+  font-weight: 400;
+  line-height: 1.45;
+  letter-spacing: normal;
+  text-transform: none;
+  box-shadow: 0 10px 28px rgb(0 0 0 / 0.45);
+  pointer-events: none;
+}
+
+.tooltip--wide {
+  max-width: 300px;
+}
+
+.tooltip-wrap:hover .tooltip,
+.tooltip-wrap:focus-within .tooltip {
+  display: flex;
+}
+
+.tooltip-title {
+  font-weight: 700;
+  color: var(--text-strong);
+}
+
+.tooltip-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.tooltip-line {
+  display: block;
+}
+
+.tooltip-line strong {
+  color: var(--text-strong);
+}
+
+/* Applied portfolios — an input-styled box holding standard grey chips */
+.forge-portfolios {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 11px 15px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  background: var(--forge-field-bg);
+}
+
+.forge-portfolio-chip {
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.forge-portfolios-empty {
+  font-size: 0.8rem;
   color: var(--text-faint);
 }
 
-.forge-rules {
+/* Configure-card sections (divided like the design's rules) */
+.forge-section {
   display: flex;
   flex-direction: column;
+  gap: 0.65rem;
+  border-top: 1px solid var(--border-soft);
+  padding-top: var(--space-3);
+}
+
+.forge-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+/* Numbered section titles: 11.5px Plex Sans Medium, --text-base (per design) */
+.forge-section-title {
+  display: inline-flex;
+  align-items: center;
   gap: 0.4rem;
+  margin: 0;
+  font-size: 0.72rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: var(--text-base);
+}
+
+.forge-section-tools {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+/* Section questions: 13.6px regular muted (per design) */
+.forge-section-q {
+  margin: 0;
+  font-size: 0.85rem;
+  line-height: 1.55;
+  color: var(--text-muted);
+}
+
+/* Conviction weight chip — a quiet 4px-radius chip (surface-3 fill, muted
+   Title-case text, per design node 219:3391) + inline editor */
+.forge-weight-chip {
+  padding: 3px 7px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-3);
+  color: var(--text-muted);
+  font-size: 0.69rem;
+  font-weight: 500;
+  letter-spacing: normal;
+  text-transform: none;
+  font-variant-numeric: tabular-nums;
+}
+
+.forge-weight-chip--warn {
+  color: var(--warning);
+  background: rgb(244 192 78 / 0.12);
+}
+
+.forge-weight-edit {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+/* Steppers — 26px "weather index" discs + flexing connector lines (per the
+   design's stepper component). Main stepper = blue (info); per-category
+   sub-steppers = gold (accent). Completed steps swap the number for a
+   CheckCircle in the stepper's index color. */
+.forge-stepper {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
-.forge-rule {
-  display: flex;
+.forge-step {
+  display: inline-flex;
   align-items: center;
-  gap: 0.55rem;
-  padding: 0.5rem 0.6rem;
-  border: 1px solid var(--border-soft);
-  border-left-width: 3px;
-  border-radius: var(--radius-md);
-  background: var(--surface-3);
-}
-
-.forge-rule--pass {
-  border-left-color: var(--positive);
-}
-.forge-rule--fail {
-  border-left-color: var(--negative);
-}
-.forge-rule--no-data {
-  border-left-color: var(--border-strong);
-}
-
-.forge-rule-toggle {
-  flex: none;
-  width: 0.9rem;
-  height: 0.9rem;
-  border-radius: 999px;
-  border: 1px solid var(--border-strong);
-  background: transparent;
-  cursor: pointer;
-  padding: 0;
-}
-
-.forge-rule-toggle--on {
-  border-color: var(--accent);
-  background: var(--accent);
-}
-
-.forge-rule-body {
-  display: flex;
-  flex-direction: column;
-  gap: 0.1rem;
-  min-width: 0;
-  flex: 1;
-}
-
-.forge-rule-label {
-  font-size: 0.86rem;
-  font-weight: 600;
-  color: var(--text-strong);
-}
-
-.forge-rule-cond {
-  font-size: 0.74rem;
-  color: var(--text-muted);
-  font-variant-numeric: tabular-nums;
-}
-
-.forge-rule-weight {
-  flex: none;
-  font-size: 0.72rem;
-  color: var(--text-faint);
-  font-variant-numeric: tabular-nums;
-}
-
-.forge-rule-pill {
-  flex: none;
-  font-size: 0.66rem;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  padding: 0.12rem 0.4rem;
-  border-radius: 999px;
-  border: 1px solid var(--border-soft);
-  color: var(--text-muted);
-}
-
-.forge-rule-pill--pass {
-  color: var(--positive);
-  border-color: rgb(34 197 94 / 0.4);
-}
-.forge-rule-pill--fail {
-  color: var(--negative);
-  border-color: rgb(239 68 68 / 0.4);
-}
-
-.forge-rule-actions {
-  flex: none;
-  display: flex;
-  gap: 0.25rem;
-}
-
-.forge-rule-act {
-  font: inherit;
-  font-size: 0.72rem;
-  padding: 0.15rem 0.4rem;
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--text-muted);
-  cursor: pointer;
-}
-
-.forge-rule-act:hover {
-  color: var(--text-strong);
-  background: var(--surface-2);
-}
-
-.forge-rule-act--danger:hover {
-  color: var(--negative);
-}
-
-/* Thesis builder */
-.forge-thesis {
-  display: flex;
-  flex-direction: column;
   gap: 0.5rem;
-  margin-top: 0.4rem;
-  padding: 0.6rem 0.7rem;
-  border: 1px dashed var(--border-soft);
-  border-radius: var(--radius-md);
 }
 
-.forge-thesis-help,
-.forge-thesis-empty {
-  margin: 0;
-  font-size: 0.78rem;
+.forge-step-index {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  font-size: 0.8rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.forge-stepper--info .forge-step-index {
+  background: rgb(86 182 240 / 0.16);
+  color: var(--info);
+}
+
+.forge-stepper--accent .forge-step-index {
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+}
+
+.forge-step-check {
+  width: 26px;
+  height: 26px;
+  flex: 0 0 auto;
+}
+
+.forge-stepper--info .forge-step-check {
+  color: var(--info);
+}
+
+.forge-stepper--accent .forge-step-check {
+  color: var(--accent-strong);
+}
+
+.forge-step-label {
+  font-size: 0.85rem;
   color: var(--text-muted);
+  white-space: nowrap;
 }
 
-.forge-thesis-group {
+.forge-stepper--info .forge-step-label {
+  font-weight: 500;
+}
+
+.forge-step-line {
+  flex: 1 0 24px;
+  height: 1px;
+  min-width: 24px;
+  background: var(--border-strong);
+}
+
+/* The final connector (the one before the last step) shouldn't stretch the
+   last item to the far right — cap it so the last step sits close to its
+   predecessor. Other connectors keep flexing to fill the row. */
+.forge-step-line:has(+ .forge-step:last-child) {
+  flex: 0 0 32px;
+  max-width: 32px;
+}
+
+/* Rule-chip / tag boxes (side-by-side like the design: chips wide, tags narrow) */
+.forge-boxes {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  gap: 0.6rem;
+  align-items: stretch;
+}
+
+.forge-box {
   display: flex;
   flex-direction: column;
-  gap: 0.4rem;
+  gap: 0.45rem;
+  min-width: 0;
 }
 
-.forge-thesis-group-head {
+.forge-box-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
 }
 
-.forge-thesis-group-name {
-  font-size: 0.72rem;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--text-faint);
-}
-
-.forge-thesis-chips {
+.forge-box-body {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.35rem;
+  align-content: flex-start;
+  gap: 8px;
+  flex: 1;
+  padding: 16px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  background: var(--forge-field-bg);
 }
 
-.forge-thesis-or {
-  font-size: 0.72rem;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  color: var(--accent-strong);
-  text-align: center;
-}
-
-/* Legacy labels disclosure */
-.forge-legacy {
-  border-top: 1px solid var(--border-soft);
-  padding-top: var(--space-2);
-}
-
-.forge-legacy summary {
-  cursor: pointer;
+.forge-box-empty {
   font-size: 0.78rem;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
   color: var(--text-faint);
 }
 
-.forge-legacy[open] {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-}
-
-/* Chip editor modal */
-.chip-editor {
-  width: min(520px, 100%);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-}
-
-.chip-editor-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.6rem;
-}
-
-.chip-editor-range {
-  display: flex;
+/* Rule chip / tag pills — 4px-radius chips, #181e32 fill, #499dd7 11px Medium
+   text (design "chip" component). The system "All Active Chips" tag is the
+   muted variant. */
+.forge-pill {
+  display: inline-flex;
   align-items: center;
-  gap: 0.4rem;
+  max-width: 100%;
+  padding: 3px 7px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--forge-chip-surface);
+  color: var(--forge-chip-text);
+  font-size: 0.69rem;
+  font-weight: 500;
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.chip-editor-range-sep {
-  font-size: 0.8rem;
-  color: var(--text-faint);
-}
-
-.chip-editor-hint {
-  margin: 0;
-  font-size: 0.8rem;
+.forge-pill--muted {
+  background: rgb(147 160 181 / 0.12);
   color: var(--text-muted);
 }
 
-.chip-editor-actions {
+.forge-pill--off {
+  opacity: 0.45;
+}
+
+.forge-pill--toggle {
+  cursor: pointer;
+  border: 1px solid transparent;
+  padding: 2px 6px;
+}
+
+.forge-pill--toggle:not(.forge-pill--on) {
+  border-color: var(--border-strong);
+  background: transparent;
+  color: var(--text-muted);
+}
+
+.forge-pill-stack {
   display: flex;
-  justify-content: flex-end;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.3rem;
+}
+
+/* Icon buttons — 28×28, 4px radius, borderless soft-blue fill (design
+   "icon button/ blue"); danger = soft red; yellow = the modal close. */
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: rgb(86 182 240 / 0.12);
+  color: var(--info);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.icon-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.icon-btn:hover:not(:disabled) {
+  background: rgb(86 182 240 / 0.22);
+}
+
+.icon-btn--active {
+  background: rgb(86 182 240 / 0.3);
+}
+
+.icon-btn--danger {
+  background: rgb(255 107 107 / 0.12);
+  color: #ff8080;
+}
+
+.icon-btn--danger:hover:not(:disabled) {
+  background: rgb(255 107 107 / 0.2);
+}
+
+.icon-btn:disabled {
+  background: var(--disabled-surface-soft);
+  color: var(--disabled-text);
+  cursor: not-allowed;
+}
+
+/* Completeness cautions */
+.forge-caution {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  padding: 0.7rem 0.8rem;
+  border: 1px solid rgb(251 191 36 / 0.4);
+  border-radius: var(--radius-md);
+  background: rgb(251 191 36 / 0.08);
+}
+
+.forge-caution-head {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--warning);
+}
+
+.forge-caution-list {
+  margin: 0;
+  padding-left: 1.4rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  font-size: 0.78rem;
+  color: var(--text-base);
+}
+
+.forge-complete {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--positive);
+}
+
+/* Configure-card action footer — sticks to the bottom of the scrolling config
+   panel (matching the My Strategies footer), with a divider + solid backdrop so
+   the form scrolls cleanly beneath it. Collision + mobile stacking mirror the
+   strategy footer: when the buttons can't share a row (measured via
+   useStackedRow) `.is-stacked` flips them to a full-width column (Update on top,
+   Reset/Delete on the bottom, preserving DOM/tab order). */
+.forge-config-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   gap: 0.5rem;
+  margin-top: var(--space-2);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border-soft);
+  background: var(--bg-base);
+}
+
+.forge-update-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+@media (min-width: 768px) {
+  .forge-config-actions.is-stacked {
+    flex-direction: column-reverse;
+    align-items: stretch;
+  }
+
+  .forge-config-actions.is-stacked .btn {
+    width: 100%;
+  }
+}
+
+/* Apply-to-portfolio footer — pinned to the bottom of the watchlist Preview
+   column (Strategy Forge only; `.forge-apply` is never rendered elsewhere).
+   Same divider + sticky treatment as the config footer. */
+.forge-apply {
+  position: sticky;
+  bottom: 0;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: var(--space-2);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border-soft);
+  background: var(--bg-base);
+}
+
+.forge-apply-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  width: 100%;
+}
+
+.forge-apply-caution {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.4rem;
+  margin: 0;
+  font-size: 0.76rem;
+  color: var(--warning);
+}
+
+.forge-apply-caution svg {
+  flex: 0 0 auto;
+  margin-top: 0.1rem;
+}
+
+/* ---------------------------------------------------------------------------
+   Strategy Forge — chip/tag table modals
+   --------------------------------------------------------------------------- */
+
+/* `.modal-card` also matches this element and sets width: min(420px, 100%)
+   later in the file, so the modal selector doubles up to win the tie. */
+.modal-card.forge-table-modal {
+  width: min(940px, 100%);
+  max-height: min(90vh, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+.forge-table-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: var(--space-3) var(--space-3) var(--space-2);
+  border-bottom: 1px solid var(--border-soft);
+}
+
+/* Modal title: 18.4px Plex Sans SemiBold white (per design) */
+.forge-table-head h2 {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 600;
+  color: #ffffff;
+}
+
+/* Close: 28×28 gold soft-gradient square (design "icon button/ yellow") */
+.forge-table-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: linear-gradient(
+    to top,
+    rgb(255 206 113 / 0.12),
+    rgb(241 178 74 / 0.12)
+  );
+  color: var(--accent-strong);
+  cursor: pointer;
+}
+
+.forge-table-close svg {
+  width: 14px;
+  height: 14px;
+}
+
+.forge-table-close:hover {
+  background: rgb(241 178 74 / 0.28);
+}
+
+.forge-table-intro {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: var(--space-2) var(--space-3);
+}
+
+.forge-table-intro p {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.forge-table-intro .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+}
+
+/* The table itself — full-bleed dark surface with zebra rows and blue rails on
+   the header/total rows (per the design tables). */
+.forge-table {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  background: var(--forge-table-bg);
+  border-top: 1px solid var(--forge-table-border);
+  border-bottom: 1px solid var(--forge-table-border);
+}
+
+.forge-table-row {
+  display: grid;
+  grid-template-columns:
+    minmax(130px, 0.95fr) minmax(120px, 1.1fr) minmax(110px, 0.9fr)
+    minmax(104px, 0.7fr) minmax(84px, 0.6fr) minmax(84px, 0.6fr) 82px;
+  gap: 4px;
+  align-items: center;
+  min-height: 40px;
+  padding: 2px 12px;
+  border-bottom: 1px solid var(--forge-table-border);
+  background: var(--forge-table-bg);
+}
+
+/* Zebra striping: header is the first child, so odd children = even rows. */
+.forge-table-row:not(.forge-table-row--head):nth-child(odd) {
+  background: var(--forge-table-row-alt);
+}
+
+.forge-table--tags .forge-table-row {
+  grid-template-columns:
+    minmax(110px, 0.8fr) minmax(140px, 1.25fr) minmax(130px, 1.1fr)
+    minmax(64px, 0.45fr) minmax(140px, 1.25fr) 100px;
+  align-items: start;
+  padding-block: 10px;
+}
+
+.forge-table-row--head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  min-height: 48px;
+  background: var(--forge-table-head-bg);
+  border-bottom: 1px solid var(--forge-chip-text);
+}
+
+.forge-table--tags .forge-table-row--head {
+  align-items: center;
+}
+
+/* Column headers: 10px semibold, 0.8px tracking, muted (per design) */
+.forge-table-th {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: none;
+  background: none;
+  padding: 0;
+  font-size: 0.625rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  text-align: left;
+  cursor: pointer;
+}
+
+.forge-table-th svg {
+  width: 11px;
+  height: 13px;
+  flex: 0 0 auto;
+}
+
+.forge-table-th:hover {
+  color: var(--text-strong);
+}
+
+.forge-table-th--static {
+  cursor: default;
+}
+
+.forge-table-th--static:hover {
+  color: var(--text-muted);
+}
+
+.forge-table-cell {
+  min-width: 0;
+  font-size: 0.75rem;
+  color: var(--text-base);
+}
+
+.forge-table-cell--actions {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+/* Cell fields read like the design's table text (transparent until you
+   interact): chip-label input renders as the blue chip; selects/inputs are
+   borderless and take the table typography. */
+.forge-cell-input {
+  width: 100%;
+  min-height: 28px;
+  padding: 2px 6px;
+  font-size: 0.75rem;
+  background: transparent;
+  border-color: transparent;
+  color: var(--text-strong);
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.forge-cell-input:hover,
+.forge-cell-input:focus {
+  border-color: var(--border-strong);
+  background: var(--forge-field-bg);
+}
+
+select.forge-cell-input {
+  padding-right: 1.6rem;
+  background-position: right 0.35rem center;
+  background-size: 0.9rem;
+}
+
+.forge-cell-input--pill {
+  width: auto;
+  max-width: 100%;
+  background: var(--forge-chip-surface);
+  border-color: transparent;
+  border-radius: var(--radius-sm);
+  color: var(--forge-chip-text);
+  font-size: 0.69rem;
+  font-weight: 500;
+  padding: 3px 7px;
+  min-height: 26px;
+}
+
+.forge-cell-input--pill:hover,
+.forge-cell-input--pill:focus {
+  background: var(--forge-chip-surface);
+  border-color: var(--border-strong);
+}
+
+.forge-cell-input--mono {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 0.69rem;
+  color: var(--text-muted);
+}
+
+.forge-cell-input--num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 0.75rem;
+}
+
+.forge-cell-input--weight {
+  width: 4.2rem;
+  color: var(--forge-chip-text);
+}
+
+.forge-cell-range {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  color: var(--text-faint);
+}
+
+.forge-cell-value {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  width: 100%;
+}
+
+.forge-cell-unit {
+  font-size: 0.72rem;
+  color: var(--text-faint);
+  flex: 0 0 auto;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+}
+
+.forge-cell-unit--weight {
+  color: var(--forge-chip-text);
+}
+
+.forge-cell-text {
+  display: block;
+  font-size: 0.75rem;
+  line-height: 1.45;
+  color: var(--text-strong);
+}
+
+.forge-cell-text--muted {
+  color: var(--text-muted);
+}
+
+.forge-cell-weight {
+  font-size: 0.75rem;
+  color: var(--forge-chip-text);
+  font-variant-numeric: tabular-nums;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+}
+
+.forge-cell-area {
+  min-height: 56px;
+  resize: vertical;
+}
+
+.forge-tag-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+/* Total row: 44px, header fill, blue top rail, bold white label + mono blue
+   value (per design node 155:3719) */
+.forge-table-total {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  min-height: 44px;
+  padding: 0.5rem var(--space-3);
+  background: var(--forge-table-head-bg);
+  border-top: 1px solid var(--forge-chip-text);
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.forge-table-total-val {
+  color: var(--forge-chip-text);
+  font-weight: 400;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+.forge-table-total--warn .forge-table-total-val {
+  color: var(--warning);
+}
+
+.forge-table-caution {
+  display: block;
+  margin: 0;
+  padding: 0.4rem var(--space-3) 0;
+  font-size: 0.76rem;
+  color: var(--warning);
+}
+
+.forge-table-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3) var(--space-3);
+}
+
+.forge-table-actions .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Cancel: transparent text button in the caution gold (design
+   "action buttons/ desktop" Cancel) */
+.btn.btn--link.forge-cancel-btn {
+  color: var(--warning);
+}
+
+.btn.btn--link.forge-cancel-btn:hover:not(:disabled) {
+  color: var(--amber-300);
+}
+
+.btn.btn--link.forge-cancel-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* ---- Forge responsive: boxes stack, tables become stacked cards ---- */
+
+@media (max-width: 900px) {
+  .forge-boxes {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 767px) {
+  /* Full-screen sheet */
+  .modal-backdrop:has(.forge-table-modal) {
+    padding: 0;
+  }
+
+  .modal-card.forge-table-modal {
+    width: 100%;
+    height: 100%;
+    max-height: 100%;
+    border-radius: 0;
+  }
+
+  /* Rows reflow into stacked cards; the header row hides (cells carry their
+     own labels via data-label). */
+  .forge-table-row--head {
+    display: none;
+  }
+
+  .forge-table-row,
+  .forge-table--tags .forge-table-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.45rem;
+    padding: 0.75rem var(--space-3);
+  }
+
+  .forge-table-cell::before {
+    content: attr(data-label);
+    display: block;
+    margin-bottom: 0.2rem;
+    font-size: 0.64rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+  }
+
+  .forge-table-cell--actions {
+    justify-content: flex-start;
+  }
+
+  .forge-table-cell--actions::before {
+    display: none;
+  }
+
+  .forge-cell-input--weight {
+    width: 5.5rem;
+  }
+
+  /* Mobile: stack the sticky action footers full-width (Update / Apply on top),
+     matching the strategy footer's mobile behavior for text buttons. */
+  .forge-config-actions {
+    flex-direction: column-reverse;
+    align-items: stretch;
+  }
+
+  .forge-config-actions .btn {
+    width: 100%;
+  }
+
+  .forge-config-actions .forge-update-btn {
+    justify-content: center;
+  }
 }
 
 @media (max-width: 540px) {
-  .forge-cadence-row,
-  .chip-editor-grid {
+  .forge-cadence-row {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .forge-rule {
+  .forge-step-line {
+    flex-basis: 14px;
+    min-width: 14px;
+  }
+
+  .forge-step {
+    min-width: 0;
+  }
+
+  .forge-step-label {
+    white-space: normal;
+  }
+
+  .forge-section-tools {
     flex-wrap: wrap;
-  }
-
-  .forge-rule-body {
-    flex-basis: 100%;
-    order: -1;
-  }
-
-  .forge-preview-cat {
-    grid-template-columns: 6rem minmax(0, 1fr) 1.8rem;
   }
 }
 

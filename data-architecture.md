@@ -150,10 +150,11 @@ to the Current Watch selection.
 
 ## 6. Strategy Forge (`src/lib/forge/`)
 
-The Forge turns a strategy's **rule chips** + a stock's data into a 0–100
-**Strategy Conviction** and an alignment status, then plumbs that downstream to
-the Home/Dashboard chips. The long-form framework (six categories, weighting,
-gates, cadence) lives in `docs/strategy-forge.md`; this section is the **data
+The Forge turns a strategy's **rule chips + tags** + a stock's data into a
+0–100 **Strategy Conviction** and an alignment status, then plumbs that
+downstream to the Home/Dashboard chips. The long-form framework (six
+categories, the weight hierarchy, the normalization algorithm, completeness
+rules, cadence) lives in `docs/strategy-forge.md`; this section is the **data
 flow**.
 
 ### Inputs — behind the `DataSource` seam
@@ -164,9 +165,9 @@ fabricated value.
 
 | Accessor | Returns | Seeded from |
 |----------|---------|-------------|
-| `getFundamentals(ticker)` | `FundamentalSnapshot` (EPS, growth, margins, P/E, D/E, FCF) | `FUNDAMENTAL_SNAPSHOTS` |
-| `getTechnicals(ticker)` | `TechnicalSnapshot` (RSI, VWAP, EMA distances) | `TECHNICAL_SNAPSHOTS` |
-| `getMarketContext()` | `MarketContext` (VIX, SPY RSI) | `MARKET_CONTEXT` |
+| `getFundamentals(ticker)` | `FundamentalSnapshot` (EPS, growth, margins, valuation, balance sheet, dividend/buyback) | `FUNDAMENTAL_SNAPSHOTS` |
+| `getTechnicals(ticker)` | `TechnicalSnapshot` (SMA trend flags, RSI, drawdown, rel. volume, ATR%, beta, liquidity, earnings distance, sector 1M) | `TECHNICAL_SNAPSHOTS` |
+| `getMarketContext()` | `MarketContext` (VIX, SPY RSI, SPY vs 200D, SPY 5D, HY credit spread, 10Y 5D change) | `MARKET_CONTEXT` |
 | `getBuckets()` | `Bucket[]` (portfolio slices governed by one strategy) | `DEFAULT_BUCKETS` |
 
 Snapshots carry an `asOf` timestamp and `source: "mock"`. They are **researched
@@ -177,13 +178,25 @@ mock validates like the real thing. Update them only with real, sourced figures.
 
 | File | Role |
 |------|------|
-| `metrics.ts` | The **metric registry** — single source of truth for every data point a chip can test (label + plainLabel, source snapshot, operators, unit). Drives the chip editor and tells the engine where to read each value. |
-| `scoring.ts` | Pure functions: `evaluateChip` → category sub-scores → weighted blend → `scoreStock`. Thesis is a boolean composite (AND within a group, OR across groups). **Gates** (failed thesis, breached risk) override + clamp conviction so the meter stays coherent with the status chip. |
-| `alignment.ts` | The **bridge**: pulls snapshots through `dataSource`, scores each holding in each bucket, and aggregates **market-value-weighted** conviction `byTicker` (best-aligned bucket = headline), `byBucket`, and `portfolio`. |
+| `metrics.ts` | The **metric registry** — single source of truth for every data point a chip can test (label + plainLabel, tooltip copy, source snapshot, conditions, date ranges, unit/format). Drives the table-modal dropdowns and tells the engine where to read each value. |
+| `scoring.ts` | Pure functions implementing the algorithm in `docs/strategy-forge.md`: resolve active chips (tag lens union, deduped; default = All Active Chips) → pass/fail per chip → **normalize active rule weights to 100% of the category** → `categoryScore × categoryWeight` → summed conviction → status bands. Also `validateStrategy` (completeness checks that gate "Apply to Portfolio"). No thesis/risk gates or conviction clamps — category weights carry that dominance. |
+| `alignment.ts` | The **bridge**: pulls snapshots through `dataSource`, scores each holding in each bucket (including `holdingDays` from the bucket `entryDate`), and aggregates **market-value-weighted** conviction `byTicker` (best-aligned bucket = headline), `byBucket`, and `portfolio`. |
 | `scheduler.ts` | Stubbed per-bucket refresh scheduler. No-op against mock; establishes the gated (market-hours / tab-visible / cache-stale) contract for live data. |
 
 To add a metric: add the key to `MetricKey` (`types.ts`), seed it in the
 snapshots (`data.ts`), and register it in `metrics.ts`. Nothing else changes.
+
+### Rule chips + tags (per strategy)
+
+- A `RuleChip` = label + metric + date range + condition + value +
+  `weightPct` (0–100 within its category) + `enabled`.
+- A `RuleTag` = label + purpose + member `chipIds` + `weightPct` (0–100 within
+  its category's tags) + auto-apply guidance. Each category has a built-in
+  `All Active Chips` system tag (`system: true`, weight 100, not deletable).
+- Both live on the strategy (`strategy.rules`, `strategy.ruleTags`) and are
+  edited through the table modals on the Configure card. Duplicating a strategy
+  deep-copies both; new blank strategies seed empty categories with default
+  category weights and the system tags.
 
 ### Buckets — independent cadence per strategy
 
@@ -213,6 +226,6 @@ means these in-app chips update; there is **no** push-notification system.
 ### Chip library
 
 Reusable rule chips live in `AppState.chipLibrary` (seeded from
-`CHIP_LIBRARY_SEED`). "Save to library" in the chip editor adds a copy; adding
-from the library clones a chip into the current strategy. The library is
-in-memory app config, **not** behind the `DataSource` seam.
+`CHIP_LIBRARY_SEED`). The library is in-memory app config, **not** behind the
+`DataSource` seam. (The old chip-editor "save to library" UI was retired with
+the table-modal redesign; the state + seed remain for a later pass.)
