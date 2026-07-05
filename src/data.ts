@@ -1,17 +1,22 @@
 import type {
   Allocation,
   Badge,
+  Bucket,
   CaptainProfile,
+  CategoryWeights,
   DecisionSignal,
   EducationCard,
   ExitRule,
+  FundamentalSnapshot,
   LogEntry,
+  MarketContext,
   MarketFlowStep,
   PortfolioMetric,
   Position,
   PrivacyMode,
   RiskProfile,
   RiskRule,
+  RuleChip,
   ScoreMetric,
   SharedLog,
   Ship,
@@ -21,6 +26,7 @@ import type {
   Portfolio,
   Strategy,
   StrategyAssignments,
+  TechnicalSnapshot,
   TickerAnalysis,
   TickerInfo,
   TimeHorizon,
@@ -48,7 +54,7 @@ export const TICKERS: Record<string, TickerInfo> = {
     category: "eVTOL / Aviation",
     sector: "Industrials",
     industry: "Aerospace & eVTOL",
-    lastPrice: 5.42,
+    lastPrice: 4.79,
     analysis: {
       setupSummary:
         "Pulled back below recent highs; the trend is fragile while the market waits on certification progress.",
@@ -81,7 +87,7 @@ export const TICKERS: Record<string, TickerInfo> = {
     category: "Consumer / Energy Drinks",
     sector: "Consumer Staples",
     industry: "Beverages",
-    lastPrice: 29.18,
+    lastPrice: 28.37,
     analysis: {
       setupSummary:
         "Stabilizing after a volatile stretch; trying to build a base as growth expectations reset.",
@@ -114,7 +120,7 @@ export const TICKERS: Record<string, TickerInfo> = {
     category: "Software / AI CRM",
     sector: "Technology",
     industry: "Software / Cloud",
-    lastPrice: 150.39,
+    lastPrice: 150.19,
     analysis: {
       setupSummary:
         "In a downtrend with a large open loss; the original reason to own needs a fresh look.",
@@ -147,7 +153,7 @@ export const TICKERS: Record<string, TickerInfo> = {
     category: "AI Infrastructure",
     sector: "Technology",
     industry: "AI Infrastructure / Cloud",
-    lastPrice: 110.06,
+    lastPrice: 99.0,
     analysis: {
       setupSummary:
         "Volatile post-IPO name pulling back; strong narrative but the trend is unsettled.",
@@ -180,7 +186,7 @@ export const TICKERS: Record<string, TickerInfo> = {
     category: "Consumer / Beauty",
     sector: "Consumer Discretionary",
     industry: "Beauty / Personal Care",
-    lastPrice: 63.15,
+    lastPrice: 67.16,
     analysis: {
       setupSummary:
         "Holding up well with a healthy open gain; constructive, but outside the core thesis.",
@@ -213,7 +219,7 @@ export const TICKERS: Record<string, TickerInfo> = {
     category: "Quantum Computing",
     sector: "Technology",
     industry: "Quantum Computing",
-    lastPrice: 60.46,
+    lastPrice: 50.56,
     analysis: {
       setupSummary:
         "Pressing higher on speculative momentum; quantum exposure fits the high-beta growth tilt.",
@@ -246,7 +252,7 @@ export const TICKERS: Record<string, TickerInfo> = {
     category: "Mega-Cap AI / Cloud",
     sector: "Technology",
     industry: "Software / Cloud",
-    lastPrice: 368.86,
+    lastPrice: 352.83,
     analysis: {
       setupSummary:
         "Consolidating with a modest open loss; a lower-beta anchor relative to the rest of the book.",
@@ -279,7 +285,7 @@ export const TICKERS: Record<string, TickerInfo> = {
     category: "AI Infrastructure",
     sector: "Technology",
     industry: "Semiconductors",
-    lastPrice: 207.81,
+    lastPrice: 195.74,
     analysis: {
       setupSummary:
         "Trending above all key moving averages with volume confirming each push higher.",
@@ -319,7 +325,7 @@ export const TICKERS: Record<string, TickerInfo> = {
     category: "Quantum Computing",
     sector: "Technology",
     industry: "Quantum Computing",
-    lastPrice: 22.39,
+    lastPrice: 18.41,
     analysis: {
       setupSummary:
         "High-volatility quantum name under pressure; the open loss and sharp swings warrant a risk check.",
@@ -352,7 +358,7 @@ export const TICKERS: Record<string, TickerInfo> = {
     category: "Fintech",
     sector: "Financials",
     industry: "Fintech",
-    lastPrice: 17.06,
+    lastPrice: 17.31,
     analysis: {
       setupSummary:
         "Trending constructively as the profitability story plays out; fintech growth fits the strategy.",
@@ -403,110 +409,110 @@ export const PORTFOLIOS: Portfolio[] = [
         ticker: "NVDA",
         shares: 3,
         avgPrice: 184.33,
-        openPnlPct: 12.74,
+        openPnlPct: 6.19,
         conviction: 88,
         status: "High Alignment",
         reason:
           "AI infrastructure leader, positive open P&L, and a strong fit with the strategy.",
-        strategyIds: ["aggressive-ai-high-beta", "ai-infrastructure", "trend-rider"],
+        strategyIds: ["aggressive-ai-high-beta"],
       },
       {
         ticker: "IONQ",
         shares: 2,
         avgPrice: 56.36,
-        openPnlPct: 7.28,
+        openPnlPct: -10.29,
         conviction: 71,
         status: "Aligned",
         reason:
           "Quantum exposure fits the high-beta growth strategy and open P&L is positive.",
-        strategyIds: ["aggressive-ai-high-beta", "speculative-runner"],
+        strategyIds: ["aggressive-ai-high-beta"],
       },
       {
         ticker: "SOFI",
         shares: 67,
         avgPrice: 16.18,
-        openPnlPct: 5.42,
+        openPnlPct: 6.98,
         conviction: 70,
         status: "Aligned",
         reason:
           "Fintech-growth exposure fits the strategy, but daily weakness should be watched.",
-        strategyIds: ["aggressive-ai-high-beta", "pullback-entry"],
+        strategyIds: ["aggressive-ai-high-beta", "value-growth-dividend"],
       },
       {
         ticker: "MSFT",
         shares: 1,
         avgPrice: 393.17,
-        openPnlPct: -6.18,
+        openPnlPct: -10.26,
         conviction: 62,
         status: "Watch",
         reason:
           "Strong AI/cloud name, but lower-beta mega-cap and open P&L is currently negative.",
-        strategyIds: ["ai-infrastructure", "long-term-compounder"],
+        strategyIds: ["aggressive-ai-high-beta", "value-growth-dividend"],
       },
       {
         ticker: "ELF",
         shares: 14,
         avgPrice: 55.05,
-        openPnlPct: 14.72,
+        openPnlPct: 22.0,
         conviction: 60,
         status: "Watch",
         reason:
           "Positive P&L, but consumer/beauty is less aligned with the AI / high-beta strategy.",
-        strategyIds: ["pullback-entry"],
+        strategyIds: ["value-growth-dividend"],
       },
       {
         ticker: "CELH",
         shares: 14,
         avgPrice: 28.2,
-        openPnlPct: 3.48,
+        openPnlPct: 0.6,
         conviction: 56,
         status: "Watch",
         reason: "Positive P&L, but consumer exposure is outside the core strategy.",
-        strategyIds: ["breakout-watch"],
+        strategyIds: ["value-growth-dividend"],
       },
       {
         ticker: "CRWV",
         shares: 2,
         avgPrice: 115.5,
-        openPnlPct: -4.71,
+        openPnlPct: -14.29,
         conviction: 54,
         status: "Review",
         reason:
           "AI infrastructure fit is strong, but open P&L is negative and weakness needs review.",
-        strategyIds: ["aggressive-ai-high-beta", "ai-infrastructure"],
+        strategyIds: ["aggressive-ai-high-beta"],
       },
       {
         ticker: "ACHR",
         shares: 75,
         avgPrice: 5.59,
-        openPnlPct: -3.12,
+        openPnlPct: -14.31,
         conviction: 46,
         status: "Review",
         reason:
           "High-beta growth exposure, but not core AI/quantum/fintech and open P&L is negative.",
-        strategyIds: ["speculative-runner", "risk-off"],
+        strategyIds: ["aggressive-ai-high-beta"],
       },
       {
         ticker: "RGTI",
         shares: 3,
         avgPrice: 25.75,
-        openPnlPct: -13.06,
+        openPnlPct: -28.5,
         conviction: 42,
         status: "Risk Check",
         reason:
           "Quantum fits the strategy, but open P&L is negative and volatility is high.",
-        strategyIds: ["speculative-runner", "risk-off"],
+        strategyIds: ["aggressive-ai-high-beta"],
       },
       {
         ticker: "CRM",
         shares: 2,
         avgPrice: 204.67,
-        openPnlPct: -26.52,
+        openPnlPct: -26.62,
         conviction: 48,
         status: "Thesis Check",
         reason:
           "Software/AI CRM exposure may fit partially, but the large open loss means the thesis should be reviewed.",
-        strategyIds: ["broken-thesis", "long-term-compounder"],
+        strategyIds: ["value-growth-dividend"],
       },
     ],
   },
@@ -514,62 +520,62 @@ export const PORTFOLIOS: Portfolio[] = [
     id: "jeff",
     label: "Jeff\u2019s Webull Portfolio",
     type: "portfolio",
-    strategyId: "long-term-compounder",
+    strategyId: "value-growth-dividend",
     holdings: [
       {
         ticker: "MSFT",
         shares: 12,
         avgPrice: 360.0,
-        openPnlPct: 2.41,
+        openPnlPct: -1.99,
         conviction: 84,
         status: "High Alignment",
         reason:
           "Durable AI/cloud compounder held for the long term — squarely on strategy.",
-        strategyIds: ["long-term-compounder", "ai-infrastructure"],
+        strategyIds: ["value-growth-dividend", "aggressive-ai-high-beta"],
       },
       {
         ticker: "NVDA",
         shares: 5,
         avgPrice: 150.2,
-        openPnlPct: 38.45,
+        openPnlPct: 30.32,
         conviction: 80,
         status: "Aligned",
         reason:
           "Long-held AI leader with strong open P&L; trend still supports the thesis.",
-        strategyIds: ["long-term-compounder", "trend-rider"],
+        strategyIds: ["value-growth-dividend", "aggressive-ai-high-beta"],
       },
       {
         ticker: "CRM",
         shares: 8,
         avgPrice: 230.0,
-        openPnlPct: -8.62,
+        openPnlPct: -34.7,
         conviction: 64,
         status: "Watch",
         reason:
           "Quality software compounder, but open P&L is negative and momentum is soft.",
-        strategyIds: ["long-term-compounder"],
+        strategyIds: ["value-growth-dividend"],
       },
       {
         ticker: "SOFI",
         shares: 120,
         avgPrice: 14.5,
-        openPnlPct: 17.66,
+        openPnlPct: 19.38,
         conviction: 58,
         status: "Watch",
         reason:
           "Profitable position, but higher-beta fintech runs hotter than a compounder book.",
-        strategyIds: ["pullback-entry"],
+        strategyIds: ["value-growth-dividend"],
       },
       {
         ticker: "CELH",
         shares: 30,
         avgPrice: 32.1,
-        openPnlPct: -9.06,
+        openPnlPct: -11.62,
         conviction: 44,
         status: "Review",
         reason:
           "Consumer growth name with a negative open P&L — review whether it still fits.",
-        strategyIds: ["breakout-watch"],
+        strategyIds: ["value-growth-dividend"],
       },
     ],
   },
@@ -587,7 +593,7 @@ export const PORTFOLIOS: Portfolio[] = [
         conviction: 52,
         status: "Watch",
         reason: "Stalking a quantum breakout — waiting for volume to confirm a base.",
-        strategyIds: ["breakout-watch", "speculative-runner"],
+        strategyIds: ["aggressive-ai-high-beta"],
       },
       {
         ticker: "IONQ",
@@ -597,7 +603,7 @@ export const PORTFOLIOS: Portfolio[] = [
         conviction: 49,
         status: "Watch",
         reason: "On watch for a pullback into support before starting a position.",
-        strategyIds: ["pullback-entry"],
+        strategyIds: ["value-growth-dividend"],
       },
       {
         ticker: "ACHR",
@@ -607,7 +613,7 @@ export const PORTFOLIOS: Portfolio[] = [
         conviction: 38,
         status: "Thesis Check",
         reason: "Speculative idea — thesis not yet written; needs a catalyst to act on.",
-        strategyIds: ["speculative-runner"],
+        strategyIds: ["aggressive-ai-high-beta"],
       },
       {
         ticker: "ELF",
@@ -617,7 +623,7 @@ export const PORTFOLIOS: Portfolio[] = [
         conviction: 45,
         status: "Watch",
         reason: "Watching for a base to form after the recent pullback.",
-        strategyIds: ["breakout-watch"],
+        strategyIds: ["value-growth-dividend"],
       },
     ],
   },
@@ -659,7 +665,38 @@ export const LOG_ENTRIES: Record<string, LogEntry[]> = Object.fromEntries(
   Object.entries(TICKERS).map(([ticker, info]) => [ticker, info.logs]),
 );
 
+// MVP default strategies. Trimmed to the two shown in the Strategy Forge design;
+// additional defaults will be re-introduced one at a time. Removing strategies is
+// a data-architecture change: bucket + holding strategyId references below are kept
+// pointed at one of these two survivors.
 export const DEFAULT_STRATEGIES: Strategy[] = [
+  {
+    id: "value-growth-dividend",
+    name: "Value, Growth, Dividend",
+    description:
+      "Build around fundamentally strong companies with attractive valuations, durable growth, and reliable shareholder returns. Favor balanced upside through capital appreciation, dividend income, cash-flow strength, and long-term portfolio stability.",
+    isDefault: true,
+    enabled: true,
+    timeframe: ["Long Term"],
+    tags: ["Value", "Growth", "Dividend"],
+    decisionSignals: ["Thesis", "Risk / Reward"],
+    exitLogic: ["Break Thesis", "Macro Changes"],
+    rules: [
+      { id: "vgd-t1", label: "Durable sales growth", category: "thesis", metric: "revenueGrowthPct", operator: ">=", value: 8, weight: 2, enabled: true },
+      { id: "vgd-t2", label: "Profitable", category: "thesis", metric: "netMarginPct", operator: ">=", value: 10, weight: 3, enabled: true },
+      { id: "vgd-t3", label: "Quality margins", category: "thesis", metric: "grossMarginPct", operator: ">=", value: 40, weight: 2, enabled: true },
+      { id: "vgd-t4", label: "Low leverage", category: "thesis", metric: "debtToEquity", operator: "<=", value: 1.5, weight: 2, enabled: true },
+      { id: "vgd-s1", label: "Long-term trend intact", category: "setup", metric: "priceVs50EmaPct", operator: ">=", value: 0, weight: 2, enabled: true },
+      { id: "vgd-s2", label: "Not stretched", category: "setup", metric: "weeklyRsi", operator: "between", value: [40, 70], weight: 1, enabled: true },
+      { id: "vgd-r1", label: "Calm-ish market", category: "risk", metric: "vix", operator: "<=", value: 28, weight: 1, enabled: true },
+      { id: "vgd-r2", label: "Not oversold-broken", category: "risk", metric: "weeklyRsi", operator: ">=", value: 30, weight: 1, enabled: true },
+      { id: "vgd-p1", label: "Within position cap", category: "position", metric: "weightPct", operator: "<=", value: 30, weight: 2, enabled: true },
+      { id: "vgd-tr1", label: "P&L within tolerance", category: "trade", metric: "openPnlPct", operator: ">=", value: -20, weight: 2, enabled: true },
+    ],
+    thesis: { groups: [["vgd-t1", "vgd-t2"], ["vgd-t2", "vgd-t3"]] },
+    checkInterval: "1D",
+    technicalsInterval: "1D",
+  },
   {
     id: "aggressive-ai-high-beta",
     name: "Aggressive AI / High-Beta Growth",
@@ -668,131 +705,24 @@ export const DEFAULT_STRATEGIES: Strategy[] = [
     isDefault: true,
     enabled: true,
     timeframe: ["Swing", "Long Term", "Speculation"],
-    tags: ["AI Infrastructure", "Aggressive Growth", "Momentum"],
+    tags: ["AI Infrastructure", "Aggressive Growth"],
     decisionSignals: ["Thesis", "Catalyst", "Risk / Reward"],
     exitLogic: ["Break Thesis", "Lose Trend", "Macro Changes"],
-  },
-  {
-    id: "aggressive-growth",
-    name: "Aggressive Growth",
-    description:
-      "Lean into high-conviction growth leaders while the trend and thesis are intact.",
-    isDefault: true,
-    enabled: true,
-    timeframe: ["Swing", "Long Term"],
-    tags: ["Aggressive Growth"],
-    decisionSignals: ["Thesis", "Catalyst"],
-    exitLogic: ["Break Thesis", "Macro Changes"],
-  },
-  {
-    id: "momentum",
-    name: "Momentum",
-    description: "Ride strength while price and volume keep confirming the move.",
-    isDefault: true,
-    enabled: true,
-    timeframe: ["Swing"],
-    tags: ["Momentum"],
-    decisionSignals: ["Volume", "Risk / Reward"],
-    exitLogic: ["Lose Trend", "Hit Target"],
-  },
-  {
-    id: "breakout-watch",
-    name: "Breakout Watch",
-    description: "Stalk bases and wait for a clean breakout with volume confirmation.",
-    isDefault: true,
-    enabled: true,
-    timeframe: ["Swing"],
-    tags: ["Momentum"],
-    decisionSignals: ["Volume", "Catalyst"],
-    exitLogic: ["Lose Trend", "Hit Target"],
-  },
-  {
-    id: "pullback-entry",
-    name: "Pullback Entry",
-    description: "Buy controlled pullbacks into support within an established uptrend.",
-    isDefault: true,
-    enabled: true,
-    timeframe: ["Swing"],
-    tags: ["Aggressive Growth"],
-    decisionSignals: ["Thesis", "Risk / Reward"],
-    exitLogic: ["Lose Trend", "Break Thesis"],
-  },
-  {
-    id: "trend-rider",
-    name: "Trend Rider",
-    description: "Stay with the primary trend until it clearly breaks.",
-    isDefault: true,
-    enabled: true,
-    timeframe: ["Long Term"],
-    tags: ["Aggressive Growth"],
-    decisionSignals: ["Thesis", "Volume"],
-    exitLogic: ["Lose Trend", "Macro Changes"],
-  },
-  {
-    id: "volume-confirmation",
-    name: "Volume Confirmation",
-    description: "Only trust moves that are backed by real participation.",
-    isDefault: true,
-    enabled: true,
-    timeframe: ["Swing"],
-    tags: ["Momentum"],
-    decisionSignals: ["Volume"],
-    exitLogic: ["Lose Trend"],
-  },
-  {
-    id: "long-term-compounder",
-    name: "Long-Term Compounder",
-    description: "Hold durable businesses through volatility while the thesis compounds.",
-    isDefault: true,
-    enabled: true,
-    timeframe: ["Long Term"],
-    tags: ["Aggressive Growth"],
-    decisionSignals: ["Thesis"],
-    exitLogic: ["Break Thesis", "Macro Changes"],
-  },
-  {
-    id: "ai-infrastructure",
-    name: "AI Infrastructure",
-    description: "Concentrate on the picks-and-shovels leaders of the AI build-out.",
-    isDefault: true,
-    enabled: true,
-    timeframe: ["Long Term"],
-    tags: ["AI Infrastructure", "Aggressive Growth"],
-    decisionSignals: ["Thesis", "Catalyst"],
-    exitLogic: ["Break Thesis", "Macro Changes"],
-  },
-  {
-    id: "speculative-runner",
-    name: "Speculative Runner",
-    description: "Small, high-risk positions in narrative-driven names with defined risk.",
-    isDefault: true,
-    enabled: true,
-    timeframe: ["Speculation"],
-    tags: ["Momentum", "Turnaround"],
-    decisionSignals: ["Catalyst", "Risk / Reward"],
-    exitLogic: ["Hit Target", "Lose Trend"],
-  },
-  {
-    id: "risk-off",
-    name: "Risk-Off / Defensive",
-    description: "Reduce exposure and protect capital when macro turns hostile.",
-    isDefault: true,
-    enabled: true,
-    timeframe: ["Long Term"],
-    tags: ["Turnaround"],
-    decisionSignals: ["Risk / Reward"],
-    exitLogic: ["Macro Changes", "Lose Trend"],
-  },
-  {
-    id: "broken-thesis",
-    name: "Broken Thesis / Exit Watch",
-    description: "Flag positions where the original reason to own is no longer valid.",
-    isDefault: true,
-    enabled: true,
-    timeframe: ["Swing", "Long Term"],
-    tags: ["Turnaround"],
-    decisionSignals: ["Thesis", "Risk / Reward"],
-    exitLogic: ["Break Thesis"],
+    rules: [
+      { id: "aih-t1", label: "Sales growing", category: "thesis", metric: "revenueGrowthPct", operator: ">=", value: 15, weight: 3, enabled: true },
+      { id: "aih-t2", label: "Healthy gross margin", category: "thesis", metric: "grossMarginPct", operator: ">=", value: 50, weight: 2, enabled: true },
+      { id: "aih-t3", label: "Profitable", category: "thesis", metric: "netMarginPct", operator: ">=", value: 10, weight: 2, enabled: true },
+      { id: "aih-s1", label: "Above mid-term trend", category: "setup", metric: "priceVs20EmaPct", operator: ">=", value: 0, weight: 2, enabled: true },
+      { id: "aih-s2", label: "Momentum healthy", category: "setup", metric: "weeklyRsi", operator: "between", value: [45, 72], weight: 2, enabled: true },
+      { id: "aih-r1", label: "Not overbought", category: "risk", metric: "weeklyRsi", operator: "<=", value: 80, weight: 2, enabled: true },
+      { id: "aih-r2", label: "Calm-ish market", category: "risk", metric: "vix", operator: "<=", value: 25, weight: 1, enabled: true },
+      { id: "aih-r3", label: "Manageable leverage", category: "risk", metric: "debtToEquity", operator: "<=", value: 2, weight: 2, enabled: true },
+      { id: "aih-p1", label: "Within position cap", category: "position", metric: "weightPct", operator: "<=", value: 30, weight: 2, enabled: true },
+      { id: "aih-tr1", label: "P&L not breaking down", category: "trade", metric: "openPnlPct", operator: ">=", value: -15, weight: 2, enabled: true },
+    ],
+    thesis: { groups: [["aih-t1", "aih-t3"], ["aih-t1", "aih-t2"]] },
+    checkInterval: "1D",
+    technicalsInterval: "1D",
   },
 ];
 
@@ -1311,5 +1241,255 @@ export const TECHNICAL_SIGNALS: EducationCard[] = [
   {
     title: "Volume",
     body: "Shows participation. Moves on stronger volume can carry more weight than thin moves.",
+  },
+];
+
+// ---------------------------------------------------------------------------
+// Strategy Forge data: market-data snapshots, buckets, and category weights.
+//
+// IMPORTANT (see .cursor/rules/data-architecture.mdc + data-architecture.md):
+// The snapshots below are REAL researched values as of MARKET_ASOF — a static
+// snapshot, NOT a live feed. They are consumed exclusively through the
+// `dataSource` seam (src/lib/datasource), so swapping in a live provider later
+// requires no changes to the scoring engine or UI. A genuinely-unavailable
+// metric is `null` ("no data") — never a fabricated value or a silent fail.
+// ---------------------------------------------------------------------------
+
+// The market date these snapshots reflect (most-recent close at authoring time).
+export const MARKET_ASOF = "2026-06-25";
+
+// Latest reported fundamentals per ticker (TTM/most-recent quarter). `null` =
+// metric is not meaningful/available for that name (e.g. margins for a bank, or
+// a P/E for an unprofitable company), so the scoring engine scores it "no data".
+export const FUNDAMENTAL_SNAPSHOTS: Record<string, FundamentalSnapshot> = {
+  NVDA: {
+    epsTtm: 6.53,
+    epsGrowthPct: 66.7,
+    revenueGrowthPct: 65.5,
+    grossMarginPct: 74.15,
+    netMarginPct: 62.97,
+    peRatio: 29.98,
+    debtToEquity: 0.07,
+    fcfMarginPct: 46.97,
+    asOf: MARKET_ASOF,
+    source: "mock",
+  },
+  MSFT: {
+    epsTtm: 16.79,
+    epsGrowthPct: 29.64,
+    revenueGrowthPct: 17.87,
+    grossMarginPct: 68.31,
+    netMarginPct: 39.34,
+    peRatio: 21.01,
+    debtToEquity: 0.2,
+    fcfMarginPct: 22.0,
+    asOf: MARKET_ASOF,
+    source: "mock",
+  },
+  CRM: {
+    epsTtm: 8.64,
+    epsGrowthPct: 22.6,
+    revenueGrowthPct: 9.58,
+    grossMarginPct: 77.64,
+    netMarginPct: 18.73,
+    peRatio: 17.39,
+    debtToEquity: 0.19,
+    fcfMarginPct: 30.0,
+    asOf: MARKET_ASOF,
+    source: "mock",
+  },
+  // Bank/fintech: gross margin, FCF margin, and a comparable debt/equity are not
+  // meaningful, so they are "no data" rather than misleading numbers.
+  SOFI: {
+    epsTtm: 0.45,
+    epsGrowthPct: 50.0,
+    revenueGrowthPct: 42.6,
+    grossMarginPct: null,
+    netMarginPct: 14.7,
+    peRatio: 38.0,
+    debtToEquity: null,
+    fcfMarginPct: null,
+    asOf: MARKET_ASOF,
+    source: "mock",
+  },
+  // Pre-commercial: GAAP EPS/net margin are distorted by warrant remeasurement,
+  // so the distorted figures are left as "no data".
+  IONQ: {
+    epsTtm: 0.92,
+    epsGrowthPct: null,
+    revenueGrowthPct: 104.0,
+    grossMarginPct: 36.1,
+    netMarginPct: null,
+    peRatio: null,
+    debtToEquity: 0.0,
+    fcfMarginPct: null,
+    asOf: MARKET_ASOF,
+    source: "mock",
+  },
+  // Pre-revenue eVTOL: almost everything fundamental is "no data" by nature.
+  ACHR: {
+    epsTtm: -1.09,
+    epsGrowthPct: null,
+    revenueGrowthPct: null,
+    grossMarginPct: null,
+    netMarginPct: null,
+    peRatio: null,
+    debtToEquity: 0.05,
+    fcfMarginPct: null,
+    asOf: MARKET_ASOF,
+    source: "mock",
+  },
+  CELH: {
+    epsTtm: 0.44,
+    epsGrowthPct: 20.0,
+    revenueGrowthPct: 138.0,
+    grossMarginPct: 50.35,
+    netMarginPct: 5.85,
+    peRatio: 64.39,
+    debtToEquity: 0.1,
+    fcfMarginPct: 9.86,
+    asOf: MARKET_ASOF,
+    source: "mock",
+  },
+  CRWV: {
+    epsTtm: -2.72,
+    epsGrowthPct: null,
+    revenueGrowthPct: 167.0,
+    grossMarginPct: 69.4,
+    netMarginPct: -25.5,
+    peRatio: null,
+    debtToEquity: 8.0,
+    fcfMarginPct: null,
+    asOf: MARKET_ASOF,
+    source: "mock",
+  },
+  ELF: {
+    epsTtm: 0.44,
+    epsGrowthPct: -77.1,
+    revenueGrowthPct: 24.6,
+    grossMarginPct: 71.0,
+    netMarginPct: 1.6,
+    peRatio: 150.5,
+    debtToEquity: 0.3,
+    fcfMarginPct: 8.0,
+    asOf: MARKET_ASOF,
+    source: "mock",
+  },
+  RGTI: {
+    epsTtm: -0.89,
+    epsGrowthPct: null,
+    revenueGrowthPct: 135.0,
+    grossMarginPct: 31.3,
+    netMarginPct: null,
+    peRatio: null,
+    debtToEquity: 0.0,
+    fcfMarginPct: null,
+    asOf: MARKET_ASOF,
+    source: "mock",
+  },
+};
+
+// Technicals are approximate snapshots derived from recent price action as of
+// MARKET_ASOF (weekly RSI; price distance % vs VWAP and the 10/20/50 EMAs).
+export const TECHNICAL_SNAPSHOTS: Record<string, TechnicalSnapshot> = {
+  NVDA: { weeklyRsi: 48, priceVsVwapPct: -1.0, priceVs10EmaPct: -2.0, priceVs20EmaPct: -1.5, priceVs50EmaPct: 0.5, asOf: MARKET_ASOF, source: "mock" },
+  MSFT: { weeklyRsi: 40, priceVsVwapPct: -1.5, priceVs10EmaPct: -3.0, priceVs20EmaPct: -4.0, priceVs50EmaPct: -5.0, asOf: MARKET_ASOF, source: "mock" },
+  CRM: { weeklyRsi: 38, priceVsVwapPct: -1.0, priceVs10EmaPct: -2.0, priceVs20EmaPct: -3.0, priceVs50EmaPct: -6.0, asOf: MARKET_ASOF, source: "mock" },
+  SOFI: { weeklyRsi: 43, priceVsVwapPct: -0.5, priceVs10EmaPct: -1.0, priceVs20EmaPct: -2.0, priceVs50EmaPct: -4.0, asOf: MARKET_ASOF, source: "mock" },
+  IONQ: { weeklyRsi: 60, priceVsVwapPct: 0.5, priceVs10EmaPct: -3.0, priceVs20EmaPct: 4.0, priceVs50EmaPct: 18.0, asOf: MARKET_ASOF, source: "mock" },
+  ACHR: { weeklyRsi: 32, priceVsVwapPct: -1.0, priceVs10EmaPct: -3.0, priceVs20EmaPct: -5.0, priceVs50EmaPct: -10.0, asOf: MARKET_ASOF, source: "mock" },
+  CELH: { weeklyRsi: 45, priceVsVwapPct: 0.0, priceVs10EmaPct: -1.0, priceVs20EmaPct: 1.0, priceVs50EmaPct: -3.0, asOf: MARKET_ASOF, source: "mock" },
+  CRWV: { weeklyRsi: 45, priceVsVwapPct: -2.0, priceVs10EmaPct: -5.0, priceVs20EmaPct: -7.0, priceVs50EmaPct: -3.0, asOf: MARKET_ASOF, source: "mock" },
+  ELF: { weeklyRsi: 52, priceVsVwapPct: 1.0, priceVs10EmaPct: 2.0, priceVs20EmaPct: 3.0, priceVs50EmaPct: 4.0, asOf: MARKET_ASOF, source: "mock" },
+  RGTI: { weeklyRsi: 38, priceVsVwapPct: -2.0, priceVs10EmaPct: -5.0, priceVs20EmaPct: -8.0, priceVs50EmaPct: -12.0, asOf: MARKET_ASOF, source: "mock" },
+};
+
+// Plan-safe market mood. VIX and the SPY 14-day RSI as of MARKET_ASOF.
+export const MARKET_CONTEXT: MarketContext = {
+  vix: 18.89,
+  spyRsi: 46.49,
+  asOf: MARKET_ASOF,
+  source: "mock",
+};
+
+// Reusable starter chips for the Forge chip library (save-to-library lets the
+// user grow this). Plain, label-first conditions a beginner can drop into any
+// strategy; ids are namespaced `lib-` so they never collide with strategy chips.
+export const CHIP_LIBRARY_SEED: RuleChip[] = [
+  { id: "lib-rev20", label: "Sales growing 20%+", category: "thesis", metric: "revenueGrowthPct", operator: ">=", value: 20, weight: 3, enabled: true },
+  { id: "lib-profitable", label: "Profitable (net margin 10%+)", category: "thesis", metric: "netMarginPct", operator: ">=", value: 10, weight: 2, enabled: true },
+  { id: "lib-grossmargin", label: "High gross margin (60%+)", category: "thesis", metric: "grossMarginPct", operator: ">=", value: 60, weight: 2, enabled: true },
+  { id: "lib-uptrend", label: "Above 50-day trend", category: "setup", metric: "priceVs50EmaPct", operator: ">=", value: 0, weight: 2, enabled: true },
+  { id: "lib-rsiband", label: "Healthy momentum (RSI 45–70)", category: "setup", metric: "weeklyRsi", operator: "between", value: [45, 70], weight: 2, enabled: true },
+  { id: "lib-lowdebt", label: "Low leverage (D/E ≤ 1)", category: "risk", metric: "debtToEquity", operator: "<=", value: 1, weight: 2, enabled: true },
+  { id: "lib-calmvix", label: "Calm market (VIX ≤ 25)", category: "risk", metric: "vix", operator: "<=", value: 25, weight: 1, enabled: true },
+  { id: "lib-poscap", label: "Position cap 25%", category: "position", metric: "weightPct", operator: "<=", value: 25, weight: 2, enabled: true },
+  { id: "lib-stoploss", label: "Stop-loss line (P&L ≥ -15)", category: "trade", metric: "openPnlPct", operator: ">=", value: -15, weight: 2, enabled: true },
+];
+
+// Default "stock-market-wizard" category blend (sums to 100). Thesis and Risk —
+// the two existential questions — dominate; see docs/strategy-forge.md.
+export const DEFAULT_CATEGORY_WEIGHTS: CategoryWeights = {
+  thesis: 30,
+  risk: 25,
+  setup: 15,
+  position: 12,
+  trade: 10,
+  timeframe: 8,
+};
+
+// Default buckets seeded for the active portfolio. A bucket is governed by one
+// strategy (which carries the cadence + rule chips) and holds a share allocation
+// of one or more tickers. SOFI intentionally lives in TWO buckets (57 sh in a
+// daily "Fintech & Consumer" bucket + 10 sh in a 15m "Momentum" bucket) to
+// exercise multi-bucket membership + per-bucket share allocation. Bucket
+// authoring + share/entry editing is a later dashboard pass.
+export const DEFAULT_BUCKETS: Bucket[] = [
+  {
+    id: "bkt-core-ai",
+    name: "Core AI Growth",
+    portfolioId: "deric",
+    strategyId: "aggressive-ai-high-beta",
+    holdings: [
+      { ticker: "NVDA", shares: 3, entryDate: "2026-02-12" },
+      { ticker: "MSFT", shares: 1, entryDate: "2026-01-08" },
+      { ticker: "CRWV", shares: 2, entryDate: "2026-04-03" },
+      { ticker: "IONQ", shares: 2, entryDate: "2026-03-19" },
+    ],
+  },
+  {
+    id: "bkt-fintech-consumer",
+    name: "Fintech & Consumer",
+    portfolioId: "deric",
+    strategyId: "value-growth-dividend",
+    holdings: [
+      { ticker: "SOFI", shares: 57, entryDate: "2026-01-22" },
+      { ticker: "ELF", shares: 14, entryDate: "2026-02-28" },
+      { ticker: "CELH", shares: 14, entryDate: "2026-03-05" },
+    ],
+  },
+  {
+    id: "bkt-momentum",
+    name: "Momentum (Intraday)",
+    portfolioId: "deric",
+    strategyId: "aggressive-ai-high-beta",
+    holdings: [
+      { ticker: "SOFI", shares: 10, entryDate: "2026-06-24" },
+      { ticker: "RGTI", shares: 3, entryDate: "2026-06-23" },
+    ],
+  },
+  {
+    id: "bkt-spec",
+    name: "Speculative Runners",
+    portfolioId: "deric",
+    strategyId: "aggressive-ai-high-beta",
+    holdings: [{ ticker: "ACHR", shares: 75, entryDate: "2026-05-14" }],
+  },
+  {
+    id: "bkt-review",
+    name: "Thesis Review",
+    portfolioId: "deric",
+    strategyId: "value-growth-dividend",
+    holdings: [{ ticker: "CRM", shares: 2, entryDate: "2025-11-10" }],
   },
 ];

@@ -1,12 +1,16 @@
 import type {
   Allocation,
+  Bucket,
+  FundamentalSnapshot,
   LogEntry,
+  MarketContext,
   MarketFlowStep,
   Portfolio,
   PortfolioMetric,
   Position,
   RiskRule,
   StrategyAssignments,
+  TechnicalSnapshot,
   TickerAnalysis,
   TickerInfo,
   WatchlistItem,
@@ -70,4 +74,22 @@ export interface DataSource {
    * session and caches it app-wide (see weather/mock.ts).
    */
   getMarketWeather(timeframe: MarketWeatherTimeframe): MarketWeatherSnapshot;
+
+  // ---- Strategy Forge inputs ----
+  // These power the Forge scoring engine. Today they return researched static
+  // snapshots; a live provider swaps in real fundamentals/technicals/market
+  // context here WITHOUT touching the scoring engine or any UI. A missing metric
+  // comes back as `null` ("no data"), never a fabricated value.
+
+  /** Latest reported fundamentals for a ticker, or undefined if untracked. */
+  getFundamentals(ticker: string): FundamentalSnapshot | undefined;
+
+  /** Latest technical snapshot for a ticker, or undefined if untracked. */
+  getTechnicals(ticker: string): TechnicalSnapshot | undefined;
+
+  /** Plan-safe market mood (VIX, SPY RSI) shared across the scoring engine. */
+  getMarketContext(): MarketContext;
+
+  /** Seed buckets (portfolio slices governed by a strategy). User-editable later. */
+  getBuckets(): Bucket[];
 }

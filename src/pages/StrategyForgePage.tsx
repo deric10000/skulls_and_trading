@@ -1,23 +1,51 @@
 import { useEffect, useState } from "react";
-import { FUNDAMENTALS, TECHNICAL_SIGNALS } from "../data";
-import { FundamentalsCard } from "../components/FundamentalsCard";
 import { StrategyForgePanel } from "../components/StrategyForgePanel";
 import { StrategyList } from "../components/StrategyList";
-import { TechnicalSignalCard } from "../components/TechnicalSignalCard";
+import { Tabs, type TabItem } from "../components/Tabs";
+import { WatchlistWidget } from "../components/WatchlistWidget";
+import { CaretLeft } from "../lib/icons";
 import { useAppState } from "../state/AppState";
+
+type ForgeDetailTab = "configure" | "watch";
+
+const FORGE_DETAIL_TABS: TabItem[] = [
+  { id: "configure", label: "Configure" },
+  { id: "watch", label: "Preview Watchlist" },
+];
 
 export function StrategyForgePage() {
   const {
     strategies,
     createStrategy,
     duplicateStrategy,
-    resetStrategy,
     deleteStrategy,
   } = useAppState();
 
   const [selectedId, setSelectedId] = useState<string>(
     strategies[0]?.id ?? "",
   );
+
+  // Mobile-only master -> detail: selecting a strategy drills from the list into
+  // a detail view (breadcrumb + Configure/Preview tab bar). Desktop/tablet keep
+  // the side-by-side grid, so this state is inert above 767px.
+  const [isMobile, setIsMobile] = useState(
+    () =>
+      typeof window !== "undefined" &&
+      window.matchMedia("(max-width: 767px)").matches,
+  );
+  const [drilledIn, setDrilledIn] = useState(false);
+  const [detailTab, setDetailTab] = useState<ForgeDetailTab>("configure");
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const media = window.matchMedia("(max-width: 767px)");
+    const update = () => setIsMobile(media.matches);
+
+    update();
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
+  }, []);
 
   // Keep a valid selection if the selected strategy is removed.
   useEffect(() => {
@@ -30,76 +58,107 @@ export function StrategyForgePage() {
     (strategy) => strategy.id === selectedId,
   );
 
+  // On mobile, choosing/creating a strategy drills into the Configure detail.
+  function openDetail(id: string) {
+    setSelectedId(id);
+    setDetailTab("configure");
+    setDrilledIn(true);
+  }
+
+  function handleSelect(id: string) {
+    if (isMobile) openDetail(id);
+    else setSelectedId(id);
+  }
+
   function handleCreate() {
     const id = createStrategy();
-    setSelectedId(id);
+    if (isMobile) openDetail(id);
+    else setSelectedId(id);
   }
 
   function handleDuplicate(id: string) {
     const newId = duplicateStrategy(id);
-    if (newId) setSelectedId(newId);
+    if (!newId) return;
+    if (isMobile) openDetail(newId);
+    else setSelectedId(newId);
+  }
+
+  const header = (
+    <header className="page-head">
+      <h1>Strategy Forge</h1>
+      <p className="page-subtitle">
+        Forge your rules, define your conviction, remove your emotions.
+      </p>
+    </header>
+  );
+
+  const strategyList = (
+    <StrategyList
+      strategies={strategies}
+      selectedId={selectedId}
+      onSelect={handleSelect}
+      onCreate={handleCreate}
+      onDuplicate={handleDuplicate}
+      onDelete={deleteStrategy}
+    />
+  );
+
+  if (isMobile) {
+    return (
+      <div className="page forge-page">
+        {/* Header (title + subtitle) is hidden in the detail view to bring the
+            breadcrumb + tabs up; it stays on the strategy list. */}
+        {!(drilledIn && selectedStrategy) && header}
+        {drilledIn && selectedStrategy ? (
+          <div className="forge-detail">
+            <button
+              type="button"
+              className="breadcrumb"
+              onClick={() => setDrilledIn(false)}
+            >
+              <CaretLeft aria-hidden />
+              My Strategies
+            </button>
+            <div className="forge-tab-bar">
+              <Tabs
+                items={FORGE_DETAIL_TABS}
+                value={detailTab}
+                onChange={(id) => setDetailTab(id as ForgeDetailTab)}
+                ariaLabel="Strategy detail sections"
+                className="forge-tabs"
+              />
+            </div>
+            {detailTab === "configure" ? (
+              <div className="forge-config">
+                <StrategyForgePanel strategy={selectedStrategy} />
+              </div>
+            ) : (
+              <div className="forge-watch">
+                <WatchlistWidget readOnly />
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="forge-strategies">{strategyList}</div>
+        )}
+      </div>
+    );
   }
 
   return (
     <div className="page forge-page">
-      <header className="page-head">
-        <h1>Strategy Forge</h1>
-        <p className="page-subtitle">
-          Forge the rules you'll be held to. Define your edge once, then let every
-          name be checked against it — not against emotion.
-        </p>
-      </header>
+      {header}
       <div className="forge-grid">
-        <div className="forge-strategies">
-          <StrategyList
-            strategies={strategies}
-            selectedId={selectedId}
-            onSelect={setSelectedId}
-            onCreate={handleCreate}
-            onDuplicate={handleDuplicate}
-            onReset={resetStrategy}
-            onDelete={deleteStrategy}
-          />
-        </div>
+        <div className="forge-strategies">{strategyList}</div>
 
         <div className="forge-config">
           <StrategyForgePanel strategy={selectedStrategy} />
         </div>
 
-        <div className="forge-fundamentals">
-          <section className="panel education" aria-labelledby="fundamentals-title">
-            <div className="panel-head">
-              <h2 id="fundamentals-title">Fundamentals</h2>
-              <span className="panel-tag">Investor lens</span>
-            </div>
-            <p className="panel-intro">
-              The building blocks of a company thesis, in plain English. Use these to
-              decide which fundamental inputs your strategies should weigh.
-            </p>
-            <div className="card-stack">
-              {FUNDAMENTALS.map((card) => (
-                <FundamentalsCard key={card.title} card={card} />
-              ))}
-            </div>
-          </section>
-        </div>
-
-        <div className="forge-technical">
-          <section className="panel education" aria-labelledby="indicators-title">
-            <div className="panel-head">
-              <h2 id="indicators-title">Reading the signals</h2>
-              <span className="panel-tag">Trader lens</span>
-            </div>
-            <p className="panel-intro">
-              The technical tools traders check before acting. Pair them with the
-              thesis, never in isolation.
-            </p>
-            <div className="card-stack">
-              {TECHNICAL_SIGNALS.map((card) => (
-                <TechnicalSignalCard key={card.title} card={card} />
-              ))}
-            </div>
-          </section>
+        {/* Read-only portfolio view: watch conviction/status shift here as the
+            selected strategy is edited (plumbed through AppState). */}
+        <div className="forge-watch">
+          <WatchlistWidget readOnly />
         </div>
       </div>
     </div>

@@ -1,12 +1,26 @@
 ---
-description: Data model + DataSource seam rules — single source of truth for tickers/portfolios, derive-don't-duplicate, and how mock data gets swapped for real APIs
-globs: src/data.ts,src/state/**,src/lib/datasource/**,src/components/**/*.tsx
-alwaysApply: false
+description: Data model + DataSource seam rules — single source of truth for tickers/portfolios, derive-don't-duplicate, the Strategy Forge engine, and how mock data gets swapped for real APIs
+globs: src/data.ts,src/state/**,src/lib/datasource/**,src/lib/forge/**,src/types.ts,src/components/**/*.tsx
+alwaysApply: true
 ---
 
 # Data Architecture Rules
 
 Full reference: `data-architecture.md`. This is the enforceable contract.
+
+## STOP and notify on data-architecture changes
+
+Before editing anything that **adds, removes, changes, reshapes, or re-ports
+data** — the registries in `src/data.ts`, the `DataSource` seam, the Forge
+snapshots/engine (`src/lib/forge/**`), data types in `src/types.ts`, or how data
+flows into `AppState` — proactively tell the user:
+
+> "Heads up: this touches the data architecture (`data-architecture.md`). Here's
+> what changes and why."
+
+Then keep `data-architecture.md` (and this rule) in sync in the **same** change.
+Don't silently restructure data or break the single-source-of-truth / seam
+contracts below.
 
 ## Single source of truth
 
@@ -51,6 +65,26 @@ Full reference: `data-architecture.md`. This is the enforceable contract.
   refresh at each session boundary, cache **app-wide** (not per user), and filter
   per user client-side via `TICKERS[ticker].sector`/`.industry`. See
   `data-architecture.md` §5.
+
+## Strategy Forge (`src/lib/forge/`)
+
+- The scoring engine (`scoring.ts`) is **pure, no I/O** — it takes a strategy +
+  a `MetricContext` and returns conviction/status. Don't fetch or import data
+  inside it; feed it through `alignment.ts`, which reads the `dataSource` seam.
+- Forge inputs come **through the seam**: `getFundamentals`, `getTechnicals`,
+  `getMarketContext`, `getBuckets`. A missing metric is `null` ("no data"),
+  never a fabricated value. Snapshot values must be **real, sourced** figures
+  (last close + latest reported fundamentals) carrying `asOf` + `source`.
+- The **metric registry** (`metrics.ts`) is the single source of truth for what
+  a chip can test. Add a metric = add to `MetricKey` (`types.ts`) + seed the
+  snapshot (`data.ts`) + register in `metrics.ts`. Nothing else.
+- Conviction is **market-value-weighted** across bucket allocations; a ticker's
+  headline = its best-aligned bucket. `AppState` overlays computed
+  conviction/status onto the watchlist — downstream chips just reflect it.
+  "Notify" = in-app chips updating; **no** push-notification system.
+- Cadence: `technicalsInterval` is clamped **≥ 15m and ≥ `checkInterval`**;
+  fundamentals refresh daily and are not user-selectable. See
+  `data-architecture.md` §6.
 
 ## Safety
 

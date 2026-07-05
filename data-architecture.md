@@ -147,3 +147,72 @@ Stock layer is scoped to the watch; the three **cascade** (Sector → first
 Industry → first watch stock, with the Stock card disabled when the watch holds
 no name in that slice). All of it is local to the widget — it never writes back
 to the Current Watch selection.
+
+## 6. Strategy Forge (`src/lib/forge/`)
+
+The Forge turns a strategy's **rule chips** + a stock's data into a 0–100
+**Strategy Conviction** and an alignment status, then plumbs that downstream to
+the Home/Dashboard chips. The long-form framework (six categories, weighting,
+gates, cadence) lives in `docs/strategy-forge.md`; this section is the **data
+flow**.
+
+### Inputs — behind the `DataSource` seam
+
+Three accessors feed the engine and are swappable for a live provider exactly
+like the rest of the seam. A missing metric returns `null` ("no data") — never a
+fabricated value.
+
+| Accessor | Returns | Seeded from |
+|----------|---------|-------------|
+| `getFundamentals(ticker)` | `FundamentalSnapshot` (EPS, growth, margins, P/E, D/E, FCF) | `FUNDAMENTAL_SNAPSHOTS` |
+| `getTechnicals(ticker)` | `TechnicalSnapshot` (RSI, VWAP, EMA distances) | `TECHNICAL_SNAPSHOTS` |
+| `getMarketContext()` | `MarketContext` (VIX, SPY RSI) | `MARKET_CONTEXT` |
+| `getBuckets()` | `Bucket[]` (portfolio slices governed by one strategy) | `DEFAULT_BUCKETS` |
+
+Snapshots carry an `asOf` timestamp and `source: "mock"`. They are **researched
+real values** (last close + latest reported fundamentals), not random — so the
+mock validates like the real thing. Update them only with real, sourced figures.
+
+### Engine — pure, no I/O (`src/lib/forge/`)
+
+| File | Role |
+|------|------|
+| `metrics.ts` | The **metric registry** — single source of truth for every data point a chip can test (label + plainLabel, source snapshot, operators, unit). Drives the chip editor and tells the engine where to read each value. |
+| `scoring.ts` | Pure functions: `evaluateChip` → category sub-scores → weighted blend → `scoreStock`. Thesis is a boolean composite (AND within a group, OR across groups). **Gates** (failed thesis, breached risk) override + clamp conviction so the meter stays coherent with the status chip. |
+| `alignment.ts` | The **bridge**: pulls snapshots through `dataSource`, scores each holding in each bucket, and aggregates **market-value-weighted** conviction `byTicker` (best-aligned bucket = headline), `byBucket`, and `portfolio`. |
+| `scheduler.ts` | Stubbed per-bucket refresh scheduler. No-op against mock; establishes the gated (market-hours / tab-visible / cache-stale) contract for live data. |
+
+To add a metric: add the key to `MetricKey` (`types.ts`), seed it in the
+snapshots (`data.ts`), and register it in `metrics.ts`. Nothing else changes.
+
+### Buckets — independent cadence per strategy
+
+A portfolio is split into **buckets**; each bucket is governed by one strategy
+(which carries its own `checkInterval` + `technicalsInterval`) and holds a share
+allocation of one or more tickers. A ticker may live in **several** buckets
+(e.g. 100 sh in a daily "Core Growth", 10 sh in a 15m "Momentum") — each slice
+is scored by its bucket's strategy on its own cadence. Modeled + seeded now;
+the bucket/share-allocation **authoring UI is a later dashboard pass**.
+
+### Conviction flows downstream (no new UI system)
+
+`AppState` computes `alignmentByPortfolio` from `buckets` + `strategies` + the
+snapshots, then **overlays** the computed `conviction`/`status` onto the
+watchlist items. The Home `WatchlistWidget`, snapshot, and Dashboard read these
+decorated values — the existing chips/meters just reflect the engine. "Notify"
+means these in-app chips update; there is **no** push-notification system.
+
+### Cadence rules (enforced in the Forge UI)
+
+- `checkInterval` (15m → 1M, default Daily) is the re-score + chip-refresh
+  cadence and the **default** technicals candle size.
+- `technicalsInterval` is user-adjustable but clamped: **≥ 15m** and **never
+  faster than `checkInterval`** (we couldn't refresh data we don't poll for).
+- Fundamentals refresh on a fixed daily cadence and are **not** user-selectable.
+
+### Chip library
+
+Reusable rule chips live in `AppState.chipLibrary` (seeded from
+`CHIP_LIBRARY_SEED`). "Save to library" in the chip editor adds a copy; adding
+from the library clones a chip into the current strategy. The library is
+in-memory app config, **not** behind the `DataSource` seam.

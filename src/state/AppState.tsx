@@ -7,18 +7,28 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { DEFAULT_CAPTAIN, DEFAULT_STRATEGIES } from "../data";
+import { CHIP_LIBRARY_SEED, DEFAULT_CAPTAIN, DEFAULT_STRATEGIES } from "../data";
 import { dataSource } from "../lib/datasource";
 import { computeSignal } from "../lib/signals";
+import {
+  computePortfolioAlignment,
+  type PortfolioAlignment,
+  type TickerAlignment,
+} from "../lib/forge/alignment";
 import type {
+  Bucket,
   CaptainProfile,
   LogEntry,
   PageId,
+  RuleChip,
   SignalResult,
   Strategy,
   StrategyAssignments,
   WatchlistItem,
 } from "../types";
+
+// The default portfolio (whose holdings seed the editable watchlist + dashboard).
+const DEFAULT_PORTFOLIO_ID = dataSource.getPortfolios()[0]?.id ?? "";
 
 type LogDraft = Pick<LogEntry, "title" | "note" | "strategy">;
 
@@ -61,6 +71,22 @@ interface AppStateValue {
   unassignStrategy: (ticker: string, strategyId: string) => void;
   strategyIdsFor: (ticker: string) => string[];
 
+  // ---- Strategy Forge chip library (reusable rule chips) ----
+  chipLibrary: RuleChip[];
+  saveChipToLibrary: (chip: RuleChip) => void;
+  removeChipFromLibrary: (chipId: string) => void;
+
+  // ---- Strategy Forge alignment (computed from buckets + strategies + data) ----
+  buckets: Bucket[];
+  // Computed conviction/status for a whole portfolio (best-aligned per ticker +
+  // market-value-weighted aggregate). Memoized per portfolio.
+  getPortfolioAlignment: (portfolioId: string) => PortfolioAlignment;
+  // A single name's headline alignment (its best-aligned bucket), if computed.
+  getStockAlignment: (
+    portfolioId: string,
+    ticker: string,
+  ) => TickerAlignment | undefined;
+
   logsByTicker: Record<string, LogEntry[]>;
   addLog: (ticker: string, draft: LogDraft) => void;
   updateLog: (ticker: string, id: string, draft: LogDraft) => void;
@@ -101,6 +127,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const [assignments, setAssignments] = useState<StrategyAssignments>(() =>
     dataSource.getDefaultAssignments(),
   );
+  const [buckets] = useState<Bucket[]>(() => dataSource.getBuckets());
+  const [chipLibrary, setChipLibrary] = useState<RuleChip[]>(CHIP_LIBRARY_SEED);
   const [logsByTicker, setLogsByTicker] = useState<Record<string, LogEntry[]>>(
     () => dataSource.getLogs(),
   );
@@ -267,6 +295,61 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     [assignments],
   );
 
+  const saveChipToLibrary = useCallback(
+    (chip: RuleChip) => {
+      const libraryChip: RuleChip = {
+        ...chip,
+        id: nextId("lib"),
+      };
+      setChipLibrary((current) => [...current, libraryChip]);
+    },
+    [nextId],
+  );
+
+  const removeChipFromLibrary = useCallback((chipId: string) => {
+    setChipLibrary((current) => current.filter((chip) => chip.id !== chipId));
+  }, []);
+
+  const portfolios = useMemo(() => dataSource.getPortfolios(), []);
+
+  // Recomputed only when the strategies or buckets change (data snapshots are
+  // static). Each portfolio's per-ticker + aggregate alignment in one pass.
+  const alignmentByPortfolio = useMemo(() => {
+    const map: Record<string, PortfolioAlignment> = {};
+    for (const portfolio of portfolios) {
+      map[portfolio.id] = computePortfolioAlignment(portfolio, buckets, strategies);
+    }
+    return map;
+  }, [portfolios, buckets, strategies]);
+
+  const getPortfolioAlignment = useCallback(
+    (portfolioId: string): PortfolioAlignment =>
+      alignmentByPortfolio[portfolioId] ?? {
+        byTicker: {},
+        byBucket: {},
+        portfolio: { conviction: 0, status: "Watch" },
+      },
+    [alignmentByPortfolio],
+  );
+
+  const getStockAlignment = useCallback(
+    (portfolioId: string, ticker: string): TickerAlignment | undefined =>
+      alignmentByPortfolio[portfolioId]?.byTicker[ticker],
+    [alignmentByPortfolio],
+  );
+
+  // Overlay computed conviction/status onto the default portfolio's watchlist so
+  // the Home/dashboard surfaces reflect the Forge engine (not the seed numbers).
+  const decoratedWatchlist = useMemo<WatchlistItem[]>(() => {
+    const byTicker = alignmentByPortfolio[DEFAULT_PORTFOLIO_ID]?.byTicker ?? {};
+    return watchlist.map((item) => {
+      const aligned = byTicker[item.ticker];
+      return aligned
+        ? { ...item, conviction: aligned.conviction, status: aligned.status }
+        : item;
+    });
+  }, [watchlist, alignmentByPortfolio]);
+
   const addLog = useCallback(
     (ticker: string, draft: LogDraft) => {
       const entry: LogEntry = {
@@ -316,8 +399,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   );
 
   const selectedItem = useMemo(
-    () => watchlist.find((item) => item.ticker === selectedTicker),
-    [watchlist, selectedTicker],
+    () => decoratedWatchlist.find((item) => item.ticker === selectedTicker),
+    [decoratedWatchlist, selectedTicker],
   );
 
   const selectedSignal = useMemo(
@@ -340,7 +423,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       updateCaptain,
       activePage,
       setActivePage,
-      watchlist,
+      watchlist: decoratedWatchlist,
       addTicker,
       removeTicker,
       selectedTicker,
@@ -356,6 +439,12 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       assignStrategy,
       unassignStrategy,
       strategyIdsFor,
+      chipLibrary,
+      saveChipToLibrary,
+      removeChipFromLibrary,
+      buckets,
+      getPortfolioAlignment,
+      getStockAlignment,
       logsByTicker,
       addLog,
       updateLog,
@@ -376,7 +465,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       captain,
       updateCaptain,
       activePage,
-      watchlist,
+      decoratedWatchlist,
       addTicker,
       removeTicker,
       selectedTicker,
@@ -391,6 +480,12 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       assignStrategy,
       unassignStrategy,
       strategyIdsFor,
+      chipLibrary,
+      saveChipToLibrary,
+      removeChipFromLibrary,
+      buckets,
+      getPortfolioAlignment,
+      getStockAlignment,
       logsByTicker,
       addLog,
       updateLog,
