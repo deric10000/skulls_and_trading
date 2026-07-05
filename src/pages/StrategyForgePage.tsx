@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { StrategyActions } from "../components/StrategyActions";
 import { StrategyForgePanel } from "../components/StrategyForgePanel";
 import { StrategyList } from "../components/StrategyList";
 import { Tabs, type TabItem } from "../components/Tabs";
@@ -65,9 +66,15 @@ export function StrategyForgePage() {
     setDrilledIn(true);
   }
 
+  // Selecting a card just highlights it (on every viewport). On mobile the user
+  // then taps Edit in the dock to drill into Configure; on desktop the config
+  // panel is already in view.
   function handleSelect(id: string) {
-    if (isMobile) openDetail(id);
-    else setSelectedId(id);
+    setSelectedId(id);
+  }
+
+  function handleEdit() {
+    if (selectedStrategy) openDetail(selectedId);
   }
 
   function handleCreate() {
@@ -92,24 +99,11 @@ export function StrategyForgePage() {
     </header>
   );
 
-  const strategyList = (
-    <StrategyList
-      strategies={strategies}
-      selectedId={selectedId}
-      onSelect={handleSelect}
-      onCreate={handleCreate}
-      onDuplicate={handleDuplicate}
-      onDelete={deleteStrategy}
-    />
-  );
-
   if (isMobile) {
-    return (
-      <div className="page forge-page">
-        {/* Header (title + subtitle) is hidden in the detail view to bring the
-            breadcrumb + tabs up; it stays on the strategy list. */}
-        {!(drilledIn && selectedStrategy) && header}
-        {drilledIn && selectedStrategy ? (
+    // Detail view: breadcrumb + Configure/Preview tab bar (no sticky dock here).
+    if (drilledIn && selectedStrategy) {
+      return (
+        <div className="page forge-page">
           <div className="forge-detail">
             <button
               type="button"
@@ -138,10 +132,39 @@ export function StrategyForgePage() {
               </div>
             )}
           </div>
-        ) : (
-          <div className="forge-strategies">{strategyList}</div>
-        )}
-      </div>
+        </div>
+      );
+    }
+
+    // List view: the card scrolls with the page, and the action row is lifted out
+    // into a viewport-sticky dock (a sibling of the page, i.e. a direct child of
+    // .app-main). Scrolling to the end lets the site footer pull up under it.
+    return (
+      <>
+        <div className="page forge-page">
+          {header}
+          <div className="forge-strategies">
+            <StrategyList
+              strategies={strategies}
+              selectedId={selectedId}
+              onSelect={handleSelect}
+              onCreate={handleCreate}
+              onDuplicate={handleDuplicate}
+              onDelete={deleteStrategy}
+              showActions={false}
+            />
+          </div>
+        </div>
+        <StrategyActions
+          className="strategy-dock"
+          selectedId={selectedId}
+          canDelete={!!selectedStrategy && !selectedStrategy.isDefault}
+          onDelete={() => selectedId && deleteStrategy(selectedId)}
+          onDuplicate={() => selectedId && handleDuplicate(selectedId)}
+          onCreate={handleCreate}
+          onEdit={handleEdit}
+        />
+      </>
     );
   }
 
@@ -149,7 +172,16 @@ export function StrategyForgePage() {
     <div className="page forge-page">
       {header}
       <div className="forge-grid">
-        <div className="forge-strategies">{strategyList}</div>
+        <div className="forge-strategies">
+          <StrategyList
+            strategies={strategies}
+            selectedId={selectedId}
+            onSelect={handleSelect}
+            onCreate={handleCreate}
+            onDuplicate={handleDuplicate}
+            onDelete={deleteStrategy}
+          />
+        </div>
 
         <div className="forge-config">
           <StrategyForgePanel strategy={selectedStrategy} />
