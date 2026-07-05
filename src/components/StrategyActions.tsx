@@ -1,5 +1,5 @@
-import { useLayoutEffect, useRef, useState } from "react";
 import { Copy, PencilSimple, Plus, Trash } from "../lib/icons";
+import { ActionFooter } from "./ActionFooter";
 
 /**
  * The Delete / Duplicate / Add action row for the strategy list. Reused in two
@@ -28,46 +28,9 @@ export function StrategyActions({
   onEdit?: () => void;
   className?: string;
 }) {
-  const footerRef = useRef<HTMLDivElement>(null);
-  const stackedRef = useRef(false);
-  const requiredWidthRef = useRef(0);
-  const [stacked, setStacked] = useState(false);
-
-  useLayoutEffect(() => {
-    const footer = footerRef.current;
-    if (!footer) return;
-
-    const measure = () => {
-      const buttons = footer.querySelectorAll<HTMLElement>(".btn");
-      // Only re-measure the natural row width while we're in the row layout —
-      // once stacked, the buttons are full-width and would report the wrong size.
-      if (!stackedRef.current) {
-        const gap = 8; // 0.5rem flex gap
-        let total = 0;
-        buttons.forEach((button) => {
-          total += button.offsetWidth;
-        });
-        requiredWidthRef.current = total + gap * Math.max(0, buttons.length - 1);
-      }
-      const shouldStack =
-        requiredWidthRef.current > 0 &&
-        footer.clientWidth < requiredWidthRef.current;
-      stackedRef.current = shouldStack;
-      setStacked(shouldStack);
-    };
-
-    measure();
-    const observer = new ResizeObserver(measure);
-    observer.observe(footer);
-    return () => observer.disconnect();
-  }, []);
-
   return (
-    <div
-      className={["strategy-footer", stacked ? "is-stacked" : "", className ?? ""]
-        .filter(Boolean)
-        .join(" ")}
-      ref={footerRef}
+    <ActionFooter
+      className={["strategy-footer--icons", className].filter(Boolean).join(" ")}
     >
       <button
         type="button"
@@ -110,6 +73,6 @@ export function StrategyActions({
         <Plus size={16} weight="regular" aria-hidden />
         <span className="btn-label">Add</span>
       </button>
-    </div>
+    </ActionFooter>
   );
 }

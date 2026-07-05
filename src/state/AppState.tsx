@@ -7,7 +7,13 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { CHIP_LIBRARY_SEED, DEFAULT_CAPTAIN, DEFAULT_STRATEGIES } from "../data";
+import {
+  buildSystemTags,
+  CHIP_LIBRARY_SEED,
+  DEFAULT_CAPTAIN,
+  DEFAULT_CATEGORY_WEIGHTS,
+  DEFAULT_STRATEGIES,
+} from "../data";
 import { dataSource } from "../lib/datasource";
 import { computeSignal } from "../lib/signals";
 import {
@@ -211,6 +217,9 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 
   const createStrategy = useCallback(() => {
     const id = nextId("strategy");
+    // New blank strategies start with empty rule sets, the built-in
+    // "All Active Chips" system tag per category, and default category weights
+    // — the same shape every strategy carries (see docs/strategy-forge.md).
     const strategy: Strategy = {
       id,
       name: "New Strategy",
@@ -221,6 +230,13 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       tags: [],
       decisionSignals: [],
       exitLogic: [],
+      thesisDescription: "",
+      rules: [],
+      ruleTags: buildSystemTags(id),
+      categoryWeights: { ...DEFAULT_CATEGORY_WEIGHTS },
+      appliedPortfolioIds: [],
+      checkInterval: "1D",
+      technicalsInterval: "1D",
     };
     setStrategies((current) => [...current, strategy]);
     return id;
@@ -250,11 +266,22 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       const source = strategies.find((strategy) => strategy.id === id);
       if (!source) return undefined;
       const newId = nextId("strategy");
+      // Deep-copy rules + tags so edits to the copy never bleed into the source.
       const copy: Strategy = {
         ...source,
         id: newId,
         name: `${source.name} (Copy)`,
         isDefault: false,
+        rules: (source.rules ?? []).map((chip) => ({ ...chip })),
+        ruleTags: (source.ruleTags ?? []).map((tag) => ({
+          ...tag,
+          chipIds: [...tag.chipIds],
+        })),
+        categoryWeights: source.categoryWeights
+          ? { ...source.categoryWeights }
+          : { ...DEFAULT_CATEGORY_WEIGHTS },
+        // A fresh copy starts unapplied — the user applies it explicitly.
+        appliedPortfolioIds: [],
       };
       setStrategies((current) => [...current, copy]);
       return newId;

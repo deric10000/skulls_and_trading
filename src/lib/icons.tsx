@@ -7,10 +7,13 @@
 import { forwardRef } from "react";
 import {
   Anchor,
+  ArrowCounterClockwise,
   ArrowFatLineUp,
   ArrowsClockwise,
+  CaretDown,
   CaretLeft,
   CaretRight,
+  CaretUpDown,
   ChartBar,
   CheckCircle,
   Clock,
@@ -22,6 +25,7 @@ import {
   Hurricane,
   type Icon,
   type IconProps,
+  Info,
   LockKey,
   PencilSimple,
   Plus,
@@ -40,6 +44,7 @@ import {
   WaveTriangle,
   Waves,
   Wind,
+  X,
 } from "@phosphor-icons/react";
 import type { StatusType } from "../types";
 
@@ -60,10 +65,13 @@ WindReversed.displayName = "WindReversed";
 
 export {
   Anchor,
+  ArrowCounterClockwise,
   ArrowFatLineUp,
   ArrowsClockwise,
+  CaretDown,
   CaretLeft,
   CaretRight,
+  CaretUpDown,
   ChartBar,
   CheckCircle,
   Clock,
@@ -73,6 +81,7 @@ export {
   Hammer,
   House,
   Hurricane,
+  Info,
   LockKey,
   PencilSimple,
   Plus,
@@ -91,6 +100,7 @@ export {
   WaveTriangle,
   Waves,
   Wind,
+  X,
 };
 
 /** Status taxonomy → status chip icon. Tone color comes from the chip class. */

@@ -1,256 +1,772 @@
-import type { MetricKey, RuleCategory, RuleOperator } from "../../types";
+import type {
+  DateRange,
+  MetricKey,
+  RuleCategory,
+  RuleChip,
+  RuleOperator,
+} from "../../types";
 
 // ---------------------------------------------------------------------------
 // Metric registry — the single source of truth for every data point a rule chip
-// can test. Powers the chip-editor dropdowns (which metrics, which operators,
-// what units) and tells the scoring engine where to read each value from.
+// can test. Powers the table-modal dropdowns (which metrics, which conditions,
+// which date ranges, what units) and tells the scoring engine where to read
+// each value from.
 //
 // DUAL TERMINOLOGY (see docs/strategy-forge.md): every metric carries a
-// `label` (standard industry term) and a `plainLabel` (beginner-friendly), so
-// the UI can speak to both new and experienced investors.
+// `label` (standard industry term) and a `plainLabel` (beginner-friendly),
+// plus `whatItIs` / `whyMatters` copy that feeds the hover tooltips
+// ("What it is:" / "Why does it matter?" — per the Figma tooltip pattern).
 //
 // To add a live metric later: add the key to `MetricKey` (types.ts), seed it in
 // the snapshots (data.ts) behind the dataSource seam, and register it here.
 // ---------------------------------------------------------------------------
 
 export type MetricSource = "fundamental" | "technical" | "position" | "market";
-export type MetricFormat = "number" | "percent" | "ratio" | "price" | "text";
+export type MetricFormat =
+  | "number"
+  | "percent"
+  | "ratio" // multiples rendered with an "x" suffix
+  | "currency" // dollars; unit carries scale ("$", "$M", "$B")
+  | "days"
+  | "boolean" // TRUE / FALSE flags (stored as 1 / 0 in snapshots)
+  | "text";
 
 export interface MetricMeta {
   key: MetricKey;
-  label: string; // standard term, e.g. "EPS Growth (YoY)"
-  plainLabel: string; // beginner-friendly, e.g. "Earnings growing"
-  hint: string; // one-line explanation for the chip editor
+  label: string; // standard term, e.g. "Revenue Growth YoY"
+  plainLabel: string; // beginner-friendly, e.g. "Sales growing"
+  whatItIs: string; // tooltip: "What it is:"
+  whyMatters: string; // tooltip: "Why does it matter?"
   category: RuleCategory; // the category this metric naturally belongs to
   source: MetricSource; // which snapshot it is read from
   format: MetricFormat;
-  unit?: string; // "%", "x", "$"
+  unit?: string; // "%", "x", "$", "$M", "$B", "days"
   operators: RuleOperator[];
-  // Whether a higher value is "better" — drives sensible operator defaults and
-  // copy. Left undefined for band metrics like RSI where the middle is best.
+  dateRanges: DateRange[]; // ranges selectable in the table modal
+  defaultDateRange: DateRange;
+  // Whether a higher value is "better" — drives sensible operator defaults.
+  // Left undefined for band metrics like RSI where the middle is best.
   higherIsBetter?: boolean;
 }
 
 const NUMERIC_OPS: RuleOperator[] = [">", ">=", "<", "<=", "between"];
+const BOOL_OPS: RuleOperator[] = ["is"];
 
 export const METRICS: Record<MetricKey, MetricMeta> = {
-  // ---- Fundamentals (Thesis Fit) ----
-  epsTtm: {
-    key: "epsTtm",
-    label: "EPS (TTM)",
-    plainLabel: "Profitable",
-    hint: "Trailing 12-month earnings per share. Above 0 means the company makes a profit.",
+  // ---- Fundamentals — growth & profitability -----------------------------
+  revenueGrowthPct: {
+    key: "revenueGrowthPct",
+    label: "Revenue Growth YoY",
+    plainLabel: "Sales growing",
+    whatItIs: "Measures how fast a company's sales are increasing over time.",
+    whyMatters: "Higher growth can signal stronger demand and business momentum.",
     category: "thesis",
     source: "fundamental",
-    format: "price",
-    unit: "$",
+    format: "percent",
+    unit: "%",
     operators: NUMERIC_OPS,
+    dateRanges: ["TTM / Latest FY", "Most Recent Quarter", "5Y"],
+    defaultDateRange: "TTM / Latest FY",
     higherIsBetter: true,
   },
   epsGrowthPct: {
     key: "epsGrowthPct",
-    label: "EPS Growth (YoY)",
+    label: "Diluted EPS Growth YoY",
     plainLabel: "Earnings growing",
-    hint: "How fast earnings per share are growing year over year.",
+    whatItIs: "Measures how fast earnings per share are growing year over year.",
+    whyMatters: "Rising earnings power is the engine behind long-term stock returns.",
     category: "thesis",
     source: "fundamental",
     format: "percent",
     unit: "%",
     operators: NUMERIC_OPS,
+    dateRanges: ["TTM / Latest FY", "Most Recent Quarter", "5Y"],
+    defaultDateRange: "TTM / Latest FY",
     higherIsBetter: true,
   },
-  revenueGrowthPct: {
-    key: "revenueGrowthPct",
-    label: "Revenue Growth (YoY)",
-    plainLabel: "Sales growing",
-    hint: "How fast the top line (sales) is growing year over year.",
+  netIncome: {
+    key: "netIncome",
+    label: "Net Income",
+    plainLabel: "Actually profitable",
+    whatItIs: "The company's bottom-line profit after all expenses and taxes.",
+    whyMatters: "Positive net income confirms the business model works, not just the story.",
+    category: "thesis",
+    source: "fundamental",
+    format: "currency",
+    unit: "$B",
+    operators: NUMERIC_OPS,
+    dateRanges: ["TTM / Latest FY", "Most Recent Quarter"],
+    defaultDateRange: "TTM / Latest FY",
+    higherIsBetter: true,
+  },
+  operatingCashFlow: {
+    key: "operatingCashFlow",
+    label: "Operating Cash Flow",
+    plainLabel: "Cash coming in",
+    whatItIs: "The cash generated by the core business operations.",
+    whyMatters: "Cash flow is harder to fake than earnings — it funds dividends, buybacks, and growth.",
+    category: "thesis",
+    source: "fundamental",
+    format: "currency",
+    unit: "$B",
+    operators: NUMERIC_OPS,
+    dateRanges: ["TTM / Latest FY", "Most Recent Quarter"],
+    defaultDateRange: "TTM / Latest FY",
+    higherIsBetter: true,
+  },
+  returnOnEquityPct: {
+    key: "returnOnEquityPct",
+    label: "Return on Equity",
+    plainLabel: "Uses money well",
+    whatItIs: "Profit generated per dollar of shareholder equity.",
+    whyMatters: "Consistently high ROE marks businesses that compound capital efficiently.",
     category: "thesis",
     source: "fundamental",
     format: "percent",
     unit: "%",
     operators: NUMERIC_OPS,
+    dateRanges: ["TTM / Latest FY", "5Y"],
+    defaultDateRange: "TTM / Latest FY",
+    higherIsBetter: true,
+  },
+  operatingMarginPct: {
+    key: "operatingMarginPct",
+    label: "Operating Margin",
+    plainLabel: "Efficient operations",
+    whatItIs: "Share of revenue left after operating costs, before interest and taxes.",
+    whyMatters: "Healthy operating margins show pricing power and cost discipline.",
+    category: "thesis",
+    source: "fundamental",
+    format: "percent",
+    unit: "%",
+    operators: NUMERIC_OPS,
+    dateRanges: ["TTM / Latest FY", "Most Recent Quarter"],
+    defaultDateRange: "TTM / Latest FY",
+    higherIsBetter: true,
+  },
+  epsTtm: {
+    key: "epsTtm",
+    label: "EPS (TTM)",
+    plainLabel: "Profit per share",
+    whatItIs: "Trailing 12-month earnings per share.",
+    whyMatters: "Above 0 means the company makes a profit; the base for valuation math.",
+    category: "thesis",
+    source: "fundamental",
+    format: "currency",
+    unit: "$",
+    operators: NUMERIC_OPS,
+    dateRanges: ["TTM / Latest FY"],
+    defaultDateRange: "TTM / Latest FY",
     higherIsBetter: true,
   },
   grossMarginPct: {
     key: "grossMarginPct",
     label: "Gross Margin",
     plainLabel: "Keeps most of each sale",
-    hint: "Share of revenue left after the direct cost of goods. Higher = more pricing power.",
+    whatItIs: "Share of revenue left after the direct cost of goods sold.",
+    whyMatters: "Higher gross margin = more pricing power and room to invest.",
     category: "thesis",
     source: "fundamental",
     format: "percent",
     unit: "%",
     operators: NUMERIC_OPS,
+    dateRanges: ["TTM / Latest FY", "Most Recent Quarter"],
+    defaultDateRange: "TTM / Latest FY",
     higherIsBetter: true,
   },
   netMarginPct: {
     key: "netMarginPct",
     label: "Net Margin",
     plainLabel: "Turns sales into profit",
-    hint: "Share of revenue that becomes bottom-line profit.",
+    whatItIs: "Share of revenue that becomes bottom-line profit.",
+    whyMatters: "Shows how efficiently growth converts into earnings.",
     category: "thesis",
     source: "fundamental",
     format: "percent",
     unit: "%",
     operators: NUMERIC_OPS,
+    dateRanges: ["TTM / Latest FY", "Most Recent Quarter"],
+    defaultDateRange: "TTM / Latest FY",
     higherIsBetter: true,
-  },
-  peRatio: {
-    key: "peRatio",
-    label: "P/E Ratio",
-    plainLabel: "Price vs earnings",
-    hint: "Price relative to earnings. Lower can mean cheaper, but context matters.",
-    category: "thesis",
-    source: "fundamental",
-    format: "ratio",
-    unit: "x",
-    operators: NUMERIC_OPS,
-    higherIsBetter: false,
-  },
-  debtToEquity: {
-    key: "debtToEquity",
-    label: "Debt / Equity",
-    plainLabel: "Borrowing load",
-    hint: "How much debt the company carries vs equity. Lower = safer balance sheet.",
-    category: "risk",
-    source: "fundamental",
-    format: "ratio",
-    unit: "x",
-    operators: NUMERIC_OPS,
-    higherIsBetter: false,
   },
   fcfMarginPct: {
     key: "fcfMarginPct",
     label: "Free Cash Flow Margin",
     plainLabel: "Generates real cash",
-    hint: "Share of revenue that becomes free cash flow — the cash a business actually keeps.",
+    whatItIs: "Share of revenue that becomes free cash flow after capital spending.",
+    whyMatters: "Free cash is what actually funds dividends, buybacks, and debt paydown.",
     category: "thesis",
     source: "fundamental",
     format: "percent",
     unit: "%",
     operators: NUMERIC_OPS,
+    dateRanges: ["TTM / Latest FY"],
+    defaultDateRange: "TTM / Latest FY",
     higherIsBetter: true,
   },
 
-  // ---- Technicals (Setup / Timing) ----
-  weeklyRsi: {
-    key: "weeklyRsi",
-    label: "RSI (Weekly)",
-    plainLabel: "Momentum strength",
-    hint: "0–100 momentum gauge. ~30 is oversold, ~70 is overbought; the middle band is healthy.",
+  // ---- Fundamentals — valuation -------------------------------------------
+  peRatio: {
+    key: "peRatio",
+    label: "P/E Ratio",
+    plainLabel: "Price vs earnings",
+    whatItIs: "Price relative to trailing earnings.",
+    whyMatters: "Lower can mean cheaper, but context (growth, quality) matters.",
+    category: "thesis",
+    source: "fundamental",
+    format: "number",
+    operators: NUMERIC_OPS,
+    dateRanges: ["Current / TTM"],
+    defaultDateRange: "Current / TTM",
+    higherIsBetter: false,
+  },
+  forwardPE: {
+    key: "forwardPE",
+    label: "Forward P/E",
+    plainLabel: "Price vs next year's earnings",
+    whatItIs: "Price relative to expected earnings over the next 12 months.",
+    whyMatters: "Keeps you from overpaying for growth that is already priced in.",
+    category: "thesis",
+    source: "fundamental",
+    format: "number",
+    operators: NUMERIC_OPS,
+    dateRanges: ["Current"],
+    defaultDateRange: "Current",
+    higherIsBetter: false,
+  },
+  priceToSales: {
+    key: "priceToSales",
+    label: "Price/Sales Ratio",
+    plainLabel: "Price vs revenue",
+    whatItIs: "Market value relative to annual revenue.",
+    whyMatters: "A sanity check on valuation when earnings are noisy or reinvested.",
+    category: "thesis",
+    source: "fundamental",
+    format: "number",
+    operators: NUMERIC_OPS,
+    dateRanges: ["Current / TTM"],
+    defaultDateRange: "Current / TTM",
+    higherIsBetter: false,
+  },
+  evToEbitda: {
+    key: "evToEbitda",
+    label: "EV/EBITDA",
+    plainLabel: "Whole-business price check",
+    whatItIs: "Enterprise value relative to core operating profit (EBITDA).",
+    whyMatters: "Compares valuation across companies regardless of debt or tax differences.",
+    category: "thesis",
+    source: "fundamental",
+    format: "number",
+    operators: NUMERIC_OPS,
+    dateRanges: ["Current / TTM"],
+    defaultDateRange: "Current / TTM",
+    higherIsBetter: false,
+  },
+
+  // ---- Fundamentals — balance sheet ---------------------------------------
+  debtToEquity: {
+    key: "debtToEquity",
+    label: "Debt to Equity Ratio",
+    plainLabel: "Borrowing load",
+    whatItIs: "How much debt the company carries versus shareholder equity.",
+    whyMatters: "Lower leverage means a safer balance sheet through downturns.",
+    category: "thesis",
+    source: "fundamental",
+    format: "number",
+    operators: NUMERIC_OPS,
+    dateRanges: ["Most Recent Quarter"],
+    defaultDateRange: "Most Recent Quarter",
+    higherIsBetter: false,
+  },
+  interestCoverage: {
+    key: "interestCoverage",
+    label: "Interest Coverage Ratio",
+    plainLabel: "Can pay its interest",
+    whatItIs: "How many times operating profit covers the interest bill.",
+    whyMatters: "A cushion here keeps debt from strangling the business when rates rise.",
+    category: "thesis",
+    source: "fundamental",
+    format: "ratio",
+    unit: "x",
+    operators: NUMERIC_OPS,
+    dateRanges: ["TTM / Latest FY"],
+    defaultDateRange: "TTM / Latest FY",
+    higherIsBetter: true,
+  },
+  currentRatio: {
+    key: "currentRatio",
+    label: "Current Ratio",
+    plainLabel: "Short-term liquidity",
+    whatItIs: "Current assets versus current liabilities.",
+    whyMatters: "Confirms the company can cover near-term obligations without stress.",
+    category: "thesis",
+    source: "fundamental",
+    format: "number",
+    operators: NUMERIC_OPS,
+    dateRanges: ["Most Recent Quarter"],
+    defaultDateRange: "Most Recent Quarter",
+    higherIsBetter: true,
+  },
+
+  // ---- Fundamentals — shareholder returns ---------------------------------
+  dividendYieldPct: {
+    key: "dividendYieldPct",
+    label: "Dividend Yield",
+    plainLabel: "Income paid to you",
+    whatItIs: "Annual dividends as a percentage of the share price.",
+    whyMatters: "A floor confirms real income; a ceiling filters out yield traps.",
+    category: "thesis",
+    source: "fundamental",
+    format: "percent",
+    unit: "%",
+    operators: NUMERIC_OPS,
+    dateRanges: ["Current"],
+    defaultDateRange: "Current",
+  },
+  payoutRatioPct: {
+    key: "payoutRatioPct",
+    label: "Dividend Payout Ratio",
+    plainLabel: "Dividend is affordable",
+    whatItIs: "Share of earnings paid out as dividends.",
+    whyMatters: "A payout that is too high leaves no room for growth — or the next cut.",
+    category: "thesis",
+    source: "fundamental",
+    format: "percent",
+    unit: "%",
+    operators: NUMERIC_OPS,
+    dateRanges: ["TTM / Latest FY"],
+    defaultDateRange: "TTM / Latest FY",
+    higherIsBetter: false,
+  },
+  dividendGrowth5yPct: {
+    key: "dividendGrowth5yPct",
+    label: "Dividend Growth Rate 5Y",
+    plainLabel: "Raises the dividend",
+    whatItIs: "Average annual dividend growth over the last five years.",
+    whyMatters: "A growing dividend signals durable cash flow and shareholder-friendly management.",
+    category: "thesis",
+    source: "fundamental",
+    format: "percent",
+    unit: "%",
+    operators: NUMERIC_OPS,
+    dateRanges: ["5Y"],
+    defaultDateRange: "5Y",
+    higherIsBetter: true,
+  },
+  buybackYieldPct: {
+    key: "buybackYieldPct",
+    label: "Buyback Yield",
+    plainLabel: "Buying back shares",
+    whatItIs: "Net share repurchases as a percentage of market value.",
+    whyMatters: "Buybacks quietly raise your ownership stake when done at fair prices.",
+    category: "thesis",
+    source: "fundamental",
+    format: "percent",
+    unit: "%",
+    operators: NUMERIC_OPS,
+    dateRanges: ["TTM / Latest FY"],
+    defaultDateRange: "TTM / Latest FY",
+    higherIsBetter: true,
+  },
+
+  // ---- Technicals — trend / momentum / setup -------------------------------
+  priceAbove200dSma: {
+    key: "priceAbove200dSma",
+    label: "Price Above 200D SMA",
+    plainLabel: "Long-term uptrend",
+    whatItIs: "Whether price is trading above its 200-day moving average.",
+    whyMatters: "The simplest long-term health check — most damage happens below this line.",
+    category: "setup",
+    source: "technical",
+    format: "boolean",
+    operators: BOOL_OPS,
+    dateRanges: ["Current"],
+    defaultDateRange: "Current",
+    higherIsBetter: true,
+  },
+  priceAbove50dSma: {
+    key: "priceAbove50dSma",
+    label: "Price Above 50D SMA",
+    plainLabel: "Intermediate uptrend",
+    whatItIs: "Whether price is trading above its 50-day moving average.",
+    whyMatters: "Confirms the medium-term trend supports adding or holding.",
+    category: "setup",
+    source: "technical",
+    format: "boolean",
+    operators: BOOL_OPS,
+    dateRanges: ["Current"],
+    defaultDateRange: "Current",
+    higherIsBetter: true,
+  },
+  priceAbove20dSma: {
+    key: "priceAbove20dSma",
+    label: "Price Above 20D SMA",
+    plainLabel: "Short-term uptrend",
+    whatItIs: "Whether price is trading above its 20-day moving average.",
+    whyMatters: "A short-term timing check for entries and rebounds.",
+    category: "setup",
+    source: "technical",
+    format: "boolean",
+    operators: BOOL_OPS,
+    dateRanges: ["Current"],
+    defaultDateRange: "Current",
+    higherIsBetter: true,
+  },
+  rsi14: {
+    key: "rsi14",
+    label: "RSI 14D",
+    plainLabel: "Momentum gauge",
+    whatItIs: "0–100 momentum gauge over 14 days; ~30 is oversold, ~70 overbought.",
+    whyMatters: "Keeps you from buying names that are already stretched.",
     category: "setup",
     source: "technical",
     format: "number",
     operators: NUMERIC_OPS,
+    dateRanges: ["14D", "Current"],
+    defaultDateRange: "Current",
   },
-  priceVsVwapPct: {
-    key: "priceVsVwapPct",
-    label: "Price vs VWAP",
-    plainLabel: "Above average price",
-    hint: "How far price is above/below the volume-weighted average price.",
+  weeklyRsi: {
+    key: "weeklyRsi",
+    label: "RSI (Weekly)",
+    plainLabel: "Big-picture momentum",
+    whatItIs: "Momentum gauge computed on weekly candles.",
+    whyMatters: "Filters day-to-day noise; the middle band is healthiest for holds.",
+    category: "setup",
+    source: "technical",
+    format: "number",
+    operators: NUMERIC_OPS,
+    dateRanges: ["Current"],
+    defaultDateRange: "Current",
+  },
+  drawdownFrom52wHighPct: {
+    key: "drawdownFrom52wHighPct",
+    label: "Drawdown from 52W High",
+    plainLabel: "How far off the high",
+    whatItIs: "How far price has fallen from its 52-week high.",
+    whyMatters: "Separates a controlled pullback from a broken chart.",
     category: "setup",
     source: "technical",
     format: "percent",
     unit: "%",
     operators: NUMERIC_OPS,
+    dateRanges: ["Current"],
+    defaultDateRange: "Current",
+    higherIsBetter: false,
+  },
+  priceChange3mPct: {
+    key: "priceChange3mPct",
+    label: "3-Month Price Change",
+    plainLabel: "Recent price strength",
+    whatItIs: "Price performance over the last three months.",
+    whyMatters: "Positive relative strength shows the market agrees with your thesis.",
+    category: "setup",
+    source: "technical",
+    format: "percent",
+    unit: "%",
+    operators: NUMERIC_OPS,
+    dateRanges: ["3M"],
+    defaultDateRange: "3M",
+    higherIsBetter: true,
+  },
+  relativeVolume: {
+    key: "relativeVolume",
+    label: "Relative Volume",
+    plainLabel: "Buyers showing up",
+    whatItIs: "Today's volume versus the 20-day average.",
+    whyMatters: "Moves with participation carry more weight than thin drifts.",
+    category: "setup",
+    source: "technical",
+    format: "ratio",
+    unit: "x",
+    operators: NUMERIC_OPS,
+    dateRanges: ["Current"],
+    defaultDateRange: "Current",
+    higherIsBetter: true,
+  },
+  priceVsVwapPct: {
+    key: "priceVsVwapPct",
+    label: "Price vs VWAP",
+    plainLabel: "Above average price",
+    whatItIs: "How far price is above/below the volume-weighted average price.",
+    whyMatters: "Gauges intraday strength or weakness against real traded prices.",
+    category: "setup",
+    source: "technical",
+    format: "percent",
+    unit: "%",
+    operators: NUMERIC_OPS,
+    dateRanges: ["Current"],
+    defaultDateRange: "Current",
     higherIsBetter: true,
   },
   priceVs10EmaPct: {
     key: "priceVs10EmaPct",
     label: "Price vs 10 EMA",
     plainLabel: "Above short-term trend",
-    hint: "How far price is above/below the 10-period moving average.",
+    whatItIs: "How far price is above/below the 10-period moving average.",
+    whyMatters: "A fast read on the immediate trend.",
     category: "setup",
     source: "technical",
     format: "percent",
     unit: "%",
     operators: NUMERIC_OPS,
+    dateRanges: ["Current"],
+    defaultDateRange: "Current",
     higherIsBetter: true,
   },
   priceVs20EmaPct: {
     key: "priceVs20EmaPct",
     label: "Price vs 20 EMA",
     plainLabel: "Above mid-term trend",
-    hint: "How far price is above/below the 20-period moving average.",
+    whatItIs: "How far price is above/below the 20-period moving average.",
+    whyMatters: "Confirms the swing trend supports the position.",
     category: "setup",
     source: "technical",
     format: "percent",
     unit: "%",
     operators: NUMERIC_OPS,
+    dateRanges: ["Current"],
+    defaultDateRange: "Current",
     higherIsBetter: true,
   },
   priceVs50EmaPct: {
     key: "priceVs50EmaPct",
     label: "Price vs 50 EMA",
     plainLabel: "Above long-term trend",
-    hint: "How far price is above/below the 50-period moving average.",
+    whatItIs: "How far price is above/below the 50-period moving average.",
+    whyMatters: "The classic dividing line between healthy and broken trends.",
     category: "setup",
     source: "technical",
     format: "percent",
     unit: "%",
     operators: NUMERIC_OPS,
+    dateRanges: ["Current"],
+    defaultDateRange: "Current",
+    higherIsBetter: true,
+  },
+  daysUntilEarnings: {
+    key: "daysUntilEarnings",
+    label: "Days Until Earnings",
+    plainLabel: "Event risk distance",
+    whatItIs: "Trading days until the next earnings report.",
+    whyMatters: "Entering right before earnings turns an investment into a coin flip.",
+    category: "setup",
+    source: "technical",
+    format: "days",
+    unit: "days",
+    operators: NUMERIC_OPS,
+    dateRanges: ["Current"],
+    defaultDateRange: "Current",
     higherIsBetter: true,
   },
 
-  // ---- Position / holding ----
-  weightPct: {
-    key: "weightPct",
-    label: "Position Weight",
-    plainLabel: "Share of portfolio",
-    hint: "How much of the book this name represents. Caps keep any one position in check.",
-    category: "position",
-    source: "position",
+  // ---- Stock risk ----------------------------------------------------------
+  atrPct14d: {
+    key: "atrPct14d",
+    label: "ATR % of Price",
+    plainLabel: "Daily swing size",
+    whatItIs: "Average daily trading range as a percentage of price (14 days).",
+    whyMatters: "Extreme volatility forces smaller sizing and shakes out conviction.",
+    category: "risk",
+    source: "technical",
     format: "percent",
     unit: "%",
     operators: NUMERIC_OPS,
+    dateRanges: ["14D"],
+    defaultDateRange: "14D",
     higherIsBetter: false,
   },
-  openPnlPct: {
-    key: "openPnlPct",
-    label: "Open P&L %",
-    plainLabel: "Current gain / loss",
-    hint: "Unrealized profit or loss vs your average cost.",
-    category: "trade",
-    source: "position",
+  beta1y: {
+    key: "beta1y",
+    label: "Beta",
+    plainLabel: "Moves vs the market",
+    whatItIs: "How much the stock moves relative to the overall market (1 year).",
+    whyMatters: "High-beta names amplify both the upside and the drawdowns.",
+    category: "risk",
+    source: "technical",
+    format: "number",
+    operators: NUMERIC_OPS,
+    dateRanges: ["1Y"],
+    defaultDateRange: "1Y",
+    higherIsBetter: false,
+  },
+  avgDollarVolume20d: {
+    key: "avgDollarVolume20d",
+    label: "20D Average Dollar Volume",
+    plainLabel: "Easy to trade",
+    whatItIs: "Average dollars traded per day over the last 20 sessions.",
+    whyMatters: "Liquidity determines whether you can exit without moving the price.",
+    category: "risk",
+    source: "technical",
+    format: "currency",
+    unit: "$M",
+    operators: NUMERIC_OPS,
+    dateRanges: ["20D"],
+    defaultDateRange: "20D",
+    higherIsBetter: true,
+  },
+  sectorEtf1mChangePct: {
+    key: "sectorEtf1mChangePct",
+    label: "Sector ETF 1M Price Change",
+    plainLabel: "Sector holding up",
+    whatItIs: "One-month performance of this stock's sector ETF.",
+    whyMatters: "A breaking sector drags even the best names down with it.",
+    category: "risk",
+    source: "technical",
     format: "percent",
     unit: "%",
     operators: NUMERIC_OPS,
+    dateRanges: ["1M"],
+    defaultDateRange: "1M",
     higherIsBetter: true,
   },
 
-  // ---- Market context (Risk Rules) ----
+  // ---- Market context (Risk Rules) -----------------------------------------
   vix: {
     key: "vix",
     label: "VIX",
     plainLabel: "Market fear gauge",
-    hint: "Expected market volatility. Higher = more fear/turbulence.",
+    whatItIs: "Expected market volatility implied by S&P 500 options.",
+    whyMatters: "Elevated fear regimes punish new positions regardless of quality.",
     category: "risk",
     source: "market",
     format: "number",
     operators: NUMERIC_OPS,
+    dateRanges: ["Current"],
+    defaultDateRange: "Current",
     higherIsBetter: false,
   },
   spyRsi: {
     key: "spyRsi",
     label: "S&P 500 RSI",
     plainLabel: "Market momentum",
-    hint: "Momentum of the broad market (SPY). Confirms whether the tide is with you.",
+    whatItIs: "Momentum of the broad market (SPY).",
+    whyMatters: "Confirms whether the tide is with you before adding risk.",
     category: "risk",
     source: "market",
     format: "number",
     operators: NUMERIC_OPS,
+    dateRanges: ["14D", "Current"],
+    defaultDateRange: "Current",
+  },
+  spyAbove200dSma: {
+    key: "spyAbove200dSma",
+    label: "SPY Above 200D SMA",
+    plainLabel: "Market in an uptrend",
+    whatItIs: "Whether the S&P 500 is trading above its 200-day moving average.",
+    whyMatters: "The broad regime filter — most bear-market damage happens below it.",
+    category: "risk",
+    source: "market",
+    format: "boolean",
+    operators: BOOL_OPS,
+    dateRanges: ["Current"],
+    defaultDateRange: "Current",
+    higherIsBetter: true,
+  },
+  spy5dChangePct: {
+    key: "spy5dChangePct",
+    label: "SPY 5D Price Change",
+    plainLabel: "No sudden market drop",
+    whatItIs: "The S&P 500's price change over the last five sessions.",
+    whyMatters: "A sharp 5-day drop signals a shock environment — a bad time to add.",
+    category: "risk",
+    source: "market",
+    format: "percent",
+    unit: "%",
+    operators: NUMERIC_OPS,
+    dateRanges: ["5D"],
+    defaultDateRange: "5D",
+    higherIsBetter: true,
+  },
+  highYieldSpreadPct: {
+    key: "highYieldSpreadPct",
+    label: "High Yield Credit Spread",
+    plainLabel: "Credit stress gauge",
+    whatItIs: "Extra yield demanded on junk bonds versus Treasuries.",
+    whyMatters: "Widening spreads flag stress that hits equities soon after.",
+    category: "risk",
+    source: "market",
+    format: "percent",
+    unit: "%",
+    operators: NUMERIC_OPS,
+    dateRanges: ["Current"],
+    defaultDateRange: "Current",
+    higherIsBetter: false,
+  },
+  treasury10y5dChangePct: {
+    key: "treasury10y5dChangePct",
+    label: "10Y Treasury Yield 5D Change",
+    plainLabel: "No rate shock",
+    whatItIs: "How much the 10-year Treasury yield moved in five days.",
+    whyMatters: "Fast rate spikes compress valuations, especially for growth and dividend names.",
+    category: "risk",
+    source: "market",
+    format: "percent",
+    unit: "%",
+    operators: NUMERIC_OPS,
+    dateRanges: ["5D"],
+    defaultDateRange: "5D",
+    higherIsBetter: false,
   },
 
-  // ---- Qualitative ----
+  // ---- Position / holding ---------------------------------------------------
+  weightPct: {
+    key: "weightPct",
+    label: "Position Weight",
+    plainLabel: "Share of portfolio",
+    whatItIs: "How much of the portfolio this name represents.",
+    whyMatters: "Caps keep any one position from sinking the whole book.",
+    category: "position",
+    source: "position",
+    format: "percent",
+    unit: "%",
+    operators: NUMERIC_OPS,
+    dateRanges: ["Current"],
+    defaultDateRange: "Current",
+    higherIsBetter: false,
+  },
+  openPnlPct: {
+    key: "openPnlPct",
+    label: "Open P&L %",
+    plainLabel: "Current gain / loss",
+    whatItIs: "Unrealized profit or loss versus your average cost.",
+    whyMatters: "Your plan's tolerances live here — both the stop and the trim.",
+    category: "trade",
+    source: "position",
+    format: "percent",
+    unit: "%",
+    operators: NUMERIC_OPS,
+    dateRanges: ["Current"],
+    defaultDateRange: "Current",
+    higherIsBetter: true,
+  },
+  holdingDays: {
+    key: "holdingDays",
+    label: "Days Held",
+    plainLabel: "Time in the position",
+    whatItIs: "Calendar days since the position was entered.",
+    whyMatters: "Long-term theses need time to work; day counts keep the horizon honest.",
+    category: "timeframe",
+    source: "position",
+    format: "days",
+    unit: "days",
+    operators: NUMERIC_OPS,
+    dateRanges: ["Current"],
+    defaultDateRange: "Current",
+  },
+
+  // ---- Qualitative -----------------------------------------------------------
   timeframe: {
     key: "timeframe",
     label: "Intended Timeframe",
     plainLabel: "Holding horizon",
-    hint: "Whether the name is managed on the strategy's intended timeline.",
+    whatItIs: "Whether the name is managed on the strategy's intended timeline.",
+    whyMatters: "Mixing horizons is how investments quietly become bag-holds.",
     category: "timeframe",
     source: "position",
     format: "text",
     operators: ["is"],
+    dateRanges: ["Current"],
+    defaultDateRange: "Current",
   },
 };
 
@@ -260,41 +776,213 @@ export function metricsForCategory(category: RuleCategory): MetricMeta[] {
   return ALL_METRICS.filter((metric) => metric.category === category);
 }
 
-// Order + human labels for the six categories (used by the registry consumers
-// and the Forge UI). Kept here so category metadata has one home.
-export const CATEGORY_META: Record<
-  RuleCategory,
-  { label: string; plainLabel: string; question: string }
-> = {
+// ---- Condition labels ------------------------------------------------------
+// Operators render as plain-English conditions (per the Figma table designs).
+// Currency metrics phrase ">" as "is greater than" (e.g. Net Income is greater
+// than $0); everything else uses "is above" (e.g. SPY 5D Change is above -5%).
+
+export function conditionLabel(
+  operator: RuleOperator,
+  format?: MetricFormat,
+): string {
+  switch (operator) {
+    case ">=":
+      return "is at least";
+    case ">":
+      return format === "currency" ? "is greater than" : "is above";
+    case "<":
+      return "is below";
+    case "<=":
+      return "is at most";
+    case "between":
+      return "is between";
+    case "is":
+      return "equals";
+  }
+}
+
+// ---- Value formatting --------------------------------------------------------
+// Renders a chip's target value with its metric's unit, matching the table
+// designs: "3%", "$0", "25", "0.8x", "TRUE", "7 days", "$10M", "1.5".
+
+export function formatMetricValue(
+  value: number | string,
+  meta: Pick<MetricMeta, "format" | "unit">,
+): string {
+  if (typeof value === "string") return value;
+  switch (meta.format) {
+    case "percent":
+      return `${value}%`;
+    case "ratio":
+      return `${value}x`;
+    case "currency":
+      if (meta.unit === "$M") return `$${value}M`;
+      if (meta.unit === "$B") return `$${value}B`;
+      return `$${value}`;
+    case "days":
+      return `${value} days`;
+    case "boolean":
+      return value === 1 ? "TRUE" : "FALSE";
+    default:
+      return `${value}`;
+  }
+}
+
+export function formatChipCondition(chip: RuleChip): string {
+  const meta = METRICS[chip.metric];
+  const label = conditionLabel(chip.operator, meta?.format);
+  if (chip.operator === "between" && Array.isArray(chip.value)) {
+    return `${label} ${formatMetricValue(chip.value[0], meta)} and ${formatMetricValue(chip.value[1], meta)}`;
+  }
+  const value = Array.isArray(chip.value) ? chip.value[0] : chip.value;
+  return `${label} ${formatMetricValue(value, meta)}`;
+}
+
+// ---- Category metadata --------------------------------------------------------
+// Order + labels + tooltip copy + section chrome for the six categories (used by
+// the registry consumers and the Configure card). Kept here so category metadata
+// has one home. Labels follow the Figma Configure-card design.
+
+export interface CategoryMeta {
+  label: string; // section title, e.g. "Thesis & Fundamentals"
+  stepLabel: string; // main-stepper label, e.g. "Thesis & Fundamentals"
+  plainLabel: string;
+  question: string; // the line under the section title
+  info: string; // section info-icon tooltip
+  chipsLabel: string; // e.g. "Fundamental Rule Chips"
+  chipsInfo: string; // chips info-icon tooltip
+  tagsLabel: string; // e.g. "Thesis Tags"
+  tagsInfo: string; // tags info-icon tooltip
+  chipModalTitle: string;
+  chipModalIntro: string;
+  tagModalTitle: string;
+  tagModalIntro: string;
+  subSteps: string[]; // the numbered mini-stepper inside the section
+}
+
+export const CATEGORY_META: Record<RuleCategory, CategoryMeta> = {
   thesis: {
-    label: "Thesis Fit",
+    label: "Thesis & Fundamentals",
+    stepLabel: "Thesis & Fundamentals",
     plainLabel: "Does it belong?",
-    question: "Does this ticker belong in the strategy?",
-  },
-  timeframe: {
-    label: "Timeframe",
-    plainLabel: "Right horizon?",
-    question: "Is the holding being managed on the intended timeline?",
-  },
-  position: {
-    label: "Position Size",
-    plainLabel: "Right size?",
-    question: "Is the allocation inside the intended range?",
+    question: "Does this ticker fit my thesis?",
+    info:
+      "The foundation of the strategy: your written thesis, quantified into measurable fundamental rules.",
+    chipsLabel: "Fundamental Rule Chips",
+    chipsInfo:
+      "What fundamental values do you want the strategy to check against your thesis?",
+    tagsLabel: "Thesis Tags",
+    tagsInfo:
+      "What are the core components of your thesis (e.g. Value, Growth, and Dividend)? What fundamentals map to those components? These become tags that you can later apply to individual stocks within your watchlists and portfolios.",
+    chipModalTitle: "Fundamental Rule Chips",
+    chipModalIntro: "Add fundamental values as rule chips.",
+    tagModalTitle: "Thesis Tags",
+    tagModalIntro:
+      "Add fundamental Rule Chips to Thesis Tags. Thesis Tags are applied to individual stocks for deriving Conviction Scores.",
+    subSteps: [
+      "Describe Thesis",
+      "Add Fundamental Values (Rule Chips)",
+      "Add Values To Thesis Tags (Optional)",
+    ],
   },
   setup: {
-    label: "Setup / Timing",
+    label: "Technical Analysis (Setup / Timing)",
+    stepLabel: "Technical Analysis",
     plainLabel: "Right setup?",
     question: "Does the current market/chart setup support the strategy?",
+    info:
+      "Chart and market-structure checks that confirm the timing supports the thesis — without overpowering it.",
+    chipsLabel: "Technical Rule Chips",
+    chipsInfo:
+      "What technical indicators and setup values do you want the strategy to check before entries and adds?",
+    tagsLabel: "Technical Tags",
+    tagsInfo:
+      "Group related technical rules into lenses like Trend Health or Entry Timing. These become tags that you can later apply to individual stocks within your watchlists and portfolios.",
+    chipModalTitle: "Technical Rule Chips",
+    chipModalIntro: "Add technical indicators and setup values as rule chips.",
+    tagModalTitle: "Technical Setup Tags",
+    tagModalIntro:
+      "Add technical Rule Chips to Technical Setup Tags. Technical Tags are applied to individual stocks for deriving Conviction Scores.",
+    subSteps: ["Add Technical Values (Rule Chips)", "Add Values to Technical Tags"],
   },
   risk: {
     label: "Risk Rules",
+    stepLabel: "Risk Rules",
     plainLabel: "Within limits?",
     question: "Is the position still inside the user's risk limits?",
+    info:
+      "Guardrails for the market, sector, and stock: conditions that must stay inside acceptable limits while you hold.",
+    chipsLabel: "Risk Rules",
+    chipsInfo: "What risk conditions must stay within acceptable limits while you hold?",
+    tagsLabel: "Risk Tags",
+    tagsInfo:
+      "Group related risk rules into lenses like Market Regime Risk or Liquidity Risk. These become tags that you can later apply to individual stocks within your watchlists and portfolios.",
+    chipModalTitle: "Risk Rule Chips",
+    chipModalIntro: "Add risk rule chips to help you manage your risk.",
+    tagModalTitle: "Risk Rule Tags",
+    tagModalIntro:
+      "Add risk Rule Chips to risk rule Tags. Risk Rule Tags are applied to individual stocks for deriving Conviction Scores.",
+    subSteps: ["Add Risk Rules (Rule Chips)", "Add Values to Risk Tags"],
+  },
+  position: {
+    label: "Position Size",
+    stepLabel: "Position Size",
+    plainLabel: "Right size?",
+    question: "Is the allocation sized with discipline?",
+    info:
+      "Sizing discipline: caps that keep any one name from dominating the book, and floors that keep positions meaningful.",
+    chipsLabel: "Position Rule Chips",
+    chipsInfo:
+      "What sizing limits should each position respect — caps to control concentration, floors to avoid dust positions?",
+    tagsLabel: "Position Tags",
+    tagsInfo:
+      "Group sizing rules into lenses like Concentration Control. These become tags that you can later apply to individual stocks within your watchlists and portfolios.",
+    chipModalTitle: "Position Rule Chips",
+    chipModalIntro: "Add position sizing values as rule chips.",
+    tagModalTitle: "Position Size Tags",
+    tagModalIntro:
+      "Add position Rule Chips to Position Size Tags. Position Tags are applied to individual stocks for deriving Conviction Scores.",
+    subSteps: ["Add Position Rules (Rule Chips)", "Add Values to Position Tags"],
   },
   trade: {
     label: "Trade Management",
+    stepLabel: "Trade Management",
     plainLabel: "Acting on plan?",
-    question: "Is the user adding, trimming, holding, or exiting per plan?",
+    question: "Is the position behaving inside the plan's tolerances?",
+    info:
+      "Whether the open position is inside your plan's tolerances — the drawdown you'll accept and the gain that triggers a trim review.",
+    chipsLabel: "Trade Rule Chips",
+    chipsInfo:
+      "What open-position tolerances define your plan — the loss you'll accept before review, the gain that triggers a trim?",
+    tagsLabel: "Trade Tags",
+    tagsInfo:
+      "Group trade-management rules into lenses like Drawdown Discipline. These become tags that you can later apply to individual stocks within your watchlists and portfolios.",
+    chipModalTitle: "Trade Rule Chips",
+    chipModalIntro: "Add trade management tolerances as rule chips.",
+    tagModalTitle: "Trade Management Tags",
+    tagModalIntro:
+      "Add trade Rule Chips to Trade Management Tags. Trade Tags are applied to individual stocks for deriving Conviction Scores.",
+    subSteps: ["Add Trade Rules (Rule Chips)", "Add Values to Trade Tags"],
+  },
+  timeframe: {
+    label: "Hold Timeframe",
+    stepLabel: "Hold Timeframe",
+    plainLabel: "Right horizon?",
+    question: "Is the holding being managed on the intended timeline?",
+    info:
+      "Horizon fit: long-term theses need time to work, and every holding deserves a periodic review checkpoint.",
+    chipsLabel: "Timeframe Rule Chips",
+    chipsInfo:
+      "What time-based checkpoints keep the holding honest — minimum seasoning, maximum time without a thesis review?",
+    tagsLabel: "Timeframe Tags",
+    tagsInfo:
+      "Group timeframe rules into lenses like Patience or Review Cadence. These become tags that you can later apply to individual stocks within your watchlists and portfolios.",
+    chipModalTitle: "Timeframe Rule Chips",
+    chipModalIntro: "Add hold-timeframe checkpoints as rule chips.",
+    tagModalTitle: "Hold Timeframe Tags",
+    tagModalIntro:
+      "Add timeframe Rule Chips to Hold Timeframe Tags. Timeframe Tags are applied to individual stocks for deriving Conviction Scores.",
+    subSteps: ["Add Timeframe Rules (Rule Chips)", "Add Values to Timeframe Tags"],
   },
 };
 

@@ -1,33 +1,44 @@
-import { useMemo, useState } from "react";
-import {
-  DECISION_SIGNAL_OPTIONS,
-  EXIT_RULE_OPTIONS,
-  TAG_OPTIONS,
-  TIMEFRAME_OPTIONS,
-} from "../data";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { dataSource } from "../lib/datasource";
 import {
   CATEGORY_META,
   CATEGORY_ORDER,
   METRICS,
+  formatChipCondition,
 } from "../lib/forge/metrics";
-import { scoreStock, type MetricContext } from "../lib/forge/scoring";
+import { validateStrategy } from "../lib/forge/scoring";
+import {
+  ArrowCounterClockwise,
+  CheckCircle,
+  PencilSimple,
+  Trash,
+  Warning,
+} from "../lib/icons";
 import { useAppState } from "../state/AppState";
+import { ActionFooter } from "./ActionFooter";
 import { Dropdown } from "./Dropdown";
-import { StatusBadge } from "./StatusBadge";
-import { RuleChipEditor } from "./forge/RuleChipEditor";
+import { MultiSelect } from "./MultiSelect";
+import { InfoTip, Tooltip } from "./Tooltip";
+import { RuleChipsTableModal } from "./forge/RuleChipsTableModal";
+import { TagsTableModal } from "./forge/TagsTableModal";
 import type {
   CheckInterval,
-  DecisionSignal,
-  ExitRule,
   RuleCategory,
   RuleChip,
-  RuleOperator,
+  RuleTag,
   Strategy,
-  Timeframe,
 } from "../types";
 
-// ---- Cadence helpers -----------------------------------------------------
+// ---------------------------------------------------------------------------
+// The Configure card (Strategy Forge). Layout follows the Figma design:
+// header → name/description → enabled → applied portfolios → conviction
+// preview → steps stepper → 1. Strategy Cadence → six category sections
+// (question, sub-stepper, rule-chip box + tags box opening table modals) →
+// completeness cautions → actions. All rule/tag editing happens in the table
+// modals (RuleChipsTableModal / TagsTableModal).
+// ---------------------------------------------------------------------------
+
+// ---- Cadence helpers -------------------------------------------------------
 
 const INTERVAL_ORDER: CheckInterval[] = ["15m", "30m", "1h", "4h", "1D", "1W", "1M"];
 const INTERVAL_LABEL: Record<CheckInterval, string> = {
@@ -40,286 +51,142 @@ const INTERVAL_LABEL: Record<CheckInterval, string> = {
   "1M": "Monthly",
 };
 
-const OPERATOR_SYMBOL: Record<RuleOperator, string> = {
-  ">": ">",
-  ">=": "≥",
-  "<": "<",
-  "<=": "≤",
-  between: "",
-  is: "is",
-};
+// ---- Steppers -------------------------------------------------------------
+// Active steppers (per the design): the main "Steps To Setup Your Strategy"
+// stepper uses blue (info) indices; the per-category sub-steppers use gold
+// (accent) indices. A completed step swaps its number for a CheckCircle in the
+// stepper's index color, and connector lines flex to fill the row.
 
-function formatCondition(chip: RuleChip): string {
-  const meta = METRICS[chip.metric];
-  const unit = meta.unit ?? "";
-  if (chip.operator === "between" && Array.isArray(chip.value)) {
-    return `${meta.label} ${chip.value[0]}${unit}–${chip.value[1]}${unit}`;
-  }
-  if (chip.operator === "is") {
-    return `${meta.label} is ${chip.value}`;
-  }
-  return `${meta.label} ${OPERATOR_SYMBOL[chip.operator]} ${chip.value}${unit}`;
+export interface StepItem {
+  label: string;
+  complete: boolean;
 }
 
-// ---- Small toggle chip group (legacy labels) -----------------------------
-
-function toggleValue<T>(values: T[], value: T): T[] {
-  return values.includes(value)
-    ? values.filter((item) => item !== value)
-    : [...values, value];
-}
-
-function ChipGroup<T extends string>({
-  title,
-  options,
-  active,
-  onToggle,
+function Stepper({
+  steps,
+  tone = "info",
 }: {
-  title: string;
-  options: readonly T[];
-  active: T[];
-  onToggle: (value: T) => void;
+  steps: StepItem[];
+  tone?: "info" | "accent";
 }) {
   return (
-    <div className="config-group">
-      <h3>{title}</h3>
-      <div className="config-chips">
-        {options.map((option) => {
-          const on = active.includes(option);
-          return (
-            <button
-              key={option}
-              type="button"
-              className={on ? "config-chip config-chip--on" : "config-chip"}
-              aria-pressed={on}
-              onClick={() => onToggle(option)}
-            >
-              {option}
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-// ---- Build a preview MetricContext for one ticker ------------------------
-
-function usePreviewContext(ticker: string): MetricContext {
-  return useMemo(() => {
-    const portfolio = dataSource.getPortfolios()[0];
-    const lastPrice = (t: string) => dataSource.getTickerInfo(t)?.lastPrice ?? 0;
-    const bookValue = portfolio
-      ? portfolio.holdings.reduce(
-          (sum, holding) => sum + holding.shares * lastPrice(holding.ticker),
-          0,
-        )
-      : 0;
-    const holding = portfolio?.holdings.find((item) => item.ticker === ticker);
-    const weightPct =
-      holding && bookValue > 0
-        ? (holding.shares * lastPrice(ticker) * 100) / bookValue
-        : holding
-          ? 0
-          : undefined;
-    return {
-      fundamentals: dataSource.getFundamentals(ticker),
-      technicals: dataSource.getTechnicals(ticker),
-      market: dataSource.getMarketContext(),
-      weightPct,
-      openPnlPct: holding?.openPnlPct,
-    };
-  }, [ticker]);
-}
-
-// ---- Thesis boolean builder ---------------------------------------------
-
-function ThesisBuilder({
-  strategy,
-  onChange,
-}: {
-  strategy: Strategy;
-  onChange: (groups: string[][]) => void;
-}) {
-  const thesisChips = (strategy.rules ?? []).filter(
-    (chip) => chip.category === "thesis",
-  );
-  const groups =
-    strategy.thesis && strategy.thesis.groups.length > 0
-      ? strategy.thesis.groups
-      : [thesisChips.map((chip) => chip.id)];
-
-  if (thesisChips.length === 0) {
-    return (
-      <p className="forge-thesis-empty">
-        Add a Thesis Fit chip above, then group your rules with AND / OR here.
-      </p>
-    );
-  }
-
-  function toggleMembership(groupIndex: number, chipId: string) {
-    const next = groups.map((group) => [...group]);
-    const group = next[groupIndex];
-    const at = group.indexOf(chipId);
-    if (at >= 0) group.splice(at, 1);
-    else group.push(chipId);
-    onChange(next.filter((g) => g.length > 0));
-  }
-
-  function addGroup() {
-    onChange([...groups, []]);
-  }
-
-  function removeGroup(groupIndex: number) {
-    onChange(groups.filter((_, index) => index !== groupIndex));
-  }
-
-  return (
-    <div className="forge-thesis">
-      <p className="forge-thesis-help">
-        A name passes the thesis if it satisfies <strong>all</strong> chips in{" "}
-        <strong>any one</strong> group (AND within a group, OR across groups).
-      </p>
-      {groups.map((group, groupIndex) => (
-        <div key={groupIndex} className="forge-thesis-group">
-          <div className="forge-thesis-group-head">
-            <span className="forge-thesis-group-name">Group {groupIndex + 1}</span>
-            {groups.length > 1 ? (
-              <button
-                type="button"
-                className="btn btn--small btn--ghost"
-                onClick={() => removeGroup(groupIndex)}
-              >
-                Remove group
-              </button>
-            ) : null}
-          </div>
-          <div className="forge-thesis-chips">
-            {thesisChips.map((chip) => {
-              const on = group.includes(chip.id);
-              return (
-                <button
-                  key={chip.id}
-                  type="button"
-                  className={on ? "config-chip config-chip--on" : "config-chip"}
-                  aria-pressed={on}
-                  onClick={() => toggleMembership(groupIndex, chip.id)}
-                >
-                  {chip.label}
-                </button>
-              );
-            })}
-          </div>
-          {groupIndex < groups.length - 1 ? (
-            <div className="forge-thesis-or">OR</div>
+    <ol className={`forge-stepper forge-stepper--${tone}`}>
+      {steps.map((step, index) => (
+        <Fragment key={step.label}>
+          <li
+            className={step.complete ? "forge-step forge-step--done" : "forge-step"}
+          >
+            {step.complete ? (
+              <CheckCircle className="forge-step-check" aria-hidden weight="fill" />
+            ) : (
+              <span className="forge-step-index">{index + 1}</span>
+            )}
+            <span className="forge-step-label">
+              {step.label}
+              {step.complete ? (
+                <span className="visually-hidden"> (complete)</span>
+              ) : null}
+            </span>
+          </li>
+          {index < steps.length - 1 ? (
+            <li className="forge-step-line" aria-hidden />
           ) : null}
-        </div>
+        </Fragment>
       ))}
-      <button type="button" className="btn btn--small btn--ghost" onClick={addGroup}>
-        + Add OR group
-      </button>
-    </div>
+    </ol>
   );
 }
 
-// ---- Rule chip row -------------------------------------------------------
+// ---- Chip / tag pills with tooltips ----------------------------------------
 
-function RuleChipRow({
-  chip,
-  outcome,
-  onEdit,
-  onDelete,
-  onToggle,
-}: {
-  chip: RuleChip;
-  outcome: "pass" | "fail" | "no-data";
-  onEdit: () => void;
-  onDelete: () => void;
-  onToggle: () => void;
-}) {
+function ChipPill({ chip }: { chip: RuleChip }) {
+  const meta = METRICS[chip.metric];
   return (
-    <li className={`forge-rule forge-rule--${outcome}`}>
-      <button
-        type="button"
-        className={
-          chip.enabled ? "forge-rule-toggle forge-rule-toggle--on" : "forge-rule-toggle"
-        }
-        aria-pressed={chip.enabled}
-        aria-label={chip.enabled ? "Disable chip" : "Enable chip"}
-        onClick={onToggle}
-      />
-      <div className="forge-rule-body">
-        <span className="forge-rule-label">{chip.label}</span>
-        <span className="forge-rule-cond">{formatCondition(chip)}</span>
-      </div>
-      <span className="forge-rule-weight" title="Weight within category">
-        ×{chip.weight}
+    <Tooltip
+      title={chip.label}
+      wide
+      body={
+        <>
+          <span className="tooltip-line">
+            <strong>Value | Weight</strong>
+          </span>
+          <span className="tooltip-line">
+            {formatChipCondition(chip)} | {chip.weightPct}%
+          </span>
+          <span className="tooltip-line">
+            <strong>What it is:</strong>
+          </span>
+          <span className="tooltip-line">{meta.whatItIs}</span>
+          <span className="tooltip-line">
+            <strong>Why does it matter?</strong>
+          </span>
+          <span className="tooltip-line">{meta.whyMatters}</span>
+        </>
+      }
+    >
+      <span className={chip.enabled ? "forge-pill" : "forge-pill forge-pill--off"} tabIndex={0}>
+        {chip.label}
       </span>
-      <span className={`forge-rule-pill forge-rule-pill--${outcome}`}>
-        {outcome === "pass" ? "Pass" : outcome === "fail" ? "Fail" : "No data"}
+    </Tooltip>
+  );
+}
+
+function TagPill({ tag }: { tag: RuleTag }) {
+  return (
+    <Tooltip
+      title={tag.label}
+      wide
+      body={
+        <>
+          <span className="tooltip-line">{tag.purpose}</span>
+          <span className="tooltip-line">
+            <strong>Weight:</strong> {tag.weightPct}%
+          </span>
+          <span className="tooltip-line">{tag.autoApply}</span>
+        </>
+      }
+    >
+      <span
+        className={tag.system ? "forge-pill forge-pill--muted" : "forge-pill"}
+        tabIndex={0}
+      >
+        {tag.label}
       </span>
-      <div className="forge-rule-actions">
-        <button type="button" className="forge-rule-act" onClick={onEdit} aria-label="Edit chip">
-          Edit
-        </button>
-        <button
-          type="button"
-          className="forge-rule-act forge-rule-act--danger"
-          onClick={onDelete}
-          aria-label="Delete chip"
-        >
-          Delete
-        </button>
-      </div>
-    </li>
+    </Tooltip>
   );
 }
 
 // ---- Main panel ----------------------------------------------------------
 
-interface EditorState {
-  chip: RuleChip | null;
+interface TableEditor {
+  kind: "chips" | "tags";
   category: RuleCategory;
 }
 
 export function StrategyForgePanel({ strategy }: { strategy: Strategy | undefined }) {
-  const {
-    updateStrategy,
-    resetStrategy,
-    deleteStrategy,
-    chipLibrary,
-    saveChipToLibrary,
-  } = useAppState();
+  const { updateStrategy, resetStrategy, deleteStrategy } = useAppState();
 
-  // Preview ticker — default to the first holding in any bucket for this
-  // strategy, else the first portfolio holding.
-  const tickerOptions = useMemo(() => {
-    const portfolio = dataSource.getPortfolios()[0];
-    return (portfolio?.holdings ?? []).map((holding) => ({
-      value: holding.ticker,
-      label: holding.ticker,
-    }));
-  }, []);
-  const [previewTicker, setPreviewTicker] = useState(
-    tickerOptions[0]?.value ?? "NVDA",
-  );
-  const [editor, setEditor] = useState<EditorState | null>(null);
-
-  const ctx = usePreviewContext(previewTicker);
-  const rules = strategy?.rules ?? [];
-
-  const alignment = useMemo(
-    () => (strategy ? scoreStock(strategy, ctx) : null),
-    [strategy, ctx],
+  const portfolioOptions = useMemo(
+    () =>
+      dataSource
+        .getPortfolios()
+        .map((portfolio) => ({ value: portfolio.id, label: portfolio.label })),
+    [],
   );
 
-  const outcomeByChip = useMemo(() => {
-    const map: Record<string, "pass" | "fail" | "no-data"> = {};
-    alignment?.results.forEach((result) => {
-      map[result.chip.id] = result.outcome;
-    });
-    return map;
-  }, [alignment]);
+  const [editor, setEditor] = useState<TableEditor | null>(null);
+  const [editingWeight, setEditingWeight] = useState<RuleCategory | null>(null);
+  const [updatedFlash, setUpdatedFlash] = useState(false);
+  const flashTimer = useRef<number | undefined>(undefined);
+  useEffect(() => () => window.clearTimeout(flashTimer.current), []);
+
+  const rules = useMemo(() => strategy?.rules ?? [], [strategy]);
+  const ruleTags = useMemo(() => strategy?.ruleTags ?? [], [strategy]);
+
+  const validation = useMemo(
+    () => (strategy ? validateStrategy(strategy) : null),
+    [strategy],
+  );
 
   if (!strategy) {
     return (
@@ -333,6 +200,7 @@ export function StrategyForgePanel({ strategy }: { strategy: Strategy | undefine
   }
 
   const id = strategy.id;
+  const weights = strategy.categoryWeights;
   const checkInterval = strategy.checkInterval ?? "1D";
   const technicalsInterval = strategy.technicalsInterval ?? checkInterval;
 
@@ -347,46 +215,80 @@ export function StrategyForgePanel({ strategy }: { strategy: Strategy | undefine
     const next = value as CheckInterval;
     const nextIndex = INTERVAL_ORDER.indexOf(next);
     const techIndex = INTERVAL_ORDER.indexOf(technicalsInterval);
-    // Keep technicals at or slower than the new check cadence.
     const nextTech = techIndex < nextIndex ? next : technicalsInterval;
     updateStrategy(id, { checkInterval: next, technicalsInterval: nextTech });
   }
 
-  function upsertChip(chip: RuleChip) {
-    const exists = rules.some((item) => item.id === chip.id);
-    const nextRules = exists
-      ? rules.map((item) => (item.id === chip.id ? chip : item))
-      : [...rules, chip];
-    updateStrategy(id, { rules: nextRules });
+  function saveChips(category: RuleCategory, chips: RuleChip[]) {
+    const nextRules = [
+      ...rules.filter((chip) => chip.category !== category),
+      ...chips,
+    ];
+    // Scrub deleted chips out of this category's tag memberships.
+    const keptIds = new Set(nextRules.map((chip) => chip.id));
+    const nextTags = ruleTags.map((tag) =>
+      tag.category === category
+        ? { ...tag, chipIds: tag.chipIds.filter((chipId) => keptIds.has(chipId)) }
+        : tag,
+    );
+    updateStrategy(id, { rules: nextRules, ruleTags: nextTags });
     setEditor(null);
   }
 
-  function deleteChip(chipId: string) {
-    updateStrategy(id, { rules: rules.filter((item) => item.id !== chipId) });
-    // Also drop it from any thesis group.
-    if (strategy?.thesis) {
-      const groups = strategy.thesis.groups
-        .map((group) => group.filter((memberId) => memberId !== chipId))
-        .filter((group) => group.length > 0);
-      updateStrategy(id, { thesis: { groups } });
-    }
-  }
-
-  function toggleChip(chipId: string) {
+  function saveTags(category: RuleCategory, tags: RuleTag[]) {
     updateStrategy(id, {
-      rules: rules.map((item) =>
-        item.id === chipId ? { ...item, enabled: !item.enabled } : item,
-      ),
+      ruleTags: [...ruleTags.filter((tag) => tag.category !== category), ...tags],
     });
+    setEditor(null);
   }
 
-  function addFromLibrary(libChip: RuleChip) {
-    const clone: RuleChip = {
-      ...libChip,
-      id: `chip-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-    };
-    updateStrategy(id, { rules: [...rules, clone] });
+  function handleUpdateStrategy() {
+    // Edits apply live; Update confirms + re-runs the completeness checks so
+    // the user gets explicit feedback before heading to Apply.
+    setUpdatedFlash(true);
+    window.clearTimeout(flashTimer.current);
+    flashTimer.current = window.setTimeout(() => setUpdatedFlash(false), 2500);
   }
+
+  const weightFor = (category: RuleCategory): number | undefined =>
+    weights?.[category];
+
+  // ---- Stepper completion (drives the active steppers) ----
+  const chipsIn = (category: RuleCategory) =>
+    rules.filter((chip) => chip.category === category && chip.enabled);
+  const customTagsIn = (category: RuleCategory) =>
+    ruleTags.filter((tag) => tag.category === category && !tag.system);
+
+  function categoryComplete(category: RuleCategory): boolean {
+    const chips = chipsIn(category);
+    if (chips.length === 0) return false;
+    const total = Math.round(chips.reduce((sum, chip) => sum + chip.weightPct, 0));
+    if (total !== 100) return false;
+    if (category === "thesis" && !strategy?.thesisDescription?.trim()) return false;
+    return true;
+  }
+
+  function subSteps(category: RuleCategory): StepItem[] {
+    const labels = CATEGORY_META[category].subSteps;
+    const hasChips = chipsIn(category).length > 0;
+    const hasTags = customTagsIn(category).length > 0;
+    const done =
+      category === "thesis"
+        ? [Boolean(strategy?.thesisDescription?.trim()), hasChips, hasTags]
+        : [hasChips, hasTags];
+    return labels.map((label, index) => ({
+      label,
+      complete: done[index] ?? false,
+    }));
+  }
+
+  const mainSteps: StepItem[] = [
+    { label: "Strategy Cadence", complete: Boolean(strategy.checkInterval) },
+    ...CATEGORY_ORDER.map((category) => ({
+      label: CATEGORY_META[category].stepLabel,
+      complete: categoryComplete(category),
+    })),
+  ];
 
   return (
     <section className="panel strategy-config" aria-labelledby="config-title">
@@ -397,8 +299,18 @@ export function StrategyForgePanel({ strategy }: { strategy: Strategy | undefine
         </span>
       </div>
 
+      {/* Scrolling body — head above + the action footer below stay pinned,
+          matching the My Strategies / Current Watch card model. */}
+      <div className="strategy-config-scroll">
+      {/* ---- Identity ---- */}
       <label className="config-field">
-        <span className="config-label">Strategy name</span>
+        <span className="config-label forge-label">
+          Strategy Name
+          <InfoTip
+            label="About strategy name"
+            body="Name the strategy after the plan it enforces — it labels signals across the Dashboard and Home."
+          />
+        </span>
         <input
           className="input"
           value={strategy.name}
@@ -407,105 +319,58 @@ export function StrategyForgePanel({ strategy }: { strategy: Strategy | undefine
       </label>
 
       <label className="config-field">
-        <span className="config-label">Description</span>
+        <span className="config-label forge-label">Description</span>
         <textarea
           className="input log-textarea"
           rows={2}
           value={strategy.description}
-          onChange={(event) =>
-            updateStrategy(id, { description: event.target.value })
-          }
+          onChange={(event) => updateStrategy(id, { description: event.target.value })}
         />
       </label>
 
-      <label className="config-toggle">
-        <input
-          type="checkbox"
-          checked={strategy.enabled}
-          onChange={(event) => updateStrategy(id, { enabled: event.target.checked })}
+      {/* ---- Applied portfolios ---- */}
+      {/* A strategy is "active" implicitly once a portfolio is applied here —
+          no separate Enabled toggle. Multi-select the portfolios/watchlists this
+          strategy governs. */}
+      <div className="config-field">
+        <span className="config-label forge-label">
+          Applied Portfolios
+          <InfoTip
+            label="About applied portfolios"
+            body="Select the portfolios and watchlists this strategy is applied to. Applying a strategy makes it active for those holdings."
+          />
+        </span>
+        <MultiSelect
+          id="forge-applied-portfolios"
+          label="Applied portfolios"
+          options={portfolioOptions}
+          selected={strategy.appliedPortfolioIds ?? []}
+          onChange={(ids) => updateStrategy(id, { appliedPortfolioIds: ids })}
+          placeholder="Select portfolios to apply this strategy to"
         />
-        <span>Enabled (counts toward Dashboard signals)</span>
-      </label>
+      </div>
 
-      {/* ---- Live conviction preview ---- */}
-      {alignment ? (
-        <div className="forge-preview">
-          <div className="forge-preview-head">
-            <span className="config-label">Conviction preview</span>
-            <div className="forge-preview-ticker">
-              <Dropdown
-                id="forge-preview-ticker"
-                label="Preview ticker"
-                value={previewTicker}
-                onChange={setPreviewTicker}
-                options={tickerOptions}
-              />
-            </div>
-          </div>
-          {alignment.hasRules ? (
-            <>
-              <div className="forge-preview-score">
-                <span className="forge-preview-number">{alignment.conviction}</span>
-                <StatusBadge status={alignment.status} />
-              </div>
-              <div className="forge-preview-track">
-                <span
-                  className="forge-preview-fill"
-                  style={{ width: `${alignment.conviction}%` }}
-                />
-              </div>
-              <ul className="forge-preview-cats">
-                {CATEGORY_ORDER.map((category) => {
-                  const cat = alignment.categories.find(
-                    (item) => item.category === category,
-                  );
-                  const score = cat?.score ?? null;
-                  return (
-                    <li key={category} className="forge-preview-cat">
-                      <span className="forge-preview-cat-name">
-                        {CATEGORY_META[category].label}
-                      </span>
-                      <span className="forge-preview-cat-bar">
-                        <span
-                          className="forge-preview-cat-fill"
-                          style={{ width: `${score ?? 0}%` }}
-                        />
-                      </span>
-                      <span className="forge-preview-cat-val">
-                        {score == null ? "—" : score}
-                      </span>
-                    </li>
-                  );
-                })}
-              </ul>
-              {!alignment.thesisPass ? (
-                <p className="forge-preview-gate">
-                  Thesis gate failed — this name doesn't meet the core thesis.
-                </p>
-              ) : alignment.riskBreached ? (
-                <p className="forge-preview-gate">
-                  Risk gate tripped — a risk rule is breaching.
-                </p>
-              ) : null}
-            </>
-          ) : (
-            <p className="forge-preview-empty">
-              Add rule chips below to see live conviction for {previewTicker}.
-            </p>
-          )}
+      {/* ---- Steps ---- */}
+      <div className="forge-section forge-section--steps">
+        <span className="config-label forge-label">Steps To Setup Your Strategy</span>
+        <Stepper steps={mainSteps} tone="info" />
+      </div>
+
+      {/* ---- 1. Strategy cadence ---- */}
+      <div className="forge-section">
+        <div className="forge-section-head">
+          <h3 className="forge-section-title">1. Strategy Cadence</h3>
         </div>
-      ) : null}
-
-      {/* ---- Check cadence ---- */}
-      <div className="config-group forge-cadence">
-        <h3>Check cadence</h3>
-        <p className="forge-cadence-help">
-          How often this strategy re-scores its bucket and updates the chips you
-          see. Fundamentals refresh daily; technicals use the candle below.
-        </p>
+        <p className="forge-section-q">How often would you like your strategy to update?</p>
         <div className="forge-cadence-row">
           <label className="config-field">
-            <span className="config-label">Strategy check</span>
+            <span className="config-label forge-label forge-label--muted">
+              Strategy Check
+              <InfoTip
+                label="About the strategy check cadence"
+                body="How often this strategy re-scores its portfolios and refreshes the chips you see. Fundamentals refresh daily regardless."
+              />
+            </span>
             <Dropdown
               id="forge-check-interval"
               label="Strategy check interval"
@@ -518,7 +383,13 @@ export function StrategyForgePanel({ strategy }: { strategy: Strategy | undefine
             />
           </label>
           <label className="config-field">
-            <span className="config-label">Technicals candle</span>
+            <span className="config-label forge-label forge-label--muted">
+              Technical Indicators
+              <InfoTip
+                label="About the technicals cadence"
+                body="The candle size technical indicators use. It can't refresh faster than the strategy check, and never below 15 minutes."
+              />
+            </span>
             <Dropdown
               id="forge-technicals-interval"
               label="Technicals interval"
@@ -532,139 +403,237 @@ export function StrategyForgePanel({ strategy }: { strategy: Strategy | undefine
         </div>
       </div>
 
-      {/* ---- Rule categories ---- */}
-      {CATEGORY_ORDER.map((category) => {
+      {/* ---- 2..7 Rule categories ---- */}
+      {CATEGORY_ORDER.map((category, index) => {
         const meta = CATEGORY_META[category];
         const categoryChips = rules.filter((chip) => chip.category === category);
+        const categoryTags = ruleTags.filter((tag) => tag.category === category);
+        const weight = weightFor(category);
+        const editingThisWeight = editingWeight === category;
         return (
-          <div key={category} className="config-group forge-category">
-            <div className="forge-category-head">
-              <h3>{meta.label}</h3>
-              <span className="forge-category-q">{meta.question}</span>
+          <div key={category} className="forge-section">
+            <div className="forge-section-head">
+              <h3 className="forge-section-title">
+                {index + 2}. {meta.label}
+                <InfoTip label={`About ${meta.label}`} body={meta.info} />
+              </h3>
+              <div className="forge-section-tools">
+                {editingThisWeight ? (
+                  <span className="forge-weight-edit">
+                    <label className="visually-hidden" htmlFor={`weight-${category}`}>
+                      {meta.label} conviction weight percent
+                    </label>
+                    <input
+                      id={`weight-${category}`}
+                      className="input forge-cell-input forge-cell-input--num forge-cell-input--weight"
+                      type="number"
+                      min={0}
+                      max={100}
+                      autoFocus
+                      value={weight ?? 0}
+                      onChange={(event) =>
+                        updateStrategy(id, {
+                          categoryWeights: {
+                            ...(weights ?? {
+                              thesis: 0,
+                              setup: 0,
+                              risk: 0,
+                              position: 0,
+                              trade: 0,
+                              timeframe: 0,
+                            }),
+                            [category]: Number(event.target.value),
+                          },
+                        })
+                      }
+                      onBlur={() => setEditingWeight(null)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === "Escape") {
+                          setEditingWeight(null);
+                        }
+                      }}
+                    />
+                    <span className="forge-cell-unit forge-cell-unit--weight">%</span>
+                  </span>
+                ) : (
+                  <span
+                    className={
+                      weight == null
+                        ? "chip forge-weight-chip forge-weight-chip--warn"
+                        : "chip forge-weight-chip"
+                    }
+                  >
+                    Conviction Weight Total: {weight == null ? "??" : weight}%
+                  </span>
+                )}
+                <button
+                  type="button"
+                  className="icon-btn icon-btn--blue"
+                  aria-label={`Edit ${meta.label} conviction weight`}
+                  onClick={() => setEditingWeight(editingThisWeight ? null : category)}
+                >
+                  <PencilSimple aria-hidden weight="regular" />
+                </button>
+              </div>
             </div>
-            {categoryChips.length > 0 ? (
-              <ul className="forge-rules">
-                {categoryChips.map((chip) => (
-                  <RuleChipRow
-                    key={chip.id}
-                    chip={chip}
-                    outcome={outcomeByChip[chip.id] ?? "no-data"}
-                    onEdit={() => setEditor({ chip, category })}
-                    onDelete={() => deleteChip(chip.id)}
-                    onToggle={() => toggleChip(chip.id)}
-                  />
-                ))}
-              </ul>
-            ) : (
-              <p className="forge-category-empty">No rules yet.</p>
-            )}
-            <button
-              type="button"
-              className="btn btn--small btn--ghost"
-              onClick={() => setEditor({ chip: null, category })}
-            >
-              + Add rule
-            </button>
+
+            <p className="forge-section-q">{meta.question}</p>
+            <Stepper steps={subSteps(category)} tone="accent" />
 
             {category === "thesis" ? (
-              <ThesisBuilder
-                strategy={strategy}
-                onChange={(groups) => updateStrategy(id, { thesis: { groups } })}
-              />
+              <label className="config-field">
+                <span className="config-label forge-label forge-label--muted">
+                  Thesis Description
+                  <InfoTip
+                    label="About the thesis description"
+                    body="Describe what you want the strategy to find — the rule chips below turn this into measurable checks."
+                  />
+                </span>
+                <textarea
+                  className="input log-textarea"
+                  rows={3}
+                  value={strategy.thesisDescription ?? ""}
+                  placeholder="Describe what this strategy should find…"
+                  onChange={(event) =>
+                    updateStrategy(id, { thesisDescription: event.target.value })
+                  }
+                />
+              </label>
             ) : null}
+
+            <div className="forge-boxes">
+              <div className="forge-box forge-box--chips">
+                <div className="forge-box-head">
+                  <span className="config-label forge-label forge-label--muted">
+                    {meta.chipsLabel}
+                    <InfoTip
+                      label={`About ${meta.chipsLabel.toLowerCase()}`}
+                      title={meta.chipsLabel}
+                      body={meta.chipsInfo}
+                      wide
+                    />
+                  </span>
+                  <button
+                    type="button"
+                    className="icon-btn icon-btn--blue"
+                    aria-label={`Edit ${meta.chipsLabel}`}
+                    onClick={() => setEditor({ kind: "chips", category })}
+                  >
+                    <PencilSimple aria-hidden weight="regular" />
+                  </button>
+                </div>
+                <div className="forge-box-body">
+                  {categoryChips.length > 0 ? (
+                    categoryChips.map((chip) => <ChipPill key={chip.id} chip={chip} />)
+                  ) : (
+                    <span className="forge-box-empty">
+                      No rule chips yet — use the edit icon to add them.
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div className="forge-box forge-box--tags">
+                <div className="forge-box-head">
+                  <span className="config-label forge-label forge-label--muted">
+                    {meta.tagsLabel}
+                    <InfoTip
+                      label={`About ${meta.tagsLabel.toLowerCase()}`}
+                      title={meta.tagsLabel}
+                      body={meta.tagsInfo}
+                      wide
+                    />
+                  </span>
+                  <button
+                    type="button"
+                    className="icon-btn icon-btn--blue"
+                    aria-label={`Edit ${meta.tagsLabel}`}
+                    onClick={() => setEditor({ kind: "tags", category })}
+                  >
+                    <PencilSimple aria-hidden weight="regular" />
+                  </button>
+                </div>
+                <div className="forge-box-body">
+                  {categoryTags.length > 0 ? (
+                    categoryTags.map((tag) => <TagPill key={tag.id} tag={tag} />)
+                  ) : (
+                    <span className="forge-box-empty">
+                      No tags yet — use the edit icon to add them.
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
           </div>
         );
       })}
 
-      {/* ---- Chip library ---- */}
-      <div className="config-group forge-library">
-        <h3>Chip library</h3>
-        <p className="forge-cadence-help">
-          Reusable rules. Click to add a copy to this strategy; save new chips to
-          the library from the rule editor.
-        </p>
-        <div className="config-chips">
-          {chipLibrary.map((libChip) => (
-            <button
-              key={libChip.id}
-              type="button"
-              className="config-chip"
-              onClick={() => addFromLibrary(libChip)}
-              title={formatCondition(libChip)}
-            >
-              + {libChip.label}
-            </button>
-          ))}
+      {/* ---- Completeness cautions ---- */}
+      {validation && !validation.complete ? (
+        <div className="forge-caution" role="status">
+          <span className="forge-caution-head">
+            <Warning aria-hidden weight="fill" />
+            Finish the configuration before applying this strategy
+          </span>
+          <ul className="forge-caution-list">
+            {validation.issues.map((issue) => (
+              <li key={issue}>{issue}</li>
+            ))}
+          </ul>
         </div>
+      ) : null}
       </div>
 
-      {/* ---- Legacy labels (kept for existing list/summary views) ---- */}
-      <details className="forge-legacy">
-        <summary>Labels &amp; legacy signals</summary>
-        <ChipGroup<Timeframe>
-          title="Timeframe"
-          options={TIMEFRAME_OPTIONS}
-          active={strategy.timeframe}
-          onToggle={(value) =>
-            updateStrategy(id, {
-              timeframe: toggleValue(strategy.timeframe, value),
-            })
-          }
-        />
-        <ChipGroup<string>
-          title="Strategy Tags"
-          options={TAG_OPTIONS}
-          active={strategy.tags}
-          onToggle={(value) =>
-            updateStrategy(id, { tags: toggleValue(strategy.tags, value) })
-          }
-        />
-        <ChipGroup<DecisionSignal>
-          title="Key Decision Signals"
-          options={DECISION_SIGNAL_OPTIONS}
-          active={strategy.decisionSignals}
-          onToggle={(value) =>
-            updateStrategy(id, {
-              decisionSignals: toggleValue(strategy.decisionSignals, value),
-            })
-          }
-        />
-        <ChipGroup<ExitRule>
-          title="Exit Logic"
-          options={EXIT_RULE_OPTIONS}
-          active={strategy.exitLogic}
-          onToggle={(value) =>
-            updateStrategy(id, { exitLogic: toggleValue(strategy.exitLogic, value) })
-          }
-        />
-      </details>
-
-      <div className="config-actions">
+      {/* ---- Actions (pinned card footer; icon-only on mobile) ---- */}
+      <ActionFooter className="forge-config-actions strategy-footer--icons">
         {strategy.isDefault ? (
           <button
             type="button"
             className="btn btn--small btn--ghost"
             onClick={() => resetStrategy(id)}
+            aria-label="Reset to default"
           >
-            Reset to default
+            <ArrowCounterClockwise size={16} weight="regular" aria-hidden />
+            <span className="btn-label">Reset to default</span>
           </button>
         ) : (
           <button
             type="button"
             className="btn btn--small btn--ghost"
             onClick={() => deleteStrategy(id)}
+            aria-label="Delete strategy"
           >
-            Delete strategy
+            <Trash size={16} weight="regular" aria-hidden />
+            <span className="btn-label">Delete strategy</span>
           </button>
         )}
-      </div>
+        <button
+          type="button"
+          className="btn btn--small btn--solid forge-update-btn"
+          onClick={handleUpdateStrategy}
+          aria-label="Update strategy"
+        >
+          <CheckCircle size={16} weight={updatedFlash ? "fill" : "regular"} aria-hidden />
+          <span className="btn-label">
+            {updatedFlash ? "Strategy Updated" : "Update Strategy"}
+          </span>
+        </button>
+      </ActionFooter>
 
-      {editor ? (
-        <RuleChipEditor
-          chip={editor.chip}
-          defaultCategory={editor.category}
-          onSave={upsertChip}
-          onSaveToLibrary={saveChipToLibrary}
+      {editor?.kind === "chips" ? (
+        <RuleChipsTableModal
+          category={editor.category}
+          chips={rules.filter((chip) => chip.category === editor.category)}
+          onSave={(chips) => saveChips(editor.category, chips)}
+          onClose={() => setEditor(null)}
+        />
+      ) : null}
+      {editor?.kind === "tags" ? (
+        <TagsTableModal
+          category={editor.category}
+          tags={ruleTags.filter((tag) => tag.category === editor.category)}
+          chips={rules.filter((chip) => chip.category === editor.category)}
+          onSave={(tags) => saveTags(editor.category, tags)}
           onClose={() => setEditor(null)}
         />
       ) : null}

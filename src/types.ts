@@ -267,9 +267,11 @@ export interface Strategy {
   // ---- Strategy Forge rule-chip engine ----
   // Optional until a strategy is "forged" with rule chips; the scoring engine
   // falls back to sensible defaults when these are absent.
+  thesisDescription?: string; // the written thesis the rule chips quantify
   rules?: RuleChip[];
-  thesis?: ThesisLogic; // how the Thesis Fit chips combine (AND-groups / OR)
-  categoryWeights?: CategoryWeights; // blend weights; defaults are Thesis-heavy
+  ruleTags?: RuleTag[]; // reusable chip groups ("lenses") per category
+  categoryWeights?: CategoryWeights; // each category's share of conviction; sums to 100
+  appliedPortfolioIds?: string[]; // portfolios/watchlists this strategy is applied to
   checkInterval?: CheckInterval; // re-score + notify cadence; default "1D"
   technicalsInterval?: CheckInterval; // candle size; >= checkInterval and >= 15m
 }
@@ -277,8 +279,11 @@ export interface Strategy {
 export type StrategyAssignments = Record<string, string[]>;
 
 // ---- Strategy Forge: rule-chip engine ----
-// The six rule categories. Each produces a 0–100 sub-score; conviction is their
-// weighted blend (see docs/strategy-forge.md).
+// The six rule categories (see docs/strategy-forge.md). Keys are stable ids;
+// UI labels live in CATEGORY_META (src/lib/forge/metrics.ts):
+// thesis = "Thesis & Fundamentals", setup = "Technical Analysis (Setup /
+// Timing)", risk = "Risk Rules", position = "Position Size",
+// trade = "Trade Management", timeframe = "Hold Timeframe".
 export type RuleCategory =
   | "thesis"
   | "timeframe"
@@ -289,47 +294,107 @@ export type RuleCategory =
 
 export type RuleOperator = ">" | ">=" | "<" | "<=" | "between" | "is";
 
+// The date range a chip's data point reflects — display metadata carried on
+// the chip (the mock snapshots already embody these ranges).
+export type DateRange =
+  | "TTM / Latest FY"
+  | "Most Recent Quarter"
+  | "Current"
+  | "Current / TTM"
+  | "5Y"
+  | "1Y"
+  | "3M"
+  | "1M"
+  | "200D"
+  | "20D"
+  | "14D"
+  | "5D";
+
 // Keys into the metric registry (src/lib/forge/metrics.ts). Kept as a string
-// union so the registry, chip editor, and snapshots stay in sync.
+// union so the registry, the table modals, and the snapshots stay in sync.
 export type MetricKey =
-  // Fundamentals
+  // Fundamentals — growth & profitability
   | "epsTtm"
   | "epsGrowthPct"
   | "revenueGrowthPct"
   | "grossMarginPct"
   | "netMarginPct"
-  | "peRatio"
-  | "debtToEquity"
+  | "netIncome"
+  | "operatingCashFlow"
+  | "returnOnEquityPct"
+  | "operatingMarginPct"
   | "fcfMarginPct"
-  // Technicals
+  // Fundamentals — valuation
+  | "peRatio"
+  | "forwardPE"
+  | "priceToSales"
+  | "evToEbitda"
+  // Fundamentals — balance sheet
+  | "debtToEquity"
+  | "interestCoverage"
+  | "currentRatio"
+  // Fundamentals — shareholder returns
+  | "dividendYieldPct"
+  | "payoutRatioPct"
+  | "dividendGrowth5yPct"
+  | "buybackYieldPct"
+  // Technicals — trend / momentum / setup
+  | "priceAbove200dSma"
+  | "priceAbove50dSma"
+  | "priceAbove20dSma"
+  | "rsi14"
   | "weeklyRsi"
+  | "drawdownFrom52wHighPct"
+  | "priceChange3mPct"
+  | "relativeVolume"
   | "priceVsVwapPct"
   | "priceVs10EmaPct"
   | "priceVs20EmaPct"
   | "priceVs50EmaPct"
-  // Position / holding
-  | "weightPct"
-  | "openPnlPct"
+  | "daysUntilEarnings"
+  // Stock risk
+  | "atrPct14d"
+  | "beta1y"
+  | "avgDollarVolume20d"
+  | "sectorEtf1mChangePct"
   // Market context
   | "vix"
   | "spyRsi"
+  | "spyAbove200dSma"
+  | "spy5dChangePct"
+  | "highYieldSpreadPct"
+  | "treasury10y5dChangePct"
+  // Position / holding
+  | "weightPct"
+  | "openPnlPct"
+  | "holdingDays"
   // Qualitative (string "is" match), e.g. intended timeframe
   | "timeframe";
 
 export interface RuleChip {
   id: string;
-  label: string; // user-defined, e.g. "Strong EPS growth"
+  label: string; // user-defined, e.g. "Revenue Growth"
   category: RuleCategory;
-  metric: MetricKey;
-  operator: RuleOperator;
+  metric: MetricKey; // the data point being tested
+  dateRange: DateRange; // the range the data point reflects
+  operator: RuleOperator; // rendered as "is at least", "is below", …
   value: number | [number, number] | string;
-  weight: number; // 1..5 contribution within its category
+  weightPct: number; // Rule Weight — % importance within its category (chips sum to 100)
   enabled: boolean;
 }
 
-// Thesis = boolean composite: chips AND-ed inside a group, groups OR-ed together.
-export interface ThesisLogic {
-  groups: string[][]; // arrays of RuleChip ids
+// A Tag is a reusable, named group of rule chips within one category — the
+// "lens" a user can later apply to individual stocks. Each category carries a
+// built-in "All Active Chips" system tag (the full chip set, not deletable).
+export interface RuleTag {
+  id: string;
+  label: string; // e.g. "Quality", "Trend Health", "Market Regime Risk"
+  category: RuleCategory;
+  purpose: string; // what this tag confirms
+  chipIds: string[]; // member rule chips (empty for the system tag = all chips)
+  weightPct: number; // Tag Weight — % importance among the category's tags
+  autoApply: string; // suggested auto-apply guidance copy
+  system?: boolean; // true for the built-in "All Active Chips" tag
 }
 
 export type CategoryWeights = Record<RuleCategory, number>;
@@ -367,24 +432,56 @@ export type MarketDataSource = "mock" | "live";
 export type MetricValue = number | null;
 
 export interface FundamentalSnapshot {
+  // Growth & profitability
   epsTtm: MetricValue;
   epsGrowthPct: MetricValue;
   revenueGrowthPct: MetricValue;
   grossMarginPct: MetricValue;
   netMarginPct: MetricValue;
-  peRatio: MetricValue;
-  debtToEquity: MetricValue;
+  netIncome: MetricValue; // $B, TTM
+  operatingCashFlow: MetricValue; // $B, TTM
+  returnOnEquityPct: MetricValue;
+  operatingMarginPct: MetricValue;
   fcfMarginPct: MetricValue;
+  // Valuation
+  peRatio: MetricValue;
+  forwardPE: MetricValue;
+  priceToSales: MetricValue;
+  evToEbitda: MetricValue;
+  // Balance sheet
+  debtToEquity: MetricValue;
+  interestCoverage: MetricValue; // x
+  currentRatio: MetricValue;
+  // Shareholder returns
+  dividendYieldPct: MetricValue;
+  payoutRatioPct: MetricValue;
+  dividendGrowth5yPct: MetricValue;
+  buybackYieldPct: MetricValue;
   asOf: string; // ISO date the snapshot reflects
   source: MarketDataSource;
 }
 
 export interface TechnicalSnapshot {
+  // Trend flags (1 = true, 0 = false, null = no data)
+  priceAbove200dSma: MetricValue;
+  priceAbove50dSma: MetricValue;
+  priceAbove20dSma: MetricValue;
+  // Momentum / setup
+  rsi14: MetricValue;
   weeklyRsi: MetricValue;
+  drawdownFrom52wHighPct: MetricValue;
+  priceChange3mPct: MetricValue;
+  relativeVolume: MetricValue; // x vs 20D average
   priceVsVwapPct: MetricValue;
   priceVs10EmaPct: MetricValue;
   priceVs20EmaPct: MetricValue;
   priceVs50EmaPct: MetricValue;
+  daysUntilEarnings: MetricValue;
+  // Stock risk
+  atrPct14d: MetricValue; // ATR as % of price
+  beta1y: MetricValue;
+  avgDollarVolume20d: MetricValue; // $M per day
+  sectorEtf1mChangePct: MetricValue; // this name's sector ETF, 1M change
   asOf: string;
   source: MarketDataSource;
 }
@@ -392,6 +489,10 @@ export interface TechnicalSnapshot {
 export interface MarketContext {
   vix: MetricValue;
   spyRsi: MetricValue;
+  spyAbove200dSma: MetricValue; // 1 = true, 0 = false
+  spy5dChangePct: MetricValue;
+  highYieldSpreadPct: MetricValue;
+  treasury10y5dChangePct: MetricValue; // percentage-point change
   asOf: string;
   source: MarketDataSource;
 }

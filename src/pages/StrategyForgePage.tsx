@@ -15,12 +15,8 @@ const FORGE_DETAIL_TABS: TabItem[] = [
 ];
 
 export function StrategyForgePage() {
-  const {
-    strategies,
-    createStrategy,
-    duplicateStrategy,
-    deleteStrategy,
-  } = useAppState();
+  const { strategies, createStrategy, duplicateStrategy, deleteStrategy } =
+    useAppState();
 
   const [selectedId, setSelectedId] = useState<string>(
     strategies[0]?.id ?? "",

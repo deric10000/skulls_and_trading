@@ -78,6 +78,12 @@ contracts below.
 - The **metric registry** (`metrics.ts`) is the single source of truth for what
   a chip can test. Add a metric = add to `MetricKey` (`types.ts`) + seed the
   snapshot (`data.ts`) + register in `metrics.ts`. Nothing else.
+- Scoring follows the normalized tag/chip/weight algorithm in
+  `docs/strategy-forge.md`: active chips (tag-lens union, deduped) → pass/fail
+  → rule weights renormalized to 100% of the category → `categoryScore ×
+  categoryWeight` summed. **No** thesis/risk gates or conviction clamps.
+  Rule weights, tag weights, and category weights each sum to 100;
+  `validateStrategy` completeness gates "Apply to Portfolio".
 - Conviction is **market-value-weighted** across bucket allocations; a ticker's
   headline = its best-aligned bucket. `AppState` overlays computed
   conviction/status onto the watchlist — downstream chips just reflect it.
