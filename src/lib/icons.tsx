@@ -7,8 +7,10 @@
 import { forwardRef } from "react";
 import {
   Anchor,
+  ArrowCounterClockwise,
   ArrowFatLineUp,
   ArrowsClockwise,
+  CaretDown,
   CaretLeft,
   CaretRight,
   CaretUpDown,
@@ -63,8 +65,10 @@ WindReversed.displayName = "WindReversed";
 
 export {
   Anchor,
+  ArrowCounterClockwise,
   ArrowFatLineUp,
   ArrowsClockwise,
+  CaretDown,
   CaretLeft,
   CaretRight,
   CaretUpDown,

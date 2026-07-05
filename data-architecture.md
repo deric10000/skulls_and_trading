@@ -197,6 +197,12 @@ snapshots (`data.ts`), and register it in `metrics.ts`. Nothing else changes.
   edited through the table modals on the Configure card. Duplicating a strategy
   deep-copies both; new blank strategies seed empty categories with default
   category weights and the system tags.
+- `strategy.appliedPortfolioIds` records which portfolios/watchlists the
+  strategy is applied to. It's edited via the "Applied Portfolios" multi-select
+  on the Configure card (no separate Enabled toggle — a strategy is active once
+  a portfolio is applied). Blank/duplicated strategies start unapplied (`[]`).
+  Wiring applied portfolios into scoring/dashboard signals is a later pass; the
+  forge preview still scores through `buckets`.
 
 ### Buckets — independent cadence per strategy
 

@@ -7,10 +7,17 @@ import {
   formatChipCondition,
 } from "../lib/forge/metrics";
 import { validateStrategy } from "../lib/forge/scoring";
-import { CheckCircle, PencilSimple, Warning } from "../lib/icons";
+import {
+  ArrowCounterClockwise,
+  CheckCircle,
+  PencilSimple,
+  Trash,
+  Warning,
+} from "../lib/icons";
 import { useAppState } from "../state/AppState";
 import { ActionFooter } from "./ActionFooter";
 import { Dropdown } from "./Dropdown";
+import { MultiSelect } from "./MultiSelect";
 import { InfoTip, Tooltip } from "./Tooltip";
 import { RuleChipsTableModal } from "./forge/RuleChipsTableModal";
 import { TagsTableModal } from "./forge/TagsTableModal";
@@ -157,7 +164,15 @@ interface TableEditor {
 }
 
 export function StrategyForgePanel({ strategy }: { strategy: Strategy | undefined }) {
-  const { updateStrategy, resetStrategy, deleteStrategy, buckets } = useAppState();
+  const { updateStrategy, resetStrategy, deleteStrategy } = useAppState();
+
+  const portfolioOptions = useMemo(
+    () =>
+      dataSource
+        .getPortfolios()
+        .map((portfolio) => ({ value: portfolio.id, label: portfolio.label })),
+    [],
+  );
 
   const [editor, setEditor] = useState<TableEditor | null>(null);
   const [editingWeight, setEditingWeight] = useState<RuleCategory | null>(null);
@@ -172,18 +187,6 @@ export function StrategyForgePanel({ strategy }: { strategy: Strategy | undefine
     () => (strategy ? validateStrategy(strategy) : null),
     [strategy],
   );
-
-  const appliedPortfolios = useMemo(() => {
-    if (!strategy) return [];
-    const portfolioIds = new Set(
-      buckets
-        .filter((bucket) => bucket.strategyId === strategy.id)
-        .map((bucket) => bucket.portfolioId),
-    );
-    return dataSource
-      .getPortfolios()
-      .filter((portfolio) => portfolioIds.has(portfolio.id));
-  }, [strategy, buckets]);
 
   if (!strategy) {
     return (
@@ -326,28 +329,25 @@ export function StrategyForgePanel({ strategy }: { strategy: Strategy | undefine
       </label>
 
       {/* ---- Applied portfolios ---- */}
-      {/* A strategy is "active" implicitly once a portfolio is applied to it
-          (via the Dashboard) — no separate Enabled toggle. `strategy.enabled`
-          stays true by default so applied portfolios count toward signals. */}
+      {/* A strategy is "active" implicitly once a portfolio is applied here —
+          no separate Enabled toggle. Multi-select the portfolios/watchlists this
+          strategy governs. */}
       <div className="config-field">
         <span className="config-label forge-label">
           Applied Portfolios
           <InfoTip
             label="About applied portfolios"
-            body="Apply portfolios in the Dashboard to see them displayed here."
+            body="Select the portfolios and watchlists this strategy is applied to. Applying a strategy makes it active for those holdings."
           />
         </span>
-        <div className="forge-portfolios">
-          {appliedPortfolios.length > 0 ? (
-            appliedPortfolios.map((portfolio) => (
-              <span key={portfolio.id} className="chip forge-portfolio-chip">
-                {portfolio.label}
-              </span>
-            ))
-          ) : (
-            <span className="forge-portfolios-empty">No portfolios applied yet.</span>
-          )}
-        </div>
+        <MultiSelect
+          id="forge-applied-portfolios"
+          label="Applied portfolios"
+          options={portfolioOptions}
+          selected={strategy.appliedPortfolioIds ?? []}
+          onChange={(ids) => updateStrategy(id, { appliedPortfolioIds: ids })}
+          placeholder="Select portfolios to apply this strategy to"
+        />
       </div>
 
       {/* ---- Steps ---- */}
@@ -584,37 +584,39 @@ export function StrategyForgePanel({ strategy }: { strategy: Strategy | undefine
       ) : null}
       </div>
 
-      {/* ---- Actions (pinned card footer) ---- */}
-      <ActionFooter className="forge-config-actions">
+      {/* ---- Actions (pinned card footer; icon-only on mobile) ---- */}
+      <ActionFooter className="forge-config-actions strategy-footer--icons">
         {strategy.isDefault ? (
           <button
             type="button"
             className="btn btn--small btn--ghost"
             onClick={() => resetStrategy(id)}
+            aria-label="Reset to default"
           >
-            Reset to default
+            <ArrowCounterClockwise size={16} weight="regular" aria-hidden />
+            <span className="btn-label">Reset to default</span>
           </button>
         ) : (
           <button
             type="button"
             className="btn btn--small btn--ghost"
             onClick={() => deleteStrategy(id)}
+            aria-label="Delete strategy"
           >
-            Delete strategy
+            <Trash size={16} weight="regular" aria-hidden />
+            <span className="btn-label">Delete strategy</span>
           </button>
         )}
         <button
           type="button"
           className="btn btn--small btn--solid forge-update-btn"
           onClick={handleUpdateStrategy}
+          aria-label="Update strategy"
         >
-          {updatedFlash ? (
-            <>
-              <CheckCircle aria-hidden weight="fill" /> Strategy Updated
-            </>
-          ) : (
-            "Update Strategy"
-          )}
+          <CheckCircle size={16} weight={updatedFlash ? "fill" : "regular"} aria-hidden />
+          <span className="btn-label">
+            {updatedFlash ? "Strategy Updated" : "Update Strategy"}
+          </span>
         </button>
       </ActionFooter>
 

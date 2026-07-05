@@ -234,6 +234,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       rules: [],
       ruleTags: buildSystemTags(id),
       categoryWeights: { ...DEFAULT_CATEGORY_WEIGHTS },
+      appliedPortfolioIds: [],
       checkInterval: "1D",
       technicalsInterval: "1D",
     };
@@ -279,6 +280,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         categoryWeights: source.categoryWeights
           ? { ...source.categoryWeights }
           : { ...DEFAULT_CATEGORY_WEIGHTS },
+        // A fresh copy starts unapplied — the user applies it explicitly.
+        appliedPortfolioIds: [],
       };
       setStrategies((current) => [...current, copy]);
       return newId;

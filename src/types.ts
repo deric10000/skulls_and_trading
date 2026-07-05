@@ -271,6 +271,7 @@ export interface Strategy {
   rules?: RuleChip[];
   ruleTags?: RuleTag[]; // reusable chip groups ("lenses") per category
   categoryWeights?: CategoryWeights; // each category's share of conviction; sums to 100
+  appliedPortfolioIds?: string[]; // portfolios/watchlists this strategy is applied to
   checkInterval?: CheckInterval; // re-score + notify cadence; default "1D"
   technicalsInterval?: CheckInterval; // candle size; >= checkInterval and >= 15m
 }

@@ -2685,23 +2685,101 @@ select.input:hover:not(:disabled) {
   color: var(--text-strong);
 }
 
-/* Applied portfolios — an input-styled box holding standard grey chips */
-.forge-portfolios {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding: 11px 15px;
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius-sm);
-  background: var(--forge-field-bg);
-}
-
+/* Applied portfolios — the chosen sources render as grey chips inside the
+   multi-select trigger. */
 .forge-portfolio-chip {
   text-transform: uppercase;
   letter-spacing: 0.06em;
 }
 
-.forge-portfolios-empty {
+/* Multi-select droplist (Applied Portfolios) */
+.multiselect {
+  position: relative;
+}
+
+.multiselect-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  width: 100%;
+  min-height: 46px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.multiselect-value {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.multiselect-placeholder {
+  color: var(--text-faint);
+}
+
+.multiselect-caret {
+  flex: 0 0 auto;
+  width: 1.1rem;
+  height: 1.1rem;
+  color: var(--text-muted);
+}
+
+.multiselect-menu {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  max-height: 240px;
+  overflow-y: auto;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg-deep);
+  box-shadow: 0 12px 32px rgb(0 0 0 / 0.45);
+}
+
+.multiselect-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-base);
+  font: inherit;
+  font-size: 0.85rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.multiselect-option:hover {
+  background: var(--surface-2);
+}
+
+.multiselect-option.is-selected {
+  color: var(--text-strong);
+}
+
+.multiselect-check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  color: var(--info);
+}
+
+.multiselect-empty {
+  padding: 8px 10px;
   font-size: 0.8rem;
   color: var(--text-faint);
 }
@@ -3041,15 +3119,10 @@ select.input:hover:not(:disabled) {
   color: var(--positive);
 }
 
-/* Configure-card action footer — sticks to the bottom of the scrolling config
-   panel (matching the My Strategies footer), with a divider + solid backdrop so
-   the form scrolls cleanly beneath it. Collision + mobile stacking mirror the
-   strategy footer: when the buttons can't share a row (measured via
-   useStackedRow) `.is-stacked` flips them to a full-width column (Update on top,
-   Reset/Delete on the bottom, preserving DOM/tab order). */
-/* Configure card footer — the shared ActionFooter (.strategy-footer) provides
-   the divider, spacing, pinning, and collision stacking. Reset/Delete sits left,
-   Update right (row mode) via the auto margin on the first button. */
+/* Configure card footer — the shared ActionFooter (.strategy-footer +
+   --icons) provides the divider, spacing, pinning, collision stacking, and the
+   mobile icon-only treatment. In row mode Reset/Delete sits left and Update
+   right via the auto margin on the first button. */
 .forge-config-actions .btn:first-child {
   margin-right: auto;
 }
@@ -3058,30 +3131,6 @@ select.input:hover:not(:disabled) {
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
-}
-
-/* Apply-to-portfolio footer — the shared ActionFooter inside the watchlist
-   Preview card (Strategy Forge only). A single full-width primary button. */
-.forge-apply-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.35rem;
-  width: 100%;
-}
-
-.forge-apply-caution {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.4rem;
-  margin: var(--space-2) 0 0;
-  font-size: 0.76rem;
-  color: var(--warning);
-}
-
-.forge-apply-caution svg {
-  flex: 0 0 auto;
-  margin-top: 0.1rem;
 }
 
 /* ---------------------------------------------------------------------------
@@ -4682,6 +4731,23 @@ button.nav-link {
 
   .app-main:has(.forge-detail) {
     padding-top: 4px;
+    /* Drop the bottom padding so the Configure card's sticky action footer can
+       pin flush to the viewport bottom (its own padding + safe-area inset
+       provides the breathing room). */
+    padding-bottom: 0;
+  }
+
+  /* Mobile: the Configure card footer stays reachable by pinning to the
+     viewport bottom while the form scrolls (matching the My Strategies dock).
+     It breaks out of the card's 16px padding for a full-width solid bar. */
+  .forge-config-actions {
+    position: sticky;
+    bottom: 0;
+    z-index: 5;
+    margin: 0 -1rem -1rem;
+    padding: var(--space-3) 1rem
+      calc(var(--space-2) + env(safe-area-inset-bottom, 0px));
+    background: var(--bg-base);
   }
 
   /* Forge LIST view (mobile): the card is natural height and the PAGE scrolls.
