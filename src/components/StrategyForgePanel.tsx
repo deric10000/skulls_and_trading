@@ -7,9 +7,9 @@ import {
   formatChipCondition,
 } from "../lib/forge/metrics";
 import { validateStrategy } from "../lib/forge/scoring";
-import { useStackedRow } from "../lib/useStackedRow";
 import { CheckCircle, PencilSimple, Warning } from "../lib/icons";
 import { useAppState } from "../state/AppState";
+import { ActionFooter } from "./ActionFooter";
 import { Dropdown } from "./Dropdown";
 import { InfoTip, Tooltip } from "./Tooltip";
 import { RuleChipsTableModal } from "./forge/RuleChipsTableModal";
@@ -164,10 +164,6 @@ export function StrategyForgePanel({ strategy }: { strategy: Strategy | undefine
   const [updatedFlash, setUpdatedFlash] = useState(false);
   const flashTimer = useRef<number | undefined>(undefined);
   useEffect(() => () => window.clearTimeout(flashTimer.current), []);
-  // Sticky action footer stacks its buttons full-width when they'd collide,
-  // matching the My Strategies footer (see useStackedRow).
-  const { ref: actionsRef, stacked: actionsStacked } =
-    useStackedRow<HTMLDivElement>();
 
   const rules = useMemo(() => strategy?.rules ?? [], [strategy]);
   const ruleTags = useMemo(() => strategy?.ruleTags ?? [], [strategy]);
@@ -300,6 +296,9 @@ export function StrategyForgePanel({ strategy }: { strategy: Strategy | undefine
         </span>
       </div>
 
+      {/* Scrolling body — head above + the action footer below stay pinned,
+          matching the My Strategies / Current Watch card model. */}
+      <div className="strategy-config-scroll">
       {/* ---- Identity ---- */}
       <label className="config-field">
         <span className="config-label forge-label">
@@ -589,16 +588,10 @@ export function StrategyForgePanel({ strategy }: { strategy: Strategy | undefine
           </ul>
         </div>
       ) : null}
+      </div>
 
-      {/* ---- Actions (sticky footer) ---- */}
-      <div
-        ref={actionsRef}
-        className={
-          actionsStacked
-            ? "config-actions forge-config-actions is-stacked"
-            : "config-actions forge-config-actions"
-        }
-      >
+      {/* ---- Actions (pinned card footer) ---- */}
+      <ActionFooter className="forge-config-actions">
         {strategy.isDefault ? (
           <button
             type="button"
@@ -629,7 +622,7 @@ export function StrategyForgePanel({ strategy }: { strategy: Strategy | undefine
             "Update Strategy"
           )}
         </button>
-      </div>
+      </ActionFooter>
 
       {editor?.kind === "chips" ? (
         <RuleChipsTableModal

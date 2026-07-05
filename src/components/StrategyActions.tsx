@@ -1,5 +1,5 @@
 import { Copy, PencilSimple, Plus, Trash } from "../lib/icons";
-import { useStackedRow } from "../lib/useStackedRow";
+import { ActionFooter } from "./ActionFooter";
 
 /**
  * The Delete / Duplicate / Add action row for the strategy list. Reused in two
@@ -28,14 +28,9 @@ export function StrategyActions({
   onEdit?: () => void;
   className?: string;
 }) {
-  const { ref: footerRef, stacked } = useStackedRow<HTMLDivElement>();
-
   return (
-    <div
-      className={["strategy-footer", stacked ? "is-stacked" : "", className ?? ""]
-        .filter(Boolean)
-        .join(" ")}
-      ref={footerRef}
+    <ActionFooter
+      className={["strategy-footer--icons", className].filter(Boolean).join(" ")}
     >
       <button
         type="button"
@@ -78,6 +73,6 @@ export function StrategyActions({
         <Plus size={16} weight="regular" aria-hidden />
         <span className="btn-label">Add</span>
       </button>
-    </div>
+    </ActionFooter>
   );
 }

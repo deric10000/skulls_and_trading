@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useAppState } from "../state/AppState";
 import { dataSource } from "../lib/datasource";
 import { formatChange, formatPrice } from "../lib/format";
@@ -110,6 +110,7 @@ const DEFAULT_SOURCE_ID = PORTFOLIOS[0]?.id ?? "";
 export function WatchlistWidget({
   readOnly = false,
   onSelectTicker,
+  footer,
 }: {
   readOnly?: boolean;
   /**
@@ -118,6 +119,13 @@ export function WatchlistWidget({
    * not affect the dashboard's global selected ticker.
    */
   onSelectTicker?: (ticker: string) => void;
+  /**
+   * Optional pinned card footer (e.g. the Strategy Forge "Apply to Portfolio"
+   * bar). Rendered as the last child of the panel so it stays below the
+   * scrolling list. Only Strategy Forge passes this — every other surface
+   * leaves the widget footer-less.
+   */
+  footer?: ReactNode;
 }) {
   const {
     watchlist,
@@ -239,6 +247,7 @@ export function WatchlistWidget({
           signal={getSignal(summaryItem.ticker)}
           logs={logsByTicker[summaryItem.ticker] ?? []}
         />
+        {footer}
       </section>
     );
   }
@@ -434,6 +443,7 @@ export function WatchlistWidget({
           </li>
         ) : null}
       </ul>
+      {footer}
     </section>
   );
 }

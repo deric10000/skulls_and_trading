@@ -2287,7 +2287,12 @@ select.input:hover:not(:disabled) {
 
   /* My Strategies + Current Watch: fixed-height shells with a fixed head and an
      inner region that scrolls (the Home card model). */
+  /* All three columns are fixed-height cards with a fixed head + footer and an
+     inner region that scrolls (the Home card model). The Configure card follows
+     the same pattern now: head fixed, the form body scrolls, the action footer
+     stays pinned — matching the My Strategies + Current Watch cards. */
   .forge-strategies > .panel,
+  .forge-config > .panel,
   .forge-watch > .panel {
     height: 100%;
     min-height: 0;
@@ -2300,6 +2305,7 @@ select.input:hover:not(:disabled) {
      edge with 4px to content — the -12px margin pulls the box into the panel's
      16px padding (4 + 8 bar + 4 = 16px inset); scrollbar-gutter holds it stable. */
   .forge-strategies .strategy-list,
+  .forge-config .strategy-config-scroll,
   .forge-watch .watchlist-items,
   .forge-watch .watch-summary {
     flex: 1 1 auto;
@@ -2308,32 +2314,6 @@ select.input:hover:not(:disabled) {
     margin-right: -12px;
     padding-right: 4px;
     scrollbar-gutter: stable;
-  }
-
-  /* Configure is one long form, so the whole panel scrolls (the Figma shows a
-     single card-height scrollbar). Its own 16px padding keeps the bar off the
-     content. */
-  .forge-config > .panel {
-    height: 100%;
-    min-height: 0;
-    overflow: hidden auto;
-    scrollbar-gutter: stable;
-  }
-
-  /* The watch column stacks the panel + the Apply-to-Portfolio bar: the panel
-     flexes (and keeps its internal scroll), the bar stays pinned below it. */
-  .forge-watch {
-    display: flex;
-    flex-direction: column;
-  }
-
-  .forge-watch > .panel {
-    flex: 1 1 auto;
-    height: auto;
-  }
-
-  .forge-watch .forge-apply {
-    flex: 0 0 auto;
   }
 }
 
@@ -2388,10 +2368,11 @@ select.input:hover:not(:disabled) {
   flex-direction: column;
 }
 
-/* Sticky action bar with a top divider. Row layout: Delete pinned left,
-   Duplicate + Add to the right (Delete's margin-right:auto pushes the rest
-   over). When the column gets too narrow for one row, the container query below
-   restacks it full-width. */
+/* Shared card action footer (`ActionFooter`) — a divider + button row pinned to
+   the bottom of a card's flex column. Reused by My Strategies, the Configure
+   card, and the Apply-to-Portfolio bar; drop any buttons inside. When the
+   buttons can't share a row (measured in JS via useStackedRow) it gets
+   .is-stacked and the actions stretch full-width. */
 .strategy-footer {
   display: flex;
   align-items: center;
@@ -2401,14 +2382,13 @@ select.input:hover:not(:disabled) {
   border-top: 1px solid var(--border-soft);
 }
 
-.strategy-footer .btn--danger {
+/* Row layout for the icon-button footer: Delete pinned left, the rest right. */
+.strategy-footer--icons .btn--danger {
   margin-right: auto;
 }
 
-/* Desktop/tablet only: when the buttons can't fit on one row (measured in JS via
-   ResizeObserver, so it triggers exactly at collision) the footer gets .is-stacked
-   and the actions stretch full-width. column-reverse keeps DOM/tab order
-   (Delete → Duplicate → Add) while rendering Add on top and Delete on the bottom. */
+/* Desktop/tablet: collision → full-width column. column-reverse keeps DOM/tab
+   order while rendering the primary action on top. */
 @media (min-width: 768px) {
   .strategy-footer.is-stacked {
     flex-direction: column-reverse;
@@ -2419,21 +2399,33 @@ select.input:hover:not(:disabled) {
     width: 100%;
   }
 
-  .strategy-footer.is-stacked .btn--danger {
+  .strategy-footer--icons.is-stacked .btn--danger {
     margin-right: 0;
   }
 }
 
-/* Mobile: condense to borderless icon-only square buttons (Figma mobile spec).
-   Labels stay in the a11y tree via aria-label on each button. Overrides the
-   narrow-column stack so mobile stays a single row of icon squares. */
+/* Mobile: text-button footers (Configure actions, Apply) stack full-width. */
 @media (max-width: 767px) {
-  .strategy-footer {
+  .strategy-footer:not(.strategy-footer--icons) {
+    flex-direction: column-reverse;
+    align-items: stretch;
+  }
+
+  .strategy-footer:not(.strategy-footer--icons) .btn {
+    width: 100%;
+  }
+}
+
+/* Mobile: the icon-button footer (My Strategies) condenses to borderless
+   icon-only square buttons (Figma mobile spec). Labels stay in the a11y tree
+   via aria-label / the visually-hidden .btn-label. */
+@media (max-width: 767px) {
+  .strategy-footer--icons {
     flex-direction: row;
     align-items: center;
   }
 
-  .strategy-footer .btn-label {
+  .strategy-footer--icons .btn-label {
     position: absolute;
     width: 1px;
     height: 1px;
@@ -2445,7 +2437,7 @@ select.input:hover:not(:disabled) {
     border: 0;
   }
 
-  .strategy-footer .btn {
+  .strategy-footer--icons .btn {
     width: 44px;
     height: 44px;
     min-height: 0;
@@ -2454,7 +2446,7 @@ select.input:hover:not(:disabled) {
     flex: 0 0 auto;
   }
 
-  .strategy-footer .btn svg {
+  .strategy-footer--icons .btn svg {
     width: 20px;
     height: 20px;
   }
@@ -3043,18 +3035,11 @@ select.input:hover:not(:disabled) {
    strategy footer: when the buttons can't share a row (measured via
    useStackedRow) `.is-stacked` flips them to a full-width column (Update on top,
    Reset/Delete on the bottom, preserving DOM/tab order). */
-.forge-config-actions {
-  position: sticky;
-  bottom: 0;
-  z-index: 4;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-  margin-top: var(--space-2);
-  padding-top: var(--space-3);
-  border-top: 1px solid var(--border-soft);
-  background: var(--bg-base);
+/* Configure card footer — the shared ActionFooter (.strategy-footer) provides
+   the divider, spacing, pinning, and collision stacking. Reset/Delete sits left,
+   Update right (row mode) via the auto margin on the first button. */
+.forge-config-actions .btn:first-child {
+  margin-right: auto;
 }
 
 .forge-update-btn {
@@ -3063,33 +3048,8 @@ select.input:hover:not(:disabled) {
   gap: 0.35rem;
 }
 
-@media (min-width: 768px) {
-  .forge-config-actions.is-stacked {
-    flex-direction: column-reverse;
-    align-items: stretch;
-  }
-
-  .forge-config-actions.is-stacked .btn {
-    width: 100%;
-  }
-}
-
-/* Apply-to-portfolio footer — pinned to the bottom of the watchlist Preview
-   column (Strategy Forge only; `.forge-apply` is never rendered elsewhere).
-   Same divider + sticky treatment as the config footer. */
-.forge-apply {
-  position: sticky;
-  bottom: 0;
-  z-index: 4;
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  margin-top: var(--space-2);
-  padding-top: var(--space-3);
-  border-top: 1px solid var(--border-soft);
-  background: var(--bg-base);
-}
-
+/* Apply-to-portfolio footer — the shared ActionFooter inside the watchlist
+   Preview card (Strategy Forge only). A single full-width primary button. */
 .forge-apply-btn {
   display: inline-flex;
   align-items: center;
@@ -3102,7 +3062,7 @@ select.input:hover:not(:disabled) {
   display: flex;
   align-items: flex-start;
   gap: 0.4rem;
-  margin: 0;
+  margin: var(--space-2) 0 0;
   font-size: 0.76rem;
   color: var(--warning);
 }
@@ -3531,17 +3491,8 @@ select.forge-cell-input {
     width: 5.5rem;
   }
 
-  /* Mobile: stack the sticky action footers full-width (Update / Apply on top),
-     matching the strategy footer's mobile behavior for text buttons. */
-  .forge-config-actions {
-    flex-direction: column-reverse;
-    align-items: stretch;
-  }
-
-  .forge-config-actions .btn {
-    width: 100%;
-  }
-
+  /* Text-button footers stack full-width on mobile (handled by
+     .strategy-footer:not(--icons)); just center the Update label. */
   .forge-config-actions .forge-update-btn {
     justify-content: center;
   }

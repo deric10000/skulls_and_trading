@@ -1,18 +1,20 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { ActionFooter } from "../components/ActionFooter";
 import { StrategyActions } from "../components/StrategyActions";
 import { StrategyForgePanel } from "../components/StrategyForgePanel";
 import { StrategyList } from "../components/StrategyList";
 import { Tabs, type TabItem } from "../components/Tabs";
 import { WatchlistWidget } from "../components/WatchlistWidget";
 import { validateStrategy } from "../lib/forge/scoring";
-import { useStackedRow } from "../lib/useStackedRow";
 import { CaretLeft, CheckCircle, Warning } from "../lib/icons";
 import { useAppState } from "../state/AppState";
 import type { Strategy } from "../types";
 
-// The "Apply to Portfolio" bar inside the watchlist Preview column. It follows
-// the My Strategies button rules (solid primary, standardized disabled state)
-// and stays disabled — with a caution — until the configuration is complete.
+// The "Apply to Portfolio" footer, rendered inside the watchlist Preview card
+// (via WatchlistWidget's `footer` slot) so it pins to the bottom of that card —
+// Strategy Forge only. Reuses the shared ActionFooter; the button follows the
+// My Strategies button rules and stays disabled (with a caution) until the
+// configuration is complete.
 function ApplyStrategyBar({
   strategy,
   onApply,
@@ -26,25 +28,10 @@ function ApplyStrategyBar({
     () => (strategy ? validateStrategy(strategy) : null),
     [strategy],
   );
-  const { ref: applyRef, stacked } = useStackedRow<HTMLDivElement>();
   if (!strategy) return null;
   const complete = validation?.complete ?? false;
   return (
-    <div ref={applyRef} className={stacked ? "forge-apply is-stacked" : "forge-apply"}>
-      <button
-        type="button"
-        className="btn btn--small btn--solid forge-apply-btn"
-        disabled={!complete}
-        onClick={onApply}
-      >
-        {applied ? (
-          <>
-            <CheckCircle aria-hidden weight="fill" /> Strategy Applied
-          </>
-        ) : (
-          "Apply to Portfolio"
-        )}
-      </button>
+    <>
       {!complete ? (
         <p className="forge-apply-caution" role="status">
           <Warning aria-hidden weight="fill" />
@@ -52,7 +39,23 @@ function ApplyStrategyBar({
           the Configure card.
         </p>
       ) : null}
-    </div>
+      <ActionFooter className="forge-apply">
+        <button
+          type="button"
+          className="btn btn--small btn--solid forge-apply-btn"
+          disabled={!complete}
+          onClick={onApply}
+        >
+          {applied ? (
+            <>
+              <CheckCircle aria-hidden weight="fill" /> Strategy Applied
+            </>
+          ) : (
+            "Apply to Portfolio"
+          )}
+        </button>
+      </ActionFooter>
+    </>
   );
 }
 
@@ -194,11 +197,15 @@ export function StrategyForgePage() {
               </div>
             ) : (
               <div className="forge-watch">
-                <WatchlistWidget readOnly />
-                <ApplyStrategyBar
-                  strategy={selectedStrategy}
-                  onApply={handleApply}
-                  applied={appliedFlash}
+                <WatchlistWidget
+                  readOnly
+                  footer={
+                    <ApplyStrategyBar
+                      strategy={selectedStrategy}
+                      onApply={handleApply}
+                      applied={appliedFlash}
+                    />
+                  }
                 />
               </div>
             )}
@@ -259,13 +266,18 @@ export function StrategyForgePage() {
         </div>
 
         {/* Read-only portfolio view: watch conviction/status shift here as the
-            selected strategy is edited (plumbed through AppState). */}
+            selected strategy is edited (plumbed through AppState). The Apply
+            footer is rendered inside the watchlist card via its footer slot. */}
         <div className="forge-watch">
-          <WatchlistWidget readOnly />
-          <ApplyStrategyBar
-            strategy={selectedStrategy}
-            onApply={handleApply}
-            applied={appliedFlash}
+          <WatchlistWidget
+            readOnly
+            footer={
+              <ApplyStrategyBar
+                strategy={selectedStrategy}
+                onApply={handleApply}
+                applied={appliedFlash}
+              />
+            }
           />
         </div>
       </div>
