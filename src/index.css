@@ -2440,8 +2440,8 @@ select.input:hover:not(:disabled) {
    model the desktop grid uses). Scoped via :has(.forge-strategies) — the detail
    view renders .forge-config/.forge-watch instead, so it keeps page-level scroll.
    The footer sits outside the scroller (the list), so it stays put while the
-   strategies scroll beneath it. The shell/viewport lock that makes this height
-   definite lives in the mobile .app:has(.forge-strategies) rule below. */
+   strategies scroll beneath it. The definite height comes from the mobile
+   .forge-page:has(.forge-strategies) min-height rule below (viewport-sized). */
 @media (max-width: 767px) {
   .forge-strategies {
     flex: 1 1 auto;
@@ -4113,22 +4113,14 @@ button.nav-link {
     padding-top: 4px;
   }
 
-  /* Forge LIST view only: re-lock the shell to the viewport (the desktop model)
-     so the page header (h1 + subtitle) stays put while the "My Strategies" card
-     fills the remaining height and scrolls its list internally with a pinned
-     footer. The detail view has no .forge-strategies, so it keeps the standard
-     mobile page-level scroll. */
-  .app:has(.forge-strategies) {
-    height: 100vh;
-    height: 100dvh;
-    min-height: 0;
-    overflow: hidden;
-  }
-
-  .app-main:has(.forge-strategies) {
-    flex: 1 1 auto;
-    min-height: 0;
-    overflow: hidden;
+  /* Forge LIST view: match the Home mobile model — the page scrolls and the
+     footer flows just below the fold. The list "card" is sized to fill the
+     viewport below the sticky header (minus a small breather) so its bottom lands
+     near the viewport bottom, pushing the footer off-screen by default. The
+     strategy list still scrolls inside the card with the button footer pinned.
+     Scroll the page to reveal the footer. Detail view has no .forge-strategies. */
+  .forge-page:has(.forge-strategies) {
+    min-height: calc(100svh - var(--app-header-h, 96px) - 1rem);
   }
 
   .home-page {
