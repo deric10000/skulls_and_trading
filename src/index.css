@@ -2332,14 +2332,38 @@ select.input:hover:not(:disabled) {
   .forge-detail {
     display: flex;
     flex-direction: column;
-    gap: var(--space-2);
+    /* 4px between the breadcrumb/tab head and the card below, to keep the whole
+       detail view tight (general rule for a breadcrumb + page-level tabs + card
+       layout on mobile). */
+    gap: 4px;
     min-height: 0;
+  }
+
+  /* Breadcrumb + page-level tab bar sit on one row when they fit; the tab bar
+     wraps to its own line only when it can't (flex-shrink: 0 forces the wrap
+     instead of shrinking/scrolling). Conserves vertical space and pulls the
+     card below up. General pattern for any breadcrumb + tabs + card mobile
+     layout. */
+  .forge-detail-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    /* 4px row gap when the tabs wrap under the breadcrumb; 2px column gap so the
+       tab bar sits right up against the breadcrumb when they share a row. */
+    gap: 4px 2px;
+  }
+
+  .forge-detail-head .breadcrumb {
+    flex: 0 0 auto;
+    /* Center against the taller tab bar (overrides the base flex-start). */
+    align-self: center;
   }
 
   /* Contained, Home-style tab strip: transparent, borderless tabs sitting on a
      single hairline divider (no full-bleed, stays inside the page padding). */
   .forge-tab-bar {
     display: flex;
+    flex: 1 0 auto;
     border-bottom: 1px solid var(--border-soft);
   }
 
@@ -2357,6 +2381,14 @@ select.input:hover:not(:disabled) {
 
   .forge-tabs::-webkit-scrollbar {
     display: none;
+  }
+
+  /* When the tab bar shares its row with a breadcrumb, stretch the tabs into
+     equal-width segments so the group fills the space up to the breadcrumb
+     instead of clumping left. */
+  .forge-detail-head .forge-tabs .tab {
+    flex: 1 1 0;
+    text-align: center;
   }
 }
 
@@ -2949,6 +2981,19 @@ select.input:hover:not(:disabled) {
 .forge-step-line:has(+ .forge-step:last-child) {
   flex: 0 0 32px;
   max-width: 32px;
+}
+
+/* In-card section stepper/tabs (mobile only). Navigates the Configure card one
+   pane at a time; hidden ≥ 768px, where every pane stacks in the side-by-side
+   workbench. `.forge-pane` is a transparent grouping wrapper (Description
+   fields) that `display: contents` on desktop so it doesn't disturb the stacked
+   layout — it only becomes a real box on mobile when its pane is active. */
+.forge-section-tabs {
+  display: none;
+}
+
+.forge-pane {
+  display: contents;
 }
 
 /* Rule-chip / tag boxes (side-by-side like the design: chips wide, tags narrow) */
@@ -3570,6 +3615,93 @@ select.forge-cell-input {
 
   .forge-section {
     padding-top: 16px;
+  }
+
+  /* In-card section tabs (mobile): keep a tight ~8px between the card heading
+     and the tab strip. Keyed off the `.forge-section-tabs` component (via
+     :has()) so the rule follows the component to any card that uses it, not
+     just this page. The heading's default margin-bottom plus the card's flex
+     gap otherwise stack to ~35px; drop the margin and shrink the card gap to
+     8px. */
+  .panel:has(> .forge-section-tabs) {
+    gap: 8px;
+  }
+
+  .panel-head:has(+ .forge-section-tabs) {
+    margin-bottom: 0;
+  }
+
+  /* ---- In-card section stepper/tabs (mobile) ------------------------------
+     A horizontal, tappable strip of numbered "info" discs + labels that drives
+     which Configure pane is visible. Styling follows the Figma stepper: blue
+     discs, a CheckCircle for completed sections, and a blue accent underline on
+     the active tab. The strip scrolls horizontally (8 tabs) with the scrollbar
+     hidden, sitting on a hairline divider just below the "Configure" heading. */
+  .forge-section-tabs {
+    display: flex;
+    gap: 2px;
+    overflow-x: auto;
+    scrollbar-width: none;
+    margin: 0;
+    padding: 0;
+    border-bottom: 1px solid var(--border-soft);
+    scroll-snap-type: x proximity;
+  }
+
+  .forge-section-tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Label-only tabs (no circles/numbers for now): muted at rest, brighter with
+     a blue accent underline when active. */
+  .forge-section-tab {
+    display: inline-flex;
+    align-items: center;
+    flex: 0 0 auto;
+    padding: 0.5rem 0.55rem;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    background: transparent;
+    color: var(--text-muted);
+    font: inherit;
+    font-size: 0.85rem;
+    white-space: nowrap;
+    cursor: pointer;
+    scroll-snap-align: start;
+  }
+
+  .forge-section-tab.is-active {
+    color: var(--text-strong);
+    border-bottom-color: var(--info);
+  }
+
+  /* Show only the active pane; the tab strip drives selection. */
+  .strategy-config-scroll > [data-forge-section]:not(.is-active) {
+    display: none;
+  }
+
+  .forge-pane.is-active {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  /* A lone visible section shouldn't carry the between-sections divider. */
+  .strategy-config-scroll > .forge-section.is-active {
+    border-top: 0;
+    padding-top: 0;
+  }
+
+  /* The long "Steps To Setup Your Strategy" stepper is replaced by the tab
+     strip on mobile. */
+  .forge-section--steps {
+    display: none;
+  }
+
+  /* Hide the per-category sub-steppers (Describe Thesis / Add Rule Chips / Add
+     Tags) on mobile in the Configure card, for every category — for now. */
+  .strategy-config .forge-stepper--accent {
+    display: none;
   }
 }
 
@@ -4752,6 +4884,45 @@ button.nav-link {
     padding: var(--space-3) 1rem
       calc(var(--space-2) + env(safe-area-inset-bottom, 0px));
     background: var(--bg-base);
+  }
+
+  /* Configure card (mobile): fill the viewport so the sticky action footer
+     reaches the bottom even for short tabs, and the card stays one viewport
+     tall instead of growing per tab. Scoped to :has(.forge-config) so only the
+     Configure tab is affected (Preview Watchlist keeps the content-height,
+     page-scroll model). This is a deliberate, card-scoped exception to the
+     standard mobile "cards are content-height" contract (components.mdc): the
+     page still scrolls and the site footer is still revealed at the very
+     bottom — only the empty space under short tabs is removed by filling the
+     viewport, which pushes the sticky footer to the bottom edge.
+     `--app-header-h` is the live header height (reported by the header), so the
+     fill lands the card bottom at the viewport bottom (site footer below fold). */
+  .app-main:has(.forge-config) {
+    min-height: calc(100svh - var(--app-header-h, 96px));
+  }
+
+  .app-main:has(.forge-config) .forge-detail,
+  .forge-detail > .forge-config {
+    flex: 1;
+    min-height: 0;
+  }
+
+  .forge-detail > .forge-config {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .forge-config > .strategy-config {
+    flex: 1;
+    min-height: 0;
+  }
+
+  /* The form body takes the leftover height (overflow stays visible so tall
+     tabs grow the page and scroll exactly as today); short tabs just stretch it
+     so the footer sits at the bottom. */
+  .forge-config .strategy-config-scroll {
+    flex: 1 1 auto;
+    min-height: 0;
   }
 
   /* Forge LIST view (mobile): the card is natural height and the PAGE scrolls.

@@ -101,22 +101,27 @@ export function StrategyForgePage() {
       return (
         <div className="page forge-page">
           <div className="forge-detail">
-            <button
-              type="button"
-              className="breadcrumb"
-              onClick={() => setDrilledIn(false)}
-            >
-              <CaretLeft aria-hidden />
-              My Strategies
-            </button>
-            <div className="forge-tab-bar">
-              <Tabs
-                items={FORGE_DETAIL_TABS}
-                value={detailTab}
-                onChange={(id) => setDetailTab(id as ForgeDetailTab)}
-                ariaLabel="Strategy detail sections"
-                className="forge-tabs"
-              />
+            {/* Breadcrumb + page-level tab bar share one row on mobile when they
+                fit (flex-wrap drops the tabs to their own line when they
+                don't), to conserve vertical space. */}
+            <div className="forge-detail-head">
+              <button
+                type="button"
+                className="breadcrumb"
+                onClick={() => setDrilledIn(false)}
+              >
+                <CaretLeft aria-hidden />
+                My Strategies
+              </button>
+              <div className="forge-tab-bar">
+                <Tabs
+                  items={FORGE_DETAIL_TABS}
+                  value={detailTab}
+                  onChange={(id) => setDetailTab(id as ForgeDetailTab)}
+                  ariaLabel="Strategy detail sections"
+                  className="forge-tabs"
+                />
+              </div>
             </div>
             {detailTab === "configure" ? (
               <div className="forge-config">
