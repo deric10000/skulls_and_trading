@@ -2951,6 +2951,19 @@ select.input:hover:not(:disabled) {
   max-width: 32px;
 }
 
+/* In-card section stepper/tabs (mobile only). Navigates the Configure card one
+   pane at a time; hidden ≥ 768px, where every pane stacks in the side-by-side
+   workbench. `.forge-pane` is a transparent grouping wrapper (Description
+   fields) that `display: contents` on desktop so it doesn't disturb the stacked
+   layout — it only becomes a real box on mobile when its pane is active. */
+.forge-section-tabs {
+  display: none;
+}
+
+.forge-pane {
+  display: contents;
+}
+
 /* Rule-chip / tag boxes (side-by-side like the design: chips wide, tags narrow) */
 .forge-boxes {
   display: grid;
@@ -3570,6 +3583,73 @@ select.forge-cell-input {
 
   .forge-section {
     padding-top: 16px;
+  }
+
+  /* ---- In-card section stepper/tabs (mobile) ------------------------------
+     A horizontal, tappable strip of numbered "info" discs + labels that drives
+     which Configure pane is visible. Styling follows the Figma stepper: blue
+     discs, a CheckCircle for completed sections, and a blue accent underline on
+     the active tab. The strip scrolls horizontally (8 tabs) with the scrollbar
+     hidden, sitting on a hairline divider just below the "Configure" heading. */
+  .forge-section-tabs {
+    display: flex;
+    gap: 2px;
+    overflow-x: auto;
+    scrollbar-width: none;
+    margin: 0;
+    padding: 0;
+    border-bottom: 1px solid var(--border-soft);
+    scroll-snap-type: x proximity;
+  }
+
+  .forge-section-tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Label-only tabs (no circles/numbers for now): muted at rest, brighter with
+     a blue accent underline when active. */
+  .forge-section-tab {
+    display: inline-flex;
+    align-items: center;
+    flex: 0 0 auto;
+    padding: 0.5rem 0.55rem;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    background: transparent;
+    color: var(--text-muted);
+    font: inherit;
+    font-size: 0.85rem;
+    white-space: nowrap;
+    cursor: pointer;
+    scroll-snap-align: start;
+  }
+
+  .forge-section-tab.is-active {
+    color: var(--text-strong);
+    border-bottom-color: var(--info);
+  }
+
+  /* Show only the active pane; the tab strip drives selection. */
+  .strategy-config-scroll > [data-forge-section]:not(.is-active) {
+    display: none;
+  }
+
+  .forge-pane.is-active {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  /* A lone visible section shouldn't carry the between-sections divider. */
+  .strategy-config-scroll > .forge-section.is-active {
+    border-top: 0;
+    padding-top: 0;
+  }
+
+  /* The long "Steps To Setup Your Strategy" stepper is replaced by the tab
+     strip on mobile. */
+  .forge-section--steps {
+    display: none;
   }
 }
 

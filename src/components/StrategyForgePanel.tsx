@@ -97,6 +97,50 @@ function Stepper({
   );
 }
 
+// ---- In-card section tabs (mobile only) -----------------------------------
+// A horizontal, tappable stepper strip that navigates the Configure card one
+// section at a time on mobile (Description + the seven setup categories),
+// replacing the long single scroll. Distinct from the page-level `Tabs`
+// component, which switches between whole cards (Configure / Preview). Styling
+// follows the Figma stepper: numbered "info" discs + labels, a CheckCircle for
+// completed sections, and a gold-free blue accent underline on the active tab.
+// Hidden above 767px, where every section stacks in the side-by-side workbench.
+
+export interface SectionTab {
+  id: string;
+  label: string;
+}
+
+function SectionTabs({
+  tabs,
+  active,
+  onChange,
+}: {
+  tabs: SectionTab[];
+  active: string;
+  onChange: (id: string) => void;
+}) {
+  return (
+    <div className="forge-section-tabs" role="tablist" aria-label="Configuration sections">
+      {tabs.map((tab) => {
+        const isActive = tab.id === active;
+        return (
+          <button
+            key={tab.id}
+            type="button"
+            role="tab"
+            aria-selected={isActive}
+            className={isActive ? "forge-section-tab is-active" : "forge-section-tab"}
+            onClick={() => onChange(tab.id)}
+          >
+            <span className="forge-section-tab-label">{tab.label}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 // ---- Chip / tag pills with tooltips ----------------------------------------
 
 function ChipPill({ chip }: { chip: RuleChip }) {
@@ -176,6 +220,9 @@ export function StrategyForgePanel({ strategy }: { strategy: Strategy | undefine
 
   const [editor, setEditor] = useState<TableEditor | null>(null);
   const [editingWeight, setEditingWeight] = useState<RuleCategory | null>(null);
+  // Which section pane the in-card tab strip is showing (mobile only). Desktop /
+  // tablet render every pane at once, so this is inert above 767px.
+  const [activeSection, setActiveSection] = useState<string>("identity");
   const [updatedFlash, setUpdatedFlash] = useState(false);
   const flashTimer = useRef<number | undefined>(undefined);
   useEffect(() => () => window.clearTimeout(flashTimer.current), []);
@@ -290,6 +337,18 @@ export function StrategyForgePanel({ strategy }: { strategy: Strategy | undefine
     })),
   ];
 
+  // In-card section tabs (mobile): Description + Cadence + the six categories.
+  // Label-only for now (no circles/numbers) — the active tab is marked by a
+  // brighter label and a blue underline.
+  const sectionTabs: SectionTab[] = [
+    { id: "identity", label: "Description" },
+    { id: "cadence", label: "Strategy Cadence" },
+    ...CATEGORY_ORDER.map((category) => ({
+      id: category,
+      label: CATEGORY_META[category].stepLabel,
+    })),
+  ];
+
   return (
     <section className="panel strategy-config" aria-labelledby="config-title">
       <div className="panel-head">
@@ -299,10 +358,19 @@ export function StrategyForgePanel({ strategy }: { strategy: Strategy | undefine
         </span>
       </div>
 
+      {/* In-card section stepper/tabs — mobile only (hidden ≥ 768px via CSS).
+          Navigates the panes below one at a time instead of one long scroll. */}
+      <SectionTabs tabs={sectionTabs} active={activeSection} onChange={setActiveSection} />
+
       {/* Scrolling body — head above + the action footer below stay pinned,
-          matching the My Strategies / Current Watch card model. */}
+          matching the My Strategies / Current Watch card model. On mobile the
+          `data-forge-section` panes toggle so only the active tab's pane shows. */}
       <div className="strategy-config-scroll">
-      {/* ---- Identity ---- */}
+      {/* ---- Identity (Description pane) ---- */}
+      <div
+        className={activeSection === "identity" ? "forge-pane is-active" : "forge-pane"}
+        data-forge-section="identity"
+      >
       <label className="config-field">
         <span className="config-label forge-label">
           Strategy Name
@@ -349,15 +417,20 @@ export function StrategyForgePanel({ strategy }: { strategy: Strategy | undefine
           placeholder="Select portfolios to apply this strategy to"
         />
       </div>
+      </div>
 
       {/* ---- Steps ---- */}
+      {/* Desktop/tablet only: the mobile view replaces this with the tab strip. */}
       <div className="forge-section forge-section--steps">
         <span className="config-label forge-label">Steps To Setup Your Strategy</span>
         <Stepper steps={mainSteps} tone="info" />
       </div>
 
       {/* ---- 1. Strategy cadence ---- */}
-      <div className="forge-section">
+      <div
+        className={activeSection === "cadence" ? "forge-section is-active" : "forge-section"}
+        data-forge-section="cadence"
+      >
         <div className="forge-section-head">
           <h3 className="forge-section-title">1. Strategy Cadence</h3>
         </div>
@@ -411,7 +484,11 @@ export function StrategyForgePanel({ strategy }: { strategy: Strategy | undefine
         const weight = weightFor(category);
         const editingThisWeight = editingWeight === category;
         return (
-          <div key={category} className="forge-section">
+          <div
+            key={category}
+            className={activeSection === category ? "forge-section is-active" : "forge-section"}
+            data-forge-section={category}
+          >
             <div className="forge-section-head">
               <h3 className="forge-section-title">
                 {index + 2}. {meta.label}
