@@ -2332,14 +2332,38 @@ select.input:hover:not(:disabled) {
   .forge-detail {
     display: flex;
     flex-direction: column;
-    gap: var(--space-2);
+    /* 4px between the breadcrumb/tab head and the card below, to keep the whole
+       detail view tight (general rule for a breadcrumb + page-level tabs + card
+       layout on mobile). */
+    gap: 4px;
     min-height: 0;
+  }
+
+  /* Breadcrumb + page-level tab bar sit on one row when they fit; the tab bar
+     wraps to its own line only when it can't (flex-shrink: 0 forces the wrap
+     instead of shrinking/scrolling). Conserves vertical space and pulls the
+     card below up. General pattern for any breadcrumb + tabs + card mobile
+     layout. */
+  .forge-detail-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    /* 4px row gap when the tabs wrap under the breadcrumb; 2px column gap so the
+       tab bar sits right up against the breadcrumb when they share a row. */
+    gap: 4px 2px;
+  }
+
+  .forge-detail-head .breadcrumb {
+    flex: 0 0 auto;
+    /* Center against the taller tab bar (overrides the base flex-start). */
+    align-self: center;
   }
 
   /* Contained, Home-style tab strip: transparent, borderless tabs sitting on a
      single hairline divider (no full-bleed, stays inside the page padding). */
   .forge-tab-bar {
     display: flex;
+    flex: 1 0 auto;
     border-bottom: 1px solid var(--border-soft);
   }
 
@@ -2357,6 +2381,14 @@ select.input:hover:not(:disabled) {
 
   .forge-tabs::-webkit-scrollbar {
     display: none;
+  }
+
+  /* When the tab bar shares its row with a breadcrumb, stretch the tabs into
+     equal-width segments so the group fills the space up to the breadcrumb
+     instead of clumping left. */
+  .forge-detail-head .forge-tabs .tab {
+    flex: 1 1 0;
+    text-align: center;
   }
 }
 
@@ -3583,6 +3615,20 @@ select.forge-cell-input {
 
   .forge-section {
     padding-top: 16px;
+  }
+
+  /* In-card section tabs (mobile): keep a tight ~8px between the card heading
+     and the tab strip. Keyed off the `.forge-section-tabs` component (via
+     :has()) so the rule follows the component to any card that uses it, not
+     just this page. The heading's default margin-bottom plus the card's flex
+     gap otherwise stack to ~35px; drop the margin and shrink the card gap to
+     8px. */
+  .panel:has(> .forge-section-tabs) {
+    gap: 8px;
+  }
+
+  .panel-head:has(+ .forge-section-tabs) {
+    margin-bottom: 0;
   }
 
   /* ---- In-card section stepper/tabs (mobile) ------------------------------
@@ -4838,6 +4884,45 @@ button.nav-link {
     padding: var(--space-3) 1rem
       calc(var(--space-2) + env(safe-area-inset-bottom, 0px));
     background: var(--bg-base);
+  }
+
+  /* Configure card (mobile): fill the viewport so the sticky action footer
+     reaches the bottom even for short tabs, and the card stays one viewport
+     tall instead of growing per tab. Scoped to :has(.forge-config) so only the
+     Configure tab is affected (Preview Watchlist keeps the content-height,
+     page-scroll model). This is a deliberate, card-scoped exception to the
+     standard mobile "cards are content-height" contract (components.mdc): the
+     page still scrolls and the site footer is still revealed at the very
+     bottom — only the empty space under short tabs is removed by filling the
+     viewport, which pushes the sticky footer to the bottom edge.
+     `--app-header-h` is the live header height (reported by the header), so the
+     fill lands the card bottom at the viewport bottom (site footer below fold). */
+  .app-main:has(.forge-config) {
+    min-height: calc(100svh - var(--app-header-h, 96px));
+  }
+
+  .app-main:has(.forge-config) .forge-detail,
+  .forge-detail > .forge-config {
+    flex: 1;
+    min-height: 0;
+  }
+
+  .forge-detail > .forge-config {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .forge-config > .strategy-config {
+    flex: 1;
+    min-height: 0;
+  }
+
+  /* The form body takes the leftover height (overflow stays visible so tall
+     tabs grow the page and scroll exactly as today); short tabs just stretch it
+     so the footer sits at the bottom. */
+  .forge-config .strategy-config-scroll {
+    flex: 1 1 auto;
+    min-height: 0;
   }
 
   /* Forge LIST view (mobile): the card is natural height and the PAGE scrolls.
