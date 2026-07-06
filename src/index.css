@@ -3651,6 +3651,12 @@ select.forge-cell-input {
   .forge-section--steps {
     display: none;
   }
+
+  /* Hide the per-category sub-steppers (Describe Thesis / Add Rule Chips / Add
+     Tags) on mobile in the Configure card, for every category — for now. */
+  .strategy-config .forge-stepper--accent {
+    display: none;
+  }
 }
 
 @media (max-width: 540px) {
