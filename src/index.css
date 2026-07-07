@@ -2717,6 +2717,67 @@ select.input:hover:not(:disabled) {
   color: var(--text-strong);
 }
 
+/* Mobile-only close (X) button — see the mobile tooltip block below. Sits
+   off-screen/inert on desktop (never shown, not tabbable) since desktop
+   dismisses via mouse-out / focus-out instead. */
+.tooltip-close {
+  display: none;
+  align-self: flex-end;
+  border: none;
+  background: none;
+  padding: 0;
+  margin: -0.1rem -0.15rem -0.2rem 0;
+  color: #fff;
+  cursor: pointer;
+}
+
+.tooltip-close svg {
+  width: 14px;
+  height: 14px;
+}
+
+@media (max-width: 767px) {
+  /* Touch has no hover — replace the desktop hover/focus-within reveal with
+     tap-to-toggle (`.is-open`, set in Tooltip.tsx). */
+  .tooltip-wrap {
+    cursor: pointer;
+  }
+
+  .tooltip-wrap:hover .tooltip,
+  .tooltip-wrap:focus-within .tooltip {
+    display: none;
+  }
+
+  /* The open tooltip always renders as a sheet fixed to the bottom-center of
+     the viewport — not anchored to the trigger — so it's reachable and
+     legible regardless of where the trigger sits on the page. `pointer-events`
+     flips back to `auto` (the desktop tooltip is decorative/non-interactive)
+     so the close button is tappable. Clears any sticky bottom toolbar (e.g.
+     the Configure card's action footer) by 4px: `--sticky-footer-h` is the
+     live footer height reported by ActionFooter (already includes its own
+     safe-area padding), and `max()` falls back to the plain safe-area baseline
+     when no such footer is mounted. */
+  .tooltip-wrap.is-open .tooltip {
+    display: flex;
+    position: fixed;
+    top: auto;
+    left: 50%;
+    bottom: max(
+      calc(var(--space-3) + env(safe-area-inset-bottom, 0px)),
+      calc(var(--sticky-footer-h, 0px) + 4px)
+    );
+    transform: translateX(-50%);
+    width: min(320px, calc(100vw - 2 * var(--content-pad)));
+    max-width: min(320px, calc(100vw - 2 * var(--content-pad)));
+    z-index: 70;
+    pointer-events: auto;
+  }
+
+  .tooltip-close {
+    display: inline-flex;
+  }
+}
+
 /* Applied portfolios — the chosen sources render as grey chips inside the
    multi-select trigger. */
 .forge-portfolio-chip {
