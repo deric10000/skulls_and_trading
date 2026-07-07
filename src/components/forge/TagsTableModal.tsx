@@ -1,6 +1,8 @@
 import { useMemo, useState } from "react";
 import { CATEGORY_META } from "../../lib/forge/metrics";
+import { useIsMobile } from "../../lib/useIsMobile";
 import {
+  CaretDown,
   CaretUpDown,
   Copy,
   PencilSimple,
@@ -47,11 +49,25 @@ export function TagsTableModal({
   onClose: () => void;
 }) {
   const meta = CATEGORY_META[category];
+  const isMobile = useIsMobile();
   const [draft, setDraft] = useState<RuleTag[]>(() =>
     tags.map((tag) => ({ ...tag, chipIds: [...tag.chipIds] })),
   );
   const [editingId, setEditingId] = useState<string | null>(null);
   const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 } | null>(null);
+  // Mobile only: rows collapse to a compact one-line summary by default (see
+  // components.mdc "Collapsible mobile row standard") — desktop/tablet always
+  // show full fields regardless of this state.
+  const [expandedRowIds, setExpandedRowIds] = useState<Set<string>>(new Set());
+
+  function toggleRowExpanded(id: string) {
+    setExpandedRowIds((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
 
   const chipById = useMemo(
     () => new Map(chips.map((chip) => [chip.id, chip])),
@@ -121,7 +137,7 @@ export function TagsTableModal({
       weightPct: 0,
       autoApply: "",
     };
-    setDraft((current) => [...current, tag]);
+    setDraft((current) => [tag, ...current]);
     setEditingId(tag.id);
   }
 
@@ -139,7 +155,7 @@ export function TagsTableModal({
         weightPct: source.system ? 0 : source.weightPct,
         system: false,
       };
-      return [...current, copy];
+      return [copy, ...current];
     });
   }
 
@@ -217,134 +233,173 @@ export function TagsTableModal({
 
           {sorted.map((tag) => {
             const editing = editingId === tag.id && !tag.system;
+            const isExpanded = expandedRowIds.has(tag.id);
+            const showCompact = isMobile && !isExpanded;
             return (
-              <div key={tag.id} className="forge-table-row" role="row">
-                <div className="forge-table-cell" role="cell" data-label="Tag">
-                  {editing ? (
-                    <input
-                      className="input forge-cell-input forge-cell-input--pill"
-                      value={tag.label}
-                      aria-label="Tag label"
-                      onChange={(event) => patchTag(tag.id, { label: event.target.value })}
-                    />
-                  ) : (
-                    <span className={tag.system ? "forge-pill forge-pill--muted" : "forge-pill"}>
-                      {tag.label}
-                    </span>
-                  )}
-                </div>
-                <div className="forge-table-cell" role="cell" data-label="Purpose">
-                  {editing ? (
-                    <textarea
-                      className="input forge-cell-input forge-cell-area"
-                      rows={2}
-                      value={tag.purpose}
-                      aria-label="Tag purpose"
-                      onChange={(event) => patchTag(tag.id, { purpose: event.target.value })}
-                    />
-                  ) : (
-                    <span className="forge-cell-text">{tag.purpose}</span>
-                  )}
-                </div>
-                <div className="forge-table-cell" role="cell" data-label="Rule Chips">
-                  {tag.system ? (
-                    <span className="forge-cell-text forge-cell-text--muted">
-                      All active rule chips
-                    </span>
-                  ) : editing ? (
-                    <span className="forge-tag-picker">
-                      {chips.map((chip) => {
-                        const on = tag.chipIds.includes(chip.id);
-                        return (
-                          <button
-                            key={chip.id}
-                            type="button"
-                            className={on ? "forge-pill forge-pill--toggle forge-pill--on" : "forge-pill forge-pill--toggle"}
-                            aria-pressed={on}
-                            onClick={() => toggleChipMembership(tag.id, chip.id)}
-                          >
-                            {chip.label}
-                          </button>
-                        );
-                      })}
-                    </span>
-                  ) : (
-                    <span className="forge-pill-stack">
-                      {tag.chipIds
-                        .map((chipId) => chipById.get(chipId))
-                        .filter((chip): chip is RuleChip => Boolean(chip))
-                        .map((chip) => (
-                          <span key={chip.id} className="forge-pill">
-                            {chip.label}
-                          </span>
-                        ))}
-                    </span>
-                  )}
-                </div>
-                <div className="forge-table-cell" role="cell" data-label="Weight">
-                  {editing ? (
-                    <span className="forge-cell-value">
-                      <input
-                        className="input forge-cell-input forge-cell-input--num forge-cell-input--weight"
-                        type="number"
-                        min={0}
-                        max={100}
-                        value={tag.weightPct}
-                        aria-label="Tag weight percent"
-                        onChange={(event) =>
-                          patchTag(tag.id, { weightPct: Number(event.target.value) })
-                        }
-                      />
-                      <span className="forge-cell-unit forge-cell-unit--weight">%</span>
-                    </span>
-                  ) : (
-                    <span className="forge-cell-weight">{tag.weightPct}%</span>
-                  )}
-                </div>
-                <div className="forge-table-cell" role="cell" data-label="Suggested Auto-Apply Logic">
-                  {editing ? (
-                    <textarea
-                      className="input forge-cell-input forge-cell-area"
-                      rows={2}
-                      value={tag.autoApply}
-                      aria-label="Suggested auto-apply logic"
-                      onChange={(event) => patchTag(tag.id, { autoApply: event.target.value })}
-                    />
-                  ) : (
-                    <span className="forge-cell-text forge-cell-text--muted">{tag.autoApply}</span>
-                  )}
-                </div>
-                <div className="forge-table-cell forge-table-cell--actions" role="cell" data-label="Actions">
-                  {!tag.system ? (
-                    <button
-                      type="button"
-                      className={editing ? "icon-btn icon-btn--blue icon-btn--active" : "icon-btn icon-btn--blue"}
-                      onClick={() => setEditingId(editing ? null : tag.id)}
-                      aria-label={editing ? `Done editing ${tag.label}` : `Edit ${tag.label}`}
-                      aria-pressed={editing}
-                    >
-                      <PencilSimple aria-hidden weight="regular" />
-                    </button>
-                  ) : null}
+              <div
+                key={tag.id}
+                className={
+                  showCompact ? "forge-table-row forge-table-row--collapsed" : "forge-table-row"
+                }
+                role="row"
+              >
+                {showCompact ? (
                   <button
                     type="button"
-                    className="icon-btn icon-btn--blue"
-                    onClick={() => duplicateTag(tag.id)}
-                    aria-label={`Duplicate ${tag.label}`}
+                    className="chip-search-option forge-row-summary"
+                    onClick={() => toggleRowExpanded(tag.id)}
+                    aria-expanded={false}
                   >
-                    <Copy aria-hidden weight="regular" />
+                    <span className="chip-search-option-label">{tag.label}</span>
+                    <span className="chip-search-option-desc">{tag.purpose}</span>
+                    <CaretDown className="forge-row-caret" aria-hidden weight="bold" />
                   </button>
-                  {!tag.system ? (
+                ) : (
+                  <>
+                  {isMobile ? (
                     <button
                       type="button"
-                      className="icon-btn icon-btn--danger"
-                      onClick={() => deleteTag(tag.id)}
-                      aria-label={`Delete ${tag.label}`}
+                      className="chip-search-option forge-row-summary is-expanded"
+                      onClick={() => toggleRowExpanded(tag.id)}
+                      aria-expanded={true}
                     >
-                      <Trash aria-hidden weight="regular" />
+                      <span className="chip-search-option-label">{tag.label}</span>
+                      <span className="chip-search-option-desc">{tag.purpose}</span>
+                      <CaretDown
+                        className="forge-row-caret forge-row-caret--up"
+                        aria-hidden
+                        weight="bold"
+                      />
                     </button>
                   ) : null}
-                </div>
+                  <div className="forge-table-cell" role="cell" data-label="Tag">
+                    {editing ? (
+                      <input
+                        className="input forge-cell-input forge-cell-input--pill"
+                        value={tag.label}
+                        aria-label="Tag label"
+                        onChange={(event) => patchTag(tag.id, { label: event.target.value })}
+                      />
+                    ) : (
+                      <span className={tag.system ? "forge-pill forge-pill--muted" : "forge-pill"}>
+                        {tag.label}
+                      </span>
+                    )}
+                  </div>
+                  <div className="forge-table-cell" role="cell" data-label="Purpose">
+                    {editing ? (
+                      <textarea
+                        className="input forge-cell-input forge-cell-area"
+                        rows={2}
+                        value={tag.purpose}
+                        aria-label="Tag purpose"
+                        onChange={(event) => patchTag(tag.id, { purpose: event.target.value })}
+                      />
+                    ) : (
+                      <span className="forge-cell-text">{tag.purpose}</span>
+                    )}
+                  </div>
+                  <div className="forge-table-cell" role="cell" data-label="Rule Chips">
+                    {tag.system ? (
+                      <span className="forge-cell-text forge-cell-text--muted">
+                        All active rule chips
+                      </span>
+                    ) : editing ? (
+                      <span className="forge-tag-picker">
+                        {chips.map((chip) => {
+                          const on = tag.chipIds.includes(chip.id);
+                          return (
+                            <button
+                              key={chip.id}
+                              type="button"
+                              className={on ? "forge-pill forge-pill--toggle forge-pill--on" : "forge-pill forge-pill--toggle"}
+                              aria-pressed={on}
+                              onClick={() => toggleChipMembership(tag.id, chip.id)}
+                            >
+                              {chip.label}
+                            </button>
+                          );
+                        })}
+                      </span>
+                    ) : (
+                      <span className="forge-pill-stack">
+                        {tag.chipIds
+                          .map((chipId) => chipById.get(chipId))
+                          .filter((chip): chip is RuleChip => Boolean(chip))
+                          .map((chip) => (
+                            <span key={chip.id} className="forge-pill">
+                              {chip.label}
+                            </span>
+                          ))}
+                      </span>
+                    )}
+                  </div>
+                  <div className="forge-table-cell" role="cell" data-label="Weight">
+                    {editing ? (
+                      <span className="forge-cell-value">
+                        <input
+                          className="input forge-cell-input forge-cell-input--num forge-cell-input--weight"
+                          type="number"
+                          min={0}
+                          max={100}
+                          value={tag.weightPct}
+                          aria-label="Tag weight percent"
+                          onChange={(event) =>
+                            patchTag(tag.id, { weightPct: Number(event.target.value) })
+                          }
+                        />
+                        <span className="forge-cell-unit forge-cell-unit--weight">%</span>
+                      </span>
+                    ) : (
+                      <span className="forge-cell-weight">{tag.weightPct}%</span>
+                    )}
+                  </div>
+                  <div className="forge-table-cell" role="cell" data-label="Suggested Auto-Apply Logic">
+                    {editing ? (
+                      <textarea
+                        className="input forge-cell-input forge-cell-area"
+                        rows={2}
+                        value={tag.autoApply}
+                        aria-label="Suggested auto-apply logic"
+                        onChange={(event) => patchTag(tag.id, { autoApply: event.target.value })}
+                      />
+                    ) : (
+                      <span className="forge-cell-text forge-cell-text--muted">{tag.autoApply}</span>
+                    )}
+                  </div>
+                  <div className="forge-table-cell forge-table-cell--actions" role="cell" data-label="Actions">
+                    {!tag.system ? (
+                      <button
+                        type="button"
+                        className={editing ? "icon-btn icon-btn--blue icon-btn--active" : "icon-btn icon-btn--blue"}
+                        onClick={() => setEditingId(editing ? null : tag.id)}
+                        aria-label={editing ? `Done editing ${tag.label}` : `Edit ${tag.label}`}
+                        aria-pressed={editing}
+                      >
+                        <PencilSimple aria-hidden weight="regular" />
+                      </button>
+                    ) : null}
+                    <button
+                      type="button"
+                      className="icon-btn icon-btn--blue"
+                      onClick={() => duplicateTag(tag.id)}
+                      aria-label={`Duplicate ${tag.label}`}
+                    >
+                      <Copy aria-hidden weight="regular" />
+                    </button>
+                    {!tag.system ? (
+                      <button
+                        type="button"
+                        className="icon-btn icon-btn--danger"
+                        onClick={() => deleteTag(tag.id)}
+                        aria-label={`Delete ${tag.label}`}
+                      >
+                        <Trash aria-hidden weight="regular" />
+                      </button>
+                    ) : null}
+                  </div>
+                  </>
+                )}
               </div>
             );
           })}

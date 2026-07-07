@@ -699,6 +699,24 @@ button {
   font-size: 0.85rem;
 }
 
+/* Button icon sizing standard — applies to every .btn variant/size, every
+   viewport. Phosphor's IconBase omits the width/height SVG attributes
+   entirely when an icon gets neither an explicit `size` prop nor a context
+   size (main.tsx's IconContext only sets `weight`, not `size`) — an
+   unconstrained <svg> then falls back to the browser's oversized default
+   object box, inflating the whole button around it. `1em` scales the icon
+   with the button's own font-size (so .btn--small gets a proportionally
+   smaller icon than .btn), matching the existing "size relative to adjacent
+   text" icon rule in design-system.md. `:not([width])` is deliberate: icons
+   that DO pass an explicit `size` (e.g. size={16} in StrategyActions) already
+   render a `width` attribute and must keep that fixed size untouched — never
+   remove this guard or it will resize every already-correct button icon. */
+.btn svg:not([width]) {
+  width: 1em;
+  height: 1em;
+  flex-shrink: 0;
+}
+
 /* Disabled = standardized inert grey (not just a dimmed version of the enabled
    color). Each button family keeps its structural identity — solid fills stay
    filled, outline/soft buttons keep a soft fill + border, and text-only buttons
@@ -3340,9 +3358,14 @@ select.input:hover:not(:disabled) {
 
 .forge-table-row {
   display: grid;
+  /* Actions is fixed at 108px to fit its 3 icon buttons (Save to My Chips /
+     Duplicate / Delete) without overflowing into Rule Weight — 3 × 28px
+     .icon-btn + 2 × 6px gaps = 96px, plus breathing room. Whenever a new
+     action icon is added to a table row, widen this to match instead of
+     letting it overflow (a fixed grid track never grows to fit content). */
   grid-template-columns:
     minmax(130px, 0.95fr) minmax(120px, 1.1fr) minmax(110px, 0.9fr)
-    minmax(104px, 0.7fr) minmax(84px, 0.6fr) minmax(84px, 0.6fr) 82px;
+    minmax(104px, 0.7fr) minmax(84px, 0.6fr) minmax(84px, 0.6fr) 108px;
   gap: 4px;
   align-items: center;
   min-height: 40px;
@@ -3357,9 +3380,13 @@ select.input:hover:not(:disabled) {
 }
 
 .forge-table--tags .forge-table-row {
+  /* Actions is fixed at 108px for the same reason as the Rule Chips table's
+     Actions column (see .forge-table-row above): 3 × 28px .icon-btn + 2 × 6px
+     gaps = 96px of icons (Edit / Duplicate / Delete) need real breathing room
+     in a fixed, non-growing grid track. */
   grid-template-columns:
     minmax(110px, 0.8fr) minmax(140px, 1.25fr) minmax(130px, 1.1fr)
-    minmax(64px, 0.45fr) minmax(140px, 1.25fr) 100px;
+    minmax(64px, 0.45fr) minmax(140px, 1.25fr) 108px;
   align-items: start;
   padding-block: 10px;
 }
@@ -3605,10 +3632,305 @@ select.forge-cell-input {
   height: 14px;
 }
 
+/* Action menu — a small button-triggered dropdown of one-shot actions (see
+   components.mdc "Action menu standard"). Positioning mirrors `.multiselect`
+   (relative wrapper + absolute menu) but right-aligns since triggers like
+   "Add Rule" typically sit near a panel's right edge. */
+.action-menu {
+  position: relative;
+  display: inline-flex;
+}
+
+.action-menu-list {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 4px);
+  right: 0;
+  left: auto;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  min-width: 220px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg-deep);
+  box-shadow: 0 12px 32px rgb(0 0 0 / 0.45);
+  white-space: nowrap;
+}
+
+.action-menu-item {
+  display: block;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-base);
+  font: inherit;
+  font-size: 0.85rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.action-menu-item:hover:not(:disabled) {
+  background: var(--surface-2);
+}
+
+.action-menu-item:disabled {
+  color: var(--disabled-text);
+  cursor: not-allowed;
+}
+
+/* Add Rule picker — the inline panel opened from the ActionMenu's "Select
+   chip from system defaults or custom chips" item. Two columns (System
+   Defaults / My Chips), each a searchable, metric-grouped ChipSearchList. See
+   components.mdc "Chip picker standard". */
+/* A first-class VIEW of the modal (see components.mdc "Modal view-state
+   standard"), not a nested panel — RuleChipsTableModal shows either the chip
+   table (.forge-table-intro/.forge-table/.forge-table-actions) or this picker,
+   never both, so it's flush with the modal's own flat content: no extra
+   border/background/margin of its own. `flex: 1 1 auto` + `overflow-y: auto`
+   fills and scrolls the same body region `.forge-table` occupies in the other
+   state. */
+.forge-chip-picker {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: var(--space-3);
+  overflow-y: auto;
+}
+
+/* The back-to-table-view affordance is the shared `.breadcrumb` component
+   (matching every other breadcrumb app-wide), sitting left of the view title
+   — not a separate close icon. Clicking it returns to the chip table
+   (closePicker), the same as "My Strategies" returns to the strategy list. */
+.forge-chip-picker-head {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.forge-chip-picker-head .breadcrumb {
+  flex: 0 0 auto;
+}
+
+/* Matches `.forge-table-intro p` exactly — the picker's intro line reads the
+   same as the table view's intro line, just relocated next to the back
+   breadcrumb instead of beside "Add Rule". */
+.forge-chip-picker-head h3 {
+  margin: 0;
+  font-size: 0.85rem;
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+.forge-chip-picker-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--space-3);
+  align-items: start;
+}
+
+.forge-chip-picker-col {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+/* Chip search list — a searchable, metric-grouped single-select list (not a
+   popover; always expanded inline, unlike MultiSelect). Search field reuses
+   `.input`; the listbox/group/option styling mirrors `.multiselect-menu`'s
+   conventions so it reads as part of the same design language. */
+.chip-search {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  min-width: 0;
+}
+
+.chip-search-field {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.chip-search-icon {
+  position: absolute;
+  left: 10px;
+  width: 14px;
+  height: 14px;
+  color: var(--text-faint);
+  pointer-events: none;
+}
+
+.chip-search-input {
+  width: 100%;
+  padding-left: 30px;
+}
+
+.chip-search-list {
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  max-height: 220px;
+  overflow-y: auto;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  background: var(--bg-deep);
+}
+
+.chip-search-group-head {
+  padding: 6px 10px 2px;
+  font-size: 0.66rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-faint);
+}
+
+.chip-search-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.chip-search-option {
+  display: flex;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 6px;
+  min-width: 0;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-base);
+  font: inherit;
+  font-size: 0.82rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.chip-search-option:hover {
+  background: var(--surface-2);
+}
+
+.chip-search-option-label {
+  font-weight: 600;
+  color: var(--text-strong);
+}
+
+.chip-search-option-desc {
+  color: var(--text-muted);
+}
+
+.chip-search-option-meta {
+  flex: 1 0 100%;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-faint);
+}
+
+.chip-search-actions {
+  display: flex;
+  gap: 4px;
+  flex: 0 0 auto;
+  padding-right: 4px;
+}
+
+.chip-search-empty {
+  padding: 10px;
+  font-size: 0.8rem;
+  color: var(--text-faint);
+}
+
+/* My Chips inline edit form (within the Add Rule picker) — same `.config-field`
+   + `.input` conventions as the rest of the Configure card, since it's a
+   stacked mini-form rather than a table row. */
+.forge-chip-edit {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-top: 0.4rem;
+  padding: var(--space-2);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  background: var(--surface-1);
+}
+
+.forge-chip-edit-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.6rem;
+}
+
+.forge-chip-savemode {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.forge-radio {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.82rem;
+  color: var(--text-base);
+  cursor: pointer;
+}
+
+.forge-radio input {
+  width: 1rem;
+  height: 1rem;
+  accent-color: var(--accent);
+}
+
+/* Same tone/shape as the completeness caution (.forge-caution) — a warning
+   banner, here for the "update everywhere" save mode. */
+.forge-chip-edit-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.4rem;
+  margin: 0;
+  padding: 0.6rem 0.7rem;
+  border: 1px solid rgb(251 191 36 / 0.4);
+  border-radius: var(--radius-sm);
+  background: rgb(251 191 36 / 0.08);
+  color: var(--warning);
+  font-size: 0.78rem;
+}
+
+.forge-chip-edit-warning svg {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  margin-top: 0.1rem;
+}
+
+.forge-chip-edit-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
 /* ---- Forge responsive: boxes stack, tables become stacked cards ---- */
 
 @media (max-width: 900px) {
   .forge-boxes {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .forge-chip-picker-columns {
     grid-template-columns: minmax(0, 1fr);
   }
 }
@@ -3639,6 +3961,44 @@ select.forge-cell-input {
     padding: 0.75rem var(--space-3);
   }
 
+  /* Collapsible mobile rows (see components.mdc "Collapsible mobile row
+     standard") — the row's own padding moves onto `.forge-row-summary` (below)
+     so the collapsed state is exactly one compact line, edge-to-edge like
+     every other row. */
+  .forge-table-row--collapsed {
+    padding: 0;
+  }
+
+  /* Reuses `.chip-search-option`'s look (see the Add Rule picker) for both the
+     collapsed row AND the expanded row's own header — same summary, only the
+     caret direction and the fields below differ. `align-items: center`
+     (overriding the picker's `baseline`) keeps the caret centered on the text
+     line; `width: 100%` fills the row (the picker version sits in a narrower
+     list, this one IS the row). */
+  .forge-row-summary {
+    width: 100%;
+    align-items: center;
+    padding: 0.75rem var(--space-3);
+  }
+
+  .forge-row-summary.is-expanded {
+    border-bottom: 1px solid var(--border-soft);
+    margin-bottom: 0.2rem;
+  }
+
+  .forge-row-caret {
+    margin-left: auto;
+    flex: 0 0 auto;
+    width: 14px;
+    height: 14px;
+    color: var(--text-faint);
+    transition: transform 0.15s ease;
+  }
+
+  .forge-row-caret--up {
+    transform: rotate(180deg);
+  }
+
   .forge-table-cell::before {
     content: attr(data-label);
     display: block;
@@ -3660,6 +4020,37 @@ select.forge-cell-input {
 
   .forge-cell-input--weight {
     width: 5.5rem;
+  }
+
+  .forge-chip-edit-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* Mobile: float the view title under the back breadcrumb instead of beside
+     it — there isn't room for both on one line at narrow widths. */
+  .forge-chip-picker-head {
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  .forge-chip-picker-head h3 {
+    flex-basis: 100%;
+  }
+
+  /* Mobile: tighten the picker's vertical rhythm — 16px between the head and
+     the columns (and between a stacked column's search results and the next
+     column's heading), 4px between a column's own heading and its search
+     field. */
+  .forge-chip-picker {
+    gap: 16px;
+  }
+
+  .forge-chip-picker-columns {
+    gap: 16px;
+  }
+
+  .forge-chip-picker-col {
+    gap: 4px;
   }
 
   /* Text-button footers stack full-width on mobile (handled by
