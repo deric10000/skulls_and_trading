@@ -81,6 +81,17 @@ interface AppStateValue {
   chipLibrary: RuleChip[];
   saveChipToLibrary: (chip: RuleChip) => void;
   removeChipFromLibrary: (chipId: string) => void;
+  // Edits a saved library chip. When `propagate` is true, the same field
+  // changes are also pushed to every chip across every strategy that was
+  // originally added from this library chip (matched via `libraryChipId`) —
+  // "Save and Update Chip Settings Everywhere". When false, only the library
+  // template changes; chips already added to a strategy keep their current
+  // values ("Save Default Chip Settings").
+  updateChipInLibrary: (
+    chipId: string,
+    patch: Partial<RuleChip>,
+    propagate: boolean,
+  ) => void;
 
   // ---- Strategy Forge alignment (computed from buckets + strategies + data) ----
   buckets: Bucket[];
@@ -337,6 +348,24 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     setChipLibrary((current) => current.filter((chip) => chip.id !== chipId));
   }, []);
 
+  const updateChipInLibrary = useCallback(
+    (chipId: string, patch: Partial<RuleChip>, propagate: boolean) => {
+      setChipLibrary((current) =>
+        current.map((chip) => (chip.id === chipId ? { ...chip, ...patch } : chip)),
+      );
+      if (!propagate) return;
+      setStrategies((current) =>
+        current.map((strategy) => ({
+          ...strategy,
+          rules: (strategy.rules ?? []).map((chip) =>
+            chip.libraryChipId === chipId ? { ...chip, ...patch } : chip,
+          ),
+        })),
+      );
+    },
+    [],
+  );
+
   const portfolios = useMemo(() => dataSource.getPortfolios(), []);
 
   // Recomputed only when the strategies or buckets change (data snapshots are
@@ -469,6 +498,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       chipLibrary,
       saveChipToLibrary,
       removeChipFromLibrary,
+      updateChipInLibrary,
       buckets,
       getPortfolioAlignment,
       getStockAlignment,
@@ -510,6 +540,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       chipLibrary,
       saveChipToLibrary,
       removeChipFromLibrary,
+      updateChipInLibrary,
       buckets,
       getPortfolioAlignment,
       getStockAlignment,

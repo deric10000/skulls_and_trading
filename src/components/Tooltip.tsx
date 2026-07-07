@@ -1,27 +1,6 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { Info, X } from "../lib/icons";
-
-// Touch has no hover, so the desktop hover/focus-within reveal doesn't work on
-// mobile. Below 767px the tooltip switches to tap-to-toggle instead (CSS hides
-// the hover reveal and shows only `.is-open`, driven by this).
-function useIsMobile() {
-  const [isMobile, setIsMobile] = useState(
-    () =>
-      typeof window !== "undefined" &&
-      window.matchMedia("(max-width: 767px)").matches,
-  );
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const media = window.matchMedia("(max-width: 767px)");
-    const update = () => setIsMobile(media.matches);
-    update();
-    media.addEventListener("change", update);
-    return () => media.removeEventListener("change", update);
-  }, []);
-
-  return isMobile;
-}
+import { useIsMobile } from "../lib/useIsMobile";
 
 /**
  * Design-system tooltip (per the Figma tooltip pattern): a dark rounded

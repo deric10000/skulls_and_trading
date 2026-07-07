@@ -381,6 +381,13 @@ export interface RuleChip {
   value: number | [number, number] | string;
   weightPct: number; // Rule Weight — % importance within its category (chips sum to 100)
   enabled: boolean;
+  // Set only when this chip was added to a strategy FROM a saved custom chip
+  // (AppState.chipLibrary) via the Add Rule picker — links this row back to
+  // its library source so editing that library chip can optionally propagate
+  // the change here too ("Save and Update Chip Settings Everywhere"). Never
+  // set for chips copied from a system-default strategy (those are read-only
+  // templates, not editable/propagatable) or for blank/from-scratch chips.
+  libraryChipId?: string;
 }
 
 // A Tag is a reusable, named group of rule chips within one category — the

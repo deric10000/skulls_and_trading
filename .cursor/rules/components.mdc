@@ -43,6 +43,152 @@ Only non-token exceptions allowed: full pills (`999px`) and circles (`50%`)
 where that shape is intended, and thin data-viz bars (`.chart-bar`, 2px).
 Nothing may exceed 8px. New components must follow this mapping.
 
+## Button icon sizing standard (`.btn svg`)
+
+Every icon inside a `.btn` (any variant/size, any viewport) is sized once,
+globally, by `.btn svg:not([width]) { width: 1em; height: 1em; flex-shrink: 0 }`
+in `index.css` — **never** size a button's icon with a one-off wrapper class or
+inline style.
+
+- **Why this exists:** Phosphor's `IconBase` omits the SVG `width`/`height`
+  attributes entirely when an icon gets neither an explicit `size` prop nor a
+  context size (`main.tsx`'s `IconContext` only sets `weight`, not `size`). An
+  `<svg>` left with no intrinsic size falls back to the browser's oversized
+  default object box, inflating the whole button around it — this is exactly
+  what broke the Rule Chips "Add Rule" button when its `CaretDown` icon
+  shipped with no `size` prop and no CSS constraining it.
+- **`1em`, not a fixed px:** scales the icon with the button's own font-size,
+  so `.btn--small` automatically gets a proportionally smaller icon than the
+  base `.btn` — consistent across every button size without a breakpoint rule
+  (buttons don't change font-size by viewport, so this is viewport-consistent
+  for free). Matches the "size relative to adjacent text" icon guidance in
+  `design-system.md`.
+- **The `:not([width])` guard is load-bearing.** Icons that pass an explicit
+  `size` prop (e.g. `size={16}` in `StrategyActions`) already render a
+  `width` attribute — the guard excludes them so this rule can't silently
+  resize an already-correct icon. Don't drop it "for simplicity."
+- **New icon-only buttons** (`.icon-btn`, `.forge-table-close`, etc.) already
+  have their own dedicated `svg` sizing rules — this standard is specifically
+  for icons inside **text** buttons (`.btn` + a label). Give a new icon-only
+  button family its own explicit `svg` rule instead of relying on this one.
+
+## Forge table Actions column standard (`.forge-table-row` / `.forge-table--tags`)
+
+Both Forge table modals (`RuleChipsTableModal`'s rows, `TagsTableModal`'s
+rows — shared across **every** category: Thesis, Setup, Risk, Position, Trade,
+Timeframe) size their rightmost **Actions** column as a **fixed pixel width**
+in `.forge-table-row`'s `grid-template-columns` (not `fr`/`minmax`, since it
+holds a stable icon count, not flexible text). A fixed grid track **never
+grows to fit overflowing content** — if the icon row inside needs more space
+than the track provides, it silently overflows *backward* into the previous
+(Rule Weight / Tag Weight) column instead of wrapping or clipping, which is
+exactly what happened when a third icon (`BookmarkSimple`, "Save to My
+Chips") was added to Rule Chips rows without widening their `82px` track.
+
+- **Before adding a new action icon to a table row, widen its Actions
+  track first**: `icon count × 28px (.icon-btn) + (icon count − 1) × 6px gap`,
+  then add real breathing room (don't size it exactly to content — both
+  tracks are `108px` today, sized for 3 icons with a few px of slack; a razor-
+  thin margin risks overflow at different zoom levels/font sizes).
+- **This is shared, not per-category** — both `.forge-table-row` (chips) and
+  `.forge-table--tags .forge-table-row` (tags) are used for every category via
+  the same two modal components, so fixing the column width once fixes it
+  everywhere; there's no per-category CSS to hunt down.
+- Mobile (`≤ 767px`) reflows rows into stacked cards
+  (`grid-template-columns: minmax(0, 1fr)`) and switches Actions to
+  `justify-content: flex-start`, so this overflow risk is desktop/tablet-grid
+  specific — verify any icon-count change at the grid breakpoint, not just
+  mobile.
+
+## Modal view-state standard (no modal-in-a-modal)
+
+When a modal needs a secondary view (e.g. a picker, a sub-form) that isn't
+simply "more fields in the same view," swap it in as a **mutually exclusive
+sibling view of the same modal card** — never render it as a bordered/boxed
+panel nested *alongside* the modal's normal content (that reads as a modal
+inside a modal).
+
+- **Shared chrome stays put.** The modal's own head (title + close `X`,
+  `.forge-table-close`) is rendered once, outside the view conditional, and
+  stays visible in every view — it's the only way to fully close the modal
+  regardless of which view is active.
+- **Exactly one view renders its body content at a time**, gated by a single
+  piece of state (e.g. `pickerOpen`). Each view's own root element is
+  `flex: 1 1 auto; min-height: 0; overflow-y: auto` (matches `.forge-table`) so
+  it fills the same body region and scrolls the same way, whichever view is
+  showing.
+- **A secondary view is flush, not boxed.** It gets no extra
+  border/background/margin of its own (that's the "nested panel" smell) — it
+  should look like a first-class replacement for the table body, not an inset
+  card floating inside one. Give it its own small head row (a `.breadcrumb`
+  back link + a view title) if it needs one, styled to match the modal's own
+  head rhythm, not a separate mini-modal look. The back affordance is the
+  shared **`.breadcrumb`** component (matching every other breadcrumb
+  app-wide — e.g. "My Strategies" on the Forge detail page) sitting left of
+  the title, labeled with the view it returns to — **not** a `.forge-table-
+  close`-styled icon button (that's reserved for actually closing the whole
+  modal, in the modal's own top-level head).
+- **Current adopter:** `RuleChipsTableModal`'s "Add Rule" picker
+  (`.forge-chip-picker`) replaces `.forge-table-intro` +
+  `.forge-table` + `.forge-table-actions` entirely while open, rather than
+  inserting itself between them.
+
+## Collapsible mobile row standard (`useIsMobile` / `.forge-row-summary`)
+
+Mobile (`< 768px`) rows in both Forge table modals (`RuleChipsTableModal`,
+`TagsTableModal` — every category) are **collapsed by default** to a compact
+one-line summary, matching the "Add Rule" picker's `.chip-search-option` look
+exactly, with a chevron that rotates to indicate state:
+
+- **Mobile detection is JS, not CSS.** This is a genuinely different markup
+  tree per state (a one-line summary vs. every field cell), not something
+  `display: none` can switch — use the shared `useIsMobile()` hook
+  (`src/lib/useIsMobile.ts`). Desktop/tablet always render every field cell
+  regardless of any collapse state; the state only has an effect when
+  `isMobile` is true.
+- **Collapsed** — a `<button className="chip-search-option forge-row-summary">`
+  reusing the picker's exact classes (`chip-search-option-label` +
+  `chip-search-option-desc` for the two summary fields) plus a right-aligned
+  `CaretDown` (`.forge-row-caret`, `margin-left: auto`). Tapping the whole row
+  expands it — the entire card is the tap target, not a small icon.
+- **Expanded** — the same summary button re-renders as the row's own header
+  (`.forge-row-summary.is-expanded`, caret rotated via `.forge-row-caret--up`)
+  followed by the row's normal full field cells, completely unchanged from the
+  desktop/tablet markup. Tapping the header collapses back — it's a
+  **persistent, separate control** from the fields below, so it never
+  conflicts with editing an input/select inside the expanded row.
+- **State:** a per-modal `Set<string>` of expanded row ids
+  (`expandedRowIds`/`toggleRowExpanded`), starting empty (all collapsed).
+  Don't persist this across renders of a *different* strategy/category — each
+  modal mount starts fresh, matching how `draft` itself resets per mount.
+- **Current adopters:** both Forge table modals, all 6 categories (shared
+  components, so one implementation covers every category automatically).
+  A future collapsible-row list should follow the same shape: reuse
+  `.chip-search-option`'s classes for the summary rather than inventing new
+  label/description styling.
+
+## Cancel / Save-Update pair standard (`.forge-cancel-btn`)
+
+Any **Cancel next to a primary commit action** (Update / Save / Add) — e.g. a
+modal or inline-form footer — reuses the **same two button styles** every
+time. Before adding a new Cancel/commit pair anywhere, check this rule first
+instead of hand-rolling a plain `.btn--link`/`.btn--ghost` Cancel:
+
+- **Cancel** = `.btn.btn--small.btn--link.forge-cancel-btn` + a leading bold
+  `X` icon (`<X aria-hidden weight="bold" /> Cancel`) — gold/warning-toned
+  text button, no fill.
+- **Commit** = `.btn.btn--small.btn--solid` + a leading regular-weight icon
+  matching the action (`Plus` for Add/Save, `FloppyDisk` for a dedicated Save
+  action, etc.).
+- **Current adopters:** `RuleChipsTableModal` (table Cancel/Update **and** the
+  My Chips inline edit form's Cancel/Save Chip), `TagsTableModal`. Any new
+  Cancel/commit pair — including ones nested inside a picker or inline form,
+  not just a top-level modal footer — joins this list instead of forking a new
+  style.
+- `CaptainLogWidget`'s inline-form Cancel (`.btn--ghost`, no icon) predates
+  this standard and is a narrower, non-modal context — don't treat it as a
+  second valid pattern; new Cancel/commit pairs use `.forge-cancel-btn`.
+
 ## Selectable card interaction standard (`.select-card` / `.is-selected`)
 
 Every card the user can **pick** — watchlist names (`.watch-item`), strategy
@@ -113,6 +259,56 @@ component (`src/components/Dropdown.tsx`) — don't re-inline `<label>` + `<sele
 > (e.g. the Market Weather Stock card's `.weather-prevnext`) is a distinct
 > two-button toggle, not a `select` — it's appropriate when cycling a short
 > ordered set in place without opening a menu.
+
+## Action menu standard (`ActionMenu`)
+
+A button that reveals a short list of **one-shot actions** (as opposed to a
+`Dropdown`/`MultiSelect`, which pick a *value*) is an `ActionMenu`
+(`src/components/ActionMenu.tsx`) — never a hand-rolled button + conditional
+`<ul>`. It renders exactly the trigger you give it (so the caller keeps full
+control of the button's look, e.g. `.btn.btn--small`) and manages open state,
+outside-click, and Escape itself, mirroring `MultiSelect`'s mechanics
+(`.action-menu` relative wrapper + `.action-menu-list` absolute menu) but
+right-aligned (`right: 0`) since triggers like "Add Rule" typically sit near a
+panel's right edge — check which alignment fits before reusing the class
+wholesale if a future trigger sits elsewhere.
+
+- **Current adopter:** the Rule Chips table modal's "Add Rule" split button
+  (`CaretDown` icon — swapped in for the old `Plus` icon specifically to signal
+  "opens a menu" rather than "adds immediately") — items: "Add new blank
+  chip" / "Select chip from system defaults or custom chips".
+- Items are one-shot (`onSelect` fires and the menu closes) — for a
+  pick-and-keep-open pattern, that's a different component; don't force it
+  through `ActionMenu`.
+
+## Chip search list standard (`ChipSearchList`)
+
+A **searchable, metric-grouped, single-select chip list** — used by the Rule
+Chips table modal's "Add Rule" picker (System Defaults / My Chips columns) —
+is a distinct pattern from both `Dropdown` (native `<select>`, no search) and
+`MultiSelect` (a compact, collapsible field trigger). `ChipSearchList`
+(`src/components/ChipSearchList.tsx`) is **always inline-expanded** (no
+open/closed trigger state of its own) because it lives inside an
+already-expanded picker panel, not a compact form field:
+
+- A search input (reusing `.input`, with a leading `MagnifyingGlass` icon)
+  filters every group's options by chip label, description, and `meta` text.
+- Options are grouped by **underlying data point** (metric label as the group
+  heading, in the same order as the Data Point dropdown —
+  `metricsForCategory`), not by source strategy — the same metric tested with
+  different values/labels (e.g. a "Revenue Growth" chip in one default
+  strategy vs. a "Hyper Growth" chip in another) surfaces under one heading so
+  it's easy to compare.
+- An optional `meta` tag per option (e.g. the source strategy name for a
+  System Defaults option) and an optional `renderExtra` slot (e.g. My Chips'
+  edit/delete icon buttons) — reuse these instead of forking the list markup.
+- Reuses `MultiSelect`'s menu/option visual conventions (`.chip-search-list`
+  mirrors `.multiselect-menu`; hover surface, `--radius-sm` rows) so it reads
+  as part of the same design language despite being a new component.
+
+See `data-architecture.md` ("Chip library") for what selecting a System
+Defaults vs. My Chips option actually does to the data (copy vs.
+copy-with-library-link) — that's a data-flow contract, not a styling one.
 
 ## Tooltip standard (`Tooltip.tsx` / `InfoTip`)
 

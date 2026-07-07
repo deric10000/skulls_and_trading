@@ -189,7 +189,9 @@ snapshots (`data.ts`), and register it in `metrics.ts`. Nothing else changes.
 ### Rule chips + tags (per strategy)
 
 - A `RuleChip` = label + metric + date range + condition + value +
-  `weightPct` (0–100 within its category) + `enabled`.
+  `weightPct` (0–100 within its category) + `enabled` + an optional
+  `libraryChipId` (set only when added from a saved custom chip — see "Chip
+  library" below).
 - A `RuleTag` = label + purpose + member `chipIds` + `weightPct` (0–100 within
   its category's tags) + auto-apply guidance. Each category has a built-in
   `All Active Chips` system tag (`system: true`, weight 100, not deletable).
@@ -229,9 +231,46 @@ means these in-app chips update; there is **no** push-notification system.
   faster than `checkInterval`** (we couldn't refresh data we don't poll for).
 - Fundamentals refresh on a fixed daily cadence and are **not** user-selectable.
 
-### Chip library
+### Chip library — "Add Rule" (System Defaults / My Chips)
 
 Reusable rule chips live in `AppState.chipLibrary` (seeded from
 `CHIP_LIBRARY_SEED`). The library is in-memory app config, **not** behind the
-`DataSource` seam. (The old chip-editor "save to library" UI was retired with
-the table-modal redesign; the state + seed remain for a later pass.)
+`DataSource` seam.
+
+`RuleChipsTableModal`'s "Add Rule" is a split button (`ActionMenu`):
+
+- **Add new blank chip** — unchanged: appends an empty, fully-editable draft
+  row (`addChip`).
+- **Select chip from system defaults or custom chips** — opens an inline
+  picker with two searchable, metric-grouped `ChipSearchList`s:
+  - **System Defaults** — read-only templates read live from every
+    `isDefault: true` strategy's `rules` (`systemChipsForCategory`, filtered to
+    the open category). Never mutated by the picker; automatically includes
+    any future default strategy. Picking one **copies** its fields into a
+    brand-new draft row (fresh id, no library link) — editing that row
+    afterward never touches the source strategy.
+  - **My Chips** — `AppState.chipLibrary`, editable in place. Picking one
+    copies it into a new draft row the same way, but also stamps
+    `RuleChip.libraryChipId = <library chip id>` on the new row, linking it
+    back to its source for the propagation option below.
+- Any row (regardless of origin — blank, system-derived, or custom-derived)
+  can be bookmarked into the library via the row's **Save to My Chips** action
+  (`saveChipToLibrary`) — a one-way snapshot copy with a fresh `lib-` id; it
+  does **not** link back to the row that spawned it.
+
+**Editing a library ("My Chips") entry** happens in the picker itself and asks
+for a save mode (`AppState.updateChipInLibrary(chipId, patch, propagate)`):
+
+- **Save Default Chip Settings** (`propagate: false`) — updates the library
+  template only. Rows already added to any strategy keep their current values;
+  only *future* picks of this chip get the new ones.
+- **Save and Update Chip Settings Everywhere** (`propagate: true`) — also
+  walks every strategy's `rules` and applies the same field patch to every
+  chip whose `libraryChipId` matches, **retroactively** changing already-
+  configured strategies (their conviction scores can change as a result). The
+  UI shows an explicit warning before this is chosen — never apply this patch
+  silently or default to it.
+
+`RuleChip.libraryChipId` (optional) is the only schema addition — it exists
+solely to support this propagation; it's `undefined` for blank and
+system-derived chips.
