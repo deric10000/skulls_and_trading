@@ -22,6 +22,8 @@ specific thing they ask for — never bundle in extra tweaks.
 | `LinkButton` | `src/components/LinkButton.tsx` | Renders `.btn.btn--link`. |
 | `SiteFooter` | `src/components/SiteFooter.tsx` | Single shared footer in `AppShell`; content + behavior. Never add a second footer. |
 | Home widgets | `HeroCard`, `MarketFlowWidget`, `WatchlistWidget`, `Tabs` | Internal markup, content, and visual styling. |
+| `Tooltip` / `InfoTip` | `src/components/Tooltip.tsx` | Desktop hover/focus-within reveal; mobile tap-to-toggle bottom sheet + close button (see "Tooltip standard" below). |
+| `ActionFooter` | `src/components/ActionFooter.tsx` | Reports its own height as `--sticky-footer-h` (see App shell below) — don't remove without checking consumers. |
 
 When the user references the Figma wireframes, treat them as **structure only**
 — never copy their colors/styling and never change widget content.
@@ -112,6 +114,52 @@ component (`src/components/Dropdown.tsx`) — don't re-inline `<label>` + `<sele
 > two-button toggle, not a `select` — it's appropriate when cycling a short
 > ordered set in place without opening a menu.
 
+## Tooltip standard (`Tooltip.tsx` / `InfoTip`)
+
+There is **one** tooltip affordance app-wide: the dark rounded popover
+(`.tooltip`) rendered by the shared `Tooltip` component (`InfoTip` is its
+info-icon trigger, used beside Configure-card section labels). Always reach
+for `Tooltip`/`InfoTip` for hover/tap explanatory content — never hand-roll a
+one-off popover.
+
+- **Desktop/tablet (`≥ 768px`)** — pure CSS: reveals on `:hover` /
+  `:focus-within`, `pointer-events: none` (decorative, dismisses on
+  mouse-out/blur). No JS state involved. Don't add a close button or click
+  handler that would change this — it must stay a lightweight hover reveal.
+- **Mobile (`< 768px`)** — touch has no hover, so behavior switches to
+  **tap-to-toggle**: tapping the trigger sets `.tooltip-wrap.is-open`, and the
+  tooltip renders as a **sheet fixed to the bottom-center of the viewport**
+  (`position: fixed; left: 50%; transform: translateX(-50%)`) — **not**
+  anchored to the trigger — so it's reachable and legible no matter where the
+  trigger sits on the page. `pointer-events` flips to `auto` and a white
+  Phosphor **`X`** close button (`.tooltip-close`, bold weight) dismisses it.
+  The mobile CSS block in `index.css`, keyed off `@media (max-width: 767px)`,
+  is the single source of truth for this styling.
+- **Dismissal (mobile):** the open tooltip closes on **any tap outside its own
+  wrap** — a single `pointerdown` listener on `document` (added only while
+  `open`, comparing `event.target` against a ref on `.tooltip-wrap`) drives
+  this. Don't reach for a backdrop or per-navigation callback instead — the
+  outside-tap listener already covers every dismiss case for free, because
+  each one begins with a tap somewhere outside this tooltip:
+  - **Genuine outside tap** — the explicit case.
+  - **Switching tabs/sections that toggle via CSS** (e.g. the Configure card's
+    section tabs) rather than unmounting — the tab button tap is "outside".
+  - **Navigating to a different app page** — the nav tap is "outside", and
+    since `ActivePage` in `App.tsx` conditionally renders (not CSS-hides) each
+    page, the old page's component tree — Tooltip included — actually
+    unmounts too, resetting `open` for free as a second line of defense.
+  - A new dismiss scenario should still route through "tap somewhere closes
+    the currently-open tooltip" rather than adding a bespoke callback.
+- **Clearing sticky bottom toolbars:** the mobile sheet's `bottom` offset uses
+  `max()` against `--sticky-footer-h` (see "Live chrome dimension variables"
+  above) so it always sits 4px above a mounted `ActionFooter` (e.g. the
+  Configure card's action row) instead of overlapping it, falling back to the
+  plain safe-area baseline when no such footer is mounted. Any new
+  viewport-fixed mobile element that could collide with a sticky footer should
+  clear it the same way, not with a hardcoded offset.
+- **Adding a new tooltip trigger:** wrap it in `<Tooltip>` (or use `<InfoTip>`
+  for the info-icon case) — don't add new hover/tap-reveal CSS per instance.
+
 ## Status chip coloring (`.chip.status--*`)
 
 There is **one** chip color set, defined once in `index.css`: `.status--positive`
@@ -179,6 +227,33 @@ every page (and any future page that renders in the shell). Content is locked.
 Its responsive behavior is the `.site-footer` rule described above — pinned on
 desktop/tablet, flowing end-of-page on mobile. Keep all footer changes in this
 component + `.site-footer`; never add a second footer.
+
+### Live chrome dimension variables (`--app-header-h` / `--sticky-footer-h`)
+
+Two CSS custom properties report the live pixel height of pinned shell chrome
+so other viewport-fixed UI can offset/clear it instead of hardcoding a magic
+number — set via `useLayoutEffect` + `ResizeObserver` (so they track resize,
+content reflow, and safe-area changes), consumed with a pixel fallback
+(`var(--x, 96px)`) so nothing breaks before the effect runs.
+
+- **`--app-header-h`** — the site header's height, set on `document.documentElement`
+  by `AppShell`. Consumers: the mobile home section-tabs sticky offset, the
+  mobile Forge list-view dock sizing.
+- **`--sticky-footer-h`** — the currently-mounted `ActionFooter`'s own rendered
+  height (its safe-area padding is already baked in — don't add
+  `env(safe-area-inset-bottom)` again on top of it), set by `ActionFooter`
+  itself and removed on unmount. Consumer: the mobile `Tooltip` sheet clears it
+  by 4px (see "Tooltip standard" below).
+- **Assumption:** at most one height-reporting instance of a given kind is
+  mounted at a time (true today — one header; the Forge dock and Configure
+  card footer are mutually exclusive on mobile). If a page ever needs two
+  simultaneous `ActionFooter`s, `--sticky-footer-h` needs to become
+  per-instance (e.g. scoped to a container, not `documentElement`) — don't
+  silently let a second instance clobber the first.
+- **Adding a new one:** follow this exact pattern (measure in a
+  `useLayoutEffect`, `ResizeObserver` + `resize` listener, clean up on
+  unmount) rather than a one-off `getBoundingClientRect()` snapshot, so it
+  stays correct across content/orientation changes.
 
 ## Pages — layout & scroll contract (applies to every new page)
 
