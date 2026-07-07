@@ -1,4 +1,4 @@
-import { useEffect, useId, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { Info, X } from "../lib/icons";
 
 // Touch has no hover, so the desktop hover/focus-within reveal doesn't work on
@@ -32,7 +32,10 @@ function useIsMobile() {
  * Mobile (< 768px): touch has no hover, so tapping the trigger toggles the
  * tooltip instead. It renders as a sheet fixed to the bottom-center of the
  * viewport (not anchored to the trigger) with its own close (X) button, since
- * there's no hover-out or click-away-from-focus to dismiss it.
+ * there's no hover-out or click-away-from-focus to dismiss it. It also closes
+ * on any tap outside its own wrap — which covers navigating away and
+ * switching tabs/sections for free, since those always start with a tap
+ * somewhere outside this tooltip.
  *
  * `Tooltip` wraps any trigger; `InfoTip` is the common info-icon trigger used
  * beside section labels on the Configure card.
@@ -51,9 +54,30 @@ export function Tooltip({
   const id = useId();
   const isMobile = useIsMobile();
   const [open, setOpen] = useState(false);
+  const wrapRef = useRef<HTMLSpanElement>(null);
+
+  // Mobile: close on any tap outside this tooltip's own wrap. This single
+  // mechanism covers every dismiss case the mobile sheet needs — a genuine
+  // outside tap, switching to a different tab/section (in-app "pages" that
+  // toggle via CSS rather than unmounting, e.g. the Configure card's section
+  // tabs), and navigating to a different app page via the top nav — all of
+  // which begin with a tap on something outside this wrap. (A real page
+  // *unmount* also resets `open` for free, since the whole component tree —
+  // Tooltip included — goes away with it.)
+  useEffect(() => {
+    if (!isMobile || !open) return;
+    function handlePointerDown(event: PointerEvent) {
+      if (wrapRef.current && !wrapRef.current.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => document.removeEventListener("pointerdown", handlePointerDown);
+  }, [isMobile, open]);
 
   return (
     <span
+      ref={wrapRef}
       className={open ? "tooltip-wrap is-open" : "tooltip-wrap"}
       aria-describedby={id}
       onClick={() => {

@@ -10,6 +10,7 @@ import { validateStrategy } from "../lib/forge/scoring";
 import {
   ArrowCounterClockwise,
   CheckCircle,
+  FloppyDisk,
   PencilSimple,
   Trash,
   Warning,
@@ -227,6 +228,23 @@ export function StrategyForgePanel({ strategy }: { strategy: Strategy | undefine
   const flashTimer = useRef<number | undefined>(undefined);
   useEffect(() => () => window.clearTimeout(flashTimer.current), []);
 
+  // Edits already apply live via updateStrategy — Save is a confirm/re-validate
+  // step, so "no changes" means "nothing new since the last confirm (or since
+  // this strategy was selected)". Track that baseline as a JSON snapshot (the
+  // Strategy shape is plain, JSON-serializable data) and reset it whenever the
+  // selected strategy changes, so switching strategies never shows stale
+  // "unsaved" state from a previous selection.
+  const savedSnapshotRef = useRef<string | null>(null);
+  const currentSnapshot = strategy ? JSON.stringify(strategy) : null;
+  useEffect(() => {
+    savedSnapshotRef.current = currentSnapshot;
+    // Intentionally keyed on the strategy id only — resets the baseline on
+    // selection change, not on every edit (currentSnapshot changes on every
+    // keystroke, which would defeat the dirty check).
+  }, [strategy?.id]);
+  const isDirty =
+    currentSnapshot !== null && currentSnapshot !== savedSnapshotRef.current;
+
   const rules = useMemo(() => strategy?.rules ?? [], [strategy]);
   const ruleTags = useMemo(() => strategy?.ruleTags ?? [], [strategy]);
 
@@ -291,7 +309,10 @@ export function StrategyForgePanel({ strategy }: { strategy: Strategy | undefine
 
   function handleUpdateStrategy() {
     // Edits apply live; Update confirms + re-runs the completeness checks so
-    // the user gets explicit feedback before heading to Apply.
+    // the user gets explicit feedback before heading to Apply. Also moves the
+    // "last saved" baseline forward, so the button disables again until the
+    // next edit.
+    savedSnapshotRef.current = currentSnapshot;
     setUpdatedFlash(true);
     window.clearTimeout(flashTimer.current);
     flashTimer.current = window.setTimeout(() => setUpdatedFlash(false), 2500);
@@ -688,9 +709,10 @@ export function StrategyForgePanel({ strategy }: { strategy: Strategy | undefine
           type="button"
           className="btn btn--small btn--solid forge-update-btn"
           onClick={handleUpdateStrategy}
+          disabled={!isDirty}
           aria-label="Update strategy"
         >
-          <CheckCircle size={16} weight={updatedFlash ? "fill" : "regular"} aria-hidden />
+          <FloppyDisk size={16} weight={updatedFlash ? "fill" : "regular"} aria-hidden />
           <span className="btn-label">
             {updatedFlash ? "Strategy Updated" : "Update Strategy"}
           </span>

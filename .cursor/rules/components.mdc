@@ -132,10 +132,24 @@ one-off popover.
   (`position: fixed; left: 50%; transform: translateX(-50%)`) — **not**
   anchored to the trigger — so it's reachable and legible no matter where the
   trigger sits on the page. `pointer-events` flips to `auto` and a white
-  Phosphor **`X`** close button (`.tooltip-close`, bold weight) is the only way
-  to dismiss it (no backdrop / outside-tap dismiss by design — the mobile CSS
-  block in `index.css`, keyed off `@media (max-width: 767px)`, is the single
-  source of truth for this).
+  Phosphor **`X`** close button (`.tooltip-close`, bold weight) dismisses it.
+  The mobile CSS block in `index.css`, keyed off `@media (max-width: 767px)`,
+  is the single source of truth for this styling.
+- **Dismissal (mobile):** the open tooltip closes on **any tap outside its own
+  wrap** — a single `pointerdown` listener on `document` (added only while
+  `open`, comparing `event.target` against a ref on `.tooltip-wrap`) drives
+  this. Don't reach for a backdrop or per-navigation callback instead — the
+  outside-tap listener already covers every dismiss case for free, because
+  each one begins with a tap somewhere outside this tooltip:
+  - **Genuine outside tap** — the explicit case.
+  - **Switching tabs/sections that toggle via CSS** (e.g. the Configure card's
+    section tabs) rather than unmounting — the tab button tap is "outside".
+  - **Navigating to a different app page** — the nav tap is "outside", and
+    since `ActivePage` in `App.tsx` conditionally renders (not CSS-hides) each
+    page, the old page's component tree — Tooltip included — actually
+    unmounts too, resetting `open` for free as a second line of defense.
+  - A new dismiss scenario should still route through "tap somewhere closes
+    the currently-open tooltip" rather than adding a bespoke callback.
 - **Clearing sticky bottom toolbars:** the mobile sheet's `bottom` offset uses
   `max()` against `--sticky-footer-h` (see "Live chrome dimension variables"
   above) so it always sits 4px above a mounted `ActionFooter` (e.g. the
