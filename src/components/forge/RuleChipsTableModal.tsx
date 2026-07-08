@@ -35,8 +35,10 @@ import type {
 // ---------------------------------------------------------------------------
 // Rule Chips table modal (per the Figma table designs). One reusable component
 // serves every category: Fundamental / Technical / Risk / Position / Trade /
-// Timeframe Rule Chips. Edits are DRAFTED locally; Cancel discards, Update
-// commits the whole chip set back to the strategy.
+// Timeframe Rule Chips. Edits commit live to the strategy as you change rows;
+// Cancel (or backdrop / X) restores the chip set from when the modal opened.
+// Update closes the modal — conviction and the panel Update button already
+// reflect live edits.
 //
 // Columns: CHIP LABEL · DATA POINT · DATE RANGE · CONDITION · VALUE ·
 // RULE WEIGHT · ACTIONS (duplicate / delete / save to My Chips). Rule weights
@@ -172,15 +174,19 @@ function ChipValueField({
 export function RuleChipsTableModal({
   category,
   chips,
-  onSave,
-  onClose,
+  onDraftChange,
+  onCancel,
+  onDone,
 }: {
   category: RuleCategory;
   /** The strategy's current chips for this category (draft source). */
   chips: RuleChip[];
-  /** Commit the edited chip set for this category. */
-  onSave: (chips: RuleChip[]) => void;
-  onClose: () => void;
+  /** Push chip edits to the strategy as the user edits (live commit). */
+  onDraftChange: (chips: RuleChip[]) => void;
+  /** Revert to the snapshot from when the modal opened, then close. */
+  onCancel: () => void;
+  /** Close the modal; edits are already committed. */
+  onDone: () => void;
 }) {
   const { chipLibrary, saveChipToLibrary, removeChipFromLibrary, updateChipInLibrary } =
     useAppState();
@@ -190,6 +196,16 @@ export function RuleChipsTableModal({
   const [draft, setDraft] = useState<RuleChip[]>(() =>
     chips.map((chip) => ({ ...chip })),
   );
+  const skipInitialDraftSync = useRef(true);
+  const onDraftChangeRef = useRef(onDraftChange);
+  onDraftChangeRef.current = onDraftChange;
+  useEffect(() => {
+    if (skipInitialDraftSync.current) {
+      skipInitialDraftSync.current = false;
+      return;
+    }
+    onDraftChangeRef.current(draft);
+  }, [draft]);
   const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 } | null>(null);
   // Mobile only: rows collapse to a compact one-line summary by default (see
   // components.mdc "Collapsible mobile row standard") — desktop/tablet always
@@ -417,7 +433,7 @@ export function RuleChipsTableModal({
   ];
 
   return (
-    <div className="modal-backdrop" role="presentation" onClick={onClose}>
+    <div className="modal-backdrop" role="presentation" onClick={onCancel}>
       <div
         className="modal-card panel forge-table-modal"
         role="dialog"
@@ -430,7 +446,7 @@ export function RuleChipsTableModal({
           <button
             type="button"
             className="forge-table-close"
-            onClick={onClose}
+            onClick={onCancel}
             aria-label="Close"
           >
             <X aria-hidden weight="bold" />
@@ -880,14 +896,14 @@ export function RuleChipsTableModal({
             <button
               type="button"
               className="btn btn--small btn--link forge-cancel-btn"
-              onClick={onClose}
+              onClick={onCancel}
             >
               <X aria-hidden weight="bold" /> Cancel
             </button>
             <button
               type="button"
               className="btn btn--small btn--solid"
-              onClick={() => onSave(draft)}
+              onClick={onDone}
             >
               <Plus aria-hidden weight="regular" /> Update
             </button>

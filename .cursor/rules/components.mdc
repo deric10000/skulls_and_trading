@@ -76,20 +76,18 @@ inline style.
 
 The read-only Watch summary (`WatchSummary` in `WatchlistWidget.tsx` — used by
 both the Home "Current Watch" widget and the Forge page's read-only preview
-column) shows, per ticker, **one block per applied strategy** (every strategy
-where the ticker's portfolio is in that strategy's `appliedPortfolioIds` —
-`AppState.getAppliedStrategiesForTicker`), each with its own rule-chip
-breakdown:
+column) shows, per ticker, **one block per assigned strategy** (default
+strategies via `holdings[].strategyIds`; custom copies via applied portfolio —
+`AppState.getAppliedStrategiesForTicker` / `strategiesForTicker`), each with its
+own rule-chip breakdown:
 
 - **The strategy-name chip stack (`.signal-stack`) and the breakdown blocks
   below MUST come from the same source.** Both are built from the same
   `strategyBreakdowns` array (`{ strategy, alignment }[]`) computed once in
-  `WatchlistWidget` — never derive the chip stack from one mechanism (e.g. a
-  per-holding `strategyIds`/`signals.ts` assignment) while the breakdown comes
-  from another (e.g. the bucket-driven headline alignment). That mismatch —
-  showing "Aggressive AI" as the only applied strategy while the ticker is
-  also configured under Value/Growth/Dividend — is exactly the bug this
-  standard exists to prevent.
+  `WatchlistWidget`. For seeded defaults, `holding.strategyIds` is the
+  per-ticker assignment (NVDA → Aggressive only, CRM → VGD only) even when both
+  strategies list the same `appliedPortfolioIds`. Never show every
+  portfolio-applied strategy on every ticker.
 - Each strategy's own chip result set comes from
   `AppState.getStrategyChipBreakdown(strategyId, ticker, portfolioId)` — a
   fresh, informational `scoreStock` call **independent of buckets**, not the

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { CATEGORY_META } from "../../lib/forge/metrics";
 import { useIsMobile } from "../../lib/useIsMobile";
 import {
@@ -15,8 +15,9 @@ import type { RuleCategory, RuleChip, RuleTag } from "../../types";
 // ---------------------------------------------------------------------------
 // Tags table modal (per the Figma tag-table designs). One reusable component
 // serves every category: Thesis / Technical Setup / Risk Rule / Position /
-// Trade / Timeframe Tags. Edits are DRAFTED locally; Cancel discards, Update
-// commits the whole tag set for the category back to the strategy.
+// Trade / Timeframe Tags. Edits commit live to the strategy as you change
+// rows; Cancel (or backdrop / X) restores the tag set from when the modal
+// opened. Update closes the modal.
 //
 // Columns: TAG · PURPOSE · RULE CHIPS · WEIGHT · SUGGESTED AUTO-APPLY LOGIC ·
 // ACTIONS. The built-in "All Active Chips" system tag is duplicate-only.
@@ -37,22 +38,34 @@ export function TagsTableModal({
   category,
   tags,
   chips,
-  onSave,
-  onClose,
+  onDraftChange,
+  onCancel,
+  onDone,
 }: {
   category: RuleCategory;
   /** The strategy's current tags for this category (draft source). */
   tags: RuleTag[];
   /** The category's rule chips — the pickable tag members. */
   chips: RuleChip[];
-  onSave: (tags: RuleTag[]) => void;
-  onClose: () => void;
+  onDraftChange: (tags: RuleTag[]) => void;
+  onCancel: () => void;
+  onDone: () => void;
 }) {
   const meta = CATEGORY_META[category];
   const isMobile = useIsMobile();
   const [draft, setDraft] = useState<RuleTag[]>(() =>
     tags.map((tag) => ({ ...tag, chipIds: [...tag.chipIds] })),
   );
+  const skipInitialDraftSync = useRef(true);
+  const onDraftChangeRef = useRef(onDraftChange);
+  onDraftChangeRef.current = onDraftChange;
+  useEffect(() => {
+    if (skipInitialDraftSync.current) {
+      skipInitialDraftSync.current = false;
+      return;
+    }
+    onDraftChangeRef.current(draft);
+  }, [draft]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 } | null>(null);
   // Mobile only: rows collapse to a compact one-line summary by default (see
@@ -170,7 +183,7 @@ export function TagsTableModal({
   ];
 
   return (
-    <div className="modal-backdrop" role="presentation" onClick={onClose}>
+    <div className="modal-backdrop" role="presentation" onClick={onCancel}>
       <div
         className="modal-card panel forge-table-modal"
         role="dialog"
@@ -183,7 +196,7 @@ export function TagsTableModal({
           <button
             type="button"
             className="forge-table-close"
-            onClick={onClose}
+            onClick={onCancel}
             aria-label="Close"
           >
             <X aria-hidden weight="bold" />
@@ -425,14 +438,14 @@ export function TagsTableModal({
           <button
             type="button"
             className="btn btn--small btn--link forge-cancel-btn"
-            onClick={onClose}
+            onClick={onCancel}
           >
             <X aria-hidden weight="bold" /> Cancel
           </button>
           <button
             type="button"
             className="btn btn--small btn--solid"
-            onClick={() => onSave(draft)}
+            onClick={onDone}
           >
             <Plus aria-hidden weight="regular" /> Update
           </button>

@@ -6,6 +6,7 @@ import {
   METRICS,
   formatChipCondition,
 } from "../lib/forge/metrics";
+import { tickersForAppliedStrategy } from "../lib/forge/tickerStrategy";
 import { validateStrategy } from "../lib/forge/scoring";
 import {
   ArrowCounterClockwise,
@@ -217,21 +218,16 @@ export function StrategyForgePanel({ strategy }: { strategy: Strategy | undefine
       allPortfolios.map((portfolio) => ({ value: portfolio.id, label: portfolio.label })),
     [allPortfolios],
   );
-  // Every ticker held in the currently-applied portfolios/watchlists. This is
-  // a read-only, informational list of what's *claimed* — buckets (not
-  // appliedPortfolioIds) remain the actual scoring assignment; see
-  // data-architecture.md's "Rule chips + tags" section.
+  // Tickers in applied portfolios that are assigned to THIS strategy
+  // (`holding.strategyIds` for defaults; all holdings for custom copies).
   const appliedTickers = useMemo(() => {
-    const appliedIds = new Set(strategy?.appliedPortfolioIds ?? []);
-    const tickers = new Set<string>();
-    for (const portfolio of allPortfolios) {
-      if (!appliedIds.has(portfolio.id)) continue;
-      for (const holding of portfolio.holdings) tickers.add(holding.ticker);
-    }
-    return Array.from(tickers).sort();
-  }, [allPortfolios, strategy?.appliedPortfolioIds]);
+    if (!strategy) return [];
+    return tickersForAppliedStrategy(strategy, allPortfolios);
+  }, [allPortfolios, strategy]);
 
   const [editor, setEditor] = useState<TableEditor | null>(null);
+  /** Chip/tag rows as they were when the table modal opened — Cancel restores this. */
+  const editorSnapshotRef = useRef<RuleChip[] | RuleTag[]>([]);
   const [editingWeight, setEditingWeight] = useState<RuleCategory | null>(null);
   // Which section pane the in-card tab strip is showing (mobile only). Desktop /
   // tablet render every pane at once, so this is inert above 767px.
@@ -296,7 +292,20 @@ export function StrategyForgePanel({ strategy }: { strategy: Strategy | undefine
     updateStrategy(id, { checkInterval: next, technicalsInterval: nextTech });
   }
 
-  function saveChips(category: RuleCategory, chips: RuleChip[]) {
+  function openEditor(next: TableEditor) {
+    if (next.kind === "chips") {
+      editorSnapshotRef.current = rules
+        .filter((chip) => chip.category === next.category)
+        .map((chip) => ({ ...chip }));
+    } else {
+      editorSnapshotRef.current = ruleTags
+        .filter((tag) => tag.category === next.category)
+        .map((tag) => ({ ...tag, chipIds: [...tag.chipIds] }));
+    }
+    setEditor(next);
+  }
+
+  function commitChips(category: RuleCategory, chips: RuleChip[]) {
     const nextRules = [
       ...rules.filter((chip) => chip.category !== category),
       ...chips,
@@ -309,13 +318,25 @@ export function StrategyForgePanel({ strategy }: { strategy: Strategy | undefine
         : tag,
     );
     updateStrategy(id, { rules: nextRules, ruleTags: nextTags });
-    setEditor(null);
   }
 
-  function saveTags(category: RuleCategory, tags: RuleTag[]) {
+  function commitTags(category: RuleCategory, tags: RuleTag[]) {
     updateStrategy(id, {
       ruleTags: [...ruleTags.filter((tag) => tag.category !== category), ...tags],
     });
+  }
+
+  function cancelEditor() {
+    if (!editor) return;
+    if (editor.kind === "chips") {
+      commitChips(editor.category, editorSnapshotRef.current as RuleChip[]);
+    } else {
+      commitTags(editor.category, editorSnapshotRef.current as RuleTag[]);
+    }
+    setEditor(null);
+  }
+
+  function dismissEditor() {
     setEditor(null);
   }
 
@@ -661,7 +682,7 @@ export function StrategyForgePanel({ strategy }: { strategy: Strategy | undefine
                     type="button"
                     className="icon-btn icon-btn--blue"
                     aria-label={`Edit ${meta.chipsLabel}`}
-                    onClick={() => setEditor({ kind: "chips", category })}
+                    onClick={() => openEditor({ kind: "chips", category })}
                   >
                     <PencilSimple aria-hidden weight="regular" />
                   </button>
@@ -692,7 +713,7 @@ export function StrategyForgePanel({ strategy }: { strategy: Strategy | undefine
                     type="button"
                     className="icon-btn icon-btn--blue"
                     aria-label={`Edit ${meta.tagsLabel}`}
-                    onClick={() => setEditor({ kind: "tags", category })}
+                    onClick={() => openEditor({ kind: "tags", category })}
                   >
                     <PencilSimple aria-hidden weight="regular" />
                   </button>
@@ -769,8 +790,9 @@ export function StrategyForgePanel({ strategy }: { strategy: Strategy | undefine
         <RuleChipsTableModal
           category={editor.category}
           chips={rules.filter((chip) => chip.category === editor.category)}
-          onSave={(chips) => saveChips(editor.category, chips)}
-          onClose={() => setEditor(null)}
+          onDraftChange={(chips) => commitChips(editor.category, chips)}
+          onCancel={cancelEditor}
+          onDone={dismissEditor}
         />
       ) : null}
       {editor?.kind === "tags" ? (
@@ -778,8 +800,9 @@ export function StrategyForgePanel({ strategy }: { strategy: Strategy | undefine
           category={editor.category}
           tags={ruleTags.filter((tag) => tag.category === editor.category)}
           chips={rules.filter((chip) => chip.category === editor.category)}
-          onSave={(tags) => saveTags(editor.category, tags)}
-          onClose={() => setEditor(null)}
+          onDraftChange={(tags) => commitTags(editor.category, tags)}
+          onCancel={cancelEditor}
+          onDone={dismissEditor}
         />
       ) : null}
     </section>
