@@ -211,13 +211,25 @@ interface TableEditor {
 export function StrategyForgePanel({ strategy }: { strategy: Strategy | undefined }) {
   const { updateStrategy, resetStrategy, deleteStrategy } = useAppState();
 
+  const allPortfolios = useMemo(() => dataSource.getPortfolios(), []);
   const portfolioOptions = useMemo(
     () =>
-      dataSource
-        .getPortfolios()
-        .map((portfolio) => ({ value: portfolio.id, label: portfolio.label })),
-    [],
+      allPortfolios.map((portfolio) => ({ value: portfolio.id, label: portfolio.label })),
+    [allPortfolios],
   );
+  // Every ticker held in the currently-applied portfolios/watchlists. This is
+  // a read-only, informational list of what's *claimed* — buckets (not
+  // appliedPortfolioIds) remain the actual scoring assignment; see
+  // data-architecture.md's "Rule chips + tags" section.
+  const appliedTickers = useMemo(() => {
+    const appliedIds = new Set(strategy?.appliedPortfolioIds ?? []);
+    const tickers = new Set<string>();
+    for (const portfolio of allPortfolios) {
+      if (!appliedIds.has(portfolio.id)) continue;
+      for (const holding of portfolio.holdings) tickers.add(holding.ticker);
+    }
+    return Array.from(tickers).sort();
+  }, [allPortfolios, strategy?.appliedPortfolioIds]);
 
   const [editor, setEditor] = useState<TableEditor | null>(null);
   const [editingWeight, setEditingWeight] = useState<RuleCategory | null>(null);
@@ -437,6 +449,40 @@ export function StrategyForgePanel({ strategy }: { strategy: Strategy | undefine
           onChange={(ids) => updateStrategy(id, { appliedPortfolioIds: ids })}
           placeholder="Select portfolios to apply this strategy to"
         />
+      </div>
+
+      {/* ---- Tickers in applied portfolios (read-only for now) ---- */}
+      <div className="forge-box forge-box--tickers">
+        <div className="forge-box-head">
+          <span className="config-label forge-label forge-label--muted">
+            Tickers In Applied Portfolios
+            <InfoTip
+              label="About tickers in applied portfolios"
+              body="Every ticker held in the portfolios/watchlists selected above. Editing which tickers a strategy covers is coming soon — for now this just shows what's currently applied."
+            />
+          </span>
+          <button
+            type="button"
+            className="icon-btn icon-btn--blue"
+            aria-label="Edit tickers in applied portfolios"
+            disabled
+          >
+            <PencilSimple aria-hidden weight="regular" />
+          </button>
+        </div>
+        <div className="forge-box-body">
+          {appliedTickers.length > 0 ? (
+            appliedTickers.map((ticker) => (
+              <span key={ticker} className="forge-pill forge-pill--applied">
+                {ticker}
+              </span>
+            ))
+          ) : (
+            <span className="forge-box-empty">
+              No tickers yet — apply a portfolio above to list its tickers here.
+            </span>
+          )}
+        </div>
       </div>
       </div>
 

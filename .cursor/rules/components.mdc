@@ -72,6 +72,43 @@ inline style.
   for icons inside **text** buttons (`.btn` + a label). Give a new icon-only
   button family its own explicit `svg` rule instead of relying on this one.
 
+## Conviction chip breakdown standard (`.watch-summary-chips`)
+
+The read-only Watch summary (`WatchSummary` in `WatchlistWidget.tsx` — used by
+both the Home "Current Watch" widget and the Forge page's read-only preview
+column) shows, per ticker, **one block per applied strategy** (every strategy
+where the ticker's portfolio is in that strategy's `appliedPortfolioIds` —
+`AppState.getAppliedStrategiesForTicker`), each with its own rule-chip
+breakdown:
+
+- **The strategy-name chip stack (`.signal-stack`) and the breakdown blocks
+  below MUST come from the same source.** Both are built from the same
+  `strategyBreakdowns` array (`{ strategy, alignment }[]`) computed once in
+  `WatchlistWidget` — never derive the chip stack from one mechanism (e.g. a
+  per-holding `strategyIds`/`signals.ts` assignment) while the breakdown comes
+  from another (e.g. the bucket-driven headline alignment). That mismatch —
+  showing "Aggressive AI" as the only applied strategy while the ticker is
+  also configured under Value/Growth/Dividend — is exactly the bug this
+  standard exists to prevent.
+- Each strategy's own chip result set comes from
+  `AppState.getStrategyChipBreakdown(strategyId, ticker, portfolioId)` — a
+  fresh, informational `scoreStock` call **independent of buckets**, not the
+  bucket-scoped headline alignment. `weightPct`/`holdingDays` are intentionally
+  left unset (no single canonical value across arbitrary applied strategies),
+  so Position Size / Hold Timeframe chips read "no data" here — this doesn't
+  touch the real, bucket-driven conviction number shown above it.
+- **"Calculating Conviction"** — every `ChipResult` with `outcome !== "no-data"`
+  (pass or fail; both mean the chip had real data and counted).
+- **"Excluded (No Data)"** — every `ChipResult` with `outcome === "no-data"`.
+- Both groups reuse `.forge-box-body` (the Configure card's chip-box look) and
+  plain `.forge-pill` chips — excluded chips get `.forge-pill--off` (the same
+  45%-opacity dimming used for a manually-disabled chip everywhere else), so
+  "no data" reads identically to "user-disabled" without inventing a new
+  visual state. **Don't add a third color/state for "no data" specifically**
+  — it already shares the disabled-chip look on purpose (a `null` metric is
+  scored "no data," already treated the same as `enabled: false`, i.e.
+  excluded — the styling should match that).
+
 ## Forge table Actions column standard (`.forge-table-row` / `.forge-table--tags`)
 
 Both Forge table modals (`RuleChipsTableModal`'s rows, `TagsTableModal`'s
@@ -389,6 +426,16 @@ the inherited `1.55` line-height, a chip in an un-reset button renders in Arial
 text/chips MUST set `font: inherit` (as `.btn`, `.flow-select`, `.weather-headpill`
 do). This is the standard fix for "the font looks like Arial" / "this chip is
 shorter than the others".
+
+This same "color = meaning" rule applies to `.forge-pill` (the Forge rule-chip/
+tag pill, a separate visual family from `.chip` — smaller, blue by default via
+`--forge-chip-text`/`--forge-chip-surface`). `.forge-pill--applied` (the
+Configure card's "Tickers In Applied Portfolios" box) reuses the exact
+`.status--positive` green token rather than a one-off color, since it's
+conceptually the same "positive/included" meaning — green there means "this
+ticker is covered," not a value judgment about the ticker itself. Any new
+`.forge-pill` variant should resolve its color from an existing token this way
+before adding a new one.
 
 ## App shell (`.app` / `.app-main` / `SiteFooter`)
 

@@ -2,21 +2,33 @@ import { useEffect, useMemo, useState } from "react";
 import { useAppState } from "../state/AppState";
 import { dataSource } from "../lib/datasource";
 import { formatChange, formatPrice } from "../lib/format";
+import { formatChipCondition } from "../lib/forge/metrics";
+import type { StockAlignment } from "../lib/forge/scoring";
 import { STATUS_TONE } from "../lib/status";
 import { StatusBadge } from "./StatusBadge";
 import { Dropdown } from "./Dropdown";
 import { CaretLeft, STATUS_ICON } from "../lib/icons";
-import type { LogEntry, SignalResult, WatchlistItem } from "../types";
+import type { LogEntry, Strategy, WatchlistItem } from "../types";
 import bullCompass from "../assets/bull-skull-compass.png";
+
+interface StrategyBreakdown {
+  strategy: Strategy;
+  alignment: StockAlignment | undefined;
+}
 
 function WatchSummary({
   item,
-  signal,
   logs,
+  strategyBreakdowns,
 }: {
   item: WatchlistItem;
-  signal: SignalResult;
   logs: LogEntry[];
+  /** Every strategy currently applied to this ticker's portfolio(s) (see
+      AppState.getAppliedStrategiesForTicker), each with its OWN rule-chip
+      breakdown — not just the one bucket happens to score it with. Drives
+      both the strategy-name chip stack and the "calculating"/"excluded"
+      sections below, so the two always agree. */
+  strategyBreakdowns: StrategyBreakdown[];
 }) {
   const analysis = dataSource.getTickerAnalysis(item.ticker);
   const latestLog = logs[0];
@@ -55,11 +67,11 @@ function WatchSummary({
         <span className="watch-summary-metrics">Conviction {item.conviction}</span>
       </div>
 
-      {signal.strategyStack.length > 0 ? (
+      {strategyBreakdowns.length > 0 ? (
         <ul className="signal-stack" aria-label="Strategy stack">
-          {signal.strategyStack.map((name) => (
-            <li key={name} className="chip">
-              {name}
+          {strategyBreakdowns.map(({ strategy }) => (
+            <li key={strategy.id} className="chip">
+              {strategy.name}
             </li>
           ))}
         </ul>
@@ -100,6 +112,54 @@ function WatchSummary({
           <p className="watch-summary-log-note">{latestLog.note}</p>
         </div>
       ) : null}
+
+      {/* What's actually driving (or excluded from) this ticker's conviction
+          per applied strategy — one block per strategy shown in the chip
+          stack above, each with its OWN rule chips, split by whether they had
+          real data to evaluate. See components.mdc "Conviction chip
+          breakdown standard". */}
+      {strategyBreakdowns.map(({ strategy, alignment }) => {
+        const results = alignment?.results ?? [];
+        const activeResults = results.filter((result) => result.outcome !== "no-data");
+        const excludedResults = results.filter((result) => result.outcome === "no-data");
+        return (
+          <div key={strategy.id} className="watch-summary-chips">
+            <span className="watch-summary-chips-strategy">{strategy.name}</span>
+            <div className="watch-summary-chip-group">
+              <span className="config-label forge-label">Calculating Conviction</span>
+              <div className="forge-box-body">
+                {activeResults.length > 0 ? (
+                  activeResults.map((result) => (
+                    <span
+                      key={result.chip.id}
+                      className="forge-pill"
+                      title={formatChipCondition(result.chip)}
+                    >
+                      {result.chip.label}
+                    </span>
+                  ))
+                ) : (
+                  <span className="forge-box-empty">No rule chips have data yet.</span>
+                )}
+              </div>
+            </div>
+            <div className="watch-summary-chip-group">
+              <span className="config-label forge-label">Excluded (No Data)</span>
+              <div className="forge-box-body">
+                {excludedResults.length > 0 ? (
+                  excludedResults.map((result) => (
+                    <span key={result.chip.id} className="forge-pill forge-pill--off">
+                      {result.chip.label}
+                    </span>
+                  ))
+                ) : (
+                  <span className="forge-box-empty">Every rule chip has data.</span>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -123,9 +183,10 @@ export function WatchlistWidget({
     watchlist,
     selectedTicker,
     selectTicker,
-    getSignal,
     logsByTicker,
     getPortfolioAlignment,
+    getAppliedStrategiesForTicker,
+    getStrategyChipBreakdown,
   } = useAppState();
   const [draft, setDraft] = useState("");
   // Read-only (home) selection is local to this widget so it never mutates the
@@ -215,6 +276,21 @@ export function WatchlistWidget({
       ? items.find((item) => item.ticker === localSelected)
       : undefined;
 
+  // Every strategy applied to this ticker (via appliedPortfolioIds), each
+  // with its own chip breakdown — computed once here so the strategy-name
+  // chip stack and the "calculating"/"excluded" sections always agree.
+  const strategyBreakdowns = useMemo(() => {
+    if (!summaryItem) return [];
+    return getAppliedStrategiesForTicker(summaryItem.ticker).map((strategy) => ({
+      strategy,
+      alignment: getStrategyChipBreakdown(
+        strategy.id,
+        summaryItem.ticker,
+        selectedSource.id,
+      ),
+    }));
+  }, [summaryItem, selectedSource.id, getAppliedStrategiesForTicker, getStrategyChipBreakdown]);
+
   // Snapshot chip reflects the selected source's headline alignment (the list is
   // ordered strongest-first), so switching sources visibly changes the state.
   const snapshotStatus = items[0]?.status ?? "Watch";
@@ -236,8 +312,8 @@ export function WatchlistWidget({
         </button>
         <WatchSummary
           item={summaryItem}
-          signal={getSignal(summaryItem.ticker)}
           logs={logsByTicker[summaryItem.ticker] ?? []}
+          strategyBreakdowns={strategyBreakdowns}
         />
       </section>
     );

@@ -172,7 +172,26 @@ fabricated value.
 
 Snapshots carry an `asOf` timestamp and `source: "mock"`. They are **researched
 real values** (last close + latest reported fundamentals), not random — so the
-mock validates like the real thing. Update them only with real, sourced figures.
+mock validates like the real thing. Update them only with real, sourced
+figures. Each snapshot also carries an optional `sourceNotes` (free text,
+human-facing only — the scoring engine never reads it) explaining where its
+figures came from and why any given field is `null`; see the per-ticker notes
+in `data.ts` for the current sourcing. Refreshed **2026-07-07** for the 10
+tickers across the seeded portfolios/watchlists (`NVDA, MSFT, CRM, SOFI, IONQ,
+ACHR, CELH, CRWV, ELF, RGTI`) — verified against `scripts/
+verify-forge-scoring.ts`, which still passes.
+
+A `null` field means the metric is genuinely unavailable **or** the ratio
+itself isn't informative for that ticker (e.g. a margin computed over
+near-zero revenue, or a metric distorted by a one-time non-cash gain) — never
+"the company performed badly." A real, very negative number (e.g. an
+operating margin of -400% for an R&D-heavy pre-scale company) is preferred
+over `null` whenever the ratio is genuinely computable and not misleadingly
+distorted, since that's a real, informative signal that should legitimately
+fail its rule chip — see each ticker's `sourceNotes` for the specific
+reasoning. `null` still means "not scored," never "failed" (enforced by
+`scoreCategory` in `scoring.ts`, which excludes `"no-data"` chips from both the
+numerator and denominator — see §6 below).
 
 ### Engine — pure, no I/O (`src/lib/forge/`)
 
@@ -203,8 +222,16 @@ snapshots (`data.ts`), and register it in `metrics.ts`. Nothing else changes.
   strategy is applied to. It's edited via the "Applied Portfolios" multi-select
   on the Configure card (no separate Enabled toggle — a strategy is active once
   a portfolio is applied). Blank/duplicated strategies start unapplied (`[]`).
-  Wiring applied portfolios into scoring/dashboard signals is a later pass; the
-  forge preview still scores through `buckets`.
+  **Wiring applied portfolios into scoring is a later pass — `appliedPortfolioIds`
+  does not drive scoring today.** Actual scoring always goes through `buckets`
+  (each bucket carries its own fixed `strategyId`, independent of any
+  strategy's applied-portfolios list — see "Buckets" below). The Configure
+  card's read-only **"Tickers In Applied Portfolios"** box (green chips, right
+  below the multi-select) exists specifically to make this transparent: it
+  lists every ticker held in the currently-applied portfolios so the user can
+  see what's *claimed*, without implying it's what's actually *scored* (that
+  remains bucket-driven). Its "Edit" icon is intentionally disabled for now —
+  editing which tickers a strategy covers is a future pass.
 
 ### Buckets — independent cadence per strategy
 
