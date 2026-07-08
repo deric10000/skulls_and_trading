@@ -919,6 +919,41 @@ button {
   filter: drop-shadow(0 0 12px rgb(255 107 107 / 0.3));
 }
 
+.compass--placeholder .compass-img {
+  filter: grayscale(1) opacity(0.45);
+}
+
+.status-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.35rem;
+}
+
+.status-flags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.status-flags .chip {
+  font-size: 0.72rem;
+  padding: 0.15rem 0.45rem;
+}
+
+.watch-align-flags {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.25rem;
+  margin-top: 0.2rem;
+}
+
+.watch-align-flags .chip {
+  font-size: 0.68rem;
+  padding: 0.1rem 0.35rem;
+}
+
 .hero-preview-card {
   width: 100%;
   padding: var(--space-3);

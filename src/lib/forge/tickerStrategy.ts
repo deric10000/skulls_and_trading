@@ -69,3 +69,18 @@ export function tickersForAppliedStrategy(
   }
   return Array.from(tickers).sort();
 }
+
+/** Whether a ticker has at least one applied strategy in this portfolio. */
+export function tickerHasAssignedStrategy(
+  ticker: string,
+  portfolio: Portfolio,
+  strategies: Strategy[],
+): boolean {
+  const holding = portfolio.holdings.find((item) => item.ticker === ticker);
+  if (!holding) return false;
+  return strategies.some(
+    (strategy) =>
+      (strategy.appliedPortfolioIds ?? []).includes(portfolio.id) &&
+      shouldScoreTickerWithStrategy(holding, strategy.id),
+  );
+}

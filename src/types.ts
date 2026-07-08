@@ -151,8 +151,26 @@ export type StatusType =
   | "Aligned"
   | "Watch"
   | "Review"
+  | "Watch Setup"
+  | "Hold Plan"
+  | "Trim Review"
+  | "Exit Review"
+  | "Review Risk"
+  | "Risk Drift"
   | "Risk Check"
-  | "Thesis Check";
+  | "Thesis Check"
+  | "Rule Conflict"
+  | "Rule Break"
+  | "Concentration Review"
+  | "Patience Review";
+
+/** Two-layer Forge status: conviction band + category diagnostics. */
+export interface ResolvedStatus {
+  primary: StatusType;
+  categoryFlags: StatusType[];
+  baseBand: StatusType;
+  conviction: number;
+}
 
 // Market Weather statuses (plan-safe market mood, used in the Market Weather widget).
 export type MarketWeatherStatus =
@@ -164,20 +182,6 @@ export type MarketWeatherStatus =
   | "Breakout Wind"
   | "Defensive Harbor";
 
-// Strategy Check states (canonical action-state mapping in product-voice.md). These
-// reflect alignment with the user's strategy, not investment advice.
-export type SignalState =
-  | "High Alignment"
-  | "Entry Aligned"
-  | "Watch Setup"
-  | "Hold Plan"
-  | "Trim Review"
-  | "Exit Review"
-  | "Review Risk"
-  | "Rule Conflict"
-  | "Rule Break"
-  | "Thesis Missing";
-
 export interface WatchlistItem {
   ticker: string;
   name: string;
@@ -185,6 +189,7 @@ export interface WatchlistItem {
   changePct: number; // open P&L % (positive → green, negative → red)
   status: StatusType;
   conviction: number;
+  resolved?: ResolvedStatus;
   shares: number; // mock share count (0 for watch-only names)
   avgPrice: number; // DCA / average cost (0 for watch-only names)
   reason: string; // why this name carries its current alignment status
@@ -509,16 +514,6 @@ export interface MarketContext {
   asOf: string;
   source: MarketDataSource;
   sourceNotes?: string; // see FundamentalSnapshot.sourceNotes
-}
-
-export interface SignalResult {
-  state: SignalState;
-  tone: SignalTone;
-  confidence: number;
-  strategyStack: string[];
-  reason: string;
-  invalidation: string;
-  nextLevel: string;
 }
 
 export interface MarketFlowStep {

@@ -1,13 +1,16 @@
-import type { Bucket, Portfolio, StatusType, Strategy } from "../../types";
+import type { Bucket, Portfolio, ResolvedStatus, StatusType, Strategy } from "../../types";
 import { dataSource } from "../datasource";
 import {
-  aggregateConviction,
   scoreStock,
   type MetricContext,
   type StockAlignment,
-  type WeightedAlignment,
 } from "./scoring";
-import { shouldScoreTickerWithStrategy } from "./tickerStrategy";
+import {
+  resolveAggregatedStatus,
+  resolveStatus,
+  type WeightedCategorySlice,
+} from "./status";
+import { shouldScoreTickerWithStrategy, tickerHasAssignedStrategy } from "./tickerStrategy";
 
 // ---------------------------------------------------------------------------
 // Alignment bridge — ties the dataSource seam + buckets + the live strategy set
@@ -23,19 +26,27 @@ export interface TickerAlignment {
   bucketName: string;
   conviction: number;
   status: StatusType;
+  resolved: ResolvedStatus;
   alignment: StockAlignment;
 }
 
 export interface PortfolioAlignment {
   byTicker: Record<string, TickerAlignment>; // headline = best-aligned slice
-  byBucket: Record<string, { conviction: number; status: StatusType }>;
-  portfolio: { conviction: number; status: StatusType };
+  byBucket: Record<
+    string,
+    { conviction: number; status: StatusType; resolved: ResolvedStatus }
+  >;
+  portfolio: { conviction: number; status: StatusType; resolved: ResolvedStatus };
 }
 
 const EMPTY: PortfolioAlignment = {
   byTicker: {},
   byBucket: {},
-  portfolio: { conviction: 0, status: "Watch" },
+  portfolio: {
+    conviction: 0,
+    status: "Watch",
+    resolved: resolveStatus(0, [], { hasStrategy: false }),
+  },
 };
 
 function coverageKey(strategyId: string, ticker: string): string {
@@ -97,16 +108,15 @@ export function computePortfolioAlignment(
   };
 
   const byTicker: Record<string, TickerAlignment> = {};
-  const bucketSlices: Record<string, WeightedAlignment[]> = {};
+  const bucketSlices: Record<string, WeightedCategorySlice[]> = {};
   const coveredPairs = new Set<string>();
 
   function applyHeadline(
     ticker: string,
     sliceMeta: { bucketId: string; bucketName: string },
-    conviction: number,
-    status: StatusType,
     alignment: StockAlignment,
   ): void {
+    const { conviction, status, resolved } = alignment;
     const existing = byTicker[ticker];
     if (!existing || conviction > existing.conviction) {
       byTicker[ticker] = {
@@ -115,9 +125,45 @@ export function computePortfolioAlignment(
         bucketName: sliceMeta.bucketName,
         conviction,
         status,
+        resolved,
         alignment,
       };
     }
+  }
+
+  function scoreTickerSlice(
+    ticker: string,
+    strategy: Strategy,
+    ctx: MetricContext,
+    sliceMeta: { bucketId: string; bucketName: string },
+    marketValue: number,
+    bucketId?: string,
+  ): void {
+    const holding = holdingByTicker.get(ticker);
+    const hasStrategy = tickerHasAssignedStrategy(ticker, portfolio, strategies);
+    const scored = scoreStock(strategy, ctx, { hasStrategy });
+    const conviction = scored.hasRules ? scored.conviction : holding?.conviction ?? 0;
+    const categories = scored.hasRules ? scored.categories : [];
+    const resolved = scored.hasRules
+      ? scored.resolved
+      : resolveStatus(conviction, categories, { hasStrategy });
+    const alignment: StockAlignment = {
+      ...scored,
+      conviction,
+      status: resolved.primary,
+      resolved,
+      categories,
+    };
+
+    if (bucketId && marketValue > 0) {
+      (bucketSlices[bucketId] ??= []).push({
+        marketValue,
+        conviction: alignment.conviction,
+        categories: alignment.categories,
+      });
+    }
+
+    applyHeadline(ticker, sliceMeta, alignment);
   }
 
   for (const bucket of portfolioBuckets) {
@@ -136,28 +182,17 @@ export function computePortfolioAlignment(
         technicals: dataSource.getTechnicals(ticker),
         market,
         weightPct: weightPctFor(ticker),
-        openPnlPct: holding?.openPnlPct,
+        openPnlPct: holding.openPnlPct,
         holdingDays: holdingDaysFor(allocation.entryDate),
       };
 
-      const scored = scoreStock(strategy, ctx);
-      const conviction = scored.hasRules
-        ? scored.conviction
-        : holding?.conviction ?? 0;
-      const status: StatusType = scored.hasRules
-        ? scored.status
-        : holding?.status ?? "Watch";
-
-      const marketValue = allocation.shares * lastPrice(ticker);
-      const slice: WeightedAlignment = { conviction, marketValue };
-      (bucketSlices[bucket.id] ??= []).push(slice);
-
-      applyHeadline(
+      scoreTickerSlice(
         ticker,
+        strategy,
+        ctx,
         { bucketId: bucket.id, bucketName: bucket.name },
-        conviction,
-        status,
-        scored,
+        allocation.shares * lastPrice(ticker),
+        bucket.id,
       );
     }
   }
@@ -182,38 +217,50 @@ export function computePortfolioAlignment(
         holdingDays: holdingDaysFor(entryDateForTicker(ticker)),
       };
 
-      const scored = scoreStock(strategy, ctx);
-      const conviction = scored.hasRules ? scored.conviction : holding.conviction;
-      const status: StatusType = scored.hasRules ? scored.status : holding.status;
-
-      applyHeadline(
+      scoreTickerSlice(
         ticker,
+        strategy,
+        ctx,
         { bucketId: `applied-${strategy.id}`, bucketName: strategy.name },
-        conviction,
-        status,
-        scored,
+        0,
       );
       coveredPairs.add(coverageKey(strategy.id, ticker));
     }
   }
 
-  const byBucket: Record<string, { conviction: number; status: StatusType }> = {};
+  const portfolioHasStrategy = portfolio.holdings.some((holding) =>
+    tickerHasAssignedStrategy(holding.ticker, portfolio, strategies),
+  );
+
+  const byBucket: PortfolioAlignment["byBucket"] = {};
   for (const [bucketId, slices] of Object.entries(bucketSlices)) {
-    byBucket[bucketId] = aggregateConviction(slices);
+    const resolved = resolveAggregatedStatus(slices, { hasStrategy: portfolioHasStrategy });
+    byBucket[bucketId] = {
+      conviction: resolved.conviction,
+      status: resolved.primary,
+      resolved,
+    };
   }
 
-  // One market-value slice per ticker (headline conviction × full holding) so
-  // multiple bucket/fallback passes never double-count the same shares.
-  const portfolioHeadlineSlices: WeightedAlignment[] = portfolio.holdings
+  const portfolioHeadlineSlices: WeightedCategorySlice[] = portfolio.holdings
     .filter((holding) => holding.shares > 0 && byTicker[holding.ticker])
     .map((holding) => ({
       conviction: byTicker[holding.ticker].conviction,
       marketValue: holding.shares * lastPrice(holding.ticker),
+      categories: byTicker[holding.ticker].alignment.categories,
     }));
+
+  const portfolioResolved = resolveAggregatedStatus(portfolioHeadlineSlices, {
+    hasStrategy: portfolioHasStrategy,
+  });
 
   return {
     byTicker,
     byBucket,
-    portfolio: aggregateConviction(portfolioHeadlineSlices),
+    portfolio: {
+      conviction: portfolioResolved.conviction,
+      status: portfolioResolved.primary,
+      resolved: portfolioResolved,
+    },
   };
 }

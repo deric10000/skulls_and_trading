@@ -90,7 +90,9 @@ Worked example (from the algorithm board): Thesis chips Revenue Growth (33%)
 fails, EPS Growth (33%) passes, EBITDA (34%) passes → Thesis score = 67%. With
 Thesis = 55% of conviction: `67% × 55 = 36.85` conviction points.
 
-### Status mapping
+### Status mapping (two layers)
+
+**Layer 1 — conviction band** (unchanged math; display-only):
 
 | Conviction | Status |
 |-----------:|--------|
@@ -99,10 +101,23 @@ Thesis = 55% of conviction: `67% × 55 = 36.85` conviction points.
 | 40–59 | Watch |
 | < 40 | Review |
 
+**Layer 2 — category diagnostics** sit on top in `src/lib/forge/status.ts`.
+Each scorable category maps its 0–100 category score through its own ladder
+(e.g. risk 50–69 → **Review Risk**, thesis 45–59 → **Thesis Check**). The
+**primary** headline is the most severe label among Layer 1 and all firing
+Layer 2 flags (severity rank in `status.ts`). When multiple categories lag,
+**all** diagnostics render as chips (primary + secondary flags). No strategy
+assigned → **Thesis Check** regardless of scores.
+
+Portfolio-level Layer 2 uses market-value-weighted category scores across
+holdings (`aggregateCategoryScores` in `status.ts`).
+
 The old hard **gates** (thesis composite → `Thesis Check`, breached risk chip →
 `Risk Check`, with conviction clamps) are **removed**: thesis and risk now
-express their dominance through their category weights. The `ThesisLogic`
-AND/OR group builder and the 1–5 chip weight scale are retired with them.
+express their dominance through their category weights and Layer 2 ladders. The
+`ThesisLogic` AND/OR group builder and the 1–5 chip weight scale are retired
+with them. The mock `computeSignal` / `SignalState` path is archived — Dashboard
+Strategy Check reads Forge alignment like the watchlist.
 
 ## 5. Portfolio conviction
 

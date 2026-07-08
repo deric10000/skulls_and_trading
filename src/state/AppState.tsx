@@ -16,7 +16,6 @@ import {
   logTimestamp,
 } from "../data";
 import { dataSource } from "../lib/datasource";
-import { computeSignal } from "../lib/signals";
 import {
   computePortfolioAlignment,
   type PortfolioAlignment,
@@ -30,6 +29,7 @@ import {
   persistChipLibrary,
   persistStrategies,
 } from "../lib/forge/persistence";
+import { resolveStatus } from "../lib/forge/status";
 import {
   scoreStock,
   type MetricContext,
@@ -41,9 +41,7 @@ import type {
   LogEntry,
   PageId,
   RuleChip,
-  SignalResult,
   Strategy,
-  StrategyAssignments,
   WatchlistItem,
 } from "../types";
 
@@ -86,11 +84,6 @@ interface AppStateValue {
   duplicateStrategy: (id: string) => string | undefined;
   resetStrategy: (id: string) => void;
 
-  assignments: StrategyAssignments;
-  assignStrategy: (ticker: string, strategyId: string) => void;
-  unassignStrategy: (ticker: string, strategyId: string) => void;
-  strategyIdsFor: (ticker: string) => string[];
-
   // ---- Strategy Forge chip library (reusable rule chips) ----
   chipLibrary: RuleChip[];
   saveChipToLibrary: (chip: RuleChip) => void;
@@ -129,9 +122,6 @@ interface AppStateValue {
   addLog: (ticker: string, draft: LogDraft) => void;
   updateLog: (ticker: string, id: string, draft: LogDraft) => void;
   deleteLog: (ticker: string, id: string) => void;
-
-  getSignal: (ticker: string) => SignalResult;
-  selectedSignal: SignalResult;
 }
 
 const AppStateContext = createContext<AppStateValue | null>(null);
@@ -166,9 +156,6 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   );
   const [strategies, setStrategies] = useState<Strategy[]>(() =>
     loadPersistedStrategies(),
-  );
-  const [assignments, setAssignments] = useState<StrategyAssignments>(() =>
-    dataSource.getDefaultAssignments(),
   );
   const [buckets] = useState<Bucket[]>(() => dataSource.getBuckets());
   const [chipLibrary, setChipLibrary] = useState<RuleChip[]>(() =>
@@ -299,13 +286,6 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 
   const deleteStrategy = useCallback((id: string) => {
     setStrategies((current) => current.filter((strategy) => strategy.id !== id));
-    setAssignments((current) => {
-      const next: StrategyAssignments = {};
-      for (const [ticker, ids] of Object.entries(current)) {
-        next[ticker] = ids.filter((assignedId) => assignedId !== id);
-      }
-      return next;
-    });
   }, []);
 
   const duplicateStrategy = useCallback(
@@ -347,29 +327,6 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       return next;
     });
   }, []);
-
-  const assignStrategy = useCallback((ticker: string, strategyId: string) => {
-    setAssignments((current) => {
-      const existing = current[ticker] ?? [];
-      if (existing.includes(strategyId)) return current;
-      return { ...current, [ticker]: [...existing, strategyId] };
-    });
-  }, []);
-
-  const unassignStrategy = useCallback((ticker: string, strategyId: string) => {
-    setAssignments((current) => {
-      const existing = current[ticker] ?? [];
-      return {
-        ...current,
-        [ticker]: existing.filter((id) => id !== strategyId),
-      };
-    });
-  }, []);
-
-  const strategyIdsFor = useCallback(
-    (ticker: string) => assignments[ticker] ?? [],
-    [assignments],
-  );
 
   const saveChipToLibrary = useCallback(
     (chip: RuleChip) => {
@@ -421,7 +378,11 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       alignmentByPortfolio[portfolioId] ?? {
         byTicker: {},
         byBucket: {},
-        portfolio: { conviction: 0, status: "Watch" },
+        portfolio: {
+          conviction: 0,
+          status: "Watch",
+          resolved: resolveStatus(0, [], { hasStrategy: false }),
+        },
       },
     [alignmentByPortfolio],
   );
@@ -474,7 +435,12 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     return watchlist.map((item) => {
       const aligned = byTicker[item.ticker];
       return aligned
-        ? { ...item, conviction: aligned.conviction, status: aligned.status }
+        ? {
+            ...item,
+            conviction: aligned.conviction,
+            status: aligned.status,
+            resolved: aligned.resolved,
+          }
         : item;
     });
   }, [watchlist, alignmentByPortfolio]);
@@ -522,19 +488,9 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     }));
   }, []);
 
-  const getSignal = useCallback(
-    (ticker: string) => computeSignal(assignments[ticker] ?? [], strategies),
-    [assignments, strategies],
-  );
-
   const selectedItem = useMemo(
     () => decoratedWatchlist.find((item) => item.ticker === selectedTicker),
     [decoratedWatchlist, selectedTicker],
-  );
-
-  const selectedSignal = useMemo(
-    () => getSignal(selectedTicker),
-    [getSignal, selectedTicker],
   );
 
   const value = useMemo<AppStateValue>(
@@ -564,10 +520,6 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       deleteStrategy,
       duplicateStrategy,
       resetStrategy,
-      assignments,
-      assignStrategy,
-      unassignStrategy,
-      strategyIdsFor,
       chipLibrary,
       saveChipToLibrary,
       removeChipFromLibrary,
@@ -581,8 +533,6 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       addLog,
       updateLog,
       deleteLog,
-      getSignal,
-      selectedSignal,
     }),
     [
       isAuthenticated,
@@ -608,10 +558,6 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       deleteStrategy,
       duplicateStrategy,
       resetStrategy,
-      assignments,
-      assignStrategy,
-      unassignStrategy,
-      strategyIdsFor,
       chipLibrary,
       saveChipToLibrary,
       removeChipFromLibrary,
@@ -625,8 +571,6 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       addLog,
       updateLog,
       deleteLog,
-      getSignal,
-      selectedSignal,
     ],
   );
 

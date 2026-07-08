@@ -1,6 +1,5 @@
 import {
   ALLOCATIONS,
-  DEFAULT_ASSIGNMENTS,
   DEFAULT_BUCKETS,
   FUNDAMENTAL_SNAPSHOTS,
   INITIAL_WATCHLIST,
@@ -29,7 +28,6 @@ export const mockDataSource: DataSource = {
     const portfolio = PORTFOLIOS.find((option) => option.id === portfolioId);
     return portfolio ? watchlistFromHoldings(portfolio.holdings) : [];
   },
-  getDefaultAssignments: () => DEFAULT_ASSIGNMENTS,
   getLogs: () => LOG_ENTRIES,
   getTickerAnalysis: (ticker) => TICKER_ANALYSIS[ticker],
   getTickerInfo: (ticker) => TICKERS[ticker],
