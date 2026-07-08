@@ -9,7 +9,7 @@ import type {
   PortfolioMetric,
   Position,
   RiskRule,
-  StrategyAssignments,
+  Strategy,
   TechnicalSnapshot,
   TickerAnalysis,
   TickerInfo,
@@ -39,9 +39,6 @@ export interface DataSource {
 
   /** A portfolio's holdings mapped into the Current Watch view model. */
   getWatchlistForPortfolio(portfolioId: string): WatchlistItem[];
-
-  /** Strategy assignments that drive the dashboard Strategy Check signal. */
-  getDefaultAssignments(): StrategyAssignments;
 
   /** Captain's Log entries keyed by ticker. */
   getLogs(): Record<string, LogEntry[]>;

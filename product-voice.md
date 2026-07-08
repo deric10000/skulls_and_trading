@@ -77,14 +77,19 @@ watchlist mini-states, and any signal surface.
 | Avoid             | Rule Conflict       | negative (red)      |
 | —                 | Review Risk         | warning (amber)     |
 | —                 | Rule Break          | negative (red)      |
-| —                 | Thesis Missing      | warning (amber)     |
+| —                 | Thesis Check        | warning (amber)     |
 | —                 | Risk Exceeded       | negative (red)      |
 
-Watchlist / portfolio alignment states (`StatusType`): High Alignment, Aligned, Watch,
-Review, Risk Check, Thesis Check. These describe how a holding lines up with the
-portfolio's assigned strategy — never a buy/sell call. Tone mapping lives in
-`src/lib/status.ts` (`STATUS_TONE`) so the chip and inline "Strategy Check · <status>"
-label always agree.
+Watchlist / portfolio alignment states (`StatusType`): High Alignment, Aligned,
+Watch, Review, Watch Setup, Hold Plan, Trim Review, Exit Review, Review Risk,
+Risk Drift, Risk Check, Thesis Check, Rule Conflict, Rule Break, Concentration
+Review, Patience Review. These describe how a holding lines up with the
+portfolio's assigned strategy — never a buy/sell call. The unified resolver in
+`src/lib/forge/status.ts` maps conviction (Layer 1) plus per-category scores
+(Layer 2) to a primary label and optional secondary category flag chips. Tone
+mapping lives in `src/lib/status.ts` (`STATUS_TONE`) so chips and inline labels
+always agree. Dashboard Strategy Check uses the same `StatusType` set (the mock
+`SignalState` / `computeSignal` path is archived).
 
 Market Weather statuses: Calm Waters, Storm Watch, Risk-On Tide, Choppy Seas,
 Rotation Current, Breakout Wind, Defensive Harbor.

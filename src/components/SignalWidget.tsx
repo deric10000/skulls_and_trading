@@ -1,7 +1,18 @@
 import { useAppState } from "../state/AppState";
+import { dataSource } from "../lib/datasource";
+import { statusCopy } from "../lib/forge/status";
+import { STATUS_TONE } from "../lib/status";
+import { StatusStack } from "./StatusBadge";
+
+const DEFAULT_PORTFOLIO_ID = dataSource.getPortfolios()[0]?.id ?? "deric";
 
 export function SignalWidget() {
-  const { selectedItem, selectedSignal } = useAppState();
+  const {
+    selectedItem,
+    selectedTicker,
+    getStockAlignment,
+    getAppliedStrategiesForTicker,
+  } = useAppState();
 
   if (!selectedItem) {
     return (
@@ -17,7 +28,16 @@ export function SignalWidget() {
     );
   }
 
-  const signal = selectedSignal;
+  const alignment = getStockAlignment(DEFAULT_PORTFOLIO_ID, selectedTicker);
+  const resolved = alignment?.resolved ?? {
+    primary: selectedItem.status,
+    categoryFlags: [],
+    baseBand: selectedItem.status,
+    conviction: selectedItem.conviction,
+  };
+  const tone = STATUS_TONE[resolved.primary];
+  const strategies = getAppliedStrategiesForTicker(selectedTicker);
+  const copy = statusCopy(resolved.primary);
 
   return (
     <section className="panel signal-widget" aria-labelledby="signal-title">
@@ -27,49 +47,47 @@ export function SignalWidget() {
       </div>
 
       <div className="signal-headline">
-        <span className={`signal-state signal-state--${signal.tone}`}>
-          {signal.state}
-        </span>
+        <StatusStack resolved={resolved} />
         <div className="signal-confidence">
           <span className="signal-confidence-label">
-            Confidence {signal.confidence}%
+            Conviction {resolved.conviction}%
           </span>
           <span className="conviction-track">
             <span
-              className={`conviction-fill conviction-fill--${signal.tone}`}
-              style={{ width: `${signal.confidence}%` }}
+              className={`conviction-fill conviction-fill--${tone}`}
+              style={{ width: `${resolved.conviction}%` }}
             />
           </span>
         </div>
       </div>
 
-      {signal.strategyStack.length > 0 ? (
+      {strategies.length > 0 ? (
         <ul className="signal-stack" aria-label="Strategy stack">
-          {signal.strategyStack.map((name) => (
-            <li key={name} className="chip">
-              {name}
+          {strategies.map((strategy) => (
+            <li key={strategy.id} className="chip">
+              {strategy.name}
             </li>
           ))}
         </ul>
       ) : (
         <p className="signal-empty">
-          No strategies assigned. Assign strategies on the right to drive this
-          signal.
+          No strategies assigned. Assign strategies via holdings in Strategy
+          Forge to drive this check.
         </p>
       )}
 
       <dl className="signal-detail">
         <div className="signal-detail-row">
           <dt>Why</dt>
-          <dd>{signal.reason}</dd>
+          <dd>{copy.reason}</dd>
         </div>
         <div className="signal-detail-row">
           <dt>Invalidation</dt>
-          <dd>{signal.invalidation}</dd>
+          <dd>{copy.invalidation}</dd>
         </div>
         <div className="signal-detail-row">
           <dt>Next level</dt>
-          <dd>{signal.nextLevel}</dd>
+          <dd>{copy.nextLevel}</dd>
         </div>
       </dl>
     </section>

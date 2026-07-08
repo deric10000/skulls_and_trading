@@ -5,11 +5,11 @@ import { formatChange, formatPrice } from "../lib/format";
 import { formatChipCondition } from "../lib/forge/metrics";
 import type { StockAlignment } from "../lib/forge/scoring";
 import { STATUS_TONE } from "../lib/status";
-import { StatusBadge } from "./StatusBadge";
+import { StatusBadge, StatusStack } from "./StatusBadge";
+import { PortfolioCompass } from "./PortfolioCompass";
 import { Dropdown } from "./Dropdown";
 import { CaretLeft, STATUS_ICON } from "../lib/icons";
 import type { LogEntry, Strategy, WatchlistItem } from "../types";
-import bullCompass from "../assets/bull-skull-compass.png";
 
 interface StrategyBreakdown {
   strategy: Strategy;
@@ -38,7 +38,11 @@ function WatchSummary({
       <header className="watch-summary-head">
         <div className="watch-summary-title">
           <span className="watch-summary-ticker">{item.ticker}</span>
-          <StatusBadge status={item.status} />
+          {item.resolved ? (
+            <StatusStack resolved={item.resolved} />
+          ) : (
+            <StatusBadge status={item.status} />
+          )}
         </div>
         <span className="watch-name">{item.name}</span>
         <div className="watch-summary-quote">
@@ -294,7 +298,7 @@ export function WatchlistWidget({
   // Snapshot chip reflects the selected portfolio's market-value-weighted
   // alignment (not the first watchlist row's status).
   const portfolioAlignment = getPortfolioAlignment(selectedSource.id);
-  const snapshotStatus = portfolioAlignment.portfolio.status;
+  const snapshotResolved = portfolioAlignment.portfolio.resolved;
 
   if (summaryItem) {
     return (
@@ -342,14 +346,12 @@ export function WatchlistWidget({
         // Snapshot headline reflects the selected source's lead alignment. The
         // emblem is a static placeholder until driven by live insights.
         <div className="watchlist-snapshot">
-          <div className="compass">
-            <img className="compass-img" src={bullCompass} alt="" />
-          </div>
+          <PortfolioCompass status={snapshotResolved.primary} />
           <div className="watchlist-snapshot-body">
             <span className="watchlist-snapshot-label">
               Portfolio Strategy Alignment
             </span>
-            <StatusBadge status={snapshotStatus} />
+            <StatusStack resolved={snapshotResolved} />
           </div>
         </div>
       ) : isWatchlistSource ? (
@@ -381,6 +383,10 @@ export function WatchlistWidget({
           const changeUp = item.changePct >= 0;
           const changeClass = changeUp ? "watch-change--up" : "watch-change--down";
           const AlignIcon = STATUS_ICON[item.status];
+          const secondaryFlags =
+            item.resolved?.categoryFlags.filter(
+              (flag) => flag !== item.resolved?.primary,
+            ) ?? [];
           return (
             <li key={item.ticker}>
               <div
@@ -485,6 +491,13 @@ export function WatchlistWidget({
                         <AlignIcon aria-hidden />
                         {item.status}
                       </span>
+                      {secondaryFlags.length > 0 ? (
+                        <span className="watch-align-flags">
+                          {secondaryFlags.map((flag) => (
+                            <StatusBadge key={flag} status={flag} />
+                          ))}
+                        </span>
+                      ) : null}
                     </span>
                   </span>
                 </button>

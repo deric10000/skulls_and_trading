@@ -198,8 +198,9 @@ numerator and denominator — see §6 below).
 | File | Role |
 |------|------|
 | `metrics.ts` | The **metric registry** — single source of truth for every data point a chip can test (label + plainLabel, tooltip copy, source snapshot, conditions, date ranges, unit/format). Drives the table-modal dropdowns and tells the engine where to read each value. |
-| `scoring.ts` | Pure functions implementing the algorithm in `docs/strategy-forge.md`: resolve active chips (tag lens union, deduped; default = All Active Chips) → pass/fail per chip → **normalize active rule weights to 100% of the category** → `categoryScore × categoryWeight` → summed conviction → status bands. Also `validateStrategy` (completeness checks that gate "Apply to Portfolio"). No thesis/risk gates or conviction clamps — category weights carry that dominance. |
-| `alignment.ts` | The **bridge**: pulls snapshots through `dataSource`, scores each holding in each bucket (including `holdingDays` from the bucket `entryDate`), and aggregates **market-value-weighted** conviction `byTicker` (best-aligned bucket = headline), `byBucket`, and `portfolio`. |
+| `scoring.ts` | Pure functions implementing the algorithm in `docs/strategy-forge.md`: resolve active chips (tag lens union, deduped; default = All Active Chips) → pass/fail per chip → **normalize active rule weights to 100% of the category** → `categoryScore × categoryWeight` → summed conviction. Also `validateStrategy` (completeness checks that gate "Apply to Portfolio"). No thesis/risk gates or conviction clamps — category weights carry that dominance. |
+| `status.ts` | **Unified status resolver** — Layer 1 conviction band + Layer 2 per-category diagnostic ladders → `ResolvedStatus` (primary + category flags). Portfolio aggregation MV-weights category scores before resolving. Compass variant (bull/bear/placeholder) derived from primary only. |
+| `alignment.ts` | The **bridge**: pulls snapshots through `dataSource`, scores each holding in each bucket (including `holdingDays` from the bucket `entryDate`), and aggregates **market-value-weighted** conviction + resolved status `byTicker` (best-aligned bucket = headline), `byBucket`, and `portfolio`. |
 | `scheduler.ts` | Stubbed per-bucket refresh scheduler. No-op against mock; establishes the gated (market-hours / tab-visible / cache-stale) contract for live data. |
 
 To add a metric: add the key to `MetricKey` (`types.ts`), seed it in the
@@ -265,8 +266,10 @@ set. No API required for demo tuning.
 
 `AppState` computes `alignmentByPortfolio` from `buckets` + `strategies` +
 `appliedPortfolioIds` + the snapshots, then **overlays** the computed
-`conviction`/`status` onto the watchlist items. The portfolio snapshot chip uses
-**market-value-weighted portfolio alignment**, not the first row's status. Forge
+`conviction`/`status`/`resolved` onto the watchlist items. The portfolio
+snapshot uses **market-value-weighted portfolio alignment** (`StatusStack` +
+`PortfolioCompass`), not the first row's status. Dashboard Strategy Check reads
+the same Forge alignment (mock `computeSignal` archived). Forge
 edits re-score immediately across Home, Dashboard, and Forge Preview watchlists.
 
 ### Cadence rules (enforced in the Forge UI)

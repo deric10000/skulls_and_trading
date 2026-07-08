@@ -4,6 +4,7 @@ import type {
   MarketContext,
   MetricKey,
   MetricValue,
+  ResolvedStatus,
   RuleCategory,
   RuleChip,
   RuleOperator,
@@ -14,6 +15,7 @@ import type {
 } from "../../types";
 import { DEFAULT_CATEGORY_WEIGHTS } from "../../data";
 import { CATEGORY_ORDER, METRICS } from "./metrics";
+import { bandFromConviction, resolveStatus, type ResolveContext } from "./status";
 
 // ---------------------------------------------------------------------------
 // Strategy Forge scoring engine — pure functions, no I/O.
@@ -61,7 +63,8 @@ export interface CategoryScore {
 export interface StockAlignment {
   hasRules: boolean; // false → caller should fall back to seed data
   conviction: number; // 0–100
-  status: StatusType;
+  status: StatusType; // primary label from the unified resolver
+  resolved: ResolvedStatus;
   categories: CategoryScore[];
   results: ChipResult[];
 }
@@ -206,11 +209,9 @@ export function scoreCategory(
 
 // ---- Status mapping -----------------------------------------------------
 
+/** Layer 1 conviction band — prefer `resolveStatus` for display labels. */
 export function statusFromConviction(conviction: number): StatusType {
-  if (conviction >= 80) return "High Alignment";
-  if (conviction >= 60) return "Aligned";
-  if (conviction >= 40) return "Watch";
-  return "Review";
+  return bandFromConviction(conviction);
 }
 
 // ---- Top-level: score one stock against one strategy --------------------
@@ -218,13 +219,16 @@ export function statusFromConviction(conviction: number): StatusType {
 export function scoreStock(
   strategy: Strategy,
   ctx: MetricContext,
+  resolveCtx: ResolveContext = { hasStrategy: true },
 ): StockAlignment {
   const rules = (strategy.rules ?? []).filter((chip) => chip.enabled);
   if (rules.length === 0) {
+    const resolved = resolveStatus(0, [], resolveCtx);
     return {
       hasRules: false,
       conviction: 0,
-      status: "Watch",
+      status: resolved.primary,
+      resolved,
       categories: [],
       results: [],
     };
@@ -254,11 +258,13 @@ export function scoreStock(
     weightTotal += weight;
   }
   const conviction = weightTotal > 0 ? Math.round(weightedSum / weightTotal) : 0;
+  const resolved = resolveStatus(conviction, categories, resolveCtx);
 
   return {
     hasRules: true,
     conviction,
-    status: statusFromConviction(conviction),
+    status: resolved.primary,
+    resolved,
     categories,
     results,
   };
@@ -342,16 +348,22 @@ export interface WeightedAlignment {
 
 // Market-value-weighted average conviction across bucket allocations, so a
 // 10-share momentum slice doesn't outweigh a 100-share core position.
-export function aggregateConviction(slices: WeightedAlignment[]): {
+export function aggregateConviction(
+  slices: WeightedAlignment[],
+  resolveCtx: ResolveContext = { hasStrategy: true },
+): {
   conviction: number;
   status: StatusType;
 } {
   const totalValue = slices.reduce((sum, slice) => sum + slice.marketValue, 0);
-  if (totalValue <= 0) return { conviction: 0, status: "Watch" };
+  if (totalValue <= 0) {
+    const resolved = resolveStatus(0, [], resolveCtx);
+    return { conviction: 0, status: resolved.primary };
+  }
   const weighted = slices.reduce(
     (sum, slice) => sum + slice.conviction * slice.marketValue,
     0,
   );
   const conviction = Math.round(weighted / totalValue);
-  return { conviction, status: statusFromConviction(conviction) };
+  return { conviction, status: bandFromConviction(conviction) };
 }

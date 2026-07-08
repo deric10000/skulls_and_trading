@@ -69,8 +69,10 @@ contracts below.
 ## Strategy Forge (`src/lib/forge/`)
 
 - The scoring engine (`scoring.ts`) is **pure, no I/O** — it takes a strategy +
-  a `MetricContext` and returns conviction/status. Don't fetch or import data
-  inside it; feed it through `alignment.ts`, which reads the `dataSource` seam.
+  a `MetricContext` and returns conviction. Display labels come from
+  `status.ts` (`resolveStatus`: Layer 1 conviction band + Layer 2 category
+  diagnostics → `ResolvedStatus`). Don't fetch or import data inside scoring;
+  feed it through `alignment.ts`, which reads the `dataSource` seam.
 - Forge inputs come **through the seam**: `getFundamentals`, `getTechnicals`,
   `getMarketContext`, `getBuckets`. A missing metric is `null` ("no data"),
   never a fabricated value. Snapshot values must be **real, sourced** figures
@@ -86,8 +88,9 @@ contracts below.
   `validateStrategy` completeness gates "Apply to Portfolio".
 - Conviction is **market-value-weighted** across bucket allocations; a ticker's
   headline = its best-aligned bucket. `AppState` overlays computed
-  conviction/status onto the watchlist — downstream chips just reflect it.
-  "Notify" = in-app chips updating; **no** push-notification system.
+  conviction/status/resolved onto the watchlist — downstream chips (`StatusStack`,
+  `PortfolioCompass`) reflect it. "Notify" = in-app chips updating; **no**
+  push-notification system.
 - Cadence: `technicalsInterval` is clamped **≥ 15m and ≥ `checkInterval`**;
   fundamentals refresh daily and are not user-selectable. See
   `data-architecture.md` §6.

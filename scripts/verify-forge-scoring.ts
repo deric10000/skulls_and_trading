@@ -17,6 +17,11 @@ import { computePortfolioAlignment } from "../src/lib/forge/alignment";
 import { strategiesForTicker } from "../src/lib/forge/tickerStrategy";
 import { CATEGORY_ORDER } from "../src/lib/forge/metrics";
 import { scoreCategory, scoreStock, evaluateChip, validateStrategy, type MetricContext } from "../src/lib/forge/scoring";
+import {
+  bandFromConviction,
+  resolveStatus,
+  severityRank,
+} from "../src/lib/forge/status";
 import type { RuleChip, Strategy } from "../src/types";
 
 let failures = 0;
@@ -68,6 +73,46 @@ const thesisOnly: Strategy = {
 };
 const thesisOnlyScore = scoreStock(thesisOnly, exampleCtx);
 check("Thesis-only conviction = 67 (renormalized)", thesisOnlyScore.conviction === 67, `${thesisOnlyScore.conviction}`);
+
+// 2b. Unified status resolver — conviction math unchanged; labels layer on top.
+check("Layer 1 band: 75 → Aligned", bandFromConviction(75) === "Aligned");
+check("Layer 1 band: 82 → High Alignment", bandFromConviction(82) === "High Alignment");
+const layered = resolveStatus(
+  72,
+  [
+    { category: "thesis", score: 52, passCount: 0, scorableCount: 3 },
+    { category: "risk", score: 58, passCount: 0, scorableCount: 2 },
+    { category: "setup", score: null, passCount: 0, scorableCount: 0 },
+    { category: "position", score: null, passCount: 0, scorableCount: 0 },
+    { category: "trade", score: null, passCount: 0, scorableCount: 0 },
+    { category: "timeframe", score: null, passCount: 0, scorableCount: 0 },
+  ],
+  { hasStrategy: true },
+);
+check(
+  "Layer 2 primary: Review Risk beats Aligned + Thesis Check",
+  layered.primary === "Review Risk",
+  `${layered.primary}`,
+);
+check(
+  "Layer 2 secondary flags include Thesis Check",
+  layered.categoryFlags.includes("Thesis Check") &&
+    layered.categoryFlags.filter((f) => f !== layered.primary).includes("Thesis Check"),
+);
+check(
+  "No strategy → Thesis Check",
+  resolveStatus(80, [], { hasStrategy: false }).primary === "Thesis Check",
+);
+check(
+  "Risk Drift more severe than Review Risk",
+  severityRank("Risk Drift") < severityRank("Review Risk"),
+);
+check(
+  "Risk 50–69 maps to Review Risk",
+  resolveStatus(70, [{ category: "risk", score: 58, passCount: 0, scorableCount: 2 }], {
+    hasStrategy: true,
+  }).categoryFlags.includes("Review Risk"),
+);
 
 // 3. VGD × NVDA
 const vgd = DEFAULT_STRATEGIES.find((s) => s.id === "value-growth-dividend")!;
