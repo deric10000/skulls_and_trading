@@ -2,6 +2,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -9,10 +10,10 @@ import {
 } from "react";
 import {
   buildSystemTags,
-  CHIP_LIBRARY_SEED,
   DEFAULT_CAPTAIN,
   DEFAULT_CATEGORY_WEIGHTS,
   DEFAULT_STRATEGIES,
+  logTimestamp,
 } from "../data";
 import { dataSource } from "../lib/datasource";
 import { computeSignal } from "../lib/signals";
@@ -21,6 +22,14 @@ import {
   type PortfolioAlignment,
   type TickerAlignment,
 } from "../lib/forge/alignment";
+import { strategiesForTicker } from "../lib/forge/tickerStrategy";
+import {
+  debounce,
+  loadPersistedChipLibrary,
+  loadPersistedStrategies,
+  persistChipLibrary,
+  persistStrategies,
+} from "../lib/forge/persistence";
 import {
   scoreStock,
   type MetricContext,
@@ -132,8 +141,11 @@ function currentTimestamp(): string {
     hour: "2-digit",
     minute: "2-digit",
   });
-  return `Today · ${time}`;
+  return logTimestamp(time);
 }
+
+const persistStrategiesDebounced = debounce(persistStrategies, 300);
+const persistChipLibraryDebounced = debounce(persistChipLibrary, 300);
 
 export function AppStateProvider({ children }: { children: ReactNode }) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -152,15 +164,27 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const [selectedTicker, setSelectedTicker] = useState<string>(
     () => dataSource.getInitialWatchlist()[0]?.ticker ?? "",
   );
-  const [strategies, setStrategies] = useState<Strategy[]>(DEFAULT_STRATEGIES);
+  const [strategies, setStrategies] = useState<Strategy[]>(() =>
+    loadPersistedStrategies(),
+  );
   const [assignments, setAssignments] = useState<StrategyAssignments>(() =>
     dataSource.getDefaultAssignments(),
   );
   const [buckets] = useState<Bucket[]>(() => dataSource.getBuckets());
-  const [chipLibrary, setChipLibrary] = useState<RuleChip[]>(CHIP_LIBRARY_SEED);
+  const [chipLibrary, setChipLibrary] = useState<RuleChip[]>(() =>
+    loadPersistedChipLibrary(),
+  );
   const [logsByTicker, setLogsByTicker] = useState<Record<string, LogEntry[]>>(
     () => dataSource.getLogs(),
   );
+
+  useEffect(() => {
+    persistStrategiesDebounced(strategies);
+  }, [strategies]);
+
+  useEffect(() => {
+    persistChipLibraryDebounced(chipLibrary);
+  }, [chipLibrary]);
 
   const idCounter = useRef(0);
   const nextId = useCallback((prefix: string) => {
@@ -315,11 +339,13 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const resetStrategy = useCallback((id: string) => {
     const original = DEFAULT_STRATEGIES.find((strategy) => strategy.id === id);
     if (!original) return;
-    setStrategies((current) =>
-      current.map((strategy) =>
+    setStrategies((current) => {
+      const next = current.map((strategy) =>
         strategy.id === id ? { ...original } : strategy,
-      ),
-    );
+      );
+      persistStrategies(next);
+      return next;
+    });
   }, []);
 
   const assignStrategy = useCallback((ticker: string, strategyId: string) => {
@@ -406,27 +432,11 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     [alignmentByPortfolio],
   );
 
-  // Every strategy that currently claims this ticker via appliedPortfolioIds
-  // (i.e. one of the ticker's portfolios is in that strategy's applied list).
-  // Informational only — does NOT affect real scoring, which stays
-  // bucket-driven (see data-architecture.md "Rule chips + tags"). This is
-  // what the Watch summary's strategy-name chip stack reflects, so it always
-  // matches what the Configure card's "Tickers In Applied Portfolios" box
-  // shows for the same strategy.
+  // Per-ticker strategy assignment via holdings[].strategyIds (defaults) plus
+  // applied portfolios for custom copies — see tickerStrategy.ts.
   const getAppliedStrategiesForTicker = useCallback(
-    (ticker: string): Strategy[] => {
-      const holdingPortfolioIds = portfolios
-        .filter((portfolio) =>
-          portfolio.holdings.some((holding) => holding.ticker === ticker),
-        )
-        .map((portfolio) => portfolio.id);
-      if (holdingPortfolioIds.length === 0) return [];
-      return strategies.filter((strategy) =>
-        (strategy.appliedPortfolioIds ?? []).some((id) =>
-          holdingPortfolioIds.includes(id),
-        ),
-      );
-    },
+    (ticker: string): Strategy[] =>
+      strategiesForTicker(ticker, portfolios, strategies),
     [portfolios, strategies],
   );
 

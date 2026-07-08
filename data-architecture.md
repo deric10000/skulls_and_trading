@@ -220,35 +220,54 @@ snapshots (`data.ts`), and register it in `metrics.ts`. Nothing else changes.
   category weights and the system tags.
 - `strategy.appliedPortfolioIds` records which portfolios/watchlists the
   strategy is applied to. It's edited via the "Applied Portfolios" multi-select
-  on the Configure card (no separate Enabled toggle — a strategy is active once
-  a portfolio is applied). Blank/duplicated strategies start unapplied (`[]`).
-  **Wiring applied portfolios into scoring is a later pass — `appliedPortfolioIds`
-  does not drive scoring today.** Actual scoring always goes through `buckets`
-  (each bucket carries its own fixed `strategyId`, independent of any
-  strategy's applied-portfolios list — see "Buckets" below). The Configure
-  card's read-only **"Tickers In Applied Portfolios"** box (green chips, right
-  below the multi-select) exists specifically to make this transparent: it
-  lists every ticker held in the currently-applied portfolios so the user can
-  see what's *claimed*, without implying it's what's actually *scored* (that
-  remains bucket-driven). Its "Edit" icon is intentionally disabled for now —
-  editing which tickers a strategy covers is a future pass.
+  on the Configure card. Blank/duplicated strategies start unapplied (`[]`).
+  **Scoring respects `appliedPortfolioIds`:** a bucket only contributes when
+  its strategy lists the bucket's portfolio; tickers in an applied portfolio
+  with no bucket row for that strategy are scored via an **applied-portfolio
+  fallback** slice (full holding shares). Custom/duplicated strategies therefore
+  work immediately once applied — no bucket row required. The Configure card's
+  read-only **"Tickers In Applied Portfolios"** box lists every ticker held in
+  the currently-applied portfolios (informational; "Edit" stays disabled).
+
+### Seed data — one strategy per ticker
+
+Demo portfolios assign each ticker to **exactly one** default strategy via
+`holdings[].strategyIds` (by company type: AI/quantum/speculative → Aggressive
+AI; compounders/consumer/fintech → VGD). A ticker may still appear in
+**multiple bucket slices** (e.g. SOFI 57 sh + 10 sh with different entry dates),
+but every slice uses the **same** `strategyId`.
+
+**Runtime wiring:** `holding.strategyIds` is the per-ticker assignment for
+default strategies. Scoring (`computePortfolioAlignment`), Watch summary strategy
+chips (`getAppliedStrategiesForTicker`), and Forge **Tickers In Applied
+Portfolios** all respect it — NVDA shows/scores Aggressive only, CRM VGD only,
+even though both strategies list `appliedPortfolioIds: ["deric"]`. Custom/
+duplicated strategies (ids not in `DEFAULT_STRATEGIES`) still score all holdings
+in an applied portfolio via fallback until per-ticker assignment UI lands.
 
 ### Buckets — independent cadence per strategy
 
 A portfolio is split into **buckets**; each bucket is governed by one strategy
 (which carries its own `checkInterval` + `technicalsInterval`) and holds a share
-allocation of one or more tickers. A ticker may live in **several** buckets
-(e.g. 100 sh in a daily "Core Growth", 10 sh in a 15m "Momentum") — each slice
-is scored by its bucket's strategy on its own cadence. Modeled + seeded now;
+allocation of one or more tickers. A ticker may live in **several** slices within
+the same strategy (different share counts / entry dates). Modeled + seeded now;
 the bucket/share-allocation **authoring UI is a later dashboard pass**.
+
+### Forge persistence (demo)
+
+`strategies` and `chipLibrary` hydrate from `localStorage` on load
+(`src/lib/forge/persistence.ts`) and debounce-save on change. Market snapshots,
+portfolios, and buckets remain static seeds. **Reset to default** on a default
+strategy restores `DEFAULT_STRATEGIES` and overwrites storage for that strategy
+set. No API required for demo tuning.
 
 ### Conviction flows downstream (no new UI system)
 
-`AppState` computes `alignmentByPortfolio` from `buckets` + `strategies` + the
-snapshots, then **overlays** the computed `conviction`/`status` onto the
-watchlist items. The Home `WatchlistWidget`, snapshot, and Dashboard read these
-decorated values — the existing chips/meters just reflect the engine. "Notify"
-means these in-app chips update; there is **no** push-notification system.
+`AppState` computes `alignmentByPortfolio` from `buckets` + `strategies` +
+`appliedPortfolioIds` + the snapshots, then **overlays** the computed
+`conviction`/`status` onto the watchlist items. The portfolio snapshot chip uses
+**market-value-weighted portfolio alignment**, not the first row's status. Forge
+edits re-score immediately across Home, Dashboard, and Forge Preview watchlists.
 
 ### Cadence rules (enforced in the Forge UI)
 

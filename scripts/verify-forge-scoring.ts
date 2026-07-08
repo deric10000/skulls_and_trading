@@ -12,7 +12,9 @@
  *     and per-category scores; no-data chips are excluded.
  *  4. validateStrategy flags an incomplete blank strategy and passes VGD.
  */
-import { DEFAULT_STRATEGIES, FUNDAMENTAL_SNAPSHOTS, MARKET_CONTEXT, TECHNICAL_SNAPSHOTS } from "../src/data";
+import { DEFAULT_BUCKETS, DEFAULT_STRATEGIES, FUNDAMENTAL_SNAPSHOTS, MARKET_CONTEXT, PORTFOLIOS, TECHNICAL_SNAPSHOTS } from "../src/data";
+import { computePortfolioAlignment } from "../src/lib/forge/alignment";
+import { strategiesForTicker } from "../src/lib/forge/tickerStrategy";
 import { CATEGORY_ORDER } from "../src/lib/forge/metrics";
 import { scoreCategory, scoreStock, evaluateChip, validateStrategy, type MetricContext } from "../src/lib/forge/scoring";
 import type { RuleChip, Strategy } from "../src/types";
@@ -105,6 +107,84 @@ const blank: Strategy = {
 };
 const blankValidation = validateStrategy(blank);
 check("Blank strategy flagged incomplete", !blankValidation.complete, `${blankValidation.issues.length} issues`);
+
+// 5. Phase 0 — one strategy per ticker in seed data
+const deric = PORTFOLIOS.find((p) => p.id === "deric")!;
+for (const holding of deric.holdings) {
+  check(
+    `deric ${holding.ticker} has one strategyId`,
+    holding.strategyIds.length === 1,
+    holding.strategyIds.join(", "),
+  );
+}
+const bucketStrategyByTicker = new Map<string, Set<string>>();
+for (const bucket of DEFAULT_BUCKETS.filter((b) => b.portfolioId === "deric")) {
+  for (const allocation of bucket.holdings) {
+    const set = bucketStrategyByTicker.get(allocation.ticker) ?? new Set();
+    set.add(bucket.strategyId);
+    bucketStrategyByTicker.set(allocation.ticker, set);
+  }
+}
+for (const [ticker, strategyIds] of bucketStrategyByTicker) {
+  check(
+    `deric ${ticker} buckets use one strategyId`,
+    strategyIds.size === 1,
+    [...strategyIds].join(", "),
+  );
+}
+
+// 6. Applied-portfolio alignment (dynamic scoring bridge)
+const agg = DEFAULT_STRATEGIES.find((s) => s.id === "aggressive-ai-high-beta")!;
+const dericAlign = computePortfolioAlignment(deric, DEFAULT_BUCKETS, DEFAULT_STRATEGIES);
+check("deric portfolio conviction in 0..100", dericAlign.portfolio.conviction >= 0 && dericAlign.portfolio.conviction <= 100,
+  `${dericAlign.portfolio.conviction} (${dericAlign.portfolio.status})`);
+check("NVDA headline uses Aggressive AI", dericAlign.byTicker.NVDA?.alignment.hasRules === true,
+  `conviction=${dericAlign.byTicker.NVDA?.conviction}`);
+
+const nvdaStrategies = strategiesForTicker("NVDA", PORTFOLIOS, DEFAULT_STRATEGIES);
+check(
+  "NVDA assigned to Aggressive AI only",
+  nvdaStrategies.length === 1 && nvdaStrategies[0]?.id === "aggressive-ai-high-beta",
+  nvdaStrategies.map((s) => s.id).join(", "),
+);
+const crmStrategies = strategiesForTicker("CRM", PORTFOLIOS, DEFAULT_STRATEGIES);
+check(
+  "CRM assigned to VGD only",
+  crmStrategies.length === 1 && crmStrategies[0]?.id === "value-growth-dividend",
+  crmStrategies.map((s) => s.id).join(", "),
+);
+
+const vgdTighter: Strategy = {
+  ...vgd,
+  rules: vgd.rules!.map((c) =>
+    c.id === "vgd-f2" ? { ...c, value: 99999 } : c,
+  ),
+};
+const crmBefore = computePortfolioAlignment(deric, DEFAULT_BUCKETS, DEFAULT_STRATEGIES).byTicker.CRM?.conviction ?? 0;
+const crmAfter = computePortfolioAlignment(deric, DEFAULT_BUCKETS, [vgdTighter, agg]).byTicker.CRM?.conviction ?? 0;
+check("VGD chip change moves CRM conviction", crmBefore !== crmAfter, `${crmBefore} → ${crmAfter}`);
+
+const vgdUnapplied: Strategy = { ...vgd, appliedPortfolioIds: [] };
+const crmWithVgd = computePortfolioAlignment(deric, DEFAULT_BUCKETS, DEFAULT_STRATEGIES).byTicker.CRM?.conviction;
+const crmWithoutVgd = computePortfolioAlignment(deric, DEFAULT_BUCKETS, [vgdUnapplied, agg]).byTicker.CRM?.conviction;
+check(
+  "Removing VGD from applied portfolios drops CRM bucket score",
+  crmWithVgd != null && (crmWithoutVgd == null || crmWithoutVgd !== crmWithVgd),
+  `${crmWithVgd} → ${crmWithoutVgd ?? "none"}`,
+);
+
+const custom: Strategy = {
+  ...vgd,
+  id: "custom-test",
+  name: "Custom Test",
+  appliedPortfolioIds: ["deric"],
+};
+const customAlign = computePortfolioAlignment(deric, DEFAULT_BUCKETS, [custom, agg]);
+check(
+  "Applied custom strategy scores deric tickers via fallback",
+  Object.keys(customAlign.byTicker).length > 0,
+  `${Object.keys(customAlign.byTicker).length} tickers`,
+);
 
 console.log(failures === 0 ? "\nALL CHECKS PASSED" : `\n${failures} CHECKS FAILED`);
 process.exit(failures === 0 ? 0 : 1);

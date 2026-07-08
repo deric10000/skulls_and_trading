@@ -7,13 +7,14 @@ import {
   type StockAlignment,
   type WeightedAlignment,
 } from "./scoring";
+import { shouldScoreTickerWithStrategy } from "./tickerStrategy";
 
 // ---------------------------------------------------------------------------
 // Alignment bridge — ties the dataSource seam + buckets + the live strategy set
 // to the pure scoring engine. AppState calls this; the engine itself stays
 // I/O-free. A ticker can live in several buckets, so its HEADLINE alignment is
-// the best-aligned bucket; the portfolio number is the market-value-weighted
-// blend across every bucket allocation.
+// the best-aligned slice; the portfolio number is the market-value-weighted
+// blend across every scored allocation (bucket + applied-portfolio fallback).
 // ---------------------------------------------------------------------------
 
 export interface TickerAlignment {
@@ -26,7 +27,7 @@ export interface TickerAlignment {
 }
 
 export interface PortfolioAlignment {
-  byTicker: Record<string, TickerAlignment>; // headline = best-aligned bucket
+  byTicker: Record<string, TickerAlignment>; // headline = best-aligned slice
   byBucket: Record<string, { conviction: number; status: StatusType }>;
   portfolio: { conviction: number; status: StatusType };
 }
@@ -36,6 +37,17 @@ const EMPTY: PortfolioAlignment = {
   byBucket: {},
   portfolio: { conviction: 0, status: "Watch" },
 };
+
+function coverageKey(strategyId: string, ticker: string): string {
+  return `${strategyId}:${ticker}`;
+}
+
+function strategyAppliesToPortfolio(
+  strategy: Strategy,
+  portfolioId: string,
+): boolean {
+  return (strategy.appliedPortfolioIds ?? []).includes(portfolioId);
+}
 
 export function computePortfolioAlignment(
   portfolio: Portfolio | undefined,
@@ -65,8 +77,6 @@ export function computePortfolioAlignment(
   );
   const market = dataSource.getMarketContext();
 
-  // Calendar days between a bucket allocation's entry date and the snapshot
-  // date (asOf) — feeds the Hold Timeframe chips. Missing entry date → no data.
   const asOfMs = Date.parse(market.asOf);
   const holdingDaysFor = (entryDate?: string): number | undefined => {
     if (!entryDate || Number.isNaN(asOfMs)) return undefined;
@@ -75,17 +85,52 @@ export function computePortfolioAlignment(
     return Math.max(0, Math.round((asOfMs - entryMs) / 86_400_000));
   };
 
+  const entryDateForTicker = (ticker: string): string | undefined => {
+    for (const bucket of portfolioBuckets) {
+      for (const allocation of bucket.holdings) {
+        if (allocation.ticker === ticker && allocation.entryDate) {
+          return allocation.entryDate;
+        }
+      }
+    }
+    return undefined;
+  };
+
   const byTicker: Record<string, TickerAlignment> = {};
-  const portfolioSlices: WeightedAlignment[] = [];
   const bucketSlices: Record<string, WeightedAlignment[]> = {};
+  const coveredPairs = new Set<string>();
+
+  function applyHeadline(
+    ticker: string,
+    sliceMeta: { bucketId: string; bucketName: string },
+    conviction: number,
+    status: StatusType,
+    alignment: StockAlignment,
+  ): void {
+    const existing = byTicker[ticker];
+    if (!existing || conviction > existing.conviction) {
+      byTicker[ticker] = {
+        ticker,
+        bucketId: sliceMeta.bucketId,
+        bucketName: sliceMeta.bucketName,
+        conviction,
+        status,
+        alignment,
+      };
+    }
+  }
 
   for (const bucket of portfolioBuckets) {
     const strategy = strategies.find((item) => item.id === bucket.strategyId);
     if (!strategy) continue;
+    if (!strategyAppliesToPortfolio(strategy, portfolio.id)) continue;
 
     for (const allocation of bucket.holdings) {
       const ticker = allocation.ticker;
       const holding = holdingByTicker.get(ticker);
+      if (!holding || !shouldScoreTickerWithStrategy(holding, strategy.id)) continue;
+
+      coveredPairs.add(coverageKey(strategy.id, ticker));
       const ctx: MetricContext = {
         fundamentals: dataSource.getFundamentals(ticker),
         technicals: dataSource.getTechnicals(ticker),
@@ -96,7 +141,6 @@ export function computePortfolioAlignment(
       };
 
       const scored = scoreStock(strategy, ctx);
-      // Fall back to the holding's seed when a bucket's strategy isn't forged.
       const conviction = scored.hasRules
         ? scored.conviction
         : holding?.conviction ?? 0;
@@ -106,21 +150,50 @@ export function computePortfolioAlignment(
 
       const marketValue = allocation.shares * lastPrice(ticker);
       const slice: WeightedAlignment = { conviction, marketValue };
-      portfolioSlices.push(slice);
       (bucketSlices[bucket.id] ??= []).push(slice);
 
-      // Headline per ticker = its best-aligned bucket (highest conviction).
-      const existing = byTicker[ticker];
-      if (!existing || conviction > existing.conviction) {
-        byTicker[ticker] = {
-          ticker,
-          bucketId: bucket.id,
-          bucketName: bucket.name,
-          conviction,
-          status,
-          alignment: scored,
-        };
-      }
+      applyHeadline(
+        ticker,
+        { bucketId: bucket.id, bucketName: bucket.name },
+        conviction,
+        status,
+        scored,
+      );
+    }
+  }
+
+  // Applied-portfolio fallback: score holdings when a strategy is applied but
+  // no bucket allocation covers that (strategy, ticker) pair yet.
+  for (const strategy of strategies) {
+    if (!strategyAppliesToPortfolio(strategy, portfolio.id)) continue;
+
+    for (const holding of portfolio.holdings) {
+      if (holding.shares <= 0) continue;
+      if (!shouldScoreTickerWithStrategy(holding, strategy.id)) continue;
+      const ticker = holding.ticker;
+      if (coveredPairs.has(coverageKey(strategy.id, ticker))) continue;
+
+      const ctx: MetricContext = {
+        fundamentals: dataSource.getFundamentals(ticker),
+        technicals: dataSource.getTechnicals(ticker),
+        market,
+        weightPct: weightPctFor(ticker),
+        openPnlPct: holding.openPnlPct,
+        holdingDays: holdingDaysFor(entryDateForTicker(ticker)),
+      };
+
+      const scored = scoreStock(strategy, ctx);
+      const conviction = scored.hasRules ? scored.conviction : holding.conviction;
+      const status: StatusType = scored.hasRules ? scored.status : holding.status;
+
+      applyHeadline(
+        ticker,
+        { bucketId: `applied-${strategy.id}`, bucketName: strategy.name },
+        conviction,
+        status,
+        scored,
+      );
+      coveredPairs.add(coverageKey(strategy.id, ticker));
     }
   }
 
@@ -129,9 +202,18 @@ export function computePortfolioAlignment(
     byBucket[bucketId] = aggregateConviction(slices);
   }
 
+  // One market-value slice per ticker (headline conviction × full holding) so
+  // multiple bucket/fallback passes never double-count the same shares.
+  const portfolioHeadlineSlices: WeightedAlignment[] = portfolio.holdings
+    .filter((holding) => holding.shares > 0 && byTicker[holding.ticker])
+    .map((holding) => ({
+      conviction: byTicker[holding.ticker].conviction,
+      marketValue: holding.shares * lastPrice(holding.ticker),
+    }));
+
   return {
     byTicker,
     byBucket,
-    portfolio: aggregateConviction(portfolioSlices),
+    portfolio: aggregateConviction(portfolioHeadlineSlices),
   };
 }

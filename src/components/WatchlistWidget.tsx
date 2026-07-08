@@ -291,9 +291,10 @@ export function WatchlistWidget({
     }));
   }, [summaryItem, selectedSource.id, getAppliedStrategiesForTicker, getStrategyChipBreakdown]);
 
-  // Snapshot chip reflects the selected source's headline alignment (the list is
-  // ordered strongest-first), so switching sources visibly changes the state.
-  const snapshotStatus = items[0]?.status ?? "Watch";
+  // Snapshot chip reflects the selected portfolio's market-value-weighted
+  // alignment (not the first watchlist row's status).
+  const portfolioAlignment = getPortfolioAlignment(selectedSource.id);
+  const snapshotStatus = portfolioAlignment.portfolio.status;
 
   if (summaryItem) {
     return (

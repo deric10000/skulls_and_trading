@@ -38,6 +38,19 @@ import type {
   WeeklyReviewItem,
 } from "./types";
 
+// The market date mock snapshots and log timestamps reflect.
+export const MARKET_ASOF = "2026-07-07";
+
+/** Captain's Log seed timestamps anchored to the mock snapshot date. */
+export function logTimestamp(time: string): string {
+  const date = new Date(`${MARKET_ASOF}T12:00:00`);
+  const label = date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+  });
+  return `${label} · ${time}`;
+}
+
 // ---------------------------------------------------------------------------
 // Ticker & portfolio mock data — SINGLE SOURCE OF TRUTH.
 //
@@ -80,7 +93,7 @@ export const TICKERS: Record<string, TickerInfo> = {
         title: "Why I'm holding",
         note: "High-beta growth sleeve. Open P&L is red and it sits outside the core AI/quantum thesis — keep size small and review against the plan.",
         strategy: "Speculative Runner",
-        timestamp: "Today · 12:20",
+        timestamp: logTimestamp("12:20"),
       },
     ],
   },
@@ -113,7 +126,7 @@ export const TICKERS: Record<string, TickerInfo> = {
         title: "Off-core but green",
         note: "Consumer name outside the AI/high-beta core. Open P&L is positive — let it work, but don't add beyond plan.",
         strategy: "Breakout Watch",
-        timestamp: "Today · 10:48",
+        timestamp: logTimestamp("10:48"),
       },
     ],
   },
@@ -146,7 +159,7 @@ export const TICKERS: Record<string, TickerInfo> = {
         title: "Thesis under review",
         note: "Down ~27% from cost. Software/AI fit is only partial, and the loss is large enough to re-check the original thesis against the plan.",
         strategy: "Broken Thesis / Exit Watch",
-        timestamp: "Today · 09:31",
+        timestamp: logTimestamp("09:31"),
       },
     ],
   },
@@ -179,7 +192,7 @@ export const TICKERS: Record<string, TickerInfo> = {
         title: "Core fit, red entry",
         note: "AI infrastructure is core to the strategy, but open P&L is negative — review the entry and support before adding.",
         strategy: "AI Infrastructure",
-        timestamp: "Today · 11:12",
+        timestamp: logTimestamp("11:12"),
       },
     ],
   },
@@ -212,7 +225,7 @@ export const TICKERS: Record<string, TickerInfo> = {
         title: "Green but off-core",
         note: "Beauty/consumer name with a solid open gain. Outside the AI/high-beta focus — keep it as a watch and respect position size.",
         strategy: "Pullback Entry",
-        timestamp: "Today · 13:05",
+        timestamp: logTimestamp("13:05"),
       },
     ],
   },
@@ -245,7 +258,7 @@ export const TICKERS: Record<string, TickerInfo> = {
         title: "Quantum sleeve working",
         note: "Fits the high-beta / quantum tilt and open P&L is green. Watch daily volatility; keep it sized as speculation.",
         strategy: "Speculative Runner",
-        timestamp: "Today · 11:48",
+        timestamp: logTimestamp("11:48"),
       },
     ],
   },
@@ -278,7 +291,7 @@ export const TICKERS: Record<string, TickerInfo> = {
         title: "Lower-beta anchor",
         note: "Strong AI/cloud name, but lower-beta than the strategy targets and open P&L is red. Hold as ballast and watch the range.",
         strategy: "Long-Term Compounder",
-        timestamp: "Today · 09:58",
+        timestamp: logTimestamp("09:58"),
       },
     ],
   },
@@ -311,14 +324,14 @@ export const TICKERS: Record<string, TickerInfo> = {
         title: "Why I'm watching",
         note: "Leadership name in the AI cycle and a tell for broad risk appetite.",
         strategy: "Trend Rider",
-        timestamp: "Today · 09:42",
+        timestamp: logTimestamp("09:42"),
       },
       {
         id: "nvda-2",
         title: "Next action",
         note: "Hold core; add only on a controlled pullback to the 20 EMA. Invalidation: a close back below the breakout level on heavy selling.",
         strategy: "Aggressive AI / High-Beta Growth",
-        timestamp: "Today · 09:44",
+        timestamp: logTimestamp("09:44"),
       },
     ],
   },
@@ -351,7 +364,7 @@ export const TICKERS: Record<string, TickerInfo> = {
         title: "Risk check",
         note: "Quantum exposure fits, but open P&L is red and volatility is high — confirm it's within the risk rule and sized for speculation.",
         strategy: "Speculative Runner",
-        timestamp: "Today · 12:41",
+        timestamp: logTimestamp("12:41"),
       },
     ],
   },
@@ -384,7 +397,7 @@ export const TICKERS: Record<string, TickerInfo> = {
         title: "Fintech growth fit",
         note: "Largest position and green. Fits the fintech-growth sleeve — watch daily weakness and keep it within the position cap.",
         strategy: "Pullback Entry",
-        timestamp: "Today · 11:03",
+        timestamp: logTimestamp("11:03"),
       },
     ],
   },
@@ -438,7 +451,7 @@ export const PORTFOLIOS: Portfolio[] = [
         status: "Aligned",
         reason:
           "Fintech-growth exposure fits the strategy, but daily weakness should be watched.",
-        strategyIds: ["aggressive-ai-high-beta", "value-growth-dividend"],
+        strategyIds: ["value-growth-dividend"],
       },
       {
         ticker: "MSFT",
@@ -449,7 +462,7 @@ export const PORTFOLIOS: Portfolio[] = [
         status: "Watch",
         reason:
           "Strong AI/cloud name, but lower-beta mega-cap and open P&L is currently negative.",
-        strategyIds: ["aggressive-ai-high-beta", "value-growth-dividend"],
+        strategyIds: ["value-growth-dividend"],
       },
       {
         ticker: "ELF",
@@ -533,7 +546,7 @@ export const PORTFOLIOS: Portfolio[] = [
         status: "High Alignment",
         reason:
           "Durable AI/cloud compounder held for the long term — squarely on strategy.",
-        strategyIds: ["value-growth-dividend", "aggressive-ai-high-beta"],
+        strategyIds: ["value-growth-dividend"],
       },
       {
         ticker: "NVDA",
@@ -544,7 +557,7 @@ export const PORTFOLIOS: Portfolio[] = [
         status: "Aligned",
         reason:
           "Long-held AI leader with strong open P&L; trend still supports the thesis.",
-        strategyIds: ["value-growth-dividend", "aggressive-ai-high-beta"],
+        strategyIds: ["aggressive-ai-high-beta"],
       },
       {
         ticker: "CRM",
@@ -605,7 +618,7 @@ export const PORTFOLIOS: Portfolio[] = [
         conviction: 49,
         status: "Watch",
         reason: "On watch for a pullback into support before starting a position.",
-        strategyIds: ["value-growth-dividend"],
+        strategyIds: ["aggressive-ai-high-beta"],
       },
       {
         ticker: "ACHR",
@@ -1372,7 +1385,7 @@ export const TECHNICAL_SIGNALS: EducationCard[] = [
 // The market date these snapshots reflect (most-recent close at authoring time).
 // Refreshed 2026-07-07 from real, current, sourced data (see per-ticker
 // sourceNotes) — replaces the prior 2026-06-25 snapshot.
-export const MARKET_ASOF = "2026-07-07";
+// MARKET_ASOF is declared at the top of this file (single source of truth).
 
 // Latest reported fundamentals per ticker (TTM/most-recent quarter). `null` =
 // metric is not meaningful/available for that name (e.g. margins for a bank, a
@@ -1788,9 +1801,9 @@ export function buildSystemTags(prefix: string): RuleTag[] {
 
 // Default buckets seeded for the active portfolio. A bucket is governed by one
 // strategy (which carries the cadence + rule chips) and holds a share allocation
-// of one or more tickers. SOFI intentionally lives in TWO buckets (57 sh in a
-// daily "Fintech & Consumer" bucket + 10 sh in a 15m "Momentum" bucket) to
-// exercise multi-bucket membership + per-bucket share allocation. Bucket
+// of one or more tickers. SOFI lives in TWO slices within the same VGD bucket
+// (57 sh core + 10 sh later entry) to exercise multi-bucket share allocation
+// with a single strategy per ticker. Bucket
 // authoring + share/entry editing is a later dashboard pass.
 export const DEFAULT_BUCKETS: Bucket[] = [
   {
@@ -1800,7 +1813,6 @@ export const DEFAULT_BUCKETS: Bucket[] = [
     strategyId: "aggressive-ai-high-beta",
     holdings: [
       { ticker: "NVDA", shares: 3, entryDate: "2026-02-12" },
-      { ticker: "MSFT", shares: 1, entryDate: "2026-01-08" },
       { ticker: "CRWV", shares: 2, entryDate: "2026-04-03" },
       { ticker: "IONQ", shares: 2, entryDate: "2026-03-19" },
     ],
@@ -1812,6 +1824,8 @@ export const DEFAULT_BUCKETS: Bucket[] = [
     strategyId: "value-growth-dividend",
     holdings: [
       { ticker: "SOFI", shares: 57, entryDate: "2026-01-22" },
+      { ticker: "SOFI", shares: 10, entryDate: "2026-06-24" },
+      { ticker: "MSFT", shares: 1, entryDate: "2026-01-08" },
       { ticker: "ELF", shares: 14, entryDate: "2026-02-28" },
       { ticker: "CELH", shares: 14, entryDate: "2026-03-05" },
     ],
@@ -1821,10 +1835,7 @@ export const DEFAULT_BUCKETS: Bucket[] = [
     name: "Momentum (Intraday)",
     portfolioId: "deric",
     strategyId: "aggressive-ai-high-beta",
-    holdings: [
-      { ticker: "SOFI", shares: 10, entryDate: "2026-06-24" },
-      { ticker: "RGTI", shares: 3, entryDate: "2026-06-23" },
-    ],
+    holdings: [{ ticker: "RGTI", shares: 3, entryDate: "2026-06-23" }],
   },
   {
     id: "bkt-spec",
