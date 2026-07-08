@@ -222,8 +222,16 @@ snapshots (`data.ts`), and register it in `metrics.ts`. Nothing else changes.
   strategy is applied to. It's edited via the "Applied Portfolios" multi-select
   on the Configure card (no separate Enabled toggle — a strategy is active once
   a portfolio is applied). Blank/duplicated strategies start unapplied (`[]`).
-  Wiring applied portfolios into scoring/dashboard signals is a later pass; the
-  forge preview still scores through `buckets`.
+  **Wiring applied portfolios into scoring is a later pass — `appliedPortfolioIds`
+  does not drive scoring today.** Actual scoring always goes through `buckets`
+  (each bucket carries its own fixed `strategyId`, independent of any
+  strategy's applied-portfolios list — see "Buckets" below). The Configure
+  card's read-only **"Tickers In Applied Portfolios"** box (green chips, right
+  below the multi-select) exists specifically to make this transparent: it
+  lists every ticker held in the currently-applied portfolios so the user can
+  see what's *claimed*, without implying it's what's actually *scored* (that
+  remains bucket-driven). Its "Edit" icon is intentionally disabled for now —
+  editing which tickers a strategy covers is a future pass.
 
 ### Buckets — independent cadence per strategy
 

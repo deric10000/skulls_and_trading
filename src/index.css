@@ -1551,6 +1551,34 @@ select.input:hover:not(:disabled) {
   color: var(--text-muted);
 }
 
+/* Conviction chip breakdown — reuses the Configure card's .forge-box-body /
+   .forge-pill chip look (same chip = same look wherever it's shown) so this
+   reads as a natural extension of the Forge design language, not a new one. */
+.watch-summary-chips {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border-soft);
+}
+
+/* One .watch-summary-chips block per applied strategy — this label ties its
+   "Calculating Conviction"/"Excluded" pair back to the strategy chip it
+   matches in .signal-stack above. */
+.watch-summary-chips-strategy {
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--forge-chip-text);
+}
+
+.watch-summary-chip-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
 .input {
   flex: 1;
   min-width: 0;
@@ -3141,6 +3169,15 @@ select.input:hover:not(:disabled) {
 
 .forge-pill--off {
   opacity: 0.45;
+}
+
+/* Applied-portfolio ticker chips — green (not the standard rule-chip blue) so
+   they read as a distinct "what's covered" list, not another rule chip.
+   Reuses the exact .status--positive green token for design-system
+   consistency rather than a one-off color. */
+.forge-pill--applied {
+  background: rgb(62 213 152 / 0.16);
+  color: var(--positive);
 }
 
 .forge-pill--toggle {

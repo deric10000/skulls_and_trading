@@ -21,6 +21,11 @@ import {
   type PortfolioAlignment,
   type TickerAlignment,
 } from "../lib/forge/alignment";
+import {
+  scoreStock,
+  type MetricContext,
+  type StockAlignment,
+} from "../lib/forge/scoring";
 import type {
   Bucket,
   CaptainProfile,
@@ -103,6 +108,13 @@ interface AppStateValue {
     portfolioId: string,
     ticker: string,
   ) => TickerAlignment | undefined;
+  // Informational (not scoring) — see the implementation comments below.
+  getAppliedStrategiesForTicker: (ticker: string) => Strategy[];
+  getStrategyChipBreakdown: (
+    strategyId: string,
+    ticker: string,
+    portfolioId?: string,
+  ) => StockAlignment | undefined;
 
   logsByTicker: Record<string, LogEntry[]>;
   addLog: (ticker: string, draft: LogDraft) => void;
@@ -394,6 +406,57 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     [alignmentByPortfolio],
   );
 
+  // Every strategy that currently claims this ticker via appliedPortfolioIds
+  // (i.e. one of the ticker's portfolios is in that strategy's applied list).
+  // Informational only — does NOT affect real scoring, which stays
+  // bucket-driven (see data-architecture.md "Rule chips + tags"). This is
+  // what the Watch summary's strategy-name chip stack reflects, so it always
+  // matches what the Configure card's "Tickers In Applied Portfolios" box
+  // shows for the same strategy.
+  const getAppliedStrategiesForTicker = useCallback(
+    (ticker: string): Strategy[] => {
+      const holdingPortfolioIds = portfolios
+        .filter((portfolio) =>
+          portfolio.holdings.some((holding) => holding.ticker === ticker),
+        )
+        .map((portfolio) => portfolio.id);
+      if (holdingPortfolioIds.length === 0) return [];
+      return strategies.filter((strategy) =>
+        (strategy.appliedPortfolioIds ?? []).some((id) =>
+          holdingPortfolioIds.includes(id),
+        ),
+      );
+    },
+    [portfolios, strategies],
+  );
+
+  // A strategy's OWN rule-chip pass/fail/no-data breakdown for a ticker,
+  // independent of buckets — lets the Watch summary show, per applied
+  // strategy, exactly which chips are calculating vs. excluded. `portfolioId`
+  // (optional) supplies openPnlPct from that portfolio's holding, if any;
+  // weightPct/holdingDays are bucket/allocation-specific and intentionally
+  // left unset here (no single canonical value across arbitrary applied
+  // strategies), so Position Size / Hold Timeframe chips read "no data" in
+  // this view — the real, bucket-scoped conviction number is unaffected.
+  const getStrategyChipBreakdown = useCallback(
+    (strategyId: string, ticker: string, portfolioId?: string): StockAlignment | undefined => {
+      const strategy = strategies.find((item) => item.id === strategyId);
+      if (!strategy) return undefined;
+      const portfolio = portfolioId
+        ? portfolios.find((item) => item.id === portfolioId)
+        : undefined;
+      const holding = portfolio?.holdings.find((item) => item.ticker === ticker);
+      const ctx: MetricContext = {
+        fundamentals: dataSource.getFundamentals(ticker),
+        technicals: dataSource.getTechnicals(ticker),
+        market: dataSource.getMarketContext(),
+        openPnlPct: holding?.openPnlPct,
+      };
+      return scoreStock(strategy, ctx);
+    },
+    [strategies, portfolios],
+  );
+
   // Overlay computed conviction/status onto the default portfolio's watchlist so
   // the Home/dashboard surfaces reflect the Forge engine (not the seed numbers).
   const decoratedWatchlist = useMemo<WatchlistItem[]>(() => {
@@ -502,6 +565,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       buckets,
       getPortfolioAlignment,
       getStockAlignment,
+      getAppliedStrategiesForTicker,
+      getStrategyChipBreakdown,
       logsByTicker,
       addLog,
       updateLog,
@@ -544,6 +609,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       buckets,
       getPortfolioAlignment,
       getStockAlignment,
+      getAppliedStrategiesForTicker,
+      getStrategyChipBreakdown,
       logsByTicker,
       addLog,
       updateLog,
