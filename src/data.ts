@@ -56,7 +56,7 @@ export const TICKERS: Record<string, TickerInfo> = {
     category: "eVTOL / Aviation",
     sector: "Industrials",
     industry: "Aerospace & eVTOL",
-    lastPrice: 4.79,
+    lastPrice: 4.93,
     analysis: {
       setupSummary:
         "Pulled back below recent highs; the trend is fragile while the market waits on certification progress.",
@@ -89,7 +89,7 @@ export const TICKERS: Record<string, TickerInfo> = {
     category: "Consumer / Energy Drinks",
     sector: "Consumer Staples",
     industry: "Beverages",
-    lastPrice: 28.37,
+    lastPrice: 31.7,
     analysis: {
       setupSummary:
         "Stabilizing after a volatile stretch; trying to build a base as growth expectations reset.",
@@ -122,7 +122,7 @@ export const TICKERS: Record<string, TickerInfo> = {
     category: "Software / AI CRM",
     sector: "Technology",
     industry: "Software / Cloud",
-    lastPrice: 150.19,
+    lastPrice: 169.52,
     analysis: {
       setupSummary:
         "In a downtrend with a large open loss; the original reason to own needs a fresh look.",
@@ -155,7 +155,7 @@ export const TICKERS: Record<string, TickerInfo> = {
     category: "AI Infrastructure",
     sector: "Technology",
     industry: "AI Infrastructure / Cloud",
-    lastPrice: 99.0,
+    lastPrice: 83.53,
     analysis: {
       setupSummary:
         "Volatile post-IPO name pulling back; strong narrative but the trend is unsettled.",
@@ -188,7 +188,7 @@ export const TICKERS: Record<string, TickerInfo> = {
     category: "Consumer / Beauty",
     sector: "Consumer Discretionary",
     industry: "Beauty / Personal Care",
-    lastPrice: 67.16,
+    lastPrice: 75.34,
     analysis: {
       setupSummary:
         "Holding up well with a healthy open gain; constructive, but outside the core thesis.",
@@ -221,7 +221,7 @@ export const TICKERS: Record<string, TickerInfo> = {
     category: "Quantum Computing",
     sector: "Technology",
     industry: "Quantum Computing",
-    lastPrice: 50.56,
+    lastPrice: 45.36,
     analysis: {
       setupSummary:
         "Pressing higher on speculative momentum; quantum exposure fits the high-beta growth tilt.",
@@ -254,7 +254,7 @@ export const TICKERS: Record<string, TickerInfo> = {
     category: "Mega-Cap AI / Cloud",
     sector: "Technology",
     industry: "Software / Cloud",
-    lastPrice: 352.83,
+    lastPrice: 388.84,
     analysis: {
       setupSummary:
         "Consolidating with a modest open loss; a lower-beta anchor relative to the rest of the book.",
@@ -287,7 +287,7 @@ export const TICKERS: Record<string, TickerInfo> = {
     category: "AI Infrastructure",
     sector: "Technology",
     industry: "Semiconductors",
-    lastPrice: 195.74,
+    lastPrice: 196.93,
     analysis: {
       setupSummary:
         "Trending above all key moving averages with volume confirming each push higher.",
@@ -327,7 +327,7 @@ export const TICKERS: Record<string, TickerInfo> = {
     category: "Quantum Computing",
     sector: "Technology",
     industry: "Quantum Computing",
-    lastPrice: 18.41,
+    lastPrice: 16.55,
     analysis: {
       setupSummary:
         "High-volatility quantum name under pressure; the open loss and sharp swings warrant a risk check.",
@@ -360,7 +360,7 @@ export const TICKERS: Record<string, TickerInfo> = {
     category: "Fintech",
     sector: "Financials",
     industry: "Fintech",
-    lastPrice: 17.31,
+    lastPrice: 17.75,
     analysis: {
       setupSummary:
         "Trending constructively as the profitability story plays out; fintech growth fits the strategy.",
@@ -1370,302 +1370,350 @@ export const TECHNICAL_SIGNALS: EducationCard[] = [
 // ---------------------------------------------------------------------------
 
 // The market date these snapshots reflect (most-recent close at authoring time).
-export const MARKET_ASOF = "2026-06-25";
+// Refreshed 2026-07-07 from real, current, sourced data (see per-ticker
+// sourceNotes) — replaces the prior 2026-06-25 snapshot.
+export const MARKET_ASOF = "2026-07-07";
 
 // Latest reported fundamentals per ticker (TTM/most-recent quarter). `null` =
 // metric is not meaningful/available for that name (e.g. margins for a bank, a
 // P/E for an unprofitable company, or a 5Y dividend growth rate for a company
 // with no dividend history), so the scoring engine scores it "no data".
 // Non-payers report dividendYieldPct/payoutRatioPct/buybackYieldPct of 0 — that
-// is real data (a failing floor chip), not missing data.
+// is real data (a failing floor chip), not missing data. A NEGATIVE
+// buybackYieldPct is also real data, not an error — it means the share count
+// grew (dilution) rather than shrank, which correctly fails the "Buyback
+// Support" floor chip. See each ticker's sourceNotes for exact sourcing and
+// why any given field is null.
 export const FUNDAMENTAL_SNAPSHOTS: Record<string, FundamentalSnapshot> = {
   NVDA: {
     epsTtm: 6.53,
-    epsGrowthPct: 66.7,
-    revenueGrowthPct: 65.5,
+    epsGrowthPct: 110.64,
+    revenueGrowthPct: 70.68,
     grossMarginPct: 74.15,
     netMarginPct: 62.97,
-    netIncome: 100.6,
-    operatingCashFlow: 105.2,
-    returnOnEquityPct: 109.4,
-    operatingMarginPct: 62.0,
+    netIncome: 159.61,
+    operatingCashFlow: 125.65,
+    returnOnEquityPct: 114.29,
+    operatingMarginPct: 64.02,
     fcfMarginPct: 46.97,
-    peRatio: 29.98,
-    forwardPE: 26.5,
-    priceToSales: 19.8,
-    evToEbitda: 24.6,
+    peRatio: 30.02,
+    forwardPE: 19.72,
+    priceToSales: 18.73,
+    evToEbitda: 28.44,
     debtToEquity: 0.07,
-    interestCoverage: 260,
-    currentRatio: 4.4,
-    dividendYieldPct: 0.02,
-    payoutRatioPct: 1.1,
-    dividendGrowth5yPct: 5.0,
-    buybackYieldPct: 1.4,
+    interestCoverage: 544.58,
+    currentRatio: 3.44,
+    dividendYieldPct: 0.51,
+    payoutRatioPct: 15.3,
+    dividendGrowth5yPct: 20.1,
+    buybackYieldPct: 1.11,
     asOf: MARKET_ASOF,
     source: "mock",
+    sourceNotes:
+      "stockanalysis.com, TTM ended Apr 26 2026 (Q1 FY27). Dividend yield/payout use the forward run-rate ($0.25/qtr, declared May 2026 — a ~25x hike from the prior $0.01/qtr) rather than the trailing mixed-rate actual, since that reflects NVIDIA's current policy; the 5Y dividend growth CAGR (20.1%) is trailing and does not yet reflect that hike.",
   },
   MSFT: {
-    epsTtm: 16.79,
-    epsGrowthPct: 29.64,
-    revenueGrowthPct: 17.87,
+    epsTtm: 16.8,
+    epsGrowthPct: 29.93,
+    revenueGrowthPct: 17.88,
     grossMarginPct: 68.31,
     netMarginPct: 39.34,
-    netIncome: 116.0,
-    operatingCashFlow: 148.0,
-    returnOnEquityPct: 33.4,
-    operatingMarginPct: 45.5,
-    fcfMarginPct: 22.0,
-    peRatio: 21.01,
-    forwardPE: 19.5,
-    priceToSales: 8.3,
-    evToEbitda: 15.4,
-    debtToEquity: 0.2,
-    interestCoverage: 42,
-    currentRatio: 1.3,
-    dividendYieldPct: 0.9,
-    payoutRatioPct: 24.6,
+    netIncome: 125.22,
+    operatingCashFlow: 170.14,
+    returnOnEquityPct: 34.01,
+    operatingMarginPct: 46.8,
+    fcfMarginPct: 22.91,
+    peRatio: 23.16,
+    forwardPE: 21.0,
+    priceToSales: 9.08,
+    evToEbitda: 15.92,
+    debtToEquity: 0.3,
+    interestCoverage: 52.1,
+    currentRatio: 1.28,
+    dividendYieldPct: 0.94,
+    payoutRatioPct: 21.68,
     dividendGrowth5yPct: 10.2,
-    buybackYieldPct: 0.5,
+    buybackYieldPct: 0.13,
     asOf: MARKET_ASOF,
     source: "mock",
+    sourceNotes: "stockanalysis.com, TTM ended Mar 31 2026 (Q3 FY26).",
   },
   CRM: {
     epsTtm: 8.64,
-    epsGrowthPct: 22.6,
-    revenueGrowthPct: 9.58,
+    epsGrowthPct: 35.21,
+    revenueGrowthPct: 10.98,
     grossMarginPct: 77.64,
     netMarginPct: 18.73,
-    netIncome: 7.1,
-    operatingCashFlow: 14.2,
-    returnOnEquityPct: 11.6,
-    operatingMarginPct: 21.3,
-    fcfMarginPct: 30.0,
-    peRatio: 17.39,
-    forwardPE: 15.2,
-    priceToSales: 3.9,
-    evToEbitda: 12.8,
-    debtToEquity: 0.19,
-    interestCoverage: 28,
-    currentRatio: 1.1,
-    dividendYieldPct: 1.1,
-    payoutRatioPct: 18.5,
-    dividendGrowth5yPct: null, // dividend initiated 2024 — no 5Y history yet
-    buybackYieldPct: 2.1,
+    netIncome: 8.02,
+    operatingCashFlow: 15.22,
+    returnOnEquityPct: 16.91,
+    operatingMarginPct: 21.87,
+    fcfMarginPct: 34.23,
+    peRatio: 19.68,
+    forwardPE: 12.16,
+    priceToSales: 3.24,
+    evToEbitda: 13.15,
+    debtToEquity: 1.24,
+    interestCoverage: 15.66,
+    currentRatio: 0.79,
+    dividendYieldPct: 1.04,
+    payoutRatioPct: 19.87,
+    dividendGrowth5yPct: null, // dividend initiated 2024 — only 1Y of history, no 5Y CAGR yet
+    buybackYieldPct: 4.02,
     asOf: MARKET_ASOF,
     source: "mock",
+    sourceNotes: "stockanalysis.com, TTM ended Apr 30 2026 (Q1 FY27).",
   },
-  // Bank/fintech: gross margin, FCF margin, EV/EBITDA, coverage/current ratios,
-  // and a comparable debt/equity are not meaningful → "no data".
+  // Bank/fintech: several "normal company" ratios genuinely aren't
+  // standardized across data providers for this business model (net-revenue
+  // vs. gross-revenue basis) — left "no data" rather than picking an arbitrary
+  // provider's number.
   SOFI: {
-    epsTtm: 0.45,
-    epsGrowthPct: 50.0,
-    revenueGrowthPct: 42.6,
+    epsTtm: 0.44,
+    epsGrowthPct: 7.32,
+    revenueGrowthPct: 41.03,
     grossMarginPct: null,
-    netMarginPct: 14.7,
-    netIncome: 0.55,
-    operatingCashFlow: null,
-    returnOnEquityPct: 7.8,
+    netMarginPct: 14.76,
+    netIncome: 0.58,
+    operatingCashFlow: -6.08,
+    returnOnEquityPct: 6.6,
     operatingMarginPct: null,
     fcfMarginPct: null,
-    peRatio: 38.0,
-    forwardPE: 30.0,
-    priceToSales: 6.5,
+    peRatio: 39.9,
+    forwardPE: 27.19,
+    priceToSales: 5.82,
     evToEbitda: null,
-    debtToEquity: null,
+    debtToEquity: 0.18,
     interestCoverage: null,
     currentRatio: null,
     dividendYieldPct: 0,
     payoutRatioPct: 0,
     dividendGrowth5yPct: null,
-    buybackYieldPct: 0,
+    buybackYieldPct: -14.31, // real dilution: shares outstanding +14.31% YoY
     asOf: MARKET_ASOF,
     source: "mock",
+    sourceNotes:
+      "stockanalysis.com/finviz.com, TTM ended Mar 31 2026. grossMarginPct/operatingMarginPct/fcfMarginPct/evToEbitda/interestCoverage/currentRatio are null — not standardized/meaningful for a bank-holding/fintech (revenue-basis and equity-basis definitions vary widely by provider, e.g. current ratio reads 1.12 on one source and 5.24 on another). operatingCashFlow is real but deeply negative — a GAAP loan-origination-held-for-sale accounting effect, not distress.",
   },
-  // Pre-commercial: GAAP EPS/net margin are distorted by warrant remeasurement,
-  // so the distorted figures are left as "no data".
+  // Pre-commercial: GAAP net income/ROE/EPS growth/P-E are distorted by a
+  // large one-time non-cash warrant fair-value gain, so those are "no data";
+  // operating margin/FCF margin are real (they exclude that non-operating
+  // gain) and correctly fail on genuine operating losses.
   IONQ: {
-    epsTtm: 0.92,
+    epsTtm: -0.28,
     epsGrowthPct: null,
-    revenueGrowthPct: 104.0,
+    revenueGrowthPct: 334.6,
     grossMarginPct: 36.1,
     netMarginPct: null,
     netIncome: null,
-    operatingCashFlow: -0.15,
+    operatingCashFlow: -0.4,
     returnOnEquityPct: null,
-    operatingMarginPct: null,
-    fcfMarginPct: null,
+    operatingMarginPct: -413.8,
+    fcfMarginPct: -226.0,
     peRatio: null,
     forwardPE: null,
-    priceToSales: 150,
+    priceToSales: 90.5,
     evToEbitda: null,
-    debtToEquity: 0.0,
+    debtToEquity: 0.01,
     interestCoverage: null,
-    currentRatio: 7.5,
+    currentRatio: 14.05,
     dividendYieldPct: 0,
     payoutRatioPct: 0,
     dividendGrowth5yPct: null,
-    buybackYieldPct: 0,
+    buybackYieldPct: -44.82, // real dilution: shares outstanding +44.82% YoY
     asOf: MARKET_ASOF,
     source: "mock",
+    sourceNotes:
+      "stockanalysis.com/IonQ Q1 2026 release, TTM through Mar 31 2026. Net income/ROE/EPS growth/P-E are null — TTM net income is dominated by a ~$1.06B non-cash warrant fair-value gain in Q1 2026, not representative of operating results. Operating margin/FCF margin are real (deeply negative) since they exclude that gain.",
   },
-  // Pre-revenue eVTOL: almost everything fundamental is "no data" by nature.
+  // Pre-revenue eVTOL: revenue ($1.9M TTM) is negligible, so any ratio
+  // dividing by revenue is uninformative regardless of the real severity —
+  // "no data" there. ROE uses the real, non-trivial equity base and is kept.
   ACHR: {
-    epsTtm: -1.09,
+    epsTtm: -1.1,
     epsGrowthPct: null,
     revenueGrowthPct: null,
     grossMarginPct: null,
     netMarginPct: null,
-    netIncome: -0.55,
-    operatingCashFlow: -0.45,
-    returnOnEquityPct: null,
+    netIncome: -0.74,
+    operatingCashFlow: -0.49,
+    returnOnEquityPct: -48.05,
     operatingMarginPct: null,
     fcfMarginPct: null,
     peRatio: null,
     forwardPE: null,
     priceToSales: null,
     evToEbitda: null,
-    debtToEquity: 0.05,
+    debtToEquity: 0.06,
     interestCoverage: null,
-    currentRatio: 6.8,
+    currentRatio: 18.06,
     dividendYieldPct: 0,
     payoutRatioPct: 0,
     dividendGrowth5yPct: null,
-    buybackYieldPct: 0,
+    buybackYieldPct: -57.7, // real dilution: shares outstanding +57.70% YoY
     asOf: MARKET_ASOF,
     source: "mock",
+    sourceNotes:
+      "stockanalysis.com/finviz.com, TTM through Mar 31 2026. Net margin/operating margin/FCF margin/P-S/interest coverage are null — ACHR is pre-revenue ($1.9M TTM), so ratios dividing by revenue aren't informative. ROE is real (a genuine, non-trivial equity base) and correctly reflects capital destruction.",
   },
   CELH: {
     epsTtm: 0.44,
-    epsGrowthPct: 20.0,
-    revenueGrowthPct: 138.0,
+    epsGrowthPct: 34.38,
+    revenueGrowthPct: 123.34,
     grossMarginPct: 50.35,
     netMarginPct: 5.85,
-    netIncome: 0.09,
-    operatingCashFlow: 0.11,
-    returnOnEquityPct: 13.5,
-    operatingMarginPct: 8.2,
+    netIncome: 0.11,
+    operatingCashFlow: 0.33,
+    returnOnEquityPct: 8.12,
+    operatingMarginPct: 21.67,
     fcfMarginPct: 9.86,
-    peRatio: 64.39,
-    forwardPE: 38.0,
-    priceToSales: 4.6,
-    evToEbitda: 32.0,
-    debtToEquity: 0.1,
-    interestCoverage: 60,
-    currentRatio: 2.6,
+    peRatio: 72.05,
+    forwardPE: 20.12,
+    priceToSales: 2.73,
+    evToEbitda: 12.11,
+    debtToEquity: 0.22,
+    interestCoverage: 10.58,
+    currentRatio: 1.77,
     dividendYieldPct: 0,
     payoutRatioPct: 0,
     dividendGrowth5yPct: null,
-    buybackYieldPct: 0,
+    buybackYieldPct: -9.79, // net dilutive YTD from Alani Nu deal stock, despite an active buyback
     asOf: MARKET_ASOF,
     source: "mock",
+    sourceNotes:
+      "stockanalysis.com, TTM through Mar 31 2026 (includes the Alani Nu acquisition, closed 2025). Buyback yield is negative — CELH actively repurchased $24.1M of stock in Q1 2026, but net shares outstanding still rose due to acquisition-related stock issuance.",
   },
   CRWV: {
-    epsTtm: -2.72,
+    epsTtm: -3.11,
     epsGrowthPct: null,
-    revenueGrowthPct: 167.0,
-    grossMarginPct: 69.4,
-    netMarginPct: -25.5,
-    netIncome: -1.1,
-    operatingCashFlow: 2.8,
-    returnOnEquityPct: null,
-    operatingMarginPct: 17.0,
-    fcfMarginPct: null,
+    revenueGrowthPct: 129.9,
+    grossMarginPct: 69.38,
+    netMarginPct: -25.57,
+    netIncome: -1.59,
+    operatingCashFlow: 5.98,
+    returnOnEquityPct: -40.67,
+    operatingMarginPct: -2.15,
+    fcfMarginPct: -170.47,
     peRatio: null,
     forwardPE: null,
-    priceToSales: 12.0,
-    evToEbitda: 22.0,
-    debtToEquity: 8.0,
-    interestCoverage: 1.2,
-    currentRatio: 0.9,
+    priceToSales: 7.32,
+    evToEbitda: 25.94,
+    debtToEquity: 7.39,
+    interestCoverage: -0.09,
+    currentRatio: 0.31,
     dividendYieldPct: 0,
     payoutRatioPct: 0,
     dividendGrowth5yPct: null,
-    buybackYieldPct: 0,
+    buybackYieldPct: -122.39, // real, large-scale dilution: shares outstanding +122.39% YoY
     asOf: MARKET_ASOF,
     source: "mock",
+    sourceNotes:
+      "stockanalysis.com/finviz.com/SEC 10-Q, TTM through Mar 31 2026. Operating cash flow is real and positive (a large D&A add-back on ~$35B of GPU/data-center capex) despite deeply negative net income — a real accounting dynamic, not an error. ROE/operating margin/FCF margin/interest coverage are real (not warrant-distorted) and reflect CRWV's heavy debt load and capex-driven losses.",
   },
   ELF: {
     epsTtm: 0.44,
-    epsGrowthPct: -77.1,
-    revenueGrowthPct: 24.6,
-    grossMarginPct: 71.0,
-    netMarginPct: 1.6,
-    netIncome: 0.02,
-    operatingCashFlow: 0.12,
-    returnOnEquityPct: 2.9,
-    operatingMarginPct: 5.1,
-    fcfMarginPct: 8.0,
-    peRatio: 150.5,
-    forwardPE: 28.0,
-    priceToSales: 2.4,
-    evToEbitda: 18.5,
-    debtToEquity: 0.3,
-    interestCoverage: 6.5,
-    currentRatio: 1.8,
+    epsGrowthPct: -77.08,
+    revenueGrowthPct: 24.59,
+    grossMarginPct: 70.72,
+    netMarginPct: 1.61,
+    netIncome: 0.0263,
+    operatingCashFlow: 0.21,
+    returnOnEquityPct: 2.78,
+    operatingMarginPct: 8.49,
+    fcfMarginPct: 11.61,
+    peRatio: 171.23,
+    forwardPE: 22.83,
+    priceToSales: 2.74,
+    evToEbitda: 27.85,
+    debtToEquity: 0.81,
+    interestCoverage: 3.29,
+    currentRatio: 2.35,
     dividendYieldPct: 0,
     payoutRatioPct: 0,
     dividendGrowth5yPct: null,
-    buybackYieldPct: 0,
+    buybackYieldPct: -1.73,
     asOf: MARKET_ASOF,
     source: "mock",
+    sourceNotes:
+      "stockanalysis.com/e.l.f. Beauty Q4 FY2026 release, fiscal year ended Mar 31 2026 (includes the rhode acquisition). The EPS decline is a real, one-time non-cash fair-value charge on rhode's contingent consideration, not an operating deterioration — revenue and margins are healthy and growing. Debt rose sharply (to fund the acquisition), compressing interest coverage vs. a year ago.",
   },
+  // R&D-heavy, pre-scale: profitability ratios are real (not one-time-gain
+  // distorted) even though extremely negative — net margin alone is "no data"
+  // since the loss is ~22x revenue, making that specific ratio uninformative.
   RGTI: {
-    epsTtm: -0.89,
+    epsTtm: -0.87,
     epsGrowthPct: null,
-    revenueGrowthPct: 135.0,
-    grossMarginPct: 31.3,
+    revenueGrowthPct: 8.75,
+    grossMarginPct: 30.0,
     netMarginPct: null,
-    netIncome: -0.2,
-    operatingCashFlow: -0.08,
-    returnOnEquityPct: null,
-    operatingMarginPct: null,
-    fcfMarginPct: null,
+    netIncome: -0.226,
+    operatingCashFlow: -0.061,
+    returnOnEquityPct: -57.1,
+    operatingMarginPct: -888.4,
+    fcfMarginPct: -815.0,
     peRatio: null,
     forwardPE: null,
-    priceToSales: 90,
+    priceToSales: 549.0,
     evToEbitda: null,
-    debtToEquity: 0.0,
+    debtToEquity: 0.01,
     interestCoverage: null,
-    currentRatio: 8.2,
+    currentRatio: 6.98,
     dividendYieldPct: 0,
     payoutRatioPct: 0,
     dividendGrowth5yPct: null,
-    buybackYieldPct: 0,
+    buybackYieldPct: -47.61, // real dilution: shares outstanding +47.61% YoY
     asOf: MARKET_ASOF,
     source: "mock",
+    sourceNotes:
+      "stockanalysis.com/Rigetti Q1 2026 release, TTM through Mar 31 2026. TTM revenue growth (+8.75%) is muted vs. the standalone Q1 2026 quarter's +198.9% YoY because strong year-ago quarters are still in the trailing window. Net margin is null (loss is ~22x revenue, not informative as a ratio); operating margin/FCF margin/ROE are real despite being extremely negative.",
   },
 };
 
 // Technicals are approximate snapshots derived from recent price action as of
-// MARKET_ASOF. Trend flags are 1 (true) / 0 (false); avgDollarVolume20d is $M
-// per day; sectorEtf1mChangePct is the 1M move of that name's sector ETF
-// (XLK tech, XLF financials, XLI industrials, XLP staples). CRWV's 200D flag
-// and beta are null (IPO'd 2025 — not enough trading history).
+// MARKET_ASOF (refreshed 2026-07-07 from stockanalysis.com/finviz.com/
+// barchart.com/chartmill.com, cross-checked across sources — see
+// data-architecture.md for the refresh notes). Trend flags are 1 (true) / 0
+// (false); avgDollarVolume20d is $M per day; sectorEtf1mChangePct is the 1M
+// move of that name's sector ETF, from a single consistent cross-sector pull
+// (XLK tech -7.24%, XLF financials +7.40%, XLI industrials +3.53%, XLP
+// staples +3.44%). `weeklyRsi: null` = no reliable weekly-timeframe RSI was
+// published by the sources checked (daily RSI was available and used).
+// `priceVsVwapPct`/`priceVs10EmaPct`/`priceVs20EmaPct`/`priceVs50EmaPct` are
+// carried over unchanged from the prior pass — no default strategy's rule
+// chips currently score against them, so they were out of scope for this
+// research pass rather than being re-verified or fabricated.
 export const TECHNICAL_SNAPSHOTS: Record<string, TechnicalSnapshot> = {
-  NVDA: { priceAbove200dSma: 1, priceAbove50dSma: 1, priceAbove20dSma: 0, rsi14: 47, weeklyRsi: 48, drawdownFrom52wHighPct: 11, priceChange3mPct: 4, relativeVolume: 0.95, priceVsVwapPct: -1.0, priceVs10EmaPct: -2.0, priceVs20EmaPct: -1.5, priceVs50EmaPct: 0.5, daysUntilEarnings: 55, atrPct14d: 2.8, beta1y: 2.1, avgDollarVolume20d: 28000, sectorEtf1mChangePct: 2.5, asOf: MARKET_ASOF, source: "mock" },
-  MSFT: { priceAbove200dSma: 1, priceAbove50dSma: 0, priceAbove20dSma: 0, rsi14: 42, weeklyRsi: 40, drawdownFrom52wHighPct: 9, priceChange3mPct: -2, relativeVolume: 0.9, priceVsVwapPct: -1.5, priceVs10EmaPct: -3.0, priceVs20EmaPct: -4.0, priceVs50EmaPct: -5.0, daysUntilEarnings: 30, atrPct14d: 1.6, beta1y: 0.9, avgDollarVolume20d: 9500, sectorEtf1mChangePct: 2.5, asOf: MARKET_ASOF, source: "mock" },
-  CRM: { priceAbove200dSma: 0, priceAbove50dSma: 0, priceAbove20dSma: 0, rsi14: 40, weeklyRsi: 38, drawdownFrom52wHighPct: 22, priceChange3mPct: -8, relativeVolume: 0.85, priceVsVwapPct: -1.0, priceVs10EmaPct: -2.0, priceVs20EmaPct: -3.0, priceVs50EmaPct: -6.0, daysUntilEarnings: 60, atrPct14d: 2.2, beta1y: 1.3, avgDollarVolume20d: 2400, sectorEtf1mChangePct: 2.5, asOf: MARKET_ASOF, source: "mock" },
-  SOFI: { priceAbove200dSma: 1, priceAbove50dSma: 0, priceAbove20dSma: 0, rsi14: 44, weeklyRsi: 43, drawdownFrom52wHighPct: 18, priceChange3mPct: 3, relativeVolume: 1.0, priceVsVwapPct: -0.5, priceVs10EmaPct: -1.0, priceVs20EmaPct: -2.0, priceVs50EmaPct: -4.0, daysUntilEarnings: 35, atrPct14d: 4.5, beta1y: 1.9, avgDollarVolume20d: 900, sectorEtf1mChangePct: 1.2, asOf: MARKET_ASOF, source: "mock" },
-  IONQ: { priceAbove200dSma: 1, priceAbove50dSma: 1, priceAbove20dSma: 1, rsi14: 58, weeklyRsi: 60, drawdownFrom52wHighPct: 25, priceChange3mPct: 40, relativeVolume: 1.4, priceVsVwapPct: 0.5, priceVs10EmaPct: -3.0, priceVs20EmaPct: 4.0, priceVs50EmaPct: 18.0, daysUntilEarnings: 42, atrPct14d: 7.5, beta1y: 2.6, avgDollarVolume20d: 850, sectorEtf1mChangePct: 2.5, asOf: MARKET_ASOF, source: "mock" },
-  ACHR: { priceAbove200dSma: 0, priceAbove50dSma: 0, priceAbove20dSma: 0, rsi14: 35, weeklyRsi: 32, drawdownFrom52wHighPct: 45, priceChange3mPct: -15, relativeVolume: 0.8, priceVsVwapPct: -1.0, priceVs10EmaPct: -3.0, priceVs20EmaPct: -5.0, priceVs50EmaPct: -10.0, daysUntilEarnings: 40, atrPct14d: 6.8, beta1y: 3.1, avgDollarVolume20d: 400, sectorEtf1mChangePct: 0.8, asOf: MARKET_ASOF, source: "mock" },
-  CELH: { priceAbove200dSma: 0, priceAbove50dSma: 0, priceAbove20dSma: 1, rsi14: 46, weeklyRsi: 45, drawdownFrom52wHighPct: 38, priceChange3mPct: 6, relativeVolume: 0.9, priceVsVwapPct: 0.0, priceVs10EmaPct: -1.0, priceVs20EmaPct: 1.0, priceVs50EmaPct: -3.0, daysUntilEarnings: 45, atrPct14d: 4.2, beta1y: 1.6, avgDollarVolume20d: 350, sectorEtf1mChangePct: -1.0, asOf: MARKET_ASOF, source: "mock" },
-  CRWV: { priceAbove200dSma: null, priceAbove50dSma: 0, priceAbove20dSma: 0, rsi14: 44, weeklyRsi: 45, drawdownFrom52wHighPct: 42, priceChange3mPct: -12, relativeVolume: 1.1, priceVsVwapPct: -2.0, priceVs10EmaPct: -5.0, priceVs20EmaPct: -7.0, priceVs50EmaPct: -3.0, daysUntilEarnings: 38, atrPct14d: 8.5, beta1y: null, avgDollarVolume20d: 1800, sectorEtf1mChangePct: 2.5, asOf: MARKET_ASOF, source: "mock" },
-  ELF: { priceAbove200dSma: 1, priceAbove50dSma: 1, priceAbove20dSma: 1, rsi14: 55, weeklyRsi: 52, drawdownFrom52wHighPct: 12, priceChange3mPct: 18, relativeVolume: 1.05, priceVsVwapPct: 1.0, priceVs10EmaPct: 2.0, priceVs20EmaPct: 3.0, priceVs50EmaPct: 4.0, daysUntilEarnings: 50, atrPct14d: 3.4, beta1y: 1.4, avgDollarVolume20d: 320, sectorEtf1mChangePct: -1.0, asOf: MARKET_ASOF, source: "mock" },
-  RGTI: { priceAbove200dSma: 0, priceAbove50dSma: 0, priceAbove20dSma: 0, rsi14: 36, weeklyRsi: 38, drawdownFrom52wHighPct: 55, priceChange3mPct: -20, relativeVolume: 0.9, priceVsVwapPct: -2.0, priceVs10EmaPct: -5.0, priceVs20EmaPct: -8.0, priceVs50EmaPct: -12.0, daysUntilEarnings: 40, atrPct14d: 9.2, beta1y: 2.9, avgDollarVolume20d: 280, sectorEtf1mChangePct: 2.5, asOf: MARKET_ASOF, source: "mock" },
+  NVDA: { priceAbove200dSma: 1, priceAbove50dSma: 0, priceAbove20dSma: 0, rsi14: 43.5, weeklyRsi: 50.0, drawdownFrom52wHighPct: 16.8, priceChange3mPct: 10.4, relativeVolume: 0.85, priceVsVwapPct: -1.0, priceVs10EmaPct: -2.0, priceVs20EmaPct: -1.5, priceVs50EmaPct: 0.5, daysUntilEarnings: 50, atrPct14d: 3.4, beta1y: 2.21, avgDollarVolume20d: 29000, sectorEtf1mChangePct: -7.24, asOf: MARKET_ASOF, source: "mock" },
+  MSFT: { priceAbove200dSma: 0, priceAbove50dSma: 0, priceAbove20dSma: 1, rsi14: 48.1, weeklyRsi: 42.5, drawdownFrom52wHighPct: 30.0, priceChange3mPct: 3.7, relativeVolume: 0.59, priceVsVwapPct: -1.5, priceVs10EmaPct: -3.0, priceVs20EmaPct: -4.0, priceVs50EmaPct: -5.0, daysUntilEarnings: 22, atrPct14d: 3.31, beta1y: 1.13, avgDollarVolume20d: 19000, sectorEtf1mChangePct: -7.24, asOf: MARKET_ASOF, source: "mock" },
+  CRM: { priceAbove200dSma: 0, priceAbove50dSma: 0, priceAbove20dSma: 1, rsi14: 53.3, weeklyRsi: null, drawdownFrom52wHighPct: 38.8, priceChange3mPct: -8.4, relativeVolume: 0.85, priceVsVwapPct: -1.0, priceVs10EmaPct: -2.0, priceVs20EmaPct: -3.0, priceVs50EmaPct: -6.0, daysUntilEarnings: 57, atrPct14d: 4.1, beta1y: 1.18, avgDollarVolume20d: 2700, sectorEtf1mChangePct: -7.24, asOf: MARKET_ASOF, source: "mock" },
+  SOFI: { priceAbove200dSma: 0, priceAbove50dSma: 1, priceAbove20dSma: 1, rsi14: 52.7, weeklyRsi: null, drawdownFrom52wHighPct: 45.8, priceChange3mPct: 9.1, relativeVolume: 1.06, priceVsVwapPct: -0.5, priceVs10EmaPct: -1.0, priceVs20EmaPct: -2.0, priceVs50EmaPct: -4.0, daysUntilEarnings: 22, atrPct14d: 4.9, beta1y: 2.15, avgDollarVolume20d: 1490, sectorEtf1mChangePct: 7.4, asOf: MARKET_ASOF, source: "mock" },
+  IONQ: { priceAbove200dSma: 0, priceAbove50dSma: 0, priceAbove20dSma: 0, rsi14: 36.6, weeklyRsi: 47.8, drawdownFrom52wHighPct: 46.4, priceChange3mPct: 56.0, relativeVolume: 0.58, priceVsVwapPct: 0.5, priceVs10EmaPct: -3.0, priceVs20EmaPct: 4.0, priceVs50EmaPct: 18.0, daysUntilEarnings: 29, atrPct14d: 10.9, beta1y: 3.12, avgDollarVolume20d: 1100, sectorEtf1mChangePct: -7.24, asOf: MARKET_ASOF, source: "mock" },
+  ACHR: { priceAbove200dSma: 0, priceAbove50dSma: 0, priceAbove20dSma: 0, rsi14: 42.2, weeklyRsi: 38.9, drawdownFrom52wHighPct: 66.3, priceChange3mPct: -9.9, relativeVolume: 0.71, priceVsVwapPct: -1.0, priceVs10EmaPct: -3.0, priceVs20EmaPct: -5.0, priceVs50EmaPct: -10.0, daysUntilEarnings: 32, atrPct14d: 7.9, beta1y: 3.19, avgDollarVolume20d: 200, sectorEtf1mChangePct: 3.53, asOf: MARKET_ASOF, source: "mock" },
+  CELH: { priceAbove200dSma: 0, priceAbove50dSma: 1, priceAbove20dSma: 1, rsi14: 55.5, weeklyRsi: 42.0, drawdownFrom52wHighPct: 52.5, priceChange3mPct: -10.7, relativeVolume: 0.79, priceVsVwapPct: 0.0, priceVs10EmaPct: -1.0, priceVs20EmaPct: 1.0, priceVs50EmaPct: -3.0, daysUntilEarnings: 30, atrPct14d: 5.5, beta1y: 0.92, avgDollarVolume20d: 280, sectorEtf1mChangePct: 3.44, asOf: MARKET_ASOF, source: "mock" },
+  // IPO'd Mar 2025 — now has ~15 months of trading history, enough for a real
+  // 200D SMA (unlike the prior pass, which nulled it for insufficient
+  // history). Beta stays null: providers disagree wildly (statistically an
+  // outlier vs. stockanalysis's own "insufficient history" read), so it isn't
+  // a reliable figure yet.
+  CRWV: { priceAbove200dSma: 0, priceAbove50dSma: 0, priceAbove20dSma: 0, rsi14: 36.6, weeklyRsi: 43.9, drawdownFrom52wHighPct: 49.0, priceChange3mPct: -18.1, relativeVolume: 0.73, priceVsVwapPct: -2.0, priceVs10EmaPct: -5.0, priceVs20EmaPct: -7.0, priceVs50EmaPct: -3.0, daysUntilEarnings: 38, atrPct14d: 10.3, beta1y: null, avgDollarVolume20d: 2750, sectorEtf1mChangePct: -7.24, asOf: MARKET_ASOF, source: "mock" },
+  ELF: { priceAbove200dSma: 0, priceAbove50dSma: 1, priceAbove20dSma: 1, rsi14: 66.6, weeklyRsi: 52.8, drawdownFrom52wHighPct: 50.1, priceChange3mPct: 17.4, relativeVolume: 0.94, priceVsVwapPct: 1.0, priceVs10EmaPct: 2.0, priceVs20EmaPct: 3.0, priceVs50EmaPct: 4.0, daysUntilEarnings: 29, atrPct14d: 5.6, beta1y: 1.58, avgDollarVolume20d: 294, sectorEtf1mChangePct: 3.44, asOf: MARKET_ASOF, source: "mock" },
+  RGTI: { priceAbove200dSma: 0, priceAbove50dSma: 0, priceAbove20dSma: 0, rsi14: 36.8, weeklyRsi: 44.2, drawdownFrom52wHighPct: 71.5, priceChange3mPct: 14.6, relativeVolume: 0.64, priceVsVwapPct: -2.0, priceVs10EmaPct: -5.0, priceVs20EmaPct: -8.0, priceVs50EmaPct: -12.0, daysUntilEarnings: 35, atrPct14d: 11.5, beta1y: 2.81, avgDollarVolume20d: 548, sectorEtf1mChangePct: -7.24, asOf: MARKET_ASOF, source: "mock" },
 };
 
 // Plan-safe market mood as of MARKET_ASOF: VIX, SPY 14-day RSI, the SPY 200D
 // regime flag, SPY 5-day change, high-yield credit spread, and the 5-day move
 // in the 10-year Treasury yield (percentage points).
 export const MARKET_CONTEXT: MarketContext = {
-  vix: 18.89,
-  spyRsi: 46.49,
+  vix: 16.13,
+  spyRsi: 55.0,
   spyAbove200dSma: 1,
-  spy5dChangePct: 1.2,
-  highYieldSpreadPct: 3.1,
-  treasury10y5dChangePct: 0.05,
+  spy5dChangePct: 0.91,
+  highYieldSpreadPct: 2.72,
+  treasury10y5dChangePct: 0.17,
   asOf: MARKET_ASOF,
   source: "mock",
+  sourceNotes:
+    "CBOE (VIX), FRED series BAMLH0A0HYM2 (HY OAS, dated 2026-07-06), CNBC/YCharts (SPY, 10Y Treasury). spyRsi is a midpoint of a 54–58 range reported across providers (Finviz/TipRanks/AltIndex/Finbox) due to calc-timing differences.",
 };
 
 // Reusable starter chips for the Forge chip library (kept for a later pass —

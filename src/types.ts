@@ -466,6 +466,11 @@ export interface FundamentalSnapshot {
   buybackYieldPct: MetricValue;
   asOf: string; // ISO date the snapshot reflects
   source: MarketDataSource;
+  // Where this snapshot's figures came from and any per-field caveats (e.g.
+  // "null because X is not meaningful for this business model"). Optional,
+  // free-text, for humans reviewing/refreshing the mock data — not read by
+  // the scoring engine.
+  sourceNotes?: string;
 }
 
 export interface TechnicalSnapshot {
@@ -491,6 +496,7 @@ export interface TechnicalSnapshot {
   sectorEtf1mChangePct: MetricValue; // this name's sector ETF, 1M change
   asOf: string;
   source: MarketDataSource;
+  sourceNotes?: string; // see FundamentalSnapshot.sourceNotes
 }
 
 export interface MarketContext {
@@ -502,6 +508,7 @@ export interface MarketContext {
   treasury10y5dChangePct: MetricValue; // percentage-point change
   asOf: string;
   source: MarketDataSource;
+  sourceNotes?: string; // see FundamentalSnapshot.sourceNotes
 }
 
 export interface SignalResult {
