@@ -1,5 +1,5 @@
 import { DEFAULT_STRATEGIES } from "../../data";
-import type { Portfolio, Strategy } from "../../types";
+import type { Portfolio, PortfolioHolding, Strategy } from "../../types";
 
 export function holdingUsesStrategy(
   holding: { strategyIds?: string[] },
@@ -12,18 +12,28 @@ export function isDefaultStrategyId(strategyId: string): boolean {
   return DEFAULT_STRATEGIES.some((strategy) => strategy.id === strategyId);
 }
 
+/** Whether a ticker is enabled for this strategy in a portfolio (Forge Tickers tab). */
+export function isTickerEnabledForStrategy(
+  holding: Pick<PortfolioHolding, "ticker" | "strategyIds">,
+  strategy: Strategy,
+  portfolioId: string,
+): boolean {
+  if (holdingUsesStrategy(holding, strategy.id)) return true;
+  if (isDefaultStrategyId(strategy.id)) return false;
+  return !(strategy.tickerExclusions?.[portfolioId]?.includes(holding.ticker) ?? false);
+}
+
 /**
  * Whether a strategy should score (or display chips for) a holding.
- * Seeded defaults: only when `holding.strategyIds` lists that strategy.
- * Custom/duplicated strategies: any holding in an applied portfolio until
- * per-ticker assignment UI lands.
+ * Default strategies: explicit `holding.strategyIds`. Custom copies: all tickers
+ * in an applied portfolio are on until excluded via `strategy.tickerExclusions`.
  */
 export function shouldScoreTickerWithStrategy(
-  holding: { strategyIds?: string[] },
-  strategyId: string,
+  holding: Pick<PortfolioHolding, "ticker" | "strategyIds">,
+  strategy: Strategy,
+  portfolioId: string,
 ): boolean {
-  if (holdingUsesStrategy(holding, strategyId)) return true;
-  return !isDefaultStrategyId(strategyId);
+  return isTickerEnabledForStrategy(holding, strategy, portfolioId);
 }
 
 /** Strategies that apply to a ticker for Watch summary / Forge ticker chips. */
@@ -36,19 +46,15 @@ export function strategiesForTicker(
     const appliedPortfolioIds = strategy.appliedPortfolioIds ?? [];
     if (appliedPortfolioIds.length === 0) return false;
 
-    const relevantHoldings = portfolios.flatMap((portfolio) =>
-      appliedPortfolioIds.includes(portfolio.id)
-        ? portfolio.holdings.filter((holding) => holding.ticker === ticker)
-        : [],
-    );
-    if (relevantHoldings.length === 0) return false;
-
-    if (isDefaultStrategyId(strategy.id)) {
-      return relevantHoldings.some((holding) =>
-        holdingUsesStrategy(holding, strategy.id),
-      );
+    for (const portfolio of portfolios) {
+      if (!appliedPortfolioIds.includes(portfolio.id)) continue;
+      const holding = portfolio.holdings.find((item) => item.ticker === ticker);
+      if (!holding) continue;
+      if (shouldScoreTickerWithStrategy(holding, strategy, portfolio.id)) {
+        return true;
+      }
     }
-    return true;
+    return false;
   });
 }
 
@@ -62,7 +68,7 @@ export function tickersForAppliedStrategy(
   for (const portfolio of portfolios) {
     if (!appliedIds.has(portfolio.id)) continue;
     for (const holding of portfolio.holdings) {
-      if (shouldScoreTickerWithStrategy(holding, strategy.id)) {
+      if (shouldScoreTickerWithStrategy(holding, strategy, portfolio.id)) {
         tickers.add(holding.ticker);
       }
     }
@@ -81,6 +87,42 @@ export function tickerHasAssignedStrategy(
   return strategies.some(
     (strategy) =>
       (strategy.appliedPortfolioIds ?? []).includes(portfolio.id) &&
-      shouldScoreTickerWithStrategy(holding, strategy.id),
+      shouldScoreTickerWithStrategy(holding, strategy, portfolio.id),
   );
+}
+
+/** Strategies actively assigned to a holding in this portfolio. */
+export function strategiesForHolding(
+  holding: PortfolioHolding,
+  portfolioId: string,
+  strategies: Strategy[],
+): Strategy[] {
+  return strategies
+    .filter(
+      (strategy) =>
+        (strategy.appliedPortfolioIds ?? []).includes(portfolioId) &&
+        shouldScoreTickerWithStrategy(holding, strategy, portfolioId),
+    )
+    .sort((a, b) => a.id.localeCompare(b.id));
+}
+
+/** All holdings in a portfolio, sorted by ticker symbol. */
+export function sortedPortfolioHoldings(portfolio: Portfolio): PortfolioHolding[] {
+  return [...portfolio.holdings].sort((a, b) => a.ticker.localeCompare(b.ticker));
+}
+
+/** Enabled tickers per applied portfolio — used for Configure dirty/saved baselines. */
+export function enabledTickersByAppliedPortfolio(
+  strategy: Strategy,
+  portfolios: Portfolio[],
+): Record<string, string[]> {
+  const appliedIds = new Set(strategy.appliedPortfolioIds ?? []);
+  const result: Record<string, string[]> = {};
+  for (const portfolio of portfolios) {
+    if (!appliedIds.has(portfolio.id)) continue;
+    result[portfolio.id] = sortedPortfolioHoldings(portfolio)
+      .filter((holding) => isTickerEnabledForStrategy(holding, strategy, portfolio.id))
+      .map((holding) => holding.ticker);
+  }
+  return result;
 }

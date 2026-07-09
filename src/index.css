@@ -3125,17 +3125,60 @@ select.input:hover:not(:disabled) {
   max-width: 32px;
 }
 
-/* In-card section stepper/tabs (mobile only). Navigates the Configure card one
-   pane at a time; hidden ≥ 768px, where every pane stacks in the side-by-side
-   workbench. `.forge-pane` is a transparent grouping wrapper (Description
-   fields) that `display: contents` on desktop so it doesn't disturb the stacked
-   layout — it only becomes a real box on mobile when its pane is active. */
+/* In-card section tabs — Configure card navigation (all viewports). One pane
+   visible at a time; tabs wrap on desktop/tablet and scroll horizontally on
+   narrow mobile when they don't fit. */
+.panel:has(> .forge-section-tabs) {
+  gap: 8px;
+}
+
+.panel-head:has(+ .forge-section-tabs) {
+  margin-bottom: 0;
+}
+
 .forge-section-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.forge-section-tab {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  padding: 0.5rem 0.55rem;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 0.85rem;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.forge-section-tab.is-active {
+  color: var(--text-strong);
+  border-bottom-color: var(--info);
+}
+
+/* Tab strip drives selection — show only the active Configure pane. */
+.strategy-config-scroll > [data-forge-section]:not(.is-active) {
   display: none;
 }
 
-.forge-pane {
-  display: contents;
+.forge-pane.is-active {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.strategy-config-scroll > .forge-section.is-active {
+  border-top: 0;
+  padding-top: 0;
 }
 
 /* Rule-chip / tag boxes (side-by-side like the design: chips wide, tags narrow) */
@@ -3227,6 +3270,13 @@ select.input:hover:not(:disabled) {
   color: var(--text-muted);
 }
 
+/* Tickers tab — enabled = green "applied" (not the default rule-chip blue). */
+.forge-pill--toggle.forge-pill--on.forge-pill--applied {
+  border-color: transparent;
+  background: rgb(62 213 152 / 0.16);
+  color: var(--positive);
+}
+
 .forge-pill-stack {
   display: flex;
   flex-direction: column;
@@ -3280,7 +3330,114 @@ select.input:hover:not(:disabled) {
   cursor: not-allowed;
 }
 
-/* Completeness cautions */
+/* Forge toast — reusable in-card notifications (warning / error / success / info).
+   Shape follows the auth error banner: tinted background, border, leading icon,
+   optional dismiss control upper-right. */
+.forge-toast-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.forge-toast {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 0.6rem 2.25rem 0.6rem 0.75rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.875rem;
+  line-height: 1.45;
+}
+
+.forge-toast-body {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+}
+
+.forge-toast-icon {
+  flex: 0 0 auto;
+  width: 1.1rem;
+  height: 1.1rem;
+  margin-top: 0.05rem;
+}
+
+.forge-toast-icon--error {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--negative);
+  color: var(--brand-ink);
+  font-weight: 800;
+  font-size: 0.75rem;
+}
+
+.forge-toast-dismiss {
+  position: absolute;
+  top: 0.35rem;
+  right: 0.35rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: inherit;
+  opacity: 0.75;
+  cursor: pointer;
+}
+
+.forge-toast-dismiss:hover {
+  opacity: 1;
+}
+
+.forge-toast-dismiss svg {
+  width: 0.85rem;
+  height: 0.85rem;
+}
+
+.forge-toast--warning {
+  border: 1px solid rgb(251 191 36 / 0.4);
+  background: rgb(251 191 36 / 0.08);
+  color: var(--warning);
+}
+
+.forge-toast--warning .forge-toast-body {
+  color: var(--text-base);
+}
+
+.forge-toast--error {
+  border: 1px solid rgb(255 107 107 / 0.35);
+  background: rgb(255 107 107 / 0.1);
+  color: var(--negative);
+}
+
+.forge-toast--success {
+  border: 1px solid rgb(74 222 128 / 0.35);
+  background: rgb(74 222 128 / 0.08);
+  color: var(--positive);
+}
+
+.forge-toast--success .forge-toast-body {
+  color: var(--text-base);
+}
+
+.forge-toast--info {
+  border: 1px solid rgb(96 165 250 / 0.35);
+  background: rgb(96 165 250 / 0.08);
+  color: var(--info);
+}
+
+.forge-toast--info .forge-toast-body {
+  color: var(--text-base);
+}
+
+/* Legacy completeness banner — replaced by ForgeToast (kept for reference). */
 .forge-caution {
   display: flex;
   flex-direction: column;
@@ -4137,38 +4294,11 @@ select.forge-cell-input {
     gap: 16px;
   }
 
-  .forge-section {
-    padding-top: 16px;
-  }
-
-  /* In-card section tabs (mobile): keep a tight ~8px between the card heading
-     and the tab strip. Keyed off the `.forge-section-tabs` component (via
-     :has()) so the rule follows the component to any card that uses it, not
-     just this page. The heading's default margin-bottom plus the card's flex
-     gap otherwise stack to ~35px; drop the margin and shrink the card gap to
-     8px. */
-  .panel:has(> .forge-section-tabs) {
-    gap: 8px;
-  }
-
-  .panel-head:has(+ .forge-section-tabs) {
-    margin-bottom: 0;
-  }
-
-  /* ---- In-card section stepper/tabs (mobile) ------------------------------
-     A horizontal, tappable strip of numbered "info" discs + labels that drives
-     which Configure pane is visible. Styling follows the Figma stepper: blue
-     discs, a CheckCircle for completed sections, and a blue accent underline on
-     the active tab. The strip scrolls horizontally (8 tabs) with the scrollbar
-     hidden, sitting on a hairline divider just below the "Configure" heading. */
+  /* Narrow mobile: scroll the tab strip when wrap isn't practical. */
   .forge-section-tabs {
-    display: flex;
-    gap: 2px;
+    flex-wrap: nowrap;
     overflow-x: auto;
     scrollbar-width: none;
-    margin: 0;
-    padding: 0;
-    border-bottom: 1px solid var(--border-soft);
     scroll-snap-type: x proximity;
   }
 
@@ -4176,56 +4306,16 @@ select.forge-cell-input {
     display: none;
   }
 
-  /* Label-only tabs (no circles/numbers for now): muted at rest, brighter with
-     a blue accent underline when active. */
   .forge-section-tab {
-    display: inline-flex;
-    align-items: center;
-    flex: 0 0 auto;
-    padding: 0.5rem 0.55rem;
-    border: 0;
-    border-bottom: 2px solid transparent;
-    background: transparent;
-    color: var(--text-muted);
-    font: inherit;
-    font-size: 0.85rem;
-    white-space: nowrap;
-    cursor: pointer;
     scroll-snap-align: start;
   }
 
-  .forge-section-tab.is-active {
-    color: var(--text-strong);
-    border-bottom-color: var(--info);
+  .forge-section {
+    padding-top: 16px;
   }
 
-  /* Show only the active pane; the tab strip drives selection. */
-  .strategy-config-scroll > [data-forge-section]:not(.is-active) {
-    display: none;
-  }
-
-  .forge-pane.is-active {
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-  }
-
-  /* A lone visible section shouldn't carry the between-sections divider. */
-  .strategy-config-scroll > .forge-section.is-active {
-    border-top: 0;
-    padding-top: 0;
-  }
-
-  /* The long "Steps To Setup Your Strategy" stepper is replaced by the tab
-     strip on mobile. */
-  .forge-section--steps {
-    display: none;
-  }
-
-  /* Hide the per-category sub-steppers (Describe Thesis / Add Rule Chips / Add
-     Tags) on mobile in the Configure card, for every category — for now. */
-  .strategy-config .forge-stepper--accent {
-    display: none;
+  .forge-section-tools {
+    flex-wrap: wrap;
   }
 }
 

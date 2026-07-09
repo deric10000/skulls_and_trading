@@ -14,6 +14,7 @@
  */
 import { DEFAULT_BUCKETS, DEFAULT_STRATEGIES, FUNDAMENTAL_SNAPSHOTS, MARKET_CONTEXT, PORTFOLIOS, TECHNICAL_SNAPSHOTS } from "../src/data";
 import { computePortfolioAlignment } from "../src/lib/forge/alignment";
+import { mergeStrategiesForScoring } from "../src/lib/forge/mergeStrategies";
 import { strategiesForTicker } from "../src/lib/forge/tickerStrategy";
 import { CATEGORY_ORDER } from "../src/lib/forge/metrics";
 import { scoreCategory, scoreStock, evaluateChip, validateStrategy, type MetricContext } from "../src/lib/forge/scoring";
@@ -22,6 +23,10 @@ import {
   resolveStatus,
   severityRank,
 } from "../src/lib/forge/status";
+import {
+  APPLY_READINESS_MESSAGE,
+  isStrategyApplyReady,
+} from "../src/lib/forge/applyReadiness";
 import type { RuleChip, Strategy } from "../src/types";
 
 let failures = 0;
@@ -218,6 +223,39 @@ check(
   `${crmWithVgd} → ${crmWithoutVgd ?? "none"}`,
 );
 
+// 6b. Multi-strategy headline = merged normalized score, not max slice
+const dericDualNvda = {
+  ...deric,
+  holdings: deric.holdings.map((holding) =>
+    holding.ticker === "NVDA"
+      ? {
+          ...holding,
+          strategyIds: ["aggressive-ai-high-beta", "value-growth-dividend"],
+        }
+      : holding,
+  ),
+};
+const nvdaAggConviction = scoreStock(agg, nvdaCtx).conviction;
+const nvdaVgdConviction = scoreStock(vgd, nvdaCtx).conviction;
+const nvdaMergedConviction = scoreStock(
+  mergeStrategiesForScoring([agg, vgd]),
+  nvdaCtx,
+).conviction;
+const dualNvdaHeadline =
+  computePortfolioAlignment(dericDualNvda, DEFAULT_BUCKETS, DEFAULT_STRATEGIES).byTicker.NVDA
+    ?.conviction;
+check(
+  "Multi-strategy NVDA headline uses merged conviction",
+  dualNvdaHeadline === nvdaMergedConviction,
+  `${dualNvdaHeadline} (merged=${nvdaMergedConviction}, agg=${nvdaAggConviction}, vgd=${nvdaVgdConviction})`,
+);
+check(
+  "Multi-strategy NVDA headline is not max-slice when strategies disagree",
+  nvdaAggConviction === nvdaVgdConviction ||
+    dualNvdaHeadline !== Math.max(nvdaAggConviction, nvdaVgdConviction),
+  `headline=${dualNvdaHeadline}, max=${Math.max(nvdaAggConviction, nvdaVgdConviction)}`,
+);
+
 const custom: Strategy = {
   ...vgd,
   id: "custom-test",
@@ -230,6 +268,18 @@ check(
   Object.keys(customAlign.byTicker).length > 0,
   `${Object.keys(customAlign.byTicker).length} tickers`,
 );
+
+// 7. Apply readiness (lighter bar than validateStrategy completeness)
+check("APPLY_READINESS_MESSAGE is non-empty", APPLY_READINESS_MESSAGE.length > 20);
+check("VGD seed is apply-ready", isStrategyApplyReady(vgd));
+check(
+  "Blank strategy is not apply-ready",
+  !isStrategyApplyReady(blank),
+);
+const noPortfolio: Strategy = { ...vgd, appliedPortfolioIds: [] };
+check("Strategy without portfolio is not apply-ready", !isStrategyApplyReady(noPortfolio));
+const noRules: Strategy = { ...vgd, rules: [] };
+check("Strategy without rules is not apply-ready", !isStrategyApplyReady(noRules));
 
 console.log(failures === 0 ? "\nALL CHECKS PASSED" : `\n${failures} CHECKS FAILED`);
 process.exit(failures === 0 ? 0 : 1);

@@ -21,7 +21,7 @@ import {
   type PortfolioAlignment,
   type TickerAlignment,
 } from "../lib/forge/alignment";
-import { strategiesForTicker } from "../lib/forge/tickerStrategy";
+import { strategiesForTicker, isDefaultStrategyId } from "../lib/forge/tickerStrategy";
 import {
   debounce,
   loadPersistedChipLibrary,
@@ -40,10 +40,21 @@ import type {
   CaptainProfile,
   LogEntry,
   PageId,
+  Portfolio,
   RuleChip,
   Strategy,
   WatchlistItem,
 } from "../types";
+
+function clonePortfolios(source: Portfolio[]): Portfolio[] {
+  return source.map((portfolio) => ({
+    ...portfolio,
+    holdings: portfolio.holdings.map((holding) => ({
+      ...holding,
+      strategyIds: [...holding.strategyIds],
+    })),
+  }));
+}
 
 // The default portfolio (whose holdings seed the editable watchlist + dashboard).
 const DEFAULT_PORTFOLIO_ID = dataSource.getPortfolios()[0]?.id ?? "";
@@ -83,6 +94,15 @@ interface AppStateValue {
   deleteStrategy: (id: string) => void;
   duplicateStrategy: (id: string) => string | undefined;
   resetStrategy: (id: string) => void;
+
+  /** Live portfolio holdings (session overlay on mock seed data). */
+  portfolios: Portfolio[];
+  setTickerEnabledForStrategy: (
+    portfolioId: string,
+    ticker: string,
+    strategyId: string,
+    enabled: boolean,
+  ) => void;
 
   // ---- Strategy Forge chip library (reusable rule chips) ----
   chipLibrary: RuleChip[];
@@ -160,6 +180,9 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const [buckets] = useState<Bucket[]>(() => dataSource.getBuckets());
   const [chipLibrary, setChipLibrary] = useState<RuleChip[]>(() =>
     loadPersistedChipLibrary(),
+  );
+  const [portfolios, setPortfolios] = useState<Portfolio[]>(() =>
+    clonePortfolios(dataSource.getPortfolios()),
   );
   const [logsByTicker, setLogsByTicker] = useState<Record<string, LogEntry[]>>(
     () => dataSource.getLogs(),
@@ -361,7 +384,41 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     [],
   );
 
-  const portfolios = useMemo(() => dataSource.getPortfolios(), []);
+  const setTickerEnabledForStrategy = useCallback(
+    (portfolioId: string, ticker: string, strategyId: string, enabled: boolean) => {
+      setPortfolios((current) =>
+        current.map((portfolio) => {
+          if (portfolio.id !== portfolioId) return portfolio;
+          return {
+            ...portfolio,
+            holdings: portfolio.holdings.map((holding) => {
+              if (holding.ticker !== ticker) return holding;
+              const nextIds = new Set(holding.strategyIds);
+              if (enabled) nextIds.add(strategyId);
+              else nextIds.delete(strategyId);
+              return { ...holding, strategyIds: Array.from(nextIds) };
+            }),
+          };
+        }),
+      );
+
+      if (isDefaultStrategyId(strategyId)) return;
+
+      setStrategies((current) =>
+        current.map((strategy) => {
+          if (strategy.id !== strategyId) return strategy;
+          const exclusions = { ...(strategy.tickerExclusions ?? {}) };
+          const tickers = new Set(exclusions[portfolioId] ?? []);
+          if (enabled) tickers.delete(ticker);
+          else tickers.add(ticker);
+          if (tickers.size === 0) delete exclusions[portfolioId];
+          else exclusions[portfolioId] = Array.from(tickers).sort();
+          return { ...strategy, tickerExclusions: exclusions };
+        }),
+      );
+    },
+    [],
+  );
 
   // Recomputed only when the strategies or buckets change (data snapshots are
   // static). Each portfolio's per-ticker + aggregate alignment in one pass.
@@ -525,6 +582,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       removeChipFromLibrary,
       updateChipInLibrary,
       buckets,
+      portfolios,
+      setTickerEnabledForStrategy,
       getPortfolioAlignment,
       getStockAlignment,
       getAppliedStrategiesForTicker,
@@ -563,6 +622,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       removeChipFromLibrary,
       updateChipInLibrary,
       buckets,
+      portfolios,
+      setTickerEnabledForStrategy,
       getPortfolioAlignment,
       getStockAlignment,
       getAppliedStrategiesForTicker,

@@ -6,16 +6,23 @@ import {
   METRICS,
   formatChipCondition,
 } from "../lib/forge/metrics";
-import { tickersForAppliedStrategy } from "../lib/forge/tickerStrategy";
-import { validateStrategy } from "../lib/forge/scoring";
+import {
+  enabledTickersByAppliedPortfolio,
+  isTickerEnabledForStrategy,
+  sortedPortfolioHoldings,
+} from "../lib/forge/tickerStrategy";
+import {
+  APPLY_READINESS_MESSAGE,
+  isStrategyApplyReady,
+} from "../lib/forge/applyReadiness";
 import {
   ArrowCounterClockwise,
   CheckCircle,
   FloppyDisk,
   PencilSimple,
   Trash,
-  Warning,
 } from "../lib/icons";
+import { ForgeToast } from "./forge/ForgeToast";
 import { useAppState } from "../state/AppState";
 import { ActionFooter } from "./ActionFooter";
 import { Dropdown } from "./Dropdown";
@@ -33,11 +40,11 @@ import type {
 
 // ---------------------------------------------------------------------------
 // The Configure card (Strategy Forge). Layout follows the Figma design:
-// header → name/description → enabled → applied portfolios → conviction
-// preview → steps stepper → 1. Strategy Cadence → six category sections
-// (question, sub-stepper, rule-chip box + tags box opening table modals) →
-// completeness cautions → actions. All rule/tag editing happens in the table
-// modals (RuleChipsTableModal / TagsTableModal).
+// header → name/description → applied portfolios → conviction
+// preview → in-card section tabs → apply-readiness toast → Strategy Cadence →
+// six category sections (question, rule-chip box + tags box opening table
+// modals) → actions. All rule/tag editing happens in the table modals
+// (RuleChipsTableModal / TagsTableModal).
 // ---------------------------------------------------------------------------
 
 // ---- Cadence helpers -------------------------------------------------------
@@ -99,14 +106,9 @@ function Stepper({
   );
 }
 
-// ---- In-card section tabs (mobile only) -----------------------------------
-// A horizontal, tappable stepper strip that navigates the Configure card one
-// section at a time on mobile (Description + the seven setup categories),
-// replacing the long single scroll. Distinct from the page-level `Tabs`
-// component, which switches between whole cards (Configure / Preview). Styling
-// follows the Figma stepper: numbered "info" discs + labels, a CheckCircle for
-// completed sections, and a gold-free blue accent underline on the active tab.
-// Hidden above 767px, where every section stacks in the side-by-side workbench.
+// ---- In-card section tabs (all viewports) ---------------------------------
+// Horizontal tab strip navigates the Configure card one section at a time.
+// Distinct from the page-level `Tabs` component (Configure / Preview Watchlist).
 
 export interface SectionTab {
   id: string;
@@ -210,56 +212,104 @@ interface TableEditor {
 }
 
 export function StrategyForgePanel({ strategy }: { strategy: Strategy | undefined }) {
-  const { updateStrategy, resetStrategy, deleteStrategy } = useAppState();
+  const { updateStrategy, resetStrategy, deleteStrategy, portfolios, setTickerEnabledForStrategy } =
+    useAppState();
 
-  const allPortfolios = useMemo(() => dataSource.getPortfolios(), []);
   const portfolioOptions = useMemo(
-    () =>
-      allPortfolios.map((portfolio) => ({ value: portfolio.id, label: portfolio.label })),
-    [allPortfolios],
+    () => portfolios.map((portfolio) => ({ value: portfolio.id, label: portfolio.label })),
+    [portfolios],
   );
-  // Tickers in applied portfolios that are assigned to THIS strategy
-  // (`holding.strategyIds` for defaults; all holdings for custom copies).
-  const appliedTickers = useMemo(() => {
-    if (!strategy) return [];
-    return tickersForAppliedStrategy(strategy, allPortfolios);
-  }, [allPortfolios, strategy]);
+  const appliedPortfolioIds = strategy?.appliedPortfolioIds ?? [];
+  const appliedPortfolios = useMemo(
+    () => portfolios.filter((portfolio) => appliedPortfolioIds.includes(portfolio.id)),
+    [appliedPortfolioIds, portfolios],
+  );
+  const appliedPortfolioOptions = useMemo(
+    () =>
+      appliedPortfolios.map((portfolio) => ({
+        value: portfolio.id,
+        label: portfolio.label,
+      })),
+    [appliedPortfolios],
+  );
 
   const [editor, setEditor] = useState<TableEditor | null>(null);
   /** Chip/tag rows as they were when the table modal opened — Cancel restores this. */
   const editorSnapshotRef = useRef<RuleChip[] | RuleTag[]>([]);
   const [editingWeight, setEditingWeight] = useState<RuleCategory | null>(null);
-  // Which section pane the in-card tab strip is showing (mobile only). Desktop /
-  // tablet render every pane at once, so this is inert above 767px.
   const [activeSection, setActiveSection] = useState<string>("identity");
+  const [selectedTickerPortfolioId, setSelectedTickerPortfolioId] = useState("");
+  const [applyToastDismissed, setApplyToastDismissed] = useState(false);
+  const [updateToastVisible, setUpdateToastVisible] = useState(false);
   const [updatedFlash, setUpdatedFlash] = useState(false);
   const flashTimer = useRef<number | undefined>(undefined);
-  useEffect(() => () => window.clearTimeout(flashTimer.current), []);
-
-  // Edits already apply live via updateStrategy — Save is a confirm/re-validate
-  // step, so "no changes" means "nothing new since the last confirm (or since
-  // this strategy was selected)". Track that baseline as a JSON snapshot (the
-  // Strategy shape is plain, JSON-serializable data) and reset it whenever the
-  // selected strategy changes, so switching strategies never shows stale
-  // "unsaved" state from a previous selection.
-  const savedSnapshotRef = useRef<string | null>(null);
-  const currentSnapshot = strategy ? JSON.stringify(strategy) : null;
+  const updateToastTimer = useRef<number | undefined>(undefined);
+  const previousStrategyIdRef = useRef<string | undefined>(undefined);
+  useEffect(
+    () => () => {
+      window.clearTimeout(flashTimer.current);
+      window.clearTimeout(updateToastTimer.current);
+    },
+    [],
+  );
   useEffect(() => {
-    savedSnapshotRef.current = currentSnapshot;
+    setActiveSection("identity");
+    setSelectedTickerPortfolioId("");
+    const previousId = previousStrategyIdRef.current;
+    if (previousId && previousId !== strategy?.id) {
+      setApplyToastDismissed(false);
+    }
+    previousStrategyIdRef.current = strategy?.id;
+  }, [strategy?.id]);
+
+  useEffect(() => {
+    setSelectedTickerPortfolioId((current) => {
+      if (appliedPortfolios.some((portfolio) => portfolio.id === current)) return current;
+      return appliedPortfolios[0]?.id ?? "";
+    });
+  }, [appliedPortfolios]);
+
+  const selectedTickerPortfolio = useMemo(
+    () => appliedPortfolios.find((portfolio) => portfolio.id === selectedTickerPortfolioId),
+    [appliedPortfolios, selectedTickerPortfolioId],
+  );
+  const portfolioHoldings = useMemo(
+    () =>
+      selectedTickerPortfolio ? sortedPortfolioHoldings(selectedTickerPortfolio) : [],
+    [selectedTickerPortfolio],
+  );
+
+  // "Unsaved" = strategy fields or ticker assignments changed since the last
+  // Update (or since this strategy was selected). Default strategies store
+  // ticker on/off in portfolio holdings; custom copies use strategy.tickerExclusions.
+  const savedSnapshotRef = useRef<string | null>(null);
+  const configSnapshot = useMemo(() => {
+    if (!strategy) return null;
+    return JSON.stringify({
+      strategy,
+      tickers: enabledTickersByAppliedPortfolio(strategy, portfolios),
+    });
+  }, [strategy, portfolios]);
+  useEffect(() => {
+    savedSnapshotRef.current = configSnapshot;
     // Intentionally keyed on the strategy id only — resets the baseline on
-    // selection change, not on every edit (currentSnapshot changes on every
+    // selection change, not on every edit (configSnapshot changes on every
     // keystroke, which would defeat the dirty check).
   }, [strategy?.id]);
   const isDirty =
-    currentSnapshot !== null && currentSnapshot !== savedSnapshotRef.current;
+    configSnapshot !== null && configSnapshot !== savedSnapshotRef.current;
 
   const rules = useMemo(() => strategy?.rules ?? [], [strategy]);
   const ruleTags = useMemo(() => strategy?.ruleTags ?? [], [strategy]);
 
-  const validation = useMemo(
-    () => (strategy ? validateStrategy(strategy) : null),
+  const applyReady = useMemo(
+    () => (strategy ? isStrategyApplyReady(strategy) : true),
     [strategy],
   );
+
+  useEffect(() => {
+    if (applyReady) setApplyToastDismissed(false);
+  }, [applyReady]);
 
   if (!strategy) {
     return (
@@ -345,57 +395,22 @@ export function StrategyForgePanel({ strategy }: { strategy: Strategy | undefine
     // the user gets explicit feedback before heading to Apply. Also moves the
     // "last saved" baseline forward, so the button disables again until the
     // next edit.
-    savedSnapshotRef.current = currentSnapshot;
+    savedSnapshotRef.current = configSnapshot;
     setUpdatedFlash(true);
+    setUpdateToastVisible(true);
     window.clearTimeout(flashTimer.current);
+    window.clearTimeout(updateToastTimer.current);
     flashTimer.current = window.setTimeout(() => setUpdatedFlash(false), 2500);
+    updateToastTimer.current = window.setTimeout(() => setUpdateToastVisible(false), 2500);
   }
 
   const weightFor = (category: RuleCategory): number | undefined =>
     weights?.[category];
 
-  // ---- Stepper completion (drives the active steppers) ----
-  const chipsIn = (category: RuleCategory) =>
-    rules.filter((chip) => chip.category === category && chip.enabled);
-  const customTagsIn = (category: RuleCategory) =>
-    ruleTags.filter((tag) => tag.category === category && !tag.system);
-
-  function categoryComplete(category: RuleCategory): boolean {
-    const chips = chipsIn(category);
-    if (chips.length === 0) return false;
-    const total = Math.round(chips.reduce((sum, chip) => sum + chip.weightPct, 0));
-    if (total !== 100) return false;
-    if (category === "thesis" && !strategy?.thesisDescription?.trim()) return false;
-    return true;
-  }
-
-  function subSteps(category: RuleCategory): StepItem[] {
-    const labels = CATEGORY_META[category].subSteps;
-    const hasChips = chipsIn(category).length > 0;
-    const hasTags = customTagsIn(category).length > 0;
-    const done =
-      category === "thesis"
-        ? [Boolean(strategy?.thesisDescription?.trim()), hasChips, hasTags]
-        : [hasChips, hasTags];
-    return labels.map((label, index) => ({
-      label,
-      complete: done[index] ?? false,
-    }));
-  }
-
-  const mainSteps: StepItem[] = [
-    { label: "Strategy Cadence", complete: Boolean(strategy.checkInterval) },
-    ...CATEGORY_ORDER.map((category) => ({
-      label: CATEGORY_META[category].stepLabel,
-      complete: categoryComplete(category),
-    })),
-  ];
-
-  // In-card section tabs (mobile): Description + Cadence + the six categories.
-  // Label-only for now (no circles/numbers) — the active tab is marked by a
-  // brighter label and a blue underline.
+  // In-card section tabs: Description + Cadence + the six categories.
   const sectionTabs: SectionTab[] = [
     { id: "identity", label: "Description" },
+    { id: "tickers", label: "Tickers" },
     { id: "cadence", label: "Strategy Cadence" },
     ...CATEGORY_ORDER.map((category) => ({
       id: category,
@@ -412,13 +427,27 @@ export function StrategyForgePanel({ strategy }: { strategy: Strategy | undefine
         </span>
       </div>
 
-      {/* In-card section stepper/tabs — mobile only (hidden ≥ 768px via CSS).
-          Navigates the panes below one at a time instead of one long scroll. */}
+      {/* In-card section tabs — one Configure pane visible at a time. */}
       <SectionTabs tabs={sectionTabs} active={activeSection} onChange={setActiveSection} />
 
-      {/* Scrolling body — head above + the action footer below stay pinned,
-          matching the My Strategies / Current Watch card model. On mobile the
-          `data-forge-section` panes toggle so only the active tab's pane shows. */}
+      {(updateToastVisible || (!applyReady && !applyToastDismissed)) ? (
+        <div className="forge-toast-stack">
+          {updateToastVisible ? (
+            <ForgeToast tone="success">Strategy updated.</ForgeToast>
+          ) : null}
+          {!applyReady && !applyToastDismissed ? (
+            <ForgeToast
+              tone="warning"
+              onDismiss={() => setApplyToastDismissed(true)}
+              dismissLabel="Dismiss apply readiness reminder"
+            >
+              {APPLY_READINESS_MESSAGE}
+            </ForgeToast>
+          ) : null}
+        </div>
+      ) : null}
+
+      {/* Scrolling body — head above + the action footer below stay pinned. */}
       <div className="strategy-config-scroll">
       {/* ---- Identity (Description pane) ---- */}
       <div
@@ -471,47 +500,110 @@ export function StrategyForgePanel({ strategy }: { strategy: Strategy | undefine
           placeholder="Select portfolios to apply this strategy to"
         />
       </div>
+      </div>
 
-      {/* ---- Tickers in applied portfolios (read-only for now) ---- */}
-      <div className="forge-box forge-box--tickers">
-        <div className="forge-box-head">
-          <span className="config-label forge-label forge-label--muted">
-            Tickers In Applied Portfolios
+      {/* ---- Tickers (per-portfolio enable/disable) ---- */}
+      <div
+        className={activeSection === "tickers" ? "forge-pane is-active" : "forge-pane"}
+        data-forge-section="tickers"
+      >
+        <div className="config-field">
+          <span className="config-label forge-label">
+            Applied Portfolios
             <InfoTip
-              label="About tickers in applied portfolios"
-              body="Every ticker held in the portfolios/watchlists selected above. Editing which tickers a strategy covers is coming soon — for now this just shows what's currently applied."
+              label="About applied portfolios on the Tickers tab"
+              body="Portfolios applied on the Description tab. Choose one from the dropdown to view and toggle its tickers for this strategy. To add or remove portfolios, use the Description tab."
             />
           </span>
-          <button
-            type="button"
-            className="icon-btn icon-btn--blue"
-            aria-label="Edit tickers in applied portfolios"
-            disabled
-          >
-            <PencilSimple aria-hidden weight="regular" />
-          </button>
-        </div>
-        <div className="forge-box-body">
-          {appliedTickers.length > 0 ? (
-            appliedTickers.map((ticker) => (
-              <span key={ticker} className="forge-pill forge-pill--applied">
-                {ticker}
-              </span>
-            ))
+          {appliedPortfolios.length > 0 ? (
+            <Dropdown
+              id="forge-ticker-portfolio"
+              label="Portfolio for ticker assignment"
+              value={selectedTickerPortfolioId}
+              onChange={setSelectedTickerPortfolioId}
+              options={appliedPortfolioOptions}
+            />
           ) : (
             <span className="forge-box-empty">
-              No tickers yet — apply a portfolio above to list its tickers here.
+              No portfolios applied yet — select portfolios on the Description tab first.
             </span>
           )}
         </div>
-      </div>
-      </div>
 
-      {/* ---- Steps ---- */}
-      {/* Desktop/tablet only: the mobile view replaces this with the tab strip. */}
-      <div className="forge-section forge-section--steps">
-        <span className="config-label forge-label">Steps To Setup Your Strategy</span>
-        <Stepper steps={mainSteps} tone="info" />
+        <div className="forge-box forge-box--tickers">
+          <div className="forge-box-head">
+            <span className="config-label forge-label forge-label--muted">
+              Tickers In Selected Portfolio
+              <InfoTip
+                label="About tickers in the selected portfolio"
+                body="Every ticker held in the selected portfolio. Tap a ticker to include or exclude it from this strategy. Default strategies start with seed assignments; custom strategies include all tickers until you turn one off."
+              />
+            </span>
+          </div>
+          <div className="forge-box-body">
+            {portfolioHoldings.length > 0 ? (
+              portfolioHoldings.map((holding) => {
+                const enabled = isTickerEnabledForStrategy(
+                  holding,
+                  strategy,
+                  selectedTickerPortfolioId,
+                );
+                const info = dataSource.getTickerInfo(holding.ticker);
+                return (
+                  <Tooltip
+                    key={holding.ticker}
+                    title={info?.company ?? holding.ticker}
+                    body={
+                      <>
+                        {info ? (
+                          <p className="tooltip-line">
+                            {info.category} · {info.sector}
+                          </p>
+                        ) : null}
+                        <p className="tooltip-line">
+                          {holding.shares.toLocaleString()} shares · avg $
+                          {holding.avgPrice.toFixed(2)}
+                        </p>
+                        <p className="tooltip-line">
+                          {enabled
+                            ? "Included in this strategy — tap to exclude."
+                            : "Excluded from this strategy — tap to include."}
+                        </p>
+                      </>
+                    }
+                  >
+                    <button
+                      type="button"
+                      className={
+                        enabled
+                          ? "forge-pill forge-pill--toggle forge-pill--on forge-pill--applied"
+                          : "forge-pill forge-pill--toggle"
+                      }
+                      aria-pressed={enabled}
+                      aria-label={`${enabled ? "Exclude" : "Include"} ${holding.ticker} in ${strategy.name}`}
+                      onClick={() =>
+                        setTickerEnabledForStrategy(
+                          selectedTickerPortfolioId,
+                          holding.ticker,
+                          id,
+                          !enabled,
+                        )
+                      }
+                    >
+                      {holding.ticker}
+                    </button>
+                  </Tooltip>
+                );
+              })
+            ) : (
+              <span className="forge-box-empty">
+                {appliedPortfolios.length > 0
+                  ? "Select an applied portfolio above to list its tickers."
+                  : "Apply a portfolio on the Description tab to manage tickers here."}
+              </span>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* ---- 1. Strategy cadence ---- */}
@@ -643,7 +735,6 @@ export function StrategyForgePanel({ strategy }: { strategy: Strategy | undefine
             </div>
 
             <p className="forge-section-q">{meta.question}</p>
-            <Stepper steps={subSteps(category)} tone="accent" />
 
             {category === "thesis" ? (
               <label className="config-field">
@@ -733,20 +824,6 @@ export function StrategyForgePanel({ strategy }: { strategy: Strategy | undefine
         );
       })}
 
-      {/* ---- Completeness cautions ---- */}
-      {validation && !validation.complete ? (
-        <div className="forge-caution" role="status">
-          <span className="forge-caution-head">
-            <Warning aria-hidden weight="fill" />
-            Finish the configuration before applying this strategy
-          </span>
-          <ul className="forge-caution-list">
-            {validation.issues.map((issue) => (
-              <li key={issue}>{issue}</li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
       </div>
 
       {/* ---- Actions (pinned card footer; icon-only on mobile) ---- */}

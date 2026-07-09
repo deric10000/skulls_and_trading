@@ -10,6 +10,7 @@ import {
   type MetricMeta,
 } from "../../lib/forge/metrics";
 import { systemChipsForCategory } from "../../lib/forge/chipSources";
+import { ForgeToast } from "./ForgeToast";
 import { useAppState } from "../../state/AppState";
 import { useIsMobile } from "../../lib/useIsMobile";
 import {
@@ -21,7 +22,6 @@ import {
   PencilSimple,
   Plus,
   Trash,
-  Warning,
   X,
 } from "../../lib/icons";
 import type {
@@ -639,11 +639,10 @@ export function RuleChipsTableModal({
                       </label>
                     </fieldset>
                     {saveMode === "everywhere" ? (
-                      <p className="forge-chip-edit-warning" role="alert">
-                        <Warning aria-hidden weight="fill" />
-                        This updates this chip in every strategy that already uses it —
-                        conviction scores there may change.
-                      </p>
+                      <ForgeToast tone="warning">
+                        This updates this chip in every strategy that already uses it
+                        — conviction scores there may change.
+                      </ForgeToast>
                     ) : null}
 
                     <div className="forge-chip-edit-actions">
