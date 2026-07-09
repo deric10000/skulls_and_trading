@@ -7,15 +7,18 @@ import {
   formatChipCondition,
 } from "../lib/forge/metrics";
 import { tickersForAppliedStrategy } from "../lib/forge/tickerStrategy";
-import { validateStrategy } from "../lib/forge/scoring";
+import {
+  APPLY_READINESS_MESSAGE,
+  isStrategyApplyReady,
+} from "../lib/forge/applyReadiness";
 import {
   ArrowCounterClockwise,
   CheckCircle,
   FloppyDisk,
   PencilSimple,
   Trash,
-  Warning,
 } from "../lib/icons";
+import { ForgeToast } from "./forge/ForgeToast";
 import { useAppState } from "../state/AppState";
 import { ActionFooter } from "./ActionFooter";
 import { Dropdown } from "./Dropdown";
@@ -33,11 +36,11 @@ import type {
 
 // ---------------------------------------------------------------------------
 // The Configure card (Strategy Forge). Layout follows the Figma design:
-// header → name/description → enabled → applied portfolios → conviction
-// preview → steps stepper → 1. Strategy Cadence → six category sections
-// (question, sub-stepper, rule-chip box + tags box opening table modals) →
-// completeness cautions → actions. All rule/tag editing happens in the table
-// modals (RuleChipsTableModal / TagsTableModal).
+// header → name/description → applied portfolios → conviction
+// preview → in-card section tabs → apply-readiness toast → Strategy Cadence →
+// six category sections (question, rule-chip box + tags box opening table
+// modals) → actions. All rule/tag editing happens in the table modals
+// (RuleChipsTableModal / TagsTableModal).
 // ---------------------------------------------------------------------------
 
 // ---- Cadence helpers -------------------------------------------------------
@@ -99,14 +102,9 @@ function Stepper({
   );
 }
 
-// ---- In-card section tabs (mobile only) -----------------------------------
-// A horizontal, tappable stepper strip that navigates the Configure card one
-// section at a time on mobile (Description + the seven setup categories),
-// replacing the long single scroll. Distinct from the page-level `Tabs`
-// component, which switches between whole cards (Configure / Preview). Styling
-// follows the Figma stepper: numbered "info" discs + labels, a CheckCircle for
-// completed sections, and a gold-free blue accent underline on the active tab.
-// Hidden above 767px, where every section stacks in the side-by-side workbench.
+// ---- In-card section tabs (all viewports) ---------------------------------
+// Horizontal tab strip navigates the Configure card one section at a time.
+// Distinct from the page-level `Tabs` component (Configure / Preview Watchlist).
 
 export interface SectionTab {
   id: string;
@@ -229,12 +227,28 @@ export function StrategyForgePanel({ strategy }: { strategy: Strategy | undefine
   /** Chip/tag rows as they were when the table modal opened — Cancel restores this. */
   const editorSnapshotRef = useRef<RuleChip[] | RuleTag[]>([]);
   const [editingWeight, setEditingWeight] = useState<RuleCategory | null>(null);
-  // Which section pane the in-card tab strip is showing (mobile only). Desktop /
-  // tablet render every pane at once, so this is inert above 767px.
   const [activeSection, setActiveSection] = useState<string>("identity");
+  const [applyToastDismissed, setApplyToastDismissed] = useState(false);
+  const [updateToastVisible, setUpdateToastVisible] = useState(false);
   const [updatedFlash, setUpdatedFlash] = useState(false);
   const flashTimer = useRef<number | undefined>(undefined);
-  useEffect(() => () => window.clearTimeout(flashTimer.current), []);
+  const updateToastTimer = useRef<number | undefined>(undefined);
+  const previousStrategyIdRef = useRef<string | undefined>(undefined);
+  useEffect(
+    () => () => {
+      window.clearTimeout(flashTimer.current);
+      window.clearTimeout(updateToastTimer.current);
+    },
+    [],
+  );
+  useEffect(() => {
+    setActiveSection("identity");
+    const previousId = previousStrategyIdRef.current;
+    if (previousId && previousId !== strategy?.id) {
+      setApplyToastDismissed(false);
+    }
+    previousStrategyIdRef.current = strategy?.id;
+  }, [strategy?.id]);
 
   // Edits already apply live via updateStrategy — Save is a confirm/re-validate
   // step, so "no changes" means "nothing new since the last confirm (or since
@@ -256,10 +270,14 @@ export function StrategyForgePanel({ strategy }: { strategy: Strategy | undefine
   const rules = useMemo(() => strategy?.rules ?? [], [strategy]);
   const ruleTags = useMemo(() => strategy?.ruleTags ?? [], [strategy]);
 
-  const validation = useMemo(
-    () => (strategy ? validateStrategy(strategy) : null),
+  const applyReady = useMemo(
+    () => (strategy ? isStrategyApplyReady(strategy) : true),
     [strategy],
   );
+
+  useEffect(() => {
+    if (applyReady) setApplyToastDismissed(false);
+  }, [applyReady]);
 
   if (!strategy) {
     return (
@@ -347,53 +365,17 @@ export function StrategyForgePanel({ strategy }: { strategy: Strategy | undefine
     // next edit.
     savedSnapshotRef.current = currentSnapshot;
     setUpdatedFlash(true);
+    setUpdateToastVisible(true);
     window.clearTimeout(flashTimer.current);
+    window.clearTimeout(updateToastTimer.current);
     flashTimer.current = window.setTimeout(() => setUpdatedFlash(false), 2500);
+    updateToastTimer.current = window.setTimeout(() => setUpdateToastVisible(false), 2500);
   }
 
   const weightFor = (category: RuleCategory): number | undefined =>
     weights?.[category];
 
-  // ---- Stepper completion (drives the active steppers) ----
-  const chipsIn = (category: RuleCategory) =>
-    rules.filter((chip) => chip.category === category && chip.enabled);
-  const customTagsIn = (category: RuleCategory) =>
-    ruleTags.filter((tag) => tag.category === category && !tag.system);
-
-  function categoryComplete(category: RuleCategory): boolean {
-    const chips = chipsIn(category);
-    if (chips.length === 0) return false;
-    const total = Math.round(chips.reduce((sum, chip) => sum + chip.weightPct, 0));
-    if (total !== 100) return false;
-    if (category === "thesis" && !strategy?.thesisDescription?.trim()) return false;
-    return true;
-  }
-
-  function subSteps(category: RuleCategory): StepItem[] {
-    const labels = CATEGORY_META[category].subSteps;
-    const hasChips = chipsIn(category).length > 0;
-    const hasTags = customTagsIn(category).length > 0;
-    const done =
-      category === "thesis"
-        ? [Boolean(strategy?.thesisDescription?.trim()), hasChips, hasTags]
-        : [hasChips, hasTags];
-    return labels.map((label, index) => ({
-      label,
-      complete: done[index] ?? false,
-    }));
-  }
-
-  const mainSteps: StepItem[] = [
-    { label: "Strategy Cadence", complete: Boolean(strategy.checkInterval) },
-    ...CATEGORY_ORDER.map((category) => ({
-      label: CATEGORY_META[category].stepLabel,
-      complete: categoryComplete(category),
-    })),
-  ];
-
-  // In-card section tabs (mobile): Description + Cadence + the six categories.
-  // Label-only for now (no circles/numbers) — the active tab is marked by a
-  // brighter label and a blue underline.
+  // In-card section tabs: Description + Cadence + the six categories.
   const sectionTabs: SectionTab[] = [
     { id: "identity", label: "Description" },
     { id: "cadence", label: "Strategy Cadence" },
@@ -412,13 +394,27 @@ export function StrategyForgePanel({ strategy }: { strategy: Strategy | undefine
         </span>
       </div>
 
-      {/* In-card section stepper/tabs — mobile only (hidden ≥ 768px via CSS).
-          Navigates the panes below one at a time instead of one long scroll. */}
+      {/* In-card section tabs — one Configure pane visible at a time. */}
       <SectionTabs tabs={sectionTabs} active={activeSection} onChange={setActiveSection} />
 
-      {/* Scrolling body — head above + the action footer below stay pinned,
-          matching the My Strategies / Current Watch card model. On mobile the
-          `data-forge-section` panes toggle so only the active tab's pane shows. */}
+      {(updateToastVisible || (!applyReady && !applyToastDismissed)) ? (
+        <div className="forge-toast-stack">
+          {updateToastVisible ? (
+            <ForgeToast tone="success">Strategy updated.</ForgeToast>
+          ) : null}
+          {!applyReady && !applyToastDismissed ? (
+            <ForgeToast
+              tone="warning"
+              onDismiss={() => setApplyToastDismissed(true)}
+              dismissLabel="Dismiss apply readiness reminder"
+            >
+              {APPLY_READINESS_MESSAGE}
+            </ForgeToast>
+          ) : null}
+        </div>
+      ) : null}
+
+      {/* Scrolling body — head above + the action footer below stay pinned. */}
       <div className="strategy-config-scroll">
       {/* ---- Identity (Description pane) ---- */}
       <div
@@ -505,13 +501,6 @@ export function StrategyForgePanel({ strategy }: { strategy: Strategy | undefine
           )}
         </div>
       </div>
-      </div>
-
-      {/* ---- Steps ---- */}
-      {/* Desktop/tablet only: the mobile view replaces this with the tab strip. */}
-      <div className="forge-section forge-section--steps">
-        <span className="config-label forge-label">Steps To Setup Your Strategy</span>
-        <Stepper steps={mainSteps} tone="info" />
       </div>
 
       {/* ---- 1. Strategy cadence ---- */}
@@ -643,7 +632,6 @@ export function StrategyForgePanel({ strategy }: { strategy: Strategy | undefine
             </div>
 
             <p className="forge-section-q">{meta.question}</p>
-            <Stepper steps={subSteps(category)} tone="accent" />
 
             {category === "thesis" ? (
               <label className="config-field">
@@ -733,20 +721,6 @@ export function StrategyForgePanel({ strategy }: { strategy: Strategy | undefine
         );
       })}
 
-      {/* ---- Completeness cautions ---- */}
-      {validation && !validation.complete ? (
-        <div className="forge-caution" role="status">
-          <span className="forge-caution-head">
-            <Warning aria-hidden weight="fill" />
-            Finish the configuration before applying this strategy
-          </span>
-          <ul className="forge-caution-list">
-            {validation.issues.map((issue) => (
-              <li key={issue}>{issue}</li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
       </div>
 
       {/* ---- Actions (pinned card footer; icon-only on mobile) ---- */}

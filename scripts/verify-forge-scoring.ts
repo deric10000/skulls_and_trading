@@ -22,6 +22,10 @@ import {
   resolveStatus,
   severityRank,
 } from "../src/lib/forge/status";
+import {
+  APPLY_READINESS_MESSAGE,
+  isStrategyApplyReady,
+} from "../src/lib/forge/applyReadiness";
 import type { RuleChip, Strategy } from "../src/types";
 
 let failures = 0;
@@ -230,6 +234,18 @@ check(
   Object.keys(customAlign.byTicker).length > 0,
   `${Object.keys(customAlign.byTicker).length} tickers`,
 );
+
+// 7. Apply readiness (lighter bar than validateStrategy completeness)
+check("APPLY_READINESS_MESSAGE is non-empty", APPLY_READINESS_MESSAGE.length > 20);
+check("VGD seed is apply-ready", isStrategyApplyReady(vgd));
+check(
+  "Blank strategy is not apply-ready",
+  !isStrategyApplyReady(blank),
+);
+const noPortfolio: Strategy = { ...vgd, appliedPortfolioIds: [] };
+check("Strategy without portfolio is not apply-ready", !isStrategyApplyReady(noPortfolio));
+const noRules: Strategy = { ...vgd, rules: [] };
+check("Strategy without rules is not apply-ready", !isStrategyApplyReady(noRules));
 
 console.log(failures === 0 ? "\nALL CHECKS PASSED" : `\n${failures} CHECKS FAILED`);
 process.exit(failures === 0 ? 0 : 1);
