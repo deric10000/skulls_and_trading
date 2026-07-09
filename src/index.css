@@ -1510,6 +1510,71 @@ select.input:hover:not(:disabled) {
   gap: var(--space-3);
 }
 
+/* Selected detail reuses list-row layout, without selectable-card chrome so
+   content aligns with the detail blocks below. */
+.watch-summary-card {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  border-radius: 0;
+}
+
+.watch-summary-card:hover {
+  border-color: transparent;
+  transform: none;
+}
+
+.watch-summary-card.is-selected {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+}
+
+.watch-summary-card .watch-select {
+  cursor: default;
+  padding-inline: 0;
+}
+
+.watch-summary-card .watch-body {
+  /* Detail view: metrics on top, per-strategy conviction blocks below. */
+  flex-direction: column;
+}
+
+.watch-summary-card .watch-metrics,
+.watch-summary-card .watch-strategy-stack {
+  flex: 1 1 auto;
+}
+
+.watch-strategy-stack {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.watch-strategy-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  min-width: 0;
+}
+
+.watch-strategy-block .signal-stack {
+  margin: 0;
+}
+
+.watch-summary-card .watch-conviction-box {
+  /* Plan block lives inside the conviction box on the selected detail view. */
+  gap: 0.55rem;
+}
+
+.watch-summary-card .watch-summary-plan-block {
+  margin-top: 0.15rem;
+  padding-top: 0.55rem;
+  border-top: 1px solid var(--border-soft);
+}
+
 .watch-summary-head {
   display: flex;
   flex-direction: column;
@@ -1561,6 +1626,33 @@ select.input:hover:not(:disabled) {
   gap: 0.45rem;
 }
 
+.watch-plan-section-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.watch-plan-section-caret {
+  flex: 0 0 auto;
+  width: 1.1rem;
+  height: 1.1rem;
+  color: var(--text-muted);
+  transition: transform 0.15s ease;
+}
+
+.watch-plan-section.is-expanded .watch-plan-section-caret {
+  transform: rotate(180deg);
+}
+
 .watch-plan-triggers {
   display: flex;
   flex-wrap: wrap;
@@ -1574,6 +1666,24 @@ select.input:hover:not(:disabled) {
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
+}
+
+.watch-summary-my-plan .config-label {
+  white-space: normal;
+  line-height: 1.35;
+}
+
+.watch-my-plan-datapoints {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.12rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  line-height: 1.35;
+  font-variant-numeric: tabular-nums;
 }
 
 .watch-my-plan-text {
@@ -1871,7 +1981,8 @@ select.input:hover:not(:disabled) {
   }
 
   .watch-metrics,
-  .watch-conviction-box {
+  .watch-conviction-box,
+  .watch-strategy-stack {
     flex: 1 1 auto;
   }
 }

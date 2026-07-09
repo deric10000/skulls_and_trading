@@ -2,17 +2,18 @@ import { useEffect, useMemo, useState } from "react";
 import { useAppState } from "../state/AppState";
 import { dataSource } from "../lib/datasource";
 import { formatChange, formatPrice } from "../lib/format";
-import { formatChipCondition } from "../lib/forge/metrics";
+import { formatChipCondition, formatMetricValue, METRICS } from "../lib/forge/metrics";
 import {
   categoriesForStatus,
   isExamplePlan,
 } from "../lib/forge/myPlan";
 import type { ChipResult, StockAlignment } from "../lib/forge/scoring";
-import { StatusStack, WatchAlignLabel, WatchAlignStack, WatchConvictionHead } from "./StatusBadge";
+import { STATUS_TONE } from "../lib/status";
+import { StatusStack, WatchAlignLabel, WatchConvictionHead } from "./StatusBadge";
 import { ForgePill } from "./ForgePill";
 import { PortfolioCompass } from "./PortfolioCompass";
 import { Dropdown } from "./Dropdown";
-import { CaretLeft } from "../lib/icons";
+import { CaretDown, CaretLeft } from "../lib/icons";
 import type {
   LogEntry,
   RuleCategory,
@@ -29,8 +30,35 @@ interface StrategyBreakdown {
 }
 
 type PlanTrigger =
-  | { kind: "chip"; id: string; label: string; myPlan?: string; chip: RuleChip }
-  | { kind: "tag"; id: string; label: string; myPlan?: string; tag: RuleTag };
+  | {
+      kind: "chip";
+      id: string;
+      label: string;
+      myPlan?: string;
+      chip: RuleChip;
+      dataPoints: string[];
+    }
+  | {
+      kind: "tag";
+      id: string;
+      label: string;
+      myPlan?: string;
+      tag: RuleTag;
+      dataPoints: string[];
+    };
+
+/** Live reading that failed the rule, e.g. "Revenue Growth YoY = 20%". */
+function formatObservedDataPoint(result: ChipResult): string {
+  const meta = METRICS[result.chip.metric];
+  const label = meta?.label ?? result.chip.metric;
+  if (result.value == null) return `${label} = —`;
+  return `${label} = ${formatMetricValue(result.value, meta)}`;
+}
+
+/** Title for the My Plan label — nickname + "is not met". */
+function formatPlanTriggerTitle(trigger: PlanTrigger): string {
+  return `My Plan if ${trigger.label} is not met`;
+}
 
 interface PlanSection {
   status: StatusType;
@@ -77,6 +105,7 @@ function collectTriggersForCategories(
         label: result.chip.label,
         myPlan: resolveChipPlan(strategy, result.chip),
         chip: result.chip,
+        dataPoints: [formatObservedDataPoint(result)],
       });
     }
 
@@ -88,10 +117,10 @@ function collectTriggersForCategories(
 
     for (const tag of strategy.ruleTags ?? []) {
       if (!categories.has(tag.category) || tag.system) continue;
-      const hit = [...failingIds].some((chipId) =>
-        tag.chipIds.some((tagChipId) => chipMatchesTag(chipId, tagChipId)),
+      const memberFails = failing.filter((result) =>
+        tag.chipIds.some((tagChipId) => chipMatchesTag(result.chip.id, tagChipId)),
       );
-      if (!hit) continue;
+      if (memberFails.length === 0) continue;
       const key = `tag:${tag.id}`;
       if (seen.has(key)) continue;
       seen.add(key);
@@ -101,6 +130,7 @@ function collectTriggersForCategories(
         label: tag.label,
         myPlan: resolveTagPlan(strategy, tag),
         tag,
+        dataPoints: memberFails.map(formatObservedDataPoint),
       });
     }
   }
@@ -124,6 +154,207 @@ function collectPlanSections(
     .filter((section) => section.triggers.length > 0);
 }
 
+function statusLabelsFromAlignment(
+  alignment: StockAlignment | undefined,
+  fallbackStatus: StatusType,
+): StatusType[] {
+  if (alignment?.resolved) {
+    const labels = [alignment.resolved.primary, ...alignment.resolved.categoryFlags];
+    return [...new Set(labels)];
+  }
+  if (alignment?.status) return [alignment.status];
+  return fallbackStatus ? [fallbackStatus] : [];
+}
+
+/** One applied strategy: name chip + its own conviction/plan box. */
+function StrategyConvictionBlock({
+  strategy,
+  alignment,
+  fallbackStatus,
+  ticker,
+}: {
+  strategy: Strategy;
+  alignment: StockAlignment | undefined;
+  fallbackStatus: StatusType;
+  ticker: string;
+}) {
+  const conviction = alignment?.conviction ?? 0;
+  const resolved = alignment?.resolved;
+  const status = alignment?.status ?? fallbackStatus;
+
+  const statusLabels = useMemo(
+    () => statusLabelsFromAlignment(alignment, fallbackStatus),
+    [alignment, fallbackStatus],
+  );
+
+  const planSections = useMemo(
+    () =>
+      collectPlanSections([{ strategy, alignment }], statusLabels),
+    [strategy, alignment, statusLabels],
+  );
+
+  const planTriggers = useMemo(
+    () => planSections.flatMap((section) => section.triggers),
+    [planSections],
+  );
+
+  const triggerKey = planTriggers
+    .map((trigger) => `${trigger.kind}:${trigger.id}`)
+    .join("|");
+
+  const [selectedTriggerId, setSelectedTriggerId] = useState<string | null>(null);
+  const [expandedPlanStatuses, setExpandedPlanStatuses] = useState<Set<StatusType>>(
+    () => new Set(),
+  );
+
+  useEffect(() => {
+    setSelectedTriggerId(
+      planTriggers[0] ? `${planTriggers[0].kind}:${planTriggers[0].id}` : null,
+    );
+    setExpandedPlanStatuses(
+      planSections[0] ? new Set([planSections[0].status]) : new Set(),
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- triggerKey fingerprints the set
+  }, [ticker, strategy.id, triggerKey]);
+
+  function togglePlanSection(statusLabel: StatusType) {
+    setExpandedPlanStatuses((current) => {
+      const next = new Set(current);
+      if (next.has(statusLabel)) next.delete(statusLabel);
+      else next.add(statusLabel);
+      return next;
+    });
+  }
+
+  const selectedTrigger =
+    planTriggers.find(
+      (trigger) => `${trigger.kind}:${trigger.id}` === selectedTriggerId,
+    ) ?? planTriggers[0];
+
+  const selectedTriggerKey = selectedTrigger
+    ? `${selectedTrigger.kind}:${selectedTrigger.id}`
+    : null;
+
+  const selectedPlanStatus =
+    planSections.find((section) =>
+      section.triggers.some(
+        (trigger) => `${trigger.kind}:${trigger.id}` === selectedTriggerKey,
+      ),
+    )?.status ?? statusLabels[0];
+
+  const myPlanTitle = selectedTrigger
+    ? formatPlanTriggerTitle(selectedTrigger)
+    : "My Plan";
+
+  const dataPointTone = selectedPlanStatus
+    ? STATUS_TONE[selectedPlanStatus]
+    : "negative";
+
+  const sectionIdBase = `watch-plan-${strategy.id}`;
+
+  return (
+    <div className="watch-strategy-block">
+      <ul className="signal-stack" aria-label={`${strategy.name} strategy`}>
+        <li className="chip">{strategy.name}</li>
+      </ul>
+      <div className="watch-conviction-box">
+        <WatchConvictionHead
+          resolved={resolved}
+          fallbackStatus={status}
+          hideStatuses={planSections.length > 0}
+        />
+        <span className="watch-conviction-meter">
+          <span className="watch-conviction-track">
+            <span
+              className="watch-conviction-fill"
+              style={{ width: `${conviction}%` }}
+            />
+          </span>
+          <span className="watch-conviction-score">{conviction}</span>
+        </span>
+
+        {planSections.length > 0 ? (
+          <div className="watch-summary-plan-block">
+            {planSections.map((section) => {
+              const expanded = expandedPlanStatuses.has(section.status);
+              const panelId = `${sectionIdBase}-${section.status.replace(/\s+/g, "-").toLowerCase()}`;
+              return (
+                <div
+                  key={section.status}
+                  className={
+                    expanded
+                      ? "watch-plan-section is-expanded"
+                      : "watch-plan-section"
+                  }
+                >
+                  <button
+                    type="button"
+                    className="watch-plan-section-toggle"
+                    aria-expanded={expanded}
+                    aria-controls={panelId}
+                    onClick={() => togglePlanSection(section.status)}
+                  >
+                    <WatchAlignLabel status={section.status} />
+                    <CaretDown
+                      className="watch-plan-section-caret"
+                      aria-hidden
+                      weight="regular"
+                    />
+                  </button>
+                  {expanded ? (
+                    <ul id={panelId} className="watch-plan-triggers">
+                      {section.triggers.map((trigger) => {
+                        const key = `${trigger.kind}:${trigger.id}`;
+                        const selected = selectedTrigger
+                          ? `${selectedTrigger.kind}:${selectedTrigger.id}` === key
+                          : false;
+                        return (
+                          <li key={key}>
+                            <ForgePill
+                              state={selected ? "selected" : "inactive"}
+                              onClick={() => setSelectedTriggerId(key)}
+                            >
+                              {trigger.label}
+                            </ForgePill>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  ) : null}
+                </div>
+              );
+            })}
+            <div className="watch-summary-my-plan">
+              <span className="config-label forge-label">{myPlanTitle}</span>
+              {selectedTrigger && selectedTrigger.dataPoints.length > 0 ? (
+                <ul
+                  className={`watch-my-plan-datapoints watch-align--${dataPointTone}`}
+                  aria-label="Failing data points"
+                >
+                  {selectedTrigger.dataPoints.map((point) => (
+                    <li key={point}>{point}</li>
+                  ))}
+                </ul>
+              ) : null}
+              <p
+                className={
+                  isExamplePlan(selectedTrigger?.myPlan)
+                    ? "watch-my-plan-text watch-my-plan-text--example"
+                    : "watch-my-plan-text"
+                }
+              >
+                {selectedTrigger?.myPlan?.trim()
+                  ? selectedTrigger.myPlan
+                  : "No plan written yet for this rule."}
+              </p>
+            </div>
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 function WatchSummary({
   item,
   logs,
@@ -141,139 +372,113 @@ function WatchSummary({
   const analysis = dataSource.getTickerAnalysis(item.ticker);
   const latestLog = logs[0];
 
-  const statusLabels = useMemo((): StatusType[] => {
-    if (item.resolved) {
-      const labels = [item.resolved.primary, ...item.resolved.categoryFlags];
-      return [...new Set(labels)];
-    }
-    return item.status ? [item.status] : [];
-  }, [item.resolved, item.status]);
-
-  const planSections = useMemo(
-    () => collectPlanSections(strategyBreakdowns, statusLabels),
-    [strategyBreakdowns, statusLabels],
-  );
-
-  const planTriggers = useMemo(
-    () => planSections.flatMap((section) => section.triggers),
-    [planSections],
-  );
-
-  const triggerKey = planTriggers
-    .map((trigger) => `${trigger.kind}:${trigger.id}`)
-    .join("|");
-
-  const [selectedTriggerId, setSelectedTriggerId] = useState<string | null>(null);
-
-  useEffect(() => {
-    setSelectedTriggerId(
-      planTriggers[0] ? `${planTriggers[0].kind}:${planTriggers[0].id}` : null,
-    );
-    // Reset selection when the ticker or the set of failing triggers changes.
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- triggerKey is the stable fingerprint
-  }, [item.ticker, triggerKey]);
-
-  const selectedTrigger =
-    planTriggers.find(
-      (trigger) => `${trigger.kind}:${trigger.id}` === selectedTriggerId,
-    ) ?? planTriggers[0];
+  const owned = item.shares > 0;
+  const marketValue = item.price * item.shares;
+  const totalPnl = (item.price - item.avgPrice) * item.shares;
+  const changeUp = item.changePct >= 0;
+  const changeClass = changeUp ? "watch-change--up" : "watch-change--down";
 
   return (
     <div className="watch-summary">
-      <header className="watch-summary-head">
-        <div className="watch-summary-title">
-          <span className="watch-summary-ticker">{item.ticker}</span>
-        </div>
-        <span className="watch-name">{item.name}</span>
-        <div className="watch-summary-quote">
-          <span className="watch-price">{formatPrice(item.price)}</span>
-          <span
-            className={
-              item.changePct >= 0
-                ? "watch-change watch-change--up"
-                : "watch-change watch-change--down"
-            }
-          >
-            {formatChange(item.changePct)}
+      {/* Selected ticker card — same structure/styles as the list-row
+          `.watch-select` card; details expand below the conviction box. */}
+      <div className="watch-item select-card is-selected watch-summary-card">
+        <div className="watch-select" aria-pressed="true">
+          <span className="watch-head">
+            <span className="watch-id">
+              <span className="watch-ticker">
+                <span className="watch-selected-dot" aria-hidden="true" />
+                {item.ticker}
+              </span>
+              <span className="watch-name">{item.name}</span>
+            </span>
+            {owned ? (
+              <span className="watch-mvqty">
+                <span className="watch-field-label">Market Value | Qty</span>
+                <span className="watch-figure watch-figure--strong">
+                  {formatPrice(marketValue)}
+                </span>
+                <span className="watch-figure">{item.shares}</span>
+              </span>
+            ) : null}
           </span>
-        </div>
-        {item.shares > 0 ? (
-          <span className="watch-holding">
-            {item.shares} shares · DCA {formatPrice(item.avgPrice)}
-          </span>
-        ) : null}
-      </header>
 
-      <div className="watch-summary-signal">
-        <span className="watch-summary-metrics">Conviction {item.conviction}</span>
-      </div>
+          <span className="watch-body">
+            <span className="watch-metrics">
+              {owned ? (
+                <span className="watch-metric-pair">
+                  <span className="watch-metric">
+                    <span className="watch-field-label">Last Price</span>
+                    <span className="watch-figure watch-figure--strong">
+                      {formatPrice(item.price)}
+                    </span>
+                  </span>
+                  <span className="watch-metric">
+                    <span className="watch-field-label">Avg. Price</span>
+                    <span className="watch-figure">
+                      {formatPrice(item.avgPrice)}
+                    </span>
+                  </span>
+                </span>
+              ) : (
+                <span className="watch-metric">
+                  <span className="watch-field-label">Last Price</span>
+                  <span className="watch-figure watch-figure--strong">
+                    {formatPrice(item.price)}
+                  </span>
+                </span>
+              )}
+              {owned ? (
+                <span className="watch-metric">
+                  <span className="watch-field-label">
+                    {"Open P&L% | Total"}
+                  </span>
+                  <span className="watch-pnl">
+                    <span className={`watch-figure watch-figure--medium ${changeClass}`}>
+                      {formatChange(item.changePct)}
+                    </span>
+                    <span className={`watch-figure ${changeClass}`}>
+                      {formatPrice(totalPnl)}
+                    </span>
+                  </span>
+                </span>
+              ) : null}
+            </span>
 
-      {strategyBreakdowns.length > 0 ? (
-        <ul className="signal-stack" aria-label="Strategy stack">
-          {strategyBreakdowns.map(({ strategy }) => (
-            <li key={strategy.id} className="chip">
-              {strategy.name}
-            </li>
-          ))}
-        </ul>
-      ) : null}
-
-      {planSections.length > 0 ? (
-        <div className="watch-summary-plan-block">
-          {planSections.map((section) => (
-            <div
-              key={section.status}
-              className="watch-plan-section"
-              aria-label={`${section.status} failing rules`}
-            >
-              <WatchAlignLabel status={section.status} />
-              <ul className="watch-plan-triggers">
-                {section.triggers.map((trigger) => {
-                  const key = `${trigger.kind}:${trigger.id}`;
-                  const selected = selectedTrigger
-                    ? `${selectedTrigger.kind}:${selectedTrigger.id}` === key
-                    : false;
-                  return (
-                    <li key={key}>
-                      <ForgePill
-                        state={selected ? "selected" : "inactive"}
-                        onClick={() => setSelectedTriggerId(key)}
-                      >
-                        {trigger.label}
-                      </ForgePill>
-                    </li>
-                  );
-                })}
-              </ul>
+            <div className="watch-strategy-stack">
+              {strategyBreakdowns.length > 0 ? (
+                strategyBreakdowns.map(({ strategy, alignment }) => (
+                  <StrategyConvictionBlock
+                    key={strategy.id}
+                    strategy={strategy}
+                    alignment={alignment}
+                    fallbackStatus={item.status}
+                    ticker={item.ticker}
+                  />
+                ))
+              ) : (
+                <div className="watch-conviction-box">
+                  <WatchConvictionHead
+                    resolved={item.resolved}
+                    fallbackStatus={item.status}
+                  />
+                  <span className="watch-conviction-meter">
+                    <span className="watch-conviction-track">
+                      <span
+                        className="watch-conviction-fill"
+                        style={{ width: `${item.conviction}%` }}
+                      />
+                    </span>
+                    <span className="watch-conviction-score">
+                      {item.conviction}
+                    </span>
+                  </span>
+                </div>
+              )}
             </div>
-          ))}
-          <div className="watch-summary-my-plan">
-            <span className="config-label forge-label">My Plan</span>
-            <p
-              className={
-                isExamplePlan(selectedTrigger?.myPlan)
-                  ? "watch-my-plan-text watch-my-plan-text--example"
-                  : "watch-my-plan-text"
-              }
-            >
-              {selectedTrigger?.myPlan?.trim()
-                ? selectedTrigger.myPlan
-                : "No plan written yet for this rule."}
-            </p>
-          </div>
+          </span>
         </div>
-      ) : item.resolved ? (
-        <div className="watch-summary-statuses">
-          <WatchAlignStack
-            resolved={item.resolved}
-            fallbackStatus={item.status}
-          />
-        </div>
-      ) : item.status ? (
-        <div className="watch-summary-statuses">
-          <WatchAlignLabel status={item.status} />
-        </div>
-      ) : null}
+      </div>
 
       <dl className="watch-summary-detail">
         <div className="watch-summary-row">
