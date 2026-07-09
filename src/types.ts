@@ -388,6 +388,10 @@ export interface RuleChip {
   value: number | [number, number] | string;
   weightPct: number; // Rule Weight — % importance within its category (chips sum to 100)
   enabled: boolean;
+  // Captain's written response when this rule breaks / triggers a status.
+  // Seeded defaults may start with "Example: " (muted in UI); the first edit
+  // drops that prefix and uses normal filled-input styling.
+  myPlan?: string;
   // Set only when this chip was added to a strategy FROM a saved custom chip
   // (AppState.chipLibrary) via the Add Rule picker — links this row back to
   // its library source so editing that library chip can optionally propagate
@@ -408,6 +412,8 @@ export interface RuleTag {
   chipIds: string[]; // member rule chips (empty for the system tag = all chips)
   weightPct: number; // Tag Weight — % importance among the category's tags
   autoApply: string; // suggested auto-apply guidance copy
+  // Same contract as RuleChip.myPlan — response when this tag's rules break.
+  myPlan?: string;
   system?: boolean; // true for the built-in "All Active Chips" tag
 }
 

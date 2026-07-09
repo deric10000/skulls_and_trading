@@ -1543,6 +1543,51 @@ select.input:hover:not(:disabled) {
   gap: 0.5rem;
 }
 
+.watch-summary-statuses {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.watch-summary-plan-block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.watch-plan-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.watch-plan-triggers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.watch-summary-my-plan {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.watch-my-plan-text {
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.4;
+  color: var(--text-strong);
+}
+
+.watch-my-plan-text--example {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
 .watch-summary-metrics {
   font-size: 0.74rem;
   font-weight: 600;
@@ -3259,8 +3304,15 @@ select.input:hover:not(:disabled) {
 
 .forge-pill--toggle {
   cursor: pointer;
+  /* Same padding as .forge-pill so selected/default share one silhouette. */
   border: 1px solid transparent;
-  padding: 2px 6px;
+}
+
+/* Selected = default chip fill + visible border (not a different color system). */
+.forge-pill--toggle.forge-pill--on {
+  border-color: var(--forge-chip-text);
+  background: var(--forge-chip-surface);
+  color: var(--forge-chip-text);
 }
 
 .forge-pill--toggle:not(.forge-pill--on) {
@@ -3271,9 +3323,15 @@ select.input:hover:not(:disabled) {
 
 /* Tickers tab — enabled = green "applied" (not the default rule-chip blue). */
 .forge-pill--toggle.forge-pill--on.forge-pill--applied {
-  border-color: transparent;
+  border-color: var(--positive);
   background: rgb(62 213 152 / 0.16);
   color: var(--positive);
+}
+
+.forge-pill--toggle:not(.forge-pill--on).forge-pill--applied {
+  border-color: var(--border-strong);
+  background: transparent;
+  color: var(--text-muted);
 }
 
 .forge-pill-stack {
@@ -3617,6 +3675,50 @@ select.input:hover:not(:disabled) {
     minmax(64px, 0.45fr) minmax(140px, 1.25fr) 108px;
   align-items: start;
   padding-block: 10px;
+}
+
+.forge-table--chips-plan .forge-table-row {
+  /* Risk chips: insert My Plan after Rule Weight, before Actions. */
+  grid-template-columns:
+    minmax(120px, 0.85fr) minmax(110px, 0.95fr) minmax(100px, 0.8fr)
+    minmax(96px, 0.65fr) minmax(76px, 0.55fr) minmax(76px, 0.55fr)
+    minmax(160px, 1.2fr) 108px;
+  align-items: start;
+}
+
+.forge-table--tags-plan .forge-table-row {
+  /* Risk tags: insert My Plan after Weight, before Auto-Apply. */
+  grid-template-columns:
+    minmax(100px, 0.7fr) minmax(120px, 1fr) minmax(110px, 0.95fr)
+    minmax(56px, 0.4fr) minmax(140px, 1.1fr) minmax(120px, 1fr) 108px;
+  align-items: start;
+  padding-block: 10px;
+}
+
+.forge-th-with-tip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.forge-table-th--plan {
+  white-space: nowrap;
+}
+
+.forge-cell-plan {
+  min-height: 2.5rem;
+  resize: vertical;
+  line-height: 1.35;
+}
+
+.forge-cell-plan--example {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.forge-cell-plan--example:focus {
+  color: inherit;
+  font-style: normal;
 }
 
 .forge-table-row--head {
@@ -4183,7 +4285,9 @@ select.forge-cell-input {
   }
 
   .forge-table-row,
-  .forge-table--tags .forge-table-row {
+  .forge-table--tags .forge-table-row,
+  .forge-table--chips-plan .forge-table-row,
+  .forge-table--tags-plan .forge-table-row {
     grid-template-columns: minmax(0, 1fr);
     gap: 0.45rem;
     padding: 0.75rem var(--space-3);

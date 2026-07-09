@@ -3,16 +3,125 @@ import { useAppState } from "../state/AppState";
 import { dataSource } from "../lib/datasource";
 import { formatChange, formatPrice } from "../lib/format";
 import { formatChipCondition } from "../lib/forge/metrics";
-import type { StockAlignment } from "../lib/forge/scoring";
+import {
+  categoriesForStatus,
+  isExamplePlan,
+} from "../lib/forge/myPlan";
+import type { ChipResult, StockAlignment } from "../lib/forge/scoring";
 import { StatusStack, WatchAlignLabel, WatchAlignStack, WatchConvictionHead } from "./StatusBadge";
+import { ForgePill } from "./ForgePill";
 import { PortfolioCompass } from "./PortfolioCompass";
 import { Dropdown } from "./Dropdown";
 import { CaretLeft } from "../lib/icons";
-import type { LogEntry, Strategy, WatchlistItem } from "../types";
+import type {
+  LogEntry,
+  RuleCategory,
+  RuleChip,
+  RuleTag,
+  StatusType,
+  Strategy,
+  WatchlistItem,
+} from "../types";
 
 interface StrategyBreakdown {
   strategy: Strategy;
   alignment: StockAlignment | undefined;
+}
+
+type PlanTrigger =
+  | { kind: "chip"; id: string; label: string; myPlan?: string; chip: RuleChip }
+  | { kind: "tag"; id: string; label: string; myPlan?: string; tag: RuleTag };
+
+interface PlanSection {
+  status: StatusType;
+  triggers: PlanTrigger[];
+}
+
+function collectTriggersForCategories(
+  strategyBreakdowns: StrategyBreakdown[],
+  categories: Set<RuleCategory>,
+): PlanTrigger[] {
+  if (categories.size === 0) return [];
+
+  const triggers: PlanTrigger[] = [];
+  const seen = new Set<string>();
+
+  /** Prefer the live strategy's myPlan (Forge edits) over the scored chip copy. */
+  const resolveChipPlan = (strategy: Strategy, chip: RuleChip): string | undefined => {
+    const rawId = chip.id.includes(":") ? chip.id.slice(chip.id.lastIndexOf(":") + 1) : chip.id;
+    const live =
+      strategy.rules?.find((item) => item.id === chip.id) ??
+      strategy.rules?.find((item) => item.id === rawId);
+    return live?.myPlan ?? chip.myPlan;
+  };
+
+  const resolveTagPlan = (strategy: Strategy, tag: RuleTag): string | undefined => {
+    const live = strategy.ruleTags?.find((item) => item.id === tag.id);
+    return live?.myPlan ?? tag.myPlan;
+  };
+
+  for (const { strategy, alignment } of strategyBreakdowns) {
+    const failing = (alignment?.results ?? []).filter(
+      (result): result is ChipResult =>
+        result.outcome === "fail" && categories.has(result.chip.category),
+    );
+    if (failing.length === 0) continue;
+
+    for (const result of failing) {
+      const key = `chip:${result.chip.id}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      triggers.push({
+        kind: "chip",
+        id: result.chip.id,
+        label: result.chip.label,
+        myPlan: resolveChipPlan(strategy, result.chip),
+        chip: result.chip,
+      });
+    }
+
+    const failingIds = new Set(failing.map((result) => result.chip.id));
+    // Merged scoring prefixes chip ids with `strategyId:` — match tag members
+    // against both the raw id and the suffix after the last colon.
+    const chipMatchesTag = (chipId: string, tagChipId: string) =>
+      chipId === tagChipId || chipId.endsWith(`:${tagChipId}`);
+
+    for (const tag of strategy.ruleTags ?? []) {
+      if (!categories.has(tag.category) || tag.system) continue;
+      const hit = [...failingIds].some((chipId) =>
+        tag.chipIds.some((tagChipId) => chipMatchesTag(chipId, tagChipId)),
+      );
+      if (!hit) continue;
+      const key = `tag:${tag.id}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      triggers.push({
+        kind: "tag",
+        id: tag.id,
+        label: tag.label,
+        myPlan: resolveTagPlan(strategy, tag),
+        tag,
+      });
+    }
+  }
+
+  return triggers;
+}
+
+/** One section per status label, with only the failing chips/tags that drive it. */
+function collectPlanSections(
+  strategyBreakdowns: StrategyBreakdown[],
+  statuses: StatusType[],
+): PlanSection[] {
+  return statuses
+    .map((status) => ({
+      status,
+      triggers: collectTriggersForCategories(
+        strategyBreakdowns,
+        new Set(categoriesForStatus(status)),
+      ),
+    }))
+    .filter((section) => section.triggers.length > 0);
 }
 
 function WatchSummary({
@@ -32,19 +141,48 @@ function WatchSummary({
   const analysis = dataSource.getTickerAnalysis(item.ticker);
   const latestLog = logs[0];
 
+  const statusLabels = useMemo((): StatusType[] => {
+    if (item.resolved) {
+      const labels = [item.resolved.primary, ...item.resolved.categoryFlags];
+      return [...new Set(labels)];
+    }
+    return item.status ? [item.status] : [];
+  }, [item.resolved, item.status]);
+
+  const planSections = useMemo(
+    () => collectPlanSections(strategyBreakdowns, statusLabels),
+    [strategyBreakdowns, statusLabels],
+  );
+
+  const planTriggers = useMemo(
+    () => planSections.flatMap((section) => section.triggers),
+    [planSections],
+  );
+
+  const triggerKey = planTriggers
+    .map((trigger) => `${trigger.kind}:${trigger.id}`)
+    .join("|");
+
+  const [selectedTriggerId, setSelectedTriggerId] = useState<string | null>(null);
+
+  useEffect(() => {
+    setSelectedTriggerId(
+      planTriggers[0] ? `${planTriggers[0].kind}:${planTriggers[0].id}` : null,
+    );
+    // Reset selection when the ticker or the set of failing triggers changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- triggerKey is the stable fingerprint
+  }, [item.ticker, triggerKey]);
+
+  const selectedTrigger =
+    planTriggers.find(
+      (trigger) => `${trigger.kind}:${trigger.id}` === selectedTriggerId,
+    ) ?? planTriggers[0];
+
   return (
     <div className="watch-summary">
       <header className="watch-summary-head">
         <div className="watch-summary-title">
           <span className="watch-summary-ticker">{item.ticker}</span>
-          {item.resolved ? (
-            <WatchAlignStack
-              resolved={item.resolved}
-              fallbackStatus={item.status}
-            />
-          ) : (
-            <WatchAlignLabel status={item.status} />
-          )}
         </div>
         <span className="watch-name">{item.name}</span>
         <div className="watch-summary-quote">
@@ -78,6 +216,63 @@ function WatchSummary({
             </li>
           ))}
         </ul>
+      ) : null}
+
+      {planSections.length > 0 ? (
+        <div className="watch-summary-plan-block">
+          {planSections.map((section) => (
+            <div
+              key={section.status}
+              className="watch-plan-section"
+              aria-label={`${section.status} failing rules`}
+            >
+              <WatchAlignLabel status={section.status} />
+              <ul className="watch-plan-triggers">
+                {section.triggers.map((trigger) => {
+                  const key = `${trigger.kind}:${trigger.id}`;
+                  const selected = selectedTrigger
+                    ? `${selectedTrigger.kind}:${selectedTrigger.id}` === key
+                    : false;
+                  return (
+                    <li key={key}>
+                      <ForgePill
+                        state={selected ? "selected" : "inactive"}
+                        onClick={() => setSelectedTriggerId(key)}
+                      >
+                        {trigger.label}
+                      </ForgePill>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          ))}
+          <div className="watch-summary-my-plan">
+            <span className="config-label forge-label">My Plan</span>
+            <p
+              className={
+                isExamplePlan(selectedTrigger?.myPlan)
+                  ? "watch-my-plan-text watch-my-plan-text--example"
+                  : "watch-my-plan-text"
+              }
+            >
+              {selectedTrigger?.myPlan?.trim()
+                ? selectedTrigger.myPlan
+                : "No plan written yet for this rule."}
+            </p>
+          </div>
+        </div>
+      ) : item.resolved ? (
+        <div className="watch-summary-statuses">
+          <WatchAlignStack
+            resolved={item.resolved}
+            fallbackStatus={item.status}
+          />
+        </div>
+      ) : item.status ? (
+        <div className="watch-summary-statuses">
+          <WatchAlignLabel status={item.status} />
+        </div>
       ) : null}
 
       <dl className="watch-summary-detail">
@@ -133,13 +328,12 @@ function WatchSummary({
               <div className="forge-box-body">
                 {activeResults.length > 0 ? (
                   activeResults.map((result) => (
-                    <span
+                    <ForgePill
                       key={result.chip.id}
-                      className="forge-pill"
                       title={formatChipCondition(result.chip)}
                     >
                       {result.chip.label}
-                    </span>
+                    </ForgePill>
                   ))
                 ) : (
                   <span className="forge-box-empty">No rule chips have data yet.</span>
@@ -151,9 +345,9 @@ function WatchSummary({
               <div className="forge-box-body">
                 {excludedResults.length > 0 ? (
                   excludedResults.map((result) => (
-                    <span key={result.chip.id} className="forge-pill forge-pill--off">
+                    <ForgePill key={result.chip.id} state="off">
                       {result.chip.label}
-                    </span>
+                    </ForgePill>
                   ))
                 ) : (
                   <span className="forge-box-empty">Every rule chip has data.</span>

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { CATEGORY_META } from "../../lib/forge/metrics";
+import { isExamplePlan, normalizePlanEdit } from "../../lib/forge/myPlan";
 import { useIsMobile } from "../../lib/useIsMobile";
 import {
   CaretDown,
@@ -10,6 +11,8 @@ import {
   Trash,
   X,
 } from "../../lib/icons";
+import { InfoTip } from "../Tooltip";
+import { ForgePill } from "../ForgePill";
 import type { RuleCategory, RuleChip, RuleTag } from "../../types";
 
 // ---------------------------------------------------------------------------
@@ -19,14 +22,18 @@ import type { RuleCategory, RuleChip, RuleTag } from "../../types";
 // rows; Cancel (or backdrop / X) restores the tag set from when the modal
 // opened. Update closes the modal.
 //
-// Columns: TAG · PURPOSE · RULE CHIPS · WEIGHT · SUGGESTED AUTO-APPLY LOGIC ·
-// ACTIONS. The built-in "All Active Chips" system tag is duplicate-only.
-// Custom tag weights should total 100%. Rows toggle into an edit mode (pencil)
-// where label/purpose/weight/auto-apply are inputs and member chips are
-// toggleable pills. On mobile the rows reflow into stacked cards.
+// Columns: TAG · PURPOSE · RULE CHIPS · WEIGHT · [MY PLAN on Risk] ·
+// SUGGESTED AUTO-APPLY LOGIC · ACTIONS. The built-in "All Active Chips"
+// system tag is duplicate-only. Custom tag weights should total 100%. Rows
+// toggle into an edit mode (pencil) where label/purpose/weight/auto-apply
+// are inputs and member chips are toggleable pills. On mobile the rows
+// reflow into stacked cards.
 // ---------------------------------------------------------------------------
 
-type SortKey = "label" | "purpose" | "weightPct" | "autoApply";
+type SortKey = "label" | "purpose" | "weightPct" | "autoApply" | "myPlan";
+
+const MY_PLAN_TOOLTIP =
+  "Write, in your words, what you plan to do if this rule is broken.";
 
 let tagIdCounter = 0;
 function nextTagId(): string {
@@ -52,6 +59,9 @@ export function TagsTableModal({
   onDone: () => void;
 }) {
   const meta = CATEGORY_META[category];
+  // My Plan is available on every category — Watch Summary surfaces failing
+  // tags from any status-driving category (thesis, setup, risk, …).
+  const showMyPlan = true;
   const isMobile = useIsMobile();
   const [draft, setDraft] = useState<RuleTag[]>(() =>
     tags.map((tag) => ({ ...tag, chipIds: [...tag.chipIds] })),
@@ -98,8 +108,11 @@ export function TagsTableModal({
     const system = draft.filter((tag) => tag.system);
     const custom = draft.filter((tag) => !tag.system);
     if (!sort) return [...system, ...custom];
-    const value = (tag: RuleTag): string | number =>
-      sort.key === "weightPct" ? tag.weightPct : String(tag[sort.key]).toLowerCase();
+    const value = (tag: RuleTag): string | number => {
+      if (sort.key === "weightPct") return tag.weightPct;
+      if (sort.key === "myPlan") return (tag.myPlan ?? "").toLowerCase();
+      return String(tag[sort.key]).toLowerCase();
+    };
     const compare = (a: RuleTag, b: RuleTag) => {
       const av = value(a);
       const bv = value(b);
@@ -185,7 +198,11 @@ export function TagsTableModal({
   return (
     <div className="modal-backdrop" role="presentation" onClick={onCancel}>
       <div
-        className="modal-card panel forge-table-modal"
+        className={
+          showMyPlan
+            ? "modal-card panel forge-table-modal forge-table-modal--with-plan"
+            : "modal-card panel forge-table-modal"
+        }
         role="dialog"
         aria-modal="true"
         aria-labelledby="tag-table-title"
@@ -210,7 +227,15 @@ export function TagsTableModal({
           </button>
         </div>
 
-        <div className="forge-table forge-table--tags" role="table" aria-label={meta.tagModalTitle}>
+        <div
+          className={
+            showMyPlan
+              ? "forge-table forge-table--tags forge-table--tags-plan"
+              : "forge-table forge-table--tags"
+          }
+          role="table"
+          aria-label={meta.tagModalTitle}
+        >
           <div className="forge-table-row forge-table-row--head" role="row">
             {headers.map((header) => (
               <button
@@ -236,6 +261,17 @@ export function TagsTableModal({
               Weight
               <CaretUpDown aria-hidden weight="regular" />
             </button>
+            {showMyPlan ? (
+              <span
+                className="forge-table-th forge-table-th--static forge-table-th--plan"
+                role="columnheader"
+              >
+                <span className="forge-th-with-tip">
+                  My Plan
+                  <InfoTip label="About My Plan" body={MY_PLAN_TOOLTIP} />
+                </span>
+              </span>
+            ) : null}
             <span className="forge-table-th forge-table-th--static" role="columnheader">
               Suggested Auto-Apply Logic
             </span>
@@ -294,9 +330,9 @@ export function TagsTableModal({
                         onChange={(event) => patchTag(tag.id, { label: event.target.value })}
                       />
                     ) : (
-                      <span className={tag.system ? "forge-pill forge-pill--muted" : "forge-pill"}>
+                      <ForgePill state={tag.system ? "muted" : "default"}>
                         {tag.label}
-                      </span>
+                      </ForgePill>
                     )}
                   </div>
                   <div className="forge-table-cell" role="cell" data-label="Purpose">
@@ -322,15 +358,13 @@ export function TagsTableModal({
                         {chips.map((chip) => {
                           const on = tag.chipIds.includes(chip.id);
                           return (
-                            <button
+                            <ForgePill
                               key={chip.id}
-                              type="button"
-                              className={on ? "forge-pill forge-pill--toggle forge-pill--on" : "forge-pill forge-pill--toggle"}
-                              aria-pressed={on}
+                              state={on ? "selected" : "inactive"}
                               onClick={() => toggleChipMembership(tag.id, chip.id)}
                             >
                               {chip.label}
-                            </button>
+                            </ForgePill>
                           );
                         })}
                       </span>
@@ -340,9 +374,7 @@ export function TagsTableModal({
                           .map((chipId) => chipById.get(chipId))
                           .filter((chip): chip is RuleChip => Boolean(chip))
                           .map((chip) => (
-                            <span key={chip.id} className="forge-pill">
-                              {chip.label}
-                            </span>
+                            <ForgePill key={chip.id}>{chip.label}</ForgePill>
                           ))}
                       </span>
                     )}
@@ -367,6 +399,38 @@ export function TagsTableModal({
                       <span className="forge-cell-weight">{tag.weightPct}%</span>
                     )}
                   </div>
+                  {showMyPlan ? (
+                    <div className="forge-table-cell" role="cell" data-label="My Plan">
+                      {editing ? (
+                        <textarea
+                          className={
+                            isExamplePlan(tag.myPlan)
+                              ? "input forge-cell-input forge-cell-area forge-cell-plan forge-cell-plan--example"
+                              : "input forge-cell-input forge-cell-area forge-cell-plan"
+                          }
+                          rows={2}
+                          value={tag.myPlan ?? ""}
+                          placeholder="What will you do if this rule breaks?"
+                          aria-label="My plan"
+                          onChange={(event) =>
+                            patchTag(tag.id, {
+                              myPlan: normalizePlanEdit(tag.myPlan, event.target.value),
+                            })
+                          }
+                        />
+                      ) : (
+                        <span
+                          className={
+                            isExamplePlan(tag.myPlan)
+                              ? "forge-cell-text forge-cell-text--muted"
+                              : "forge-cell-text"
+                          }
+                        >
+                          {tag.myPlan || "—"}
+                        </span>
+                      )}
+                    </div>
+                  ) : null}
                   <div className="forge-table-cell" role="cell" data-label="Suggested Auto-Apply Logic">
                     {editing ? (
                       <textarea
