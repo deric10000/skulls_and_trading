@@ -2,7 +2,7 @@ import { useAppState } from "../state/AppState";
 import { dataSource } from "../lib/datasource";
 import { statusCopy } from "../lib/forge/status";
 import { STATUS_TONE } from "../lib/status";
-import { StatusStack } from "./StatusBadge";
+import { WatchAlignStack } from "./StatusBadge";
 
 const DEFAULT_PORTFOLIO_ID = dataSource.getPortfolios()[0]?.id ?? "deric";
 
@@ -47,7 +47,7 @@ export function SignalWidget() {
       </div>
 
       <div className="signal-headline">
-        <StatusStack resolved={resolved} />
+        <WatchAlignStack resolved={resolved} fallbackStatus={selectedItem.status} />
         <div className="signal-confidence">
           <span className="signal-confidence-label">
             Conviction {resolved.conviction}%

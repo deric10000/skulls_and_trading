@@ -3,7 +3,7 @@ import { Clock } from "../lib/icons";
 import { useAppState } from "../state/AppState";
 import { formatChange, formatPrice } from "../lib/format";
 import type { SignalChip } from "../types";
-import { StatusBadge } from "./StatusBadge";
+import { WatchAlignLabel, WatchAlignStack } from "./StatusBadge";
 
 function SignalChips({ signals }: { signals: SignalChip[] }) {
   return (
@@ -56,7 +56,14 @@ export function StockSummaryPanel() {
           >
             {formatChange(selectedItem.changePct)}
           </span>
-          <StatusBadge status={selectedItem.status} />
+          {selectedItem.resolved ? (
+            <WatchAlignStack
+              resolved={selectedItem.resolved}
+              fallbackStatus={selectedItem.status}
+            />
+          ) : (
+            <WatchAlignLabel status={selectedItem.status} />
+          )}
         </div>
       </div>
 
