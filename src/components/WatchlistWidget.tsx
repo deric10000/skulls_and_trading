@@ -4,11 +4,10 @@ import { dataSource } from "../lib/datasource";
 import { formatChange, formatPrice } from "../lib/format";
 import { formatChipCondition } from "../lib/forge/metrics";
 import type { StockAlignment } from "../lib/forge/scoring";
-import { STATUS_TONE } from "../lib/status";
-import { StatusBadge, StatusStack } from "./StatusBadge";
+import { StatusStack, WatchAlignLabel, WatchAlignStack, WatchConvictionHead } from "./StatusBadge";
 import { PortfolioCompass } from "./PortfolioCompass";
 import { Dropdown } from "./Dropdown";
-import { CaretLeft, STATUS_ICON } from "../lib/icons";
+import { CaretLeft } from "../lib/icons";
 import type { LogEntry, Strategy, WatchlistItem } from "../types";
 
 interface StrategyBreakdown {
@@ -39,9 +38,12 @@ function WatchSummary({
         <div className="watch-summary-title">
           <span className="watch-summary-ticker">{item.ticker}</span>
           {item.resolved ? (
-            <StatusStack resolved={item.resolved} />
+            <WatchAlignStack
+              resolved={item.resolved}
+              fallbackStatus={item.status}
+            />
           ) : (
-            <StatusBadge status={item.status} />
+            <WatchAlignLabel status={item.status} />
           )}
         </div>
         <span className="watch-name">{item.name}</span>
@@ -65,9 +67,6 @@ function WatchSummary({
       </header>
 
       <div className="watch-summary-signal">
-        <span className={`chip status--${STATUS_TONE[item.status]}`}>
-          {item.status}
-        </span>
         <span className="watch-summary-metrics">Conviction {item.conviction}</span>
       </div>
 
@@ -382,11 +381,6 @@ export function WatchlistWidget({
           const totalPnl = (item.price - item.avgPrice) * item.shares;
           const changeUp = item.changePct >= 0;
           const changeClass = changeUp ? "watch-change--up" : "watch-change--down";
-          const AlignIcon = STATUS_ICON[item.status];
-          const secondaryFlags =
-            item.resolved?.categoryFlags.filter(
-              (flag) => flag !== item.resolved?.primary,
-            ) ?? [];
           return (
             <li key={item.ticker}>
               <div
@@ -473,9 +467,10 @@ export function WatchlistWidget({
                     </span>
 
                     <span className="watch-conviction-box">
-                      <span className="watch-field-label watch-field-label--right">
-                        Strategy Conviction
-                      </span>
+                      <WatchConvictionHead
+                        resolved={item.resolved}
+                        fallbackStatus={item.status}
+                      />
                       <span className="watch-conviction-meter">
                         <span className="watch-conviction-track">
                           <span
@@ -487,17 +482,6 @@ export function WatchlistWidget({
                           {item.conviction}
                         </span>
                       </span>
-                      <span className={`watch-align watch-align--${STATUS_TONE[item.status]}`}>
-                        <AlignIcon aria-hidden />
-                        {item.status}
-                      </span>
-                      {secondaryFlags.length > 0 ? (
-                        <span className="watch-align-flags">
-                          {secondaryFlags.map((flag) => (
-                            <StatusBadge key={flag} status={flag} />
-                          ))}
-                        </span>
-                      ) : null}
                     </span>
                   </span>
                 </button>

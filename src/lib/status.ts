@@ -1,8 +1,9 @@
 import type { SignalTone, StatusType } from "../types";
 
-// Single source for alignment-status → tone. Drives both the status chip
-// (StatusBadge) and the inline "Strategy Check · <status>" label so they always
-// agree. Tone names map to the chip/text tone classes in index.css.
+// Single source for alignment-status → tone. Drives the status chip
+// (StatusBadge / StatusStack — portfolio snapshot only), the inline
+// watch-align labels (WatchAlignLabel / WatchAlignStack — ticker rows), so they
+// always agree. Tone names map to the chip/text tone classes in index.css.
 export const STATUS_TONE: Record<StatusType, SignalTone> = {
   "High Alignment": "positive",
   Aligned: "positive",

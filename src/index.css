@@ -944,14 +944,42 @@ button {
 .watch-align-flags {
   display: flex;
   flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 0.25rem;
+  justify-content: flex-start;
+  gap: 0.35rem 0.5rem;
+}
+
+.watch-align-stack .watch-align-flags {
   margin-top: 0.2rem;
 }
 
-.watch-align-flags .chip {
-  font-size: 0.68rem;
-  padding: 0.1rem 0.35rem;
+.watch-conviction-head {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.2rem;
+}
+
+.watch-conviction-head-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 0.5rem;
+  row-gap: 0.25rem;
+}
+
+.watch-conviction-head-row .watch-field-label {
+  flex: 0 0 auto;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.watch-conviction-head-row > .watch-align {
+  flex: 0 1 auto;
+  white-space: nowrap;
+}
+
+.watch-conviction-head-flags {
+  margin-top: 0;
 }
 
 .hero-preview-card {
@@ -1800,35 +1828,6 @@ select.input:hover:not(:disabled) {
   .watch-metrics,
   .watch-conviction-box {
     flex: 1 1 auto;
-  }
-
-  /* Now that the box spans the card's full width at the bottom, recover the
-     vertical space the chip used: put the "Strategy Conviction" label (left)
-     and the alignment chip (right) on one row, with the meter beneath. If the
-     label + chip can't share a row, they wrap to a left-aligned stack
-     (label → chip → meter). */
-  .watch-conviction-box {
-    flex-flow: row wrap;
-    align-items: center;
-    justify-content: space-between;
-    column-gap: 0.5rem;
-  }
-
-  .watch-conviction-box .watch-field-label--right {
-    order: 1;
-    text-align: left;
-    white-space: nowrap;
-  }
-
-  .watch-conviction-box .watch-align {
-    order: 2;
-    white-space: nowrap;
-  }
-
-  /* Force the meter onto its own line below the label/chip row. */
-  .watch-conviction-box .watch-conviction-meter {
-    order: 3;
-    flex-basis: 100%;
   }
 }
 
