@@ -46,9 +46,13 @@ export function WatchAlignLabel({ status }: { status: StatusType }) {
 export function WatchConvictionHead({
   resolved,
   fallbackStatus,
+  hideStatuses = false,
 }: {
   resolved?: ResolvedStatus;
   fallbackStatus: StatusType;
+  /** When true, only the "Strategy Conviction" label shows (detail view
+      already lists statuses in the plan block below the meter). */
+  hideStatuses?: boolean;
 }) {
   const primary = resolved?.primary ?? fallbackStatus;
   const secondary =
@@ -58,9 +62,9 @@ export function WatchConvictionHead({
     <div className="watch-conviction-head">
       <div className="watch-conviction-head-row">
         <span className="watch-field-label">Strategy Conviction</span>
-        <WatchAlignLabel status={primary} />
+        {hideStatuses ? null : <WatchAlignLabel status={primary} />}
       </div>
-      {secondary.length > 0 ? (
+      {!hideStatuses && secondary.length > 0 ? (
         <span
           className="watch-align-flags watch-conviction-head-flags"
           aria-label="Category diagnostics"

@@ -1,4 +1,4 @@
-import type { RuleChip, Strategy } from "../../types";
+import type { RuleChip, RuleTag, Strategy } from "../../types";
 import { CHIP_LIBRARY_SEED, DEFAULT_STRATEGIES } from "../../data";
 
 const STORAGE_VERSION = 1;
@@ -33,8 +33,47 @@ function writePayload<T>(key: string, data: T): void {
   }
 }
 
+/** Fill missing myPlan from the matching default strategy chip/tag (by id). */
+function backfillMyPlans(strategies: Strategy[]): Strategy[] {
+  const defaultById = new Map(
+    DEFAULT_STRATEGIES.map((strategy) => [strategy.id, strategy]),
+  );
+
+  return strategies.map((strategy) => {
+    const defaults = defaultById.get(strategy.id);
+    if (!defaults) return strategy;
+
+    const defaultChipPlan = new Map(
+      (defaults.rules ?? [])
+        .filter((chip) => chip.myPlan)
+        .map((chip) => [chip.id, chip.myPlan as string]),
+    );
+    const defaultTagPlan = new Map(
+      (defaults.ruleTags ?? [])
+        .filter((tag) => tag.myPlan)
+        .map((tag) => [tag.id, tag.myPlan as string]),
+    );
+
+    let changed = false;
+    const rules = (strategy.rules ?? []).map((chip) => {
+      if (chip.myPlan || !defaultChipPlan.has(chip.id)) return chip;
+      changed = true;
+      return { ...chip, myPlan: defaultChipPlan.get(chip.id) };
+    });
+    const ruleTags = (strategy.ruleTags ?? []).map((tag: RuleTag) => {
+      if (tag.myPlan || !defaultTagPlan.has(tag.id)) return tag;
+      changed = true;
+      return { ...tag, myPlan: defaultTagPlan.get(tag.id) };
+    });
+
+    return changed ? { ...strategy, rules, ruleTags } : strategy;
+  });
+}
+
 export function loadPersistedStrategies(): Strategy[] {
-  return readPayload<Strategy[]>(STRATEGIES_KEY) ?? DEFAULT_STRATEGIES;
+  const stored = readPayload<Strategy[]>(STRATEGIES_KEY);
+  if (!stored) return DEFAULT_STRATEGIES;
+  return backfillMyPlans(stored);
 }
 
 export function loadPersistedChipLibrary(): RuleChip[] {

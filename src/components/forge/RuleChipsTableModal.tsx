@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ActionMenu } from "../ActionMenu";
 import { ChipSearchList, type ChipSearchGroup } from "../ChipSearchList";
+import { InfoTip } from "../Tooltip";
 import {
   CATEGORY_META,
   METRICS,
@@ -9,6 +10,7 @@ import {
   metricsForCategory,
   type MetricMeta,
 } from "../../lib/forge/metrics";
+import { isExamplePlan, normalizePlanEdit } from "../../lib/forge/myPlan";
 import { systemChipsForCategory } from "../../lib/forge/chipSources";
 import { ForgeToast } from "./ForgeToast";
 import { useAppState } from "../../state/AppState";
@@ -41,8 +43,8 @@ import type {
 // reflect live edits.
 //
 // Columns: CHIP LABEL · DATA POINT · DATE RANGE · CONDITION · VALUE ·
-// RULE WEIGHT · ACTIONS (duplicate / delete / save to My Chips). Rule weights
-// should total 100%. On mobile the rows reflow into stacked cards (index.css).
+// RULE WEIGHT · [MY PLAN on Risk] · ACTIONS. Rule weights should total 100%.
+// On mobile the rows reflow into stacked cards (index.css).
 //
 // "Add Rule" is a split button (ActionMenu): "Add new blank chip" is the
 // original behavior; "Select chip from system defaults or custom chips" opens
@@ -53,8 +55,18 @@ import type {
 // fully-editable draft row — see data-architecture.md "Chip library".
 // ---------------------------------------------------------------------------
 
-type SortKey = "label" | "metric" | "dateRange" | "operator" | "value" | "weightPct";
+type SortKey =
+  | "label"
+  | "metric"
+  | "dateRange"
+  | "operator"
+  | "value"
+  | "weightPct"
+  | "myPlan";
 type SaveMode = "template" | "everywhere";
+
+const MY_PLAN_TOOLTIP =
+  "Write, in your words, what you plan to do if this rule is broken.";
 
 let chipIdCounter = 0;
 function nextChipId(): string {
@@ -192,6 +204,9 @@ export function RuleChipsTableModal({
     useAppState();
   const isMobile = useIsMobile();
   const meta = CATEGORY_META[category];
+  // My Plan is available on every category — Watch Summary surfaces failing
+  // chips from any status-driving category (thesis, setup, risk, …).
+  const showMyPlan = true;
   const metricOptions = useMemo(() => metricsForCategory(category), [category]);
   const [draft, setDraft] = useState<RuleChip[]>(() =>
     chips.map((chip) => ({ ...chip })),
@@ -332,6 +347,8 @@ export function RuleChipsTableModal({
               : String(chip.value);
         case "weightPct":
           return chip.weightPct;
+        case "myPlan":
+          return (chip.myPlan ?? "").toLowerCase();
         case "dateRange":
           return chip.dateRange;
         default:
@@ -435,7 +452,11 @@ export function RuleChipsTableModal({
   return (
     <div className="modal-backdrop" role="presentation" onClick={onCancel}>
       <div
-        className="modal-card panel forge-table-modal"
+        className={
+          showMyPlan
+            ? "modal-card panel forge-table-modal forge-table-modal--with-plan"
+            : "modal-card panel forge-table-modal"
+        }
         role="dialog"
         aria-modal="true"
         aria-labelledby="chip-table-title"
@@ -696,7 +717,15 @@ export function RuleChipsTableModal({
             />
           </div>
 
-          <div className="forge-table forge-table--chips" role="table" aria-label={meta.chipModalTitle}>
+          <div
+            className={
+              showMyPlan
+                ? "forge-table forge-table--chips forge-table--chips-plan"
+                : "forge-table forge-table--chips"
+            }
+            role="table"
+            aria-label={meta.chipModalTitle}
+          >
             <div className="forge-table-row forge-table-row--head" role="row">
               {headers.map((header) => (
                 <button
@@ -710,6 +739,20 @@ export function RuleChipsTableModal({
                   <CaretUpDown aria-hidden weight="regular" />
                 </button>
               ))}
+              {showMyPlan ? (
+                <span
+                  className="forge-table-th forge-table-th--static forge-table-th--plan"
+                  role="columnheader"
+                >
+                  <span className="forge-th-with-tip">
+                    My Plan
+                    <InfoTip
+                      label="About My Plan"
+                      body={MY_PLAN_TOOLTIP}
+                    />
+                  </span>
+                </span>
+              ) : null}
               <span className="forge-table-th forge-table-th--static" role="columnheader">
                 Actions
               </span>
@@ -839,6 +882,26 @@ export function RuleChipsTableModal({
                         <span className="forge-cell-unit forge-cell-unit--weight">%</span>
                       </span>
                     </div>
+                    {showMyPlan ? (
+                      <div className="forge-table-cell" role="cell" data-label="My Plan">
+                        <textarea
+                          className={
+                            isExamplePlan(chip.myPlan)
+                              ? "input forge-cell-input forge-cell-area forge-cell-plan forge-cell-plan--example"
+                              : "input forge-cell-input forge-cell-area forge-cell-plan"
+                          }
+                          rows={2}
+                          value={chip.myPlan ?? ""}
+                          placeholder="What will you do if this rule breaks?"
+                          aria-label="My plan"
+                          onChange={(event) =>
+                            patchChip(chip.id, {
+                              myPlan: normalizePlanEdit(chip.myPlan, event.target.value),
+                            })
+                          }
+                        />
+                      </div>
+                    ) : null}
                     <div className="forge-table-cell forge-table-cell--actions" role="cell" data-label="Actions">
                       <button
                         type="button"

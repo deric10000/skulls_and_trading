@@ -1510,6 +1510,71 @@ select.input:hover:not(:disabled) {
   gap: var(--space-3);
 }
 
+/* Selected detail reuses list-row layout, without selectable-card chrome so
+   content aligns with the detail blocks below. */
+.watch-summary-card {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  border-radius: 0;
+}
+
+.watch-summary-card:hover {
+  border-color: transparent;
+  transform: none;
+}
+
+.watch-summary-card.is-selected {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+}
+
+.watch-summary-card .watch-select {
+  cursor: default;
+  padding-inline: 0;
+}
+
+.watch-summary-card .watch-body {
+  /* Detail view: metrics on top, per-strategy conviction blocks below. */
+  flex-direction: column;
+}
+
+.watch-summary-card .watch-metrics,
+.watch-summary-card .watch-strategy-stack {
+  flex: 1 1 auto;
+}
+
+.watch-strategy-stack {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.watch-strategy-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  min-width: 0;
+}
+
+.watch-strategy-block .signal-stack {
+  margin: 0;
+}
+
+.watch-summary-card .watch-conviction-box {
+  /* Plan block lives inside the conviction box on the selected detail view. */
+  gap: 0.55rem;
+}
+
+.watch-summary-card .watch-summary-plan-block {
+  margin-top: 0.15rem;
+  padding-top: 0.55rem;
+  border-top: 1px solid var(--border-soft);
+}
+
 .watch-summary-head {
   display: flex;
   flex-direction: column;
@@ -1541,6 +1606,96 @@ select.input:hover:not(:disabled) {
   align-items: center;
   flex-wrap: wrap;
   gap: 0.5rem;
+}
+
+.watch-summary-statuses {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.watch-summary-plan-block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.watch-plan-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.watch-plan-section-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.watch-plan-section-caret {
+  flex: 0 0 auto;
+  width: 1.1rem;
+  height: 1.1rem;
+  color: var(--text-muted);
+  transition: transform 0.15s ease;
+}
+
+.watch-plan-section.is-expanded .watch-plan-section-caret {
+  transform: rotate(180deg);
+}
+
+.watch-plan-triggers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.watch-summary-my-plan {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.watch-summary-my-plan .config-label {
+  white-space: normal;
+  line-height: 1.35;
+}
+
+.watch-my-plan-datapoints {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.12rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  line-height: 1.35;
+  font-variant-numeric: tabular-nums;
+}
+
+.watch-my-plan-text {
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.4;
+  color: var(--text-strong);
+}
+
+.watch-my-plan-text--example {
+  color: var(--text-muted);
+  font-style: italic;
 }
 
 .watch-summary-metrics {
@@ -1826,7 +1981,8 @@ select.input:hover:not(:disabled) {
   }
 
   .watch-metrics,
-  .watch-conviction-box {
+  .watch-conviction-box,
+  .watch-strategy-stack {
     flex: 1 1 auto;
   }
 }
@@ -3259,8 +3415,15 @@ select.input:hover:not(:disabled) {
 
 .forge-pill--toggle {
   cursor: pointer;
+  /* Same padding as .forge-pill so selected/default share one silhouette. */
   border: 1px solid transparent;
-  padding: 2px 6px;
+}
+
+/* Selected = default chip fill + visible border (not a different color system). */
+.forge-pill--toggle.forge-pill--on {
+  border-color: var(--forge-chip-text);
+  background: var(--forge-chip-surface);
+  color: var(--forge-chip-text);
 }
 
 .forge-pill--toggle:not(.forge-pill--on) {
@@ -3271,9 +3434,15 @@ select.input:hover:not(:disabled) {
 
 /* Tickers tab — enabled = green "applied" (not the default rule-chip blue). */
 .forge-pill--toggle.forge-pill--on.forge-pill--applied {
-  border-color: transparent;
+  border-color: var(--positive);
   background: rgb(62 213 152 / 0.16);
   color: var(--positive);
+}
+
+.forge-pill--toggle:not(.forge-pill--on).forge-pill--applied {
+  border-color: var(--border-strong);
+  background: transparent;
+  color: var(--text-muted);
 }
 
 .forge-pill-stack {
@@ -3617,6 +3786,50 @@ select.input:hover:not(:disabled) {
     minmax(64px, 0.45fr) minmax(140px, 1.25fr) 108px;
   align-items: start;
   padding-block: 10px;
+}
+
+.forge-table--chips-plan .forge-table-row {
+  /* Risk chips: insert My Plan after Rule Weight, before Actions. */
+  grid-template-columns:
+    minmax(120px, 0.85fr) minmax(110px, 0.95fr) minmax(100px, 0.8fr)
+    minmax(96px, 0.65fr) minmax(76px, 0.55fr) minmax(76px, 0.55fr)
+    minmax(160px, 1.2fr) 108px;
+  align-items: start;
+}
+
+.forge-table--tags-plan .forge-table-row {
+  /* Risk tags: insert My Plan after Weight, before Auto-Apply. */
+  grid-template-columns:
+    minmax(100px, 0.7fr) minmax(120px, 1fr) minmax(110px, 0.95fr)
+    minmax(56px, 0.4fr) minmax(140px, 1.1fr) minmax(120px, 1fr) 108px;
+  align-items: start;
+  padding-block: 10px;
+}
+
+.forge-th-with-tip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.forge-table-th--plan {
+  white-space: nowrap;
+}
+
+.forge-cell-plan {
+  min-height: 2.5rem;
+  resize: vertical;
+  line-height: 1.35;
+}
+
+.forge-cell-plan--example {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.forge-cell-plan--example:focus {
+  color: inherit;
+  font-style: normal;
 }
 
 .forge-table-row--head {
@@ -4183,7 +4396,9 @@ select.forge-cell-input {
   }
 
   .forge-table-row,
-  .forge-table--tags .forge-table-row {
+  .forge-table--tags .forge-table-row,
+  .forge-table--chips-plan .forge-table-row,
+  .forge-table--tags-plan .forge-table-row {
     grid-template-columns: minmax(0, 1fr);
     gap: 0.45rem;
     padding: 0.75rem var(--space-3);

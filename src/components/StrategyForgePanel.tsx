@@ -26,6 +26,7 @@ import { ForgeToast } from "./forge/ForgeToast";
 import { useAppState } from "../state/AppState";
 import { ActionFooter } from "./ActionFooter";
 import { Dropdown } from "./Dropdown";
+import { ForgePill } from "./ForgePill";
 import { MultiSelect } from "./MultiSelect";
 import { InfoTip, Tooltip } from "./Tooltip";
 import { RuleChipsTableModal } from "./forge/RuleChipsTableModal";
@@ -172,9 +173,7 @@ function ChipPill({ chip }: { chip: RuleChip }) {
         </>
       }
     >
-      <span className={chip.enabled ? "forge-pill" : "forge-pill forge-pill--off"} tabIndex={0}>
-        {chip.label}
-      </span>
+      <ForgePill state={chip.enabled ? "default" : "off"}>{chip.label}</ForgePill>
     </Tooltip>
   );
 }
@@ -194,12 +193,9 @@ function TagPill({ tag }: { tag: RuleTag }) {
         </>
       }
     >
-      <span
-        className={tag.system ? "forge-pill forge-pill--muted" : "forge-pill"}
-        tabIndex={0}
-      >
+      <ForgePill state={tag.system ? "muted" : "default"}>
         {tag.label}
-      </span>
+      </ForgePill>
     </Tooltip>
   );
 }
@@ -572,14 +568,9 @@ export function StrategyForgePanel({ strategy }: { strategy: Strategy | undefine
                       </>
                     }
                   >
-                    <button
-                      type="button"
-                      className={
-                        enabled
-                          ? "forge-pill forge-pill--toggle forge-pill--on forge-pill--applied"
-                          : "forge-pill forge-pill--toggle"
-                      }
-                      aria-pressed={enabled}
+                    <ForgePill
+                      state={enabled ? "selected" : "inactive"}
+                      variant="applied"
                       aria-label={`${enabled ? "Exclude" : "Include"} ${holding.ticker} in ${strategy.name}`}
                       onClick={() =>
                         setTickerEnabledForStrategy(
@@ -591,7 +582,7 @@ export function StrategyForgePanel({ strategy }: { strategy: Strategy | undefine
                       }
                     >
                       {holding.ticker}
-                    </button>
+                    </ForgePill>
                   </Tooltip>
                 );
               })
