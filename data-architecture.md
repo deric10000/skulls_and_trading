@@ -228,7 +228,10 @@ snapshots (`data.ts`), and register it in `metrics.ts`. Nothing else changes.
   fallback** slice (full holding shares). Custom/duplicated strategies therefore
   work immediately once applied — no bucket row required. The Configure card's
   read-only **"Tickers In Applied Portfolios"** box lists every ticker held in
-  the currently-applied portfolios (informational; "Edit" stays disabled).
+  the currently-applied portfolios. The **Tickers** tab lists every holding in
+  each applied portfolio; tap a ticker to include or exclude it from this
+  strategy. Default strategies honor seed `holding.strategyIds`; custom copies
+  include all tickers until excluded via `strategy.tickerExclusions`.
 
 ### Seed data — one strategy per ticker
 
@@ -239,12 +242,17 @@ AI; compounders/consumer/fintech → VGD). A ticker may still appear in
 but every slice uses the **same** `strategyId`.
 
 **Runtime wiring:** `holding.strategyIds` is the per-ticker assignment for
-default strategies. Scoring (`computePortfolioAlignment`), Watch summary strategy
-chips (`getAppliedStrategiesForTicker`), and Forge **Tickers In Applied
-Portfolios** all respect it — NVDA shows/scores Aggressive only, CRM VGD only,
-even though both strategies list `appliedPortfolioIds: ["deric"]`. Custom/
-duplicated strategies (ids not in `DEFAULT_STRATEGIES`) still score all holdings
-in an applied portfolio via fallback until per-ticker assignment UI lands.
+default strategies. Custom strategies track exclusions in
+`strategy.tickerExclusions[portfolioId]`. Both are edited live in AppState via
+the Configure **Tickers** tab (`setTickerEnabledForStrategy`). Scoring
+(`computePortfolioAlignment`), Watch summary strategy chips
+(`getAppliedStrategiesForTicker`), and Forge ticker toggles all respect
+`shouldScoreTickerWithStrategy()` — NVDA scores Aggressive only, CRM VGD only,
+even though both strategies list `appliedPortfolioIds: ["deric"]`. When a
+holding lists **multiple** `strategyIds`, headline conviction merges both
+strategies via `mergeStrategiesForScoring()` (chip + category weights
+renormalized, then one `scoreStock` pass — not a conviction average or
+max-slice pick).
 
 ### Buckets — independent cadence per strategy
 
@@ -258,7 +266,9 @@ the bucket/share-allocation **authoring UI is a later dashboard pass**.
 
 `strategies` and `chipLibrary` hydrate from `localStorage` on load
 (`src/lib/forge/persistence.ts`) and debounce-save on change. Market snapshots,
-portfolios, and buckets remain static seeds. **Reset to default** on a default
+portfolios (holdings + `strategyIds`), and buckets remain static seeds on page
+load — ticker enable/disable edits live in AppState for the session.
+**Reset to default** on a default
 strategy restores `DEFAULT_STRATEGIES` and overwrites storage for that strategy
 set. No API required for demo tuning.
 

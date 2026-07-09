@@ -1,23 +1,30 @@
-import type { Bucket, Portfolio, ResolvedStatus, StatusType, Strategy } from "../../types";
+import type { Bucket, Portfolio, PortfolioHolding, ResolvedStatus, StatusType, Strategy } from "../../types";
 import { dataSource } from "../datasource";
 import {
   scoreStock,
   type MetricContext,
   type StockAlignment,
 } from "./scoring";
+import { mergeStrategiesForScoring } from "./mergeStrategies";
 import {
   resolveAggregatedStatus,
   resolveStatus,
   type WeightedCategorySlice,
 } from "./status";
-import { shouldScoreTickerWithStrategy, tickerHasAssignedStrategy } from "./tickerStrategy";
+import {
+  shouldScoreTickerWithStrategy,
+  strategiesForHolding,
+  tickerHasAssignedStrategy,
+} from "./tickerStrategy";
 
 // ---------------------------------------------------------------------------
 // Alignment bridge — ties the dataSource seam + buckets + the live strategy set
 // to the pure scoring engine. AppState calls this; the engine itself stays
 // I/O-free. A ticker can live in several buckets, so its HEADLINE alignment is
-// the best-aligned slice; the portfolio number is the market-value-weighted
-// blend across every scored allocation (bucket + applied-portfolio fallback).
+// the best-aligned slice; when multiple strategies apply to one ticker, the
+// headline is recomputed from a merged virtual strategy (normalized chip +
+// category weights — not a conviction average). Portfolio conviction is the
+// market-value-weighted blend across every scored allocation.
 // ---------------------------------------------------------------------------
 
 export interface TickerAlignment {
@@ -31,7 +38,7 @@ export interface TickerAlignment {
 }
 
 export interface PortfolioAlignment {
-  byTicker: Record<string, TickerAlignment>; // headline = best-aligned slice
+  byTicker: Record<string, TickerAlignment>; // headline; merged when 2+ strategies apply
   byBucket: Record<
     string,
     { conviction: number; status: StatusType; resolved: ResolvedStatus }
@@ -174,7 +181,7 @@ export function computePortfolioAlignment(
     for (const allocation of bucket.holdings) {
       const ticker = allocation.ticker;
       const holding = holdingByTicker.get(ticker);
-      if (!holding || !shouldScoreTickerWithStrategy(holding, strategy.id)) continue;
+      if (!holding || !shouldScoreTickerWithStrategy(holding, strategy, portfolio.id)) continue;
 
       coveredPairs.add(coverageKey(strategy.id, ticker));
       const ctx: MetricContext = {
@@ -204,7 +211,7 @@ export function computePortfolioAlignment(
 
     for (const holding of portfolio.holdings) {
       if (holding.shares <= 0) continue;
-      if (!shouldScoreTickerWithStrategy(holding, strategy.id)) continue;
+      if (!shouldScoreTickerWithStrategy(holding, strategy, portfolio.id)) continue;
       const ticker = holding.ticker;
       if (coveredPairs.has(coverageKey(strategy.id, ticker))) continue;
 
@@ -226,6 +233,69 @@ export function computePortfolioAlignment(
       );
       coveredPairs.add(coverageKey(strategy.id, ticker));
     }
+  }
+
+  function buildMetricContext(ticker: string, holding: PortfolioHolding): MetricContext {
+    return {
+      fundamentals: dataSource.getFundamentals(ticker),
+      technicals: dataSource.getTechnicals(ticker),
+      market,
+      weightPct: weightPctFor(ticker),
+      openPnlPct: holding.openPnlPct,
+      holdingDays: holdingDaysFor(entryDateForTicker(ticker)),
+    };
+  }
+
+  function scoreAlignmentForStrategies(
+    applicable: Strategy[],
+    ctx: MetricContext,
+    hasStrategy: boolean,
+  ): StockAlignment {
+    const scored =
+      applicable.length === 1
+        ? scoreStock(applicable[0], ctx, { hasStrategy })
+        : scoreStock(mergeStrategiesForScoring(applicable), ctx, { hasStrategy });
+    const conviction = scored.hasRules ? scored.conviction : 0;
+    const categories = scored.hasRules ? scored.categories : [];
+    const resolved = scored.hasRules
+      ? scored.resolved
+      : resolveStatus(conviction, categories, { hasStrategy });
+    return {
+      ...scored,
+      conviction,
+      status: resolved.primary,
+      resolved,
+      categories,
+    };
+  }
+
+  // Headline per ticker: one strategy scores as-is; multiple strategies merge
+  // chip + category weights then score once (not max conviction across slices).
+  for (const holding of portfolio.holdings) {
+    if (holding.shares <= 0) continue;
+    const ticker = holding.ticker;
+    const applicable = strategiesForHolding(holding, portfolio.id, strategies);
+    if (applicable.length === 0) continue;
+
+    const ctx = buildMetricContext(ticker, holding);
+    const alignment = scoreAlignmentForStrategies(applicable, ctx, true);
+    const existing = byTicker[ticker];
+    byTicker[ticker] = {
+      ticker,
+      bucketId:
+        existing?.bucketId ??
+        (applicable.length === 1
+          ? `applied-${applicable[0].id}`
+          : `merged-${applicable.map((strategy) => strategy.id).join("+")}`),
+      bucketName:
+        applicable.length > 1
+          ? applicable.map((strategy) => strategy.name).join(" + ")
+          : existing?.bucketName ?? applicable[0].name,
+      conviction: alignment.conviction,
+      status: alignment.status,
+      resolved: alignment.resolved,
+      alignment,
+    };
   }
 
   const portfolioHasStrategy = portfolio.holdings.some((holding) =>

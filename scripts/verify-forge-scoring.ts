@@ -14,6 +14,7 @@
  */
 import { DEFAULT_BUCKETS, DEFAULT_STRATEGIES, FUNDAMENTAL_SNAPSHOTS, MARKET_CONTEXT, PORTFOLIOS, TECHNICAL_SNAPSHOTS } from "../src/data";
 import { computePortfolioAlignment } from "../src/lib/forge/alignment";
+import { mergeStrategiesForScoring } from "../src/lib/forge/mergeStrategies";
 import { strategiesForTicker } from "../src/lib/forge/tickerStrategy";
 import { CATEGORY_ORDER } from "../src/lib/forge/metrics";
 import { scoreCategory, scoreStock, evaluateChip, validateStrategy, type MetricContext } from "../src/lib/forge/scoring";
@@ -220,6 +221,39 @@ check(
   "Removing VGD from applied portfolios drops CRM bucket score",
   crmWithVgd != null && (crmWithoutVgd == null || crmWithoutVgd !== crmWithVgd),
   `${crmWithVgd} → ${crmWithoutVgd ?? "none"}`,
+);
+
+// 6b. Multi-strategy headline = merged normalized score, not max slice
+const dericDualNvda = {
+  ...deric,
+  holdings: deric.holdings.map((holding) =>
+    holding.ticker === "NVDA"
+      ? {
+          ...holding,
+          strategyIds: ["aggressive-ai-high-beta", "value-growth-dividend"],
+        }
+      : holding,
+  ),
+};
+const nvdaAggConviction = scoreStock(agg, nvdaCtx).conviction;
+const nvdaVgdConviction = scoreStock(vgd, nvdaCtx).conviction;
+const nvdaMergedConviction = scoreStock(
+  mergeStrategiesForScoring([agg, vgd]),
+  nvdaCtx,
+).conviction;
+const dualNvdaHeadline =
+  computePortfolioAlignment(dericDualNvda, DEFAULT_BUCKETS, DEFAULT_STRATEGIES).byTicker.NVDA
+    ?.conviction;
+check(
+  "Multi-strategy NVDA headline uses merged conviction",
+  dualNvdaHeadline === nvdaMergedConviction,
+  `${dualNvdaHeadline} (merged=${nvdaMergedConviction}, agg=${nvdaAggConviction}, vgd=${nvdaVgdConviction})`,
+);
+check(
+  "Multi-strategy NVDA headline is not max-slice when strategies disagree",
+  nvdaAggConviction === nvdaVgdConviction ||
+    dualNvdaHeadline !== Math.max(nvdaAggConviction, nvdaVgdConviction),
+  `headline=${dualNvdaHeadline}, max=${Math.max(nvdaAggConviction, nvdaVgdConviction)}`,
 );
 
 const custom: Strategy = {

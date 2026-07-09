@@ -3270,6 +3270,13 @@ select.input:hover:not(:disabled) {
   color: var(--text-muted);
 }
 
+/* Tickers tab — enabled = green "applied" (not the default rule-chip blue). */
+.forge-pill--toggle.forge-pill--on.forge-pill--applied {
+  border-color: transparent;
+  background: rgb(62 213 152 / 0.16);
+  color: var(--positive);
+}
+
 .forge-pill-stack {
   display: flex;
   flex-direction: column;

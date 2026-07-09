@@ -277,6 +277,8 @@ export interface Strategy {
   ruleTags?: RuleTag[]; // reusable chip groups ("lenses") per category
   categoryWeights?: CategoryWeights; // each category's share of conviction; sums to 100
   appliedPortfolioIds?: string[]; // portfolios/watchlists this strategy is applied to
+  /** Custom strategies: tickers turned off per portfolio (defaults use strategyIds on holdings). */
+  tickerExclusions?: Partial<Record<string, string[]>>;
   checkInterval?: CheckInterval; // re-score + notify cadence; default "1D"
   technicalsInterval?: CheckInterval; // candle size; >= checkInterval and >= 15m
 }
