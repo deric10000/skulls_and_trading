@@ -21,4 +21,18 @@ export const STATUS_TONE: Record<StatusType, SignalTone> = {
   "Rule Break": "negative",
   "Concentration Review": "warning",
   "Patience Review": "warning",
+  // Layer 3 — user-driven zones (not emitted by resolveStatus yet)
+  "Trim Zone": "warning",
+  "Add Zone": "positive",
+  "Go to Cash": "negative",
 };
+
+/** Chip label overrides (StatusType value stays the short key). */
+export function statusChipLabel(status: StatusType): string {
+  if (status === "Go to Cash") return "Go to Cash - SICADFU";
+  return status;
+}
+
+/** Expansion shown on the Go to Cash chip info tip. */
+export const GO_TO_CASH_SICADFU =
+  "Sit in Cash and Don't F* Up";

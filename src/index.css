@@ -794,6 +794,24 @@ button {
   background: rgb(86 182 240 / 0.16);
 }
 
+/* Keep chip info-tip tooltips sentence-case (chips are uppercase). */
+.chip .tooltip {
+  text-transform: none;
+  letter-spacing: normal;
+  font-weight: 500;
+}
+
+.chip .info-tip {
+  color: inherit;
+  opacity: 0.75;
+}
+
+.chip .info-tip:hover,
+.chip .info-tip:focus-visible {
+  opacity: 1;
+  color: inherit;
+}
+
 .chip--soon {
   color: var(--accent-strong);
   background: var(--accent-soft);
@@ -1653,6 +1671,12 @@ select.input:hover:not(:disabled) {
   transform: rotate(180deg);
 }
 
+.watch-plan-section-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
 .watch-plan-triggers {
   display: flex;
   flex-wrap: wrap;
@@ -1666,6 +1690,8 @@ select.input:hover:not(:disabled) {
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
+  padding-top: 0.35rem;
+  border-top: 1px solid var(--border-soft);
 }
 
 .watch-summary-my-plan .config-label {
@@ -1675,15 +1701,24 @@ select.input:hover:not(:disabled) {
 
 .watch-my-plan-datapoints {
   margin: 0;
-  padding: 0;
-  list-style: none;
+  padding: 0 0 0 1.1rem;
+  list-style: disc;
   display: flex;
   flex-direction: column;
-  gap: 0.12rem;
+  gap: 0.35rem;
   font-size: 0.82rem;
   font-weight: 600;
   line-height: 1.35;
   font-variant-numeric: tabular-nums;
+}
+
+.watch-my-plan-datapoints li {
+  white-space: normal;
+  padding-left: 0.15rem;
+}
+
+.watch-my-plan-datapoints li::marker {
+  color: currentColor;
 }
 
 .watch-my-plan-text {

@@ -162,9 +162,15 @@ export type StatusType =
   | "Rule Conflict"
   | "Rule Break"
   | "Concentration Review"
-  | "Patience Review";
+  | "Patience Review"
+  // Layer 3 — user-driven zone overlays (registered; not emitted by resolveStatus yet)
+  | "Trim Zone"
+  | "Add Zone"
+  | "Go to Cash";
 
-/** Two-layer Forge status: conviction band + category diagnostics. */
+/** Forge status: Layer 1 conviction band + Layer 2 category diagnostics.
+ *  Layer 3 zone overlays (Trim Zone / Add Zone / Go to Cash) are in StatusType
+ *  for tone/icon coverage but are not resolved or displayed until wired. */
 export interface ResolvedStatus {
   primary: StatusType;
   categoryFlags: StatusType[];

@@ -76,8 +76,27 @@ export function loadPersistedStrategies(): Strategy[] {
   return backfillMyPlans(stored);
 }
 
+/** Fill missing myPlan on library chips from CHIP_LIBRARY_SEED (by id). */
+function backfillChipLibraryPlans(chips: RuleChip[]): RuleChip[] {
+  const defaults = new Map(
+    CHIP_LIBRARY_SEED.filter((chip) => chip.myPlan).map((chip) => [
+      chip.id,
+      chip.myPlan as string,
+    ]),
+  );
+  let changed = false;
+  const next = chips.map((chip) => {
+    if (chip.myPlan || !defaults.has(chip.id)) return chip;
+    changed = true;
+    return { ...chip, myPlan: defaults.get(chip.id) };
+  });
+  return changed ? next : chips;
+}
+
 export function loadPersistedChipLibrary(): RuleChip[] {
-  return readPayload<RuleChip[]>(CHIP_LIBRARY_KEY) ?? CHIP_LIBRARY_SEED;
+  const stored = readPayload<RuleChip[]>(CHIP_LIBRARY_KEY);
+  if (!stored) return CHIP_LIBRARY_SEED;
+  return backfillChipLibraryPlans(stored);
 }
 
 export function persistStrategies(strategies: Strategy[]): void {
