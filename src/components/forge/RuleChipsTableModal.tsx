@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ActionMenu } from "../ActionMenu";
 import { ChipSearchList, type ChipSearchGroup } from "../ChipSearchList";
 import { InfoTip } from "../Tooltip";
+import { ForgeTableModal } from "./ForgeTableModal";
 import {
   CATEGORY_META,
   METRICS,
@@ -40,7 +41,8 @@ import type {
 // Timeframe Rule Chips. Edits commit live to the strategy as you change rows;
 // Cancel (or backdrop / X) restores the chip set from when the modal opened.
 // Update closes the modal — conviction and the panel Update button already
-// reflect live edits.
+// reflect live edits. Chrome (backdrop, title, intro, totals, footer) comes
+// from ForgeTableModal — do not re-implement that shell here.
 //
 // Columns: CHIP LABEL · DATA POINT · DATE RANGE · CONDITION · VALUE ·
 // RULE WEIGHT · [MY PLAN on Risk] · ACTIONS. Rule weights should total 100%.
@@ -449,32 +451,32 @@ export function RuleChipsTableModal({
     { key: "weightPct", label: "Rule Weight" },
   ];
 
-  return (
-    <div className="modal-backdrop" role="presentation" onClick={onCancel}>
-      <div
-        className={
-          showMyPlan
-            ? "modal-card panel forge-table-modal forge-table-modal--with-plan"
-            : "modal-card panel forge-table-modal"
-        }
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="chip-table-title"
-        onClick={(event) => event.stopPropagation()}
-      >
-        <div className="forge-table-head">
-          <h2 id="chip-table-title">{meta.chipModalTitle}</h2>
-          <button
-            type="button"
-            className="forge-table-close"
-            onClick={onCancel}
-            aria-label="Close"
-          >
-            <X aria-hidden weight="bold" />
-          </button>
-        </div>
+  const addRuleAction = (
+            <ActionMenu
+              label="Add Rule options"
+              trigger={({ open, toggle }) => (
+                <button
+                  type="button"
+                  className="btn btn--small"
+                  aria-haspopup="menu"
+                  aria-expanded={open}
+                  onClick={toggle}
+                >
+                  <CaretDown aria-hidden weight="bold" /> Add Rule
+                </button>
+              )}
+              items={[
+                { id: "blank", label: "Add new blank chip", onSelect: addChip },
+                {
+                  id: "pick",
+                  label: "Select chip from system defaults or custom chips",
+                  onSelect: () => setPickerOpen(true),
+                },
+              ]}
+            />
+  );
 
-        {pickerOpen ? (
+  const pickerView = (
           <div className="forge-chip-picker" role="region" aria-label="Add a rule chip">
             <div className="forge-chip-picker-head">
               <button type="button" className="breadcrumb" onClick={closePicker}>
@@ -687,35 +689,29 @@ export function RuleChipsTableModal({
               </section>
             </div>
           </div>
-        ) : null}
+  );
 
-        {!pickerOpen ? (
-          <>
-          <div className="forge-table-intro">
-            <p>{meta.chipModalIntro}</p>
-            <ActionMenu
-              label="Add Rule options"
-              trigger={({ open, toggle }) => (
-                <button
-                  type="button"
-                  className="btn btn--small"
-                  aria-haspopup="menu"
-                  aria-expanded={open}
-                  onClick={toggle}
-                >
-                  <CaretDown aria-hidden weight="bold" /> Add Rule
-                </button>
-              )}
-              items={[
-                { id: "blank", label: "Add new blank chip", onSelect: addChip },
-                {
-                  id: "pick",
-                  label: "Select chip from system defaults or custom chips",
-                  onSelect: () => setPickerOpen(true),
-                },
-              ]}
-            />
-          </div>
+  return (
+    <ForgeTableModal
+      title={meta.chipModalTitle}
+      titleId="chip-table-title"
+      withPlan={showMyPlan}
+      onCancel={onCancel}
+      onDone={onDone}
+      intro={meta.chipModalIntro}
+      addAction={addRuleAction}
+      totalLabel="Total Rule Weights"
+      totalValue={`${totalWeight}%`}
+      totalWarn={totalWeight !== 100}
+      caution={
+        totalWeight !== 100 ? (
+          <p className="forge-table-caution" role="status">
+            Rule weights should total 100% — currently {totalWeight}%.
+          </p>
+        ) : null
+      }
+      alternateView={pickerOpen ? pickerView : null}
+    >
 
           <div
             className={
@@ -937,42 +933,6 @@ export function RuleChipsTableModal({
               );
             })}
           </div>
-
-          <div
-            className={
-              totalWeight === 100
-                ? "forge-table-total"
-                : "forge-table-total forge-table-total--warn"
-            }
-          >
-            <span>Total Rule Weights</span>
-            <span className="forge-table-total-val">{totalWeight}%</span>
-          </div>
-          {totalWeight !== 100 ? (
-            <p className="forge-table-caution" role="status">
-              Rule weights should total 100% — currently {totalWeight}%.
-            </p>
-          ) : null}
-
-          <div className="forge-table-actions">
-            <button
-              type="button"
-              className="btn btn--small btn--link forge-cancel-btn"
-              onClick={onCancel}
-            >
-              <X aria-hidden weight="bold" /> Cancel
-            </button>
-            <button
-              type="button"
-              className="btn btn--small btn--solid"
-              onClick={onDone}
-            >
-              <Plus aria-hidden weight="regular" /> Update
-            </button>
-          </div>
-          </>
-        ) : null}
-      </div>
-    </div>
+    </ForgeTableModal>
   );
 }

@@ -15,6 +15,10 @@ import type {
 } from "../../types";
 import { DEFAULT_CATEGORY_WEIGHTS } from "../../data";
 import { CATEGORY_ORDER, METRICS } from "./metrics";
+import {
+  LAYER3_ZONE_ORDER,
+  LAYER3_ZONES,
+} from "./layer3Zones";
 import { bandFromConviction, resolveStatus, type ResolveContext } from "./status";
 
 // ---------------------------------------------------------------------------
@@ -67,6 +71,8 @@ export interface StockAlignment {
   resolved: ResolvedStatus;
   categories: CategoryScore[];
   results: ChipResult[];
+  /** Layer 3 overlay chip evaluations (Trim / Add / Go to Cash) — not in conviction. */
+  zoneResults: ChipResult[];
 }
 
 // ---- Metric reads -------------------------------------------------------
@@ -137,6 +143,75 @@ export function evaluateChip(chip: RuleChip, ctx: MetricContext): ChipResult {
 
   const pass = compareNumeric(value, chip.operator, chip.value);
   return { chip, outcome: pass ? "pass" : "fail", value };
+}
+
+/** Active chips for a Layer 3 zone: tag-lens union when tags exist, else all enabled. */
+export function resolveZoneActiveChips(
+  rules: RuleChip[],
+  tags: RuleTag[],
+): RuleChip[] {
+  const enabled = rules.filter((chip) => chip.enabled);
+  if (enabled.length === 0) return [];
+  const customTags = tags.filter((tag) => !tag.system);
+  if (customTags.length === 0) return enabled;
+
+  const activeIds = new Set<string>();
+  for (const tag of customTags) {
+    for (const chipId of tag.chipIds) activeIds.add(chipId);
+  }
+  if (activeIds.size === 0) return enabled;
+  return enabled.filter((chip) => activeIds.has(chip.id));
+}
+
+/**
+ * Layer 3 overlays — a zone fires when any active chip **fails** (guardrail
+ * broken). Does not affect conviction math.
+ */
+export function evaluateZoneFlags(
+  strategy: Strategy,
+  ctx: MetricContext,
+): StatusType[] {
+  return evaluateZoneChipResults(strategy, ctx)
+    .filter((result) => result.outcome === "fail")
+    .reduce<StatusType[]>((flags, result) => {
+      const zoneId = zoneIdForChip(strategy, result.chip.id);
+      if (!zoneId) return flags;
+      const status = LAYER3_ZONES[zoneId].status;
+      if (!flags.includes(status)) flags.push(status);
+      return flags;
+    }, []);
+}
+
+/** All active Layer 3 chips evaluated against ctx (for Watch Summary plans). */
+export function evaluateZoneChipResults(
+  strategy: Strategy,
+  ctx: MetricContext,
+): ChipResult[] {
+  return LAYER3_ZONE_ORDER.flatMap((zoneId) => {
+    const meta = LAYER3_ZONES[zoneId];
+    const rules = (strategy[meta.rulesKey] ?? []) as RuleChip[];
+    const tags = (strategy[meta.tagsKey] ?? []) as RuleTag[];
+    return resolveZoneActiveChips(rules, tags).map((chip) =>
+      evaluateChip(chip, ctx),
+    );
+  });
+}
+
+function zoneIdForChip(
+  strategy: Strategy,
+  chipId: string,
+): (typeof LAYER3_ZONE_ORDER)[number] | null {
+  const rawId = chipId.includes(":")
+    ? chipId.slice(chipId.lastIndexOf(":") + 1)
+    : chipId;
+  for (const zoneId of LAYER3_ZONE_ORDER) {
+    const meta = LAYER3_ZONES[zoneId];
+    const rules = (strategy[meta.rulesKey] ?? []) as RuleChip[];
+    if (rules.some((chip) => chip.id === chipId || chip.id === rawId)) {
+      return zoneId;
+    }
+  }
+  return null;
 }
 
 // ---- Active chip resolution ----------------------------------------------
@@ -221,9 +296,24 @@ export function scoreStock(
   ctx: MetricContext,
   resolveCtx: ResolveContext = { hasStrategy: true },
 ): StockAlignment {
+  const zoneResults = evaluateZoneChipResults(strategy, ctx);
+  const zoneFlags = zoneResults
+    .filter((result) => result.outcome === "fail")
+    .reduce<StatusType[]>((flags, result) => {
+      const zoneId = zoneIdForChip(strategy, result.chip.id);
+      if (!zoneId) return flags;
+      const status = LAYER3_ZONES[zoneId].status;
+      if (!flags.includes(status)) flags.push(status);
+      return flags;
+    }, []);
+  const statusCtx: ResolveContext = {
+    ...resolveCtx,
+    zoneFlags,
+    zoneSurface: resolveCtx.zoneSurface ?? "ticker",
+  };
   const rules = (strategy.rules ?? []).filter((chip) => chip.enabled);
   if (rules.length === 0) {
-    const resolved = resolveStatus(0, [], resolveCtx);
+    const resolved = resolveStatus(0, [], statusCtx);
     return {
       hasRules: false,
       conviction: 0,
@@ -231,6 +321,7 @@ export function scoreStock(
       resolved,
       categories: [],
       results: [],
+      zoneResults,
     };
   }
 
@@ -258,7 +349,7 @@ export function scoreStock(
     weightTotal += weight;
   }
   const conviction = weightTotal > 0 ? Math.round(weightedSum / weightTotal) : 0;
-  const resolved = resolveStatus(conviction, categories, resolveCtx);
+  const resolved = resolveStatus(conviction, categories, statusCtx);
 
   return {
     hasRules: true,
@@ -267,6 +358,7 @@ export function scoreStock(
     resolved,
     categories,
     results,
+    zoneResults,
   };
 }
 

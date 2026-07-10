@@ -6,7 +6,9 @@ import { formatChipCondition, formatObservedBreach } from "../lib/forge/metrics"
 import {
   categoriesForStatus,
   isExamplePlan,
+  isLayer3Status,
 } from "../lib/forge/myPlan";
+import { LAYER3_ZONES, type Layer3ZoneId } from "../lib/forge/layer3Zones";
 import type { ChipResult, StockAlignment } from "../lib/forge/scoring";
 import { STATUS_TONE } from "../lib/status";
 import { StatusStack, WatchAlignLabel, WatchConvictionHead } from "./StatusBadge";
@@ -135,6 +137,86 @@ function collectTriggersForCategories(
   return triggers;
 }
 
+const ZONE_STATUS_TO_ID: Partial<Record<StatusType, Layer3ZoneId>> = {
+  "Trim Zone": "trimZone",
+  "Add Zone": "addZone",
+  "Go to Cash": "goToCash",
+};
+
+/** Failing Layer 3 overlay chips/tags for a zone status. */
+function collectZoneTriggers(
+  strategyBreakdowns: StrategyBreakdown[],
+  status: StatusType,
+): PlanTrigger[] {
+  const zoneId = ZONE_STATUS_TO_ID[status];
+  if (!zoneId) return [];
+  const meta = LAYER3_ZONES[zoneId];
+  const triggers: PlanTrigger[] = [];
+  const seen = new Set<string>();
+
+  for (const { strategy, alignment } of strategyBreakdowns) {
+    const zoneRules = strategy[meta.rulesKey] ?? [];
+    const zoneRuleIds = new Set(zoneRules.map((chip) => chip.id));
+    const failing = (alignment?.zoneResults ?? []).filter(
+      (result) =>
+        result.outcome === "fail" &&
+        (zoneRuleIds.has(result.chip.id) ||
+          [...zoneRuleIds].some((id) => result.chip.id.endsWith(`:${id}`))),
+    );
+    if (failing.length === 0) continue;
+
+    const resolveChipPlan = (chip: RuleChip): string | undefined => {
+      const rawId = chip.id.includes(":")
+        ? chip.id.slice(chip.id.lastIndexOf(":") + 1)
+        : chip.id;
+      const live =
+        zoneRules.find((item) => item.id === chip.id) ??
+        zoneRules.find((item) => item.id === rawId);
+      return live?.myPlan ?? chip.myPlan;
+    };
+
+    for (const result of failing) {
+      const key = `chip:${result.chip.id}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      triggers.push({
+        kind: "chip",
+        id: result.chip.id,
+        label: result.chip.label,
+        myPlan: resolveChipPlan(result.chip),
+        chip: result.chip,
+        dataPoints: [formatObservedDataPoint(result)],
+      });
+    }
+
+    const zoneTags = strategy[meta.tagsKey] ?? [];
+    for (const tag of zoneTags) {
+      if (tag.system) continue;
+      const memberFails = failing.filter((result) =>
+        tag.chipIds.some(
+          (tagChipId) =>
+            result.chip.id === tagChipId ||
+            result.chip.id.endsWith(`:${tagChipId}`),
+        ),
+      );
+      if (memberFails.length === 0) continue;
+      const key = `tag:${tag.id}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      triggers.push({
+        kind: "tag",
+        id: tag.id,
+        label: tag.label,
+        myPlan: tag.myPlan,
+        tag,
+        dataPoints: memberFails.map(formatObservedDataPoint),
+      });
+    }
+  }
+
+  return triggers;
+}
+
 /** One section per status label, with only the failing chips/tags that drive it. */
 function collectPlanSections(
   strategyBreakdowns: StrategyBreakdown[],
@@ -143,10 +225,12 @@ function collectPlanSections(
   return statuses
     .map((status) => ({
       status,
-      triggers: collectTriggersForCategories(
-        strategyBreakdowns,
-        new Set(categoriesForStatus(status)),
-      ),
+      triggers: isLayer3Status(status)
+        ? collectZoneTriggers(strategyBreakdowns, status)
+        : collectTriggersForCategories(
+            strategyBreakdowns,
+            new Set(categoriesForStatus(status)),
+          ),
     }))
     .filter((section) => section.triggers.length > 0);
 }

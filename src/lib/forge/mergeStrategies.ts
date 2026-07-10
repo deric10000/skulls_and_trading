@@ -84,5 +84,45 @@ export function mergeStrategiesForScoring(strategies: Strategy[]): Strategy {
     rules: mergedRules,
     ruleTags: [],
     categoryWeights,
+    // Concatenate Layer 3 overlays so multi-strategy tickers still fire zones.
+    trimZoneRules: ordered.flatMap((strategy) =>
+      (strategy.trimZoneRules ?? []).map((chip) => ({
+        ...chip,
+        id: `${strategy.id}:${chip.id}`,
+      })),
+    ),
+    trimZoneTags: ordered.flatMap((strategy) =>
+      (strategy.trimZoneTags ?? []).map((tag) => ({
+        ...tag,
+        id: `${strategy.id}:${tag.id}`,
+        chipIds: tag.chipIds.map((chipId) => `${strategy.id}:${chipId}`),
+      })),
+    ),
+    addZoneRules: ordered.flatMap((strategy) =>
+      (strategy.addZoneRules ?? []).map((chip) => ({
+        ...chip,
+        id: `${strategy.id}:${chip.id}`,
+      })),
+    ),
+    addZoneTags: ordered.flatMap((strategy) =>
+      (strategy.addZoneTags ?? []).map((tag) => ({
+        ...tag,
+        id: `${strategy.id}:${tag.id}`,
+        chipIds: tag.chipIds.map((chipId) => `${strategy.id}:${chipId}`),
+      })),
+    ),
+    goToCashRules: ordered.flatMap((strategy) =>
+      (strategy.goToCashRules ?? []).map((chip) => ({
+        ...chip,
+        id: `${strategy.id}:${chip.id}`,
+      })),
+    ),
+    goToCashTags: ordered.flatMap((strategy) =>
+      (strategy.goToCashTags ?? []).map((tag) => ({
+        ...tag,
+        id: `${strategy.id}:${tag.id}`,
+        chipIds: tag.chipIds.map((chipId) => `${strategy.id}:${chipId}`),
+      })),
+    ),
   };
 }

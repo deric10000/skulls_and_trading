@@ -21,7 +21,7 @@ export const STATUS_TONE: Record<StatusType, SignalTone> = {
   "Rule Break": "negative",
   "Concentration Review": "warning",
   "Patience Review": "warning",
-  // Layer 3 — user-driven zones (not emitted by resolveStatus yet)
+  // Layer 3 — user-driven zones (Trim/Add ticker; Go to Cash portfolio)
   "Trim Zone": "warning",
   "Add Zone": "positive",
   "Go to Cash": "negative",

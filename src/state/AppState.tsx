@@ -327,6 +327,21 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
           ...tag,
           chipIds: [...tag.chipIds],
         })),
+        trimZoneRules: (source.trimZoneRules ?? []).map((chip) => ({ ...chip })),
+        trimZoneTags: (source.trimZoneTags ?? []).map((tag) => ({
+          ...tag,
+          chipIds: [...tag.chipIds],
+        })),
+        addZoneRules: (source.addZoneRules ?? []).map((chip) => ({ ...chip })),
+        addZoneTags: (source.addZoneTags ?? []).map((tag) => ({
+          ...tag,
+          chipIds: [...tag.chipIds],
+        })),
+        goToCashRules: (source.goToCashRules ?? []).map((chip) => ({ ...chip })),
+        goToCashTags: (source.goToCashTags ?? []).map((tag) => ({
+          ...tag,
+          chipIds: [...tag.chipIds],
+        })),
         categoryWeights: source.categoryWeights
           ? { ...source.categoryWeights }
           : { ...DEFAULT_CATEGORY_WEIGHTS },
@@ -460,12 +475,10 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 
   // A strategy's OWN rule-chip pass/fail/no-data breakdown for a ticker,
   // independent of buckets — lets the Watch summary show, per applied
-  // strategy, exactly which chips are calculating vs. excluded. `portfolioId`
-  // (optional) supplies openPnlPct from that portfolio's holding, if any;
-  // weightPct/holdingDays are bucket/allocation-specific and intentionally
-  // left unset here (no single canonical value across arbitrary applied
-  // strategies), so Position Size / Hold Timeframe chips read "no data" in
-  // this view — the real, bucket-scoped conviction number is unaffected.
+  // strategy, exactly which chips are calculating vs. excluded. Supplies
+  // openPnlPct + portfolio weightPct from the selected portfolio so Layer 3
+  // overlays (e.g. Add Zone on weight) match the list-row alignment. holdingDays
+  // stays unset here (bucket entry-date specific).
   const getStrategyChipBreakdown = useCallback(
     (strategyId: string, ticker: string, portfolioId?: string): StockAlignment | undefined => {
       const strategy = strategies.find((item) => item.id === strategyId);
@@ -474,11 +487,25 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         ? portfolios.find((item) => item.id === portfolioId)
         : undefined;
       const holding = portfolio?.holdings.find((item) => item.ticker === ticker);
+      const lastPrice = (symbol: string): number =>
+        dataSource.getTickerInfo(symbol)?.lastPrice ?? 0;
+      const bookValue =
+        portfolio?.holdings.reduce(
+          (sum, item) => sum + item.shares * lastPrice(item.ticker),
+          0,
+        ) ?? 0;
+      // Match alignment.ts: 0 when unheld / empty book so weight chips evaluate
+      // (undefined would read as "no data" and never trip Add/Trim zones).
+      const weightPct =
+        holding && bookValue > 0
+          ? (holding.shares * lastPrice(ticker) * 100) / bookValue
+          : 0;
       const ctx: MetricContext = {
         fundamentals: dataSource.getFundamentals(ticker),
         technicals: dataSource.getTechnicals(ticker),
         market: dataSource.getMarketContext(),
         openPnlPct: holding?.openPnlPct,
+        weightPct,
       };
       return scoreStock(strategy, ctx);
     },

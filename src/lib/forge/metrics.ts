@@ -804,27 +804,36 @@ export function conditionLabel(
 // ---- Value formatting --------------------------------------------------------
 // Renders a chip's target value with its metric's unit, matching the table
 // designs: "3%", "$0", "25", "0.8x", "TRUE", "7 days", "$10M", "1.5".
+// Live readings (weight, P&L, ratios, etc.) are always rounded to 2 decimals
+// so long floats never leak into Watch / Forge copy.
+
+/** Round numeric display values to two decimal places (1.936… → 1.94). */
+export function roundMetricDisplay(value: number): number {
+  return Math.round(value * 100) / 100;
+}
 
 export function formatMetricValue(
   value: number | string,
   meta: Pick<MetricMeta, "format" | "unit">,
 ): string {
   if (typeof value === "string") return value;
+  if (meta.format === "boolean") {
+    return value === 1 ? "TRUE" : "FALSE";
+  }
+  const display = roundMetricDisplay(value);
   switch (meta.format) {
     case "percent":
-      return `${value}%`;
+      return `${display}%`;
     case "ratio":
-      return `${value}x`;
+      return `${display}x`;
     case "currency":
-      if (meta.unit === "$M") return `$${value}M`;
-      if (meta.unit === "$B") return `$${value}B`;
-      return `$${value}`;
+      if (meta.unit === "$M") return `$${display}M`;
+      if (meta.unit === "$B") return `$${display}B`;
+      return `$${display}`;
     case "days":
-      return `${value} days`;
-    case "boolean":
-      return value === 1 ? "TRUE" : "FALSE";
+      return `${display} days`;
     default:
-      return `${value}`;
+      return `${display}`;
   }
 }
 
@@ -838,16 +847,12 @@ export function formatChipCondition(chip: RuleChip): string {
   return `${label} ${formatMetricValue(value, meta)}`;
 }
 
-/** Round display gaps so long floats stay readable (e.g. 82.08%). */
+/** Format a numeric gap; rounding is handled by formatMetricValue. */
 function formatGapValue(
   gap: number,
   meta: Pick<MetricMeta, "format" | "unit">,
 ): string {
-  const rounded =
-    meta.format === "percent" || meta.format === "ratio" || meta.format === "number"
-      ? Math.round(gap * 100) / 100
-      : gap;
-  return formatMetricValue(rounded, meta);
+  return formatMetricValue(gap, meta);
 }
 
 /** Plain-English threshold phrase, e.g. "5% or more", "below 30x". */
@@ -1044,10 +1049,10 @@ export const CATEGORY_META: Record<RuleCategory, CategoryMeta> = {
     plainLabel: "Acting on plan?",
     question: "Is the position behaving inside the plan's tolerances?",
     info:
-      "Whether the open position is inside your plan's tolerances — the drawdown you'll accept and the gain that triggers a trim review.",
+      "Last step — open-position tolerances and Layer 3 zone overlays (Trim Zone, Add Zone, Go to Cash). Earlier categories feed the plan; this is where you decide how to act when it breaks or pays off.",
     chipsLabel: "Trade Rule Chips",
     chipsInfo:
-      "What open-position tolerances define your plan — the loss you'll accept before review, the gain that triggers a trim?",
+      "What open-position tolerances define your plan — the loss you'll accept before review, the gain that triggers a trim? Zone overlays below use the same chip pattern for Trim / Add / Go to Cash triggers.",
     tagsLabel: "Trade Tags",
     tagsInfo:
       "Group trade-management rules into lenses like Drawdown Discipline. These become tags that you can later apply to individual stocks within your watchlists and portfolios.",
@@ -1085,6 +1090,6 @@ export const CATEGORY_ORDER: RuleCategory[] = [
   "setup",
   "risk",
   "position",
-  "trade",
   "timeframe",
+  "trade",
 ];

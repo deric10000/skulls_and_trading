@@ -135,7 +135,7 @@ export const STATUS_ICON: Record<StatusType, Icon> = {
   "Rule Break": WarningOctagon,
   "Concentration Review": ChartBar,
   "Patience Review": Clock,
-  // Layer 3 — user-driven zones (not emitted by resolveStatus yet)
+  // Layer 3 — user-driven zones (Trim/Add ticker; Go to Cash portfolio)
   "Trim Zone": Scissors,
   "Add Zone": Coins,
   "Go to Cash": CurrencyDollar,

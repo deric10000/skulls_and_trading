@@ -163,14 +163,13 @@ export type StatusType =
   | "Rule Break"
   | "Concentration Review"
   | "Patience Review"
-  // Layer 3 — user-driven zone overlays (registered; not emitted by resolveStatus yet)
+  // Layer 3 — user-driven zone overlays (Trim/Add on tickers; Go to Cash on portfolio)
   | "Trim Zone"
   | "Add Zone"
   | "Go to Cash";
 
-/** Forge status: Layer 1 conviction band + Layer 2 category diagnostics.
- *  Layer 3 zone overlays (Trim Zone / Add Zone / Go to Cash) are in StatusType
- *  for tone/icon coverage but are not resolved or displayed until wired. */
+/** Forge status: Layer 1 conviction band + Layer 2 category diagnostics +
+ *  Layer 3 zone overlays when zone chips fail (see evaluateZoneFlags). */
 export interface ResolvedStatus {
   primary: StatusType;
   categoryFlags: StatusType[];
@@ -282,6 +281,17 @@ export interface Strategy {
   rules?: RuleChip[];
   ruleTags?: RuleTag[]; // reusable chip groups ("lenses") per category
   categoryWeights?: CategoryWeights; // each category's share of conviction; sums to 100
+  /**
+   * Layer 3 zone overlays — independent chip/tag copies. A zone fires when any
+   * active chip fails (`evaluateZoneFlags`); never read for conviction math.
+   * Trim/Add → ticker labels; Go to Cash → portfolio badge only.
+   */
+  trimZoneRules?: RuleChip[];
+  trimZoneTags?: RuleTag[];
+  addZoneRules?: RuleChip[];
+  addZoneTags?: RuleTag[];
+  goToCashRules?: RuleChip[];
+  goToCashTags?: RuleTag[];
   appliedPortfolioIds?: string[]; // portfolios/watchlists this strategy is applied to
   /** Custom strategies: tickers turned off per portfolio (defaults use strategyIds on holdings). */
   tickerExclusions?: Partial<Record<string, string[]>>;
@@ -296,7 +306,8 @@ export type StrategyAssignments = Record<string, string[]>;
 // UI labels live in CATEGORY_META (src/lib/forge/metrics.ts):
 // thesis = "Thesis & Fundamentals", setup = "Technical Analysis (Setup /
 // Timing)", risk = "Risk Rules", position = "Position Size",
-// trade = "Trade Management", timeframe = "Hold Timeframe".
+// timeframe = "Hold Timeframe", trade = "Trade Management" (last in UI —
+// Layer 3 zone overlays live here). UI order is CATEGORY_ORDER in metrics.ts.
 export type RuleCategory =
   | "thesis"
   | "timeframe"

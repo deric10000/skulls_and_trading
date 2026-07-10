@@ -70,10 +70,60 @@ function backfillMyPlans(strategies: Strategy[]): Strategy[] {
   });
 }
 
+/**
+ * Seed Layer 3 overlays onto default strategies that were persisted before
+ * trim/add/go-to-cash zone fields existed. Only fills when the field is missing
+ * or empty — never overwrites an edited non-empty list.
+ */
+function backfillLayer3Overlays(strategies: Strategy[]): Strategy[] {
+  const defaultById = new Map(
+    DEFAULT_STRATEGIES.map((strategy) => [strategy.id, strategy]),
+  );
+
+  return strategies.map((strategy) => {
+    const defaults = defaultById.get(strategy.id);
+    if (!defaults) return strategy;
+
+    const patch: Partial<Strategy> = {};
+    const missing = (current: RuleChip[] | RuleTag[] | undefined) =>
+      current == null || current.length === 0;
+
+    if (missing(strategy.trimZoneRules) && defaults.trimZoneRules?.length) {
+      patch.trimZoneRules = defaults.trimZoneRules.map((chip) => ({ ...chip }));
+    }
+    if (missing(strategy.trimZoneTags) && defaults.trimZoneTags?.length) {
+      patch.trimZoneTags = defaults.trimZoneTags.map((tag) => ({
+        ...tag,
+        chipIds: [...tag.chipIds],
+      }));
+    }
+    if (missing(strategy.addZoneRules) && defaults.addZoneRules?.length) {
+      patch.addZoneRules = defaults.addZoneRules.map((chip) => ({ ...chip }));
+    }
+    if (missing(strategy.addZoneTags) && defaults.addZoneTags?.length) {
+      patch.addZoneTags = defaults.addZoneTags.map((tag) => ({
+        ...tag,
+        chipIds: [...tag.chipIds],
+      }));
+    }
+    if (missing(strategy.goToCashRules) && defaults.goToCashRules?.length) {
+      patch.goToCashRules = defaults.goToCashRules.map((chip) => ({ ...chip }));
+    }
+    if (missing(strategy.goToCashTags) && defaults.goToCashTags?.length) {
+      patch.goToCashTags = defaults.goToCashTags.map((tag) => ({
+        ...tag,
+        chipIds: [...tag.chipIds],
+      }));
+    }
+
+    return Object.keys(patch).length > 0 ? { ...strategy, ...patch } : strategy;
+  });
+}
+
 export function loadPersistedStrategies(): Strategy[] {
   const stored = readPayload<Strategy[]>(STRATEGIES_KEY);
   if (!stored) return DEFAULT_STRATEGIES;
-  return backfillMyPlans(stored);
+  return backfillLayer3Overlays(backfillMyPlans(stored));
 }
 
 /** Fill missing myPlan on library chips from CHIP_LIBRARY_SEED (by id). */
