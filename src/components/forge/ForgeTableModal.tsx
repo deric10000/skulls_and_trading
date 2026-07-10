@@ -2,7 +2,8 @@ import type { ReactNode } from "react";
 import { Plus, X } from "../../lib/icons";
 
 /**
- * Shared chrome for Strategy Forge table modals (Rule Chips, Tags, Trim Zone, …).
+ * Shared chrome for Strategy Forge table modals (Rule Chips, Tags, Layer 3
+ * zones, …).
  *
  * Owns the backdrop, card, title bar, intro + add-action row, weight total,
  * caution, and Cancel/Update footer — the pieces that must look and behave

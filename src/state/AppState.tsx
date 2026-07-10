@@ -327,6 +327,21 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
           ...tag,
           chipIds: [...tag.chipIds],
         })),
+        trimZoneRules: (source.trimZoneRules ?? []).map((chip) => ({ ...chip })),
+        trimZoneTags: (source.trimZoneTags ?? []).map((tag) => ({
+          ...tag,
+          chipIds: [...tag.chipIds],
+        })),
+        addZoneRules: (source.addZoneRules ?? []).map((chip) => ({ ...chip })),
+        addZoneTags: (source.addZoneTags ?? []).map((tag) => ({
+          ...tag,
+          chipIds: [...tag.chipIds],
+        })),
+        goToCashRules: (source.goToCashRules ?? []).map((chip) => ({ ...chip })),
+        goToCashTags: (source.goToCashTags ?? []).map((tag) => ({
+          ...tag,
+          chipIds: [...tag.chipIds],
+        })),
         categoryWeights: source.categoryWeights
           ? { ...source.categoryWeights }
           : { ...DEFAULT_CATEGORY_WEIGHTS },

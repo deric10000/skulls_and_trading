@@ -27,12 +27,14 @@ import type {
   RuleOperator,
   RuleTag,
 } from "../../types";
+import type { Layer3ZoneMeta } from "../../lib/forge/layer3Zones";
 
 // ---------------------------------------------------------------------------
-// Trim Zone table modal — Layer 3 overlay authoring on ForgeTableModal chrome
-// (same baseline as Rule Chips / Tags). Reads/writes strategy.trimZone* only.
-// Copies from conviction chips/tags are independent; nothing here feeds
-// scoreStock. Empty by default until the captain adds rules.
+// Layer 3 zone table modal — Trim Zone / Add Zone / Go to Cash authoring on
+// ForgeTableModal chrome (same baseline as Rule Chips / Tags). Each zone
+// reads/writes its own strategy.*Rules / .*Tags fields. Copies from
+// conviction chips/tags are independent; nothing here feeds scoreStock.
+// Empty by default until the captain adds rules.
 // ---------------------------------------------------------------------------
 
 type SortKey =
@@ -46,16 +48,10 @@ type SortKey =
 
 type PickerMode = "chips" | "tags" | null;
 
-const MY_PLAN_TOOLTIP =
-  "Write, in your words, what you plan to do if this Trim Zone rule is broken.";
-
-const TRIM_ZONE_INFO =
-  "Trim Zone rules decide when the Trim Zone label fires. They are independent copies — changing a value here does not change conviction scoring or the original category rule.";
-
-let trimIdCounter = 0;
-function nextTrimId(prefix: string): string {
-  trimIdCounter += 1;
-  return `trim-${prefix}-${Date.now()}-${trimIdCounter}`;
+let zoneIdCounter = 0;
+function nextZoneId(idPrefix: string, kind: string): string {
+  zoneIdCounter += 1;
+  return `${idPrefix}-${kind}-${Date.now()}-${zoneIdCounter}`;
 }
 
 function valueUnitSuffix(metric: MetricKey): string {
@@ -197,7 +193,8 @@ function ChipValueField({
   );
 }
 
-export function TrimZoneTableModal({
+export function Layer3ZoneTableModal({
+  zone,
   rules,
   tags,
   sourceChips,
@@ -206,6 +203,7 @@ export function TrimZoneTableModal({
   onCancel,
   onDone,
 }: {
+  zone: Layer3ZoneMeta;
   rules: RuleChip[];
   tags: RuleTag[];
   /** Conviction-scoring chips available to copy (all categories). */
@@ -314,8 +312,8 @@ export function TrimZoneTableModal({
   function addBlankChip() {
     const metricMeta = metricOptions[0] ?? METRICS.weightPct;
     const chip: RuleChip = {
-      id: nextTrimId("chip"),
-      label: "New Trim Rule",
+      id: nextZoneId(zone.idPrefix, "chip"),
+      label: zone.blankChipLabel,
       category: "position",
       metric: metricMeta.key,
       dateRange: metricMeta.defaultDateRange,
@@ -335,7 +333,7 @@ export function TrimZoneTableModal({
   function addChipFromSource(source: RuleChip) {
     const copy: RuleChip = {
       ...source,
-      id: nextTrimId("chip"),
+      id: nextZoneId(zone.idPrefix, "chip"),
       label: source.label,
     };
     setDraftRules((current) => [copy, ...current]);
@@ -348,14 +346,14 @@ export function TrimZoneTableModal({
       .map((chipId) => sourceChips.find((chip) => chip.id === chipId))
       .filter((chip): chip is RuleChip => Boolean(chip))
       .map((chip) => {
-        const newId = nextTrimId("chip");
+        const newId = nextZoneId(zone.idPrefix, "chip");
         idMap.set(chip.id, newId);
         return { ...chip, id: newId };
       });
 
     const tagCopy: RuleTag = {
       ...source,
-      id: nextTrimId("tag"),
+      id: nextZoneId(zone.idPrefix, "tag"),
       chipIds: source.chipIds.map((chipId) => idMap.get(chipId) ?? chipId),
       system: false,
     };
@@ -370,7 +368,7 @@ export function TrimZoneTableModal({
       const source = current.find((chip) => chip.id === id);
       if (!source) return current;
       return [
-        { ...source, id: nextTrimId("chip"), label: `${source.label} (Copy)` },
+        { ...source, id: nextZoneId(zone.idPrefix, "chip"), label: `${source.label} (Copy)` },
         ...current,
       ];
     });
@@ -439,11 +437,11 @@ export function TrimZoneTableModal({
   );
 
   const pickerView = (
-          <div className="forge-chip-picker" role="region" aria-label="Add a Trim Zone rule">
+          <div className="forge-chip-picker" role="region" aria-label={`Add a ${zone.shortName} rule`}>
             <div className="forge-chip-picker-head">
               <button type="button" className="breadcrumb" onClick={() => setPickerMode(null)}>
                 <CaretLeft aria-hidden />
-                Trim Zone Rules
+                {zone.modalTitle}
               </button>
               <h3>
                 {pickerMode === "chips"
@@ -453,7 +451,7 @@ export function TrimZoneTableModal({
             </div>
             <div className="forge-chip-picker-intro">
               <p>
-                Picking a chip or tag creates an independent Trim Zone copy.
+                Picking a chip or tag creates an independent {zone.shortName} copy.
               </p>
             </div>
             <div className="forge-chip-picker-columns">
@@ -462,7 +460,7 @@ export function TrimZoneTableModal({
                   {pickerMode === "chips" ? "Strategy Rule Chips" : "Strategy Tags"}
                 </h4>
                 <ChipSearchList
-                  id={`trim-zone-${pickerMode}`}
+                  id={`${zone.id}-${pickerMode}`}
                   label={
                     pickerMode === "chips"
                       ? "Search strategy rule chips"
@@ -494,20 +492,20 @@ export function TrimZoneTableModal({
 
   return (
     <ForgeTableModal
-      title="Trim Zone Rules"
-      titleId="trim-zone-table-title"
+      title={zone.modalTitle}
+      titleId={zone.titleId}
       titleAccessory={
         <InfoTip
-          label="About Trim Zone rules"
-          title="Trim Zone"
-          body={TRIM_ZONE_INFO}
+          label={`About ${zone.shortName} rules`}
+          title={zone.shortName}
+          body={zone.infoBody}
           wide
         />
       }
       withPlan
       onCancel={onCancel}
       onDone={onDone}
-      intro="Add Trim Zone rules that fire the Trim Zone label."
+      intro={zone.intro}
       addAction={addRuleAction}
       totalLabel="Total Rule Weights"
       totalValue={`${totalWeight}%`}
@@ -515,8 +513,8 @@ export function TrimZoneTableModal({
       caution={
         draftRules.length > 0 && totalWeight !== 100 ? (
           <p className="forge-table-caution" role="status">
-            Rule weights should total 100% — currently {totalWeight}%. (Trim
-            Zone weights do not affect conviction.)
+            Rule weights should total 100% — currently {totalWeight}%. (
+            {zone.shortName} weights do not affect conviction.)
           </p>
         ) : null
       }
@@ -525,7 +523,7 @@ export function TrimZoneTableModal({
             <div
               className="forge-table forge-table--chips forge-table--chips-plan"
               role="table"
-              aria-label="Trim Zone Rules"
+              aria-label={zone.modalTitle}
             >
               <div className="forge-table-row forge-table-row--head" role="row">
                 {headers.map((header) => (
@@ -546,7 +544,7 @@ export function TrimZoneTableModal({
                 >
                   <span className="forge-th-with-tip">
                     My Plan
-                    <InfoTip label="About My Plan" body={MY_PLAN_TOOLTIP} />
+                    <InfoTip label="About My Plan" body={zone.myPlanTooltip} />
                   </span>
                 </span>
                 <span className="forge-table-th forge-table-th--static" role="columnheader">
@@ -557,8 +555,7 @@ export function TrimZoneTableModal({
               {sorted.length === 0 ? (
                 <div className="forge-table-row" role="row">
                   <span className="forge-box-empty" style={{ gridColumn: "1 / -1" }}>
-                    No Trim Zone rules yet — use Add Rule to create a blank rule or
-                    copy one from another category.
+                    {zone.emptyTable}
                   </span>
                 </div>
               ) : null}
@@ -713,7 +710,7 @@ export function TrimZoneTableModal({
                             }
                             rows={2}
                             value={chip.myPlan ?? ""}
-                            placeholder="What will you do if this Trim Zone rule breaks?"
+                            placeholder={zone.myPlanPlaceholder}
                             aria-label="My plan"
                             onChange={(event) =>
                               patchChip(chip.id, {
@@ -752,9 +749,9 @@ export function TrimZoneTableModal({
             </div>
 
             {draftTags.length > 0 ? (
-              <div className="forge-trim-zone-tags">
+              <div className="forge-layer3-zone-tags">
                 <span className="config-label forge-label forge-label--muted">
-                  Trim Zone Tags
+                  {zone.tagsHeading}
                 </span>
                 <ul className="watch-plan-triggers">
                   {draftTags.map((tag) => (

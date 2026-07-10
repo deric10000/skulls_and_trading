@@ -3379,6 +3379,11 @@ select.input:hover:not(:disabled) {
   align-items: stretch;
 }
 
+/* Layer 3 overlays sit under the chips/tags pair — full width, stacked. */
+.forge-box--layer3-zone {
+  grid-column: 1 / -1;
+}
+
 .forge-box {
   display: flex;
   flex-direction: column;
@@ -3417,7 +3422,7 @@ select.input:hover:not(:disabled) {
   margin-bottom: 0.75rem;
 }
 
-.forge-trim-zone-tags {
+.forge-layer3-zone-tags {
   display: flex;
   flex-direction: column;
   gap: 0.45rem;
@@ -3784,19 +3789,27 @@ select.input:hover:not(:disabled) {
   justify-content: space-between;
   gap: 0.75rem;
   padding: var(--space-2) var(--space-3);
+  /* Keep the add control inside the padded box — long intro copy used to
+     shove `.action-menu` past the right edge, and the modal's overflow:hidden
+     clipped it flush (padding looked "missing"). */
+  min-width: 0;
 }
 
 .forge-table-intro p {
   margin: 0;
+  flex: 1 1 auto;
+  min-width: 0;
   font-size: 0.85rem;
   color: var(--text-muted);
 }
 
+.forge-table-intro .action-menu,
 .forge-table-intro .btn {
   display: inline-flex;
   align-items: center;
   gap: 4px;
   flex: 0 0 auto;
+  max-width: 100%;
 }
 
 /* The table itself — full-bleed dark surface with zebra rows and blue rails on

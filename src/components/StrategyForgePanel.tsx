@@ -31,7 +31,13 @@ import { MultiSelect } from "./MultiSelect";
 import { InfoTip, Tooltip } from "./Tooltip";
 import { RuleChipsTableModal } from "./forge/RuleChipsTableModal";
 import { TagsTableModal } from "./forge/TagsTableModal";
-import { TrimZoneTableModal } from "./forge/TrimZoneTableModal";
+import { Layer3ZoneTableModal } from "./forge/Layer3ZoneTableModal";
+import {
+  LAYER3_ZONE_ORDER,
+  LAYER3_ZONES,
+  type Layer3ZoneId,
+} from "../lib/forge/layer3Zones";
+import { GO_TO_CASH_SICADFU } from "../lib/status";
 import type {
   CheckInterval,
   RuleCategory,
@@ -204,7 +210,7 @@ function TagPill({ tag }: { tag: RuleTag }) {
 // ---- Main panel ----------------------------------------------------------
 
 interface TableEditor {
-  kind: "chips" | "tags" | "trimZone";
+  kind: "chips" | "tags" | Layer3ZoneId;
   category?: RuleCategory;
 }
 
@@ -300,8 +306,20 @@ export function StrategyForgePanel({ strategy }: { strategy: Strategy | undefine
 
   const rules = useMemo(() => strategy?.rules ?? [], [strategy]);
   const ruleTags = useMemo(() => strategy?.ruleTags ?? [], [strategy]);
-  const trimZoneRules = useMemo(() => strategy?.trimZoneRules ?? [], [strategy]);
-  const trimZoneTags = useMemo(() => strategy?.trimZoneTags ?? [], [strategy]);
+  const layer3ByZone = useMemo(() => {
+    const read = (zoneId: Layer3ZoneId) => {
+      const meta = LAYER3_ZONES[zoneId];
+      return {
+        rules: (strategy?.[meta.rulesKey] ?? []) as RuleChip[],
+        tags: (strategy?.[meta.tagsKey] ?? []) as RuleTag[],
+      };
+    };
+    return {
+      trimZone: read("trimZone"),
+      addZone: read("addZone"),
+      goToCash: read("goToCash"),
+    };
+  }, [strategy]);
 
   const applyReady = useMemo(
     () => (strategy ? isStrategyApplyReady(strategy) : true),
@@ -352,10 +370,11 @@ export function StrategyForgePanel({ strategy }: { strategy: Strategy | undefine
       editorSnapshotRef.current = ruleTags
         .filter((tag) => tag.category === next.category)
         .map((tag) => ({ ...tag, chipIds: [...tag.chipIds] }));
-    } else if (next.kind === "trimZone") {
+    } else if (next.kind in LAYER3_ZONES) {
+      const zone = layer3ByZone[next.kind as Layer3ZoneId];
       editorSnapshotRef.current = {
-        rules: trimZoneRules.map((chip) => ({ ...chip })),
-        tags: trimZoneTags.map((tag) => ({ ...tag, chipIds: [...tag.chipIds] })),
+        rules: zone.rules.map((chip) => ({ ...chip })),
+        tags: zone.tags.map((tag) => ({ ...tag, chipIds: [...tag.chipIds] })),
       };
     }
     setEditor(next);
@@ -382,10 +401,14 @@ export function StrategyForgePanel({ strategy }: { strategy: Strategy | undefine
     });
   }
 
-  function commitTrimZone(next: { rules: RuleChip[]; tags: RuleTag[] }) {
+  function commitLayer3Zone(
+    zoneId: Layer3ZoneId,
+    next: { rules: RuleChip[]; tags: RuleTag[] },
+  ) {
+    const meta = LAYER3_ZONES[zoneId];
     updateStrategy(id, {
-      trimZoneRules: next.rules,
-      trimZoneTags: next.tags,
+      [meta.rulesKey]: next.rules,
+      [meta.tagsKey]: next.tags,
     });
   }
 
@@ -395,8 +418,9 @@ export function StrategyForgePanel({ strategy }: { strategy: Strategy | undefine
       commitChips(editor.category, editorSnapshotRef.current as RuleChip[]);
     } else if (editor.kind === "tags" && editor.category) {
       commitTags(editor.category, editorSnapshotRef.current as RuleTag[]);
-    } else if (editor.kind === "trimZone") {
-      commitTrimZone(
+    } else if (editor.kind in LAYER3_ZONES) {
+      commitLayer3Zone(
+        editor.kind as Layer3ZoneId,
         editorSnapshotRef.current as { rules: RuleChip[]; tags: RuleTag[] },
       );
     }
@@ -832,45 +856,59 @@ export function StrategyForgePanel({ strategy }: { strategy: Strategy | undefine
                 </div>
               </div>
 
-              {category === "position" ? (
-                <div className="forge-box forge-box--chips forge-box--trim-zone">
-                  <div className="forge-box-head">
-                    <span className="config-label forge-label forge-label--muted">
-                      Trim Zone
-                      <InfoTip
-                        label="About Trim Zone"
-                        title="Trim Zone"
-                        body="Independent overlay rules that decide when the Trim Zone label fires. Copies from other categories do not change conviction scoring — you can set different thresholds here than on the original rule."
-                        wide
-                      />
-                    </span>
-                    <button
-                      type="button"
-                      className="icon-btn icon-btn--blue"
-                      aria-label="Edit Trim Zone"
-                      onClick={() => openEditor({ kind: "trimZone" })}
-                    >
-                      <PencilSimple aria-hidden weight="regular" />
-                    </button>
-                  </div>
-                  <div className="forge-box-body">
-                    {trimZoneRules.length > 0 || trimZoneTags.length > 0 ? (
-                      <>
-                        {trimZoneRules.map((chip) => (
-                          <ChipPill key={chip.id} chip={chip} />
-                        ))}
-                        {trimZoneTags.map((tag) => (
-                          <TagPill key={tag.id} tag={tag} />
-                        ))}
-                      </>
-                    ) : (
-                      <span className="forge-box-empty">
-                        No Trim Zone rules yet — use the edit icon to add them.
-                      </span>
-                    )}
-                  </div>
-                </div>
-              ) : null}
+              {category === "position"
+                ? LAYER3_ZONE_ORDER.map((zoneId) => {
+                    const zone = LAYER3_ZONES[zoneId];
+                    const { rules: zoneRules, tags: zoneTags } =
+                      layer3ByZone[zoneId];
+                    return (
+                      <div
+                        key={zoneId}
+                        className="forge-box forge-box--chips forge-box--layer3-zone"
+                      >
+                        <div className="forge-box-head">
+                          <span className="config-label forge-label forge-label--muted">
+                            {zone.title}
+                            <InfoTip
+                              label={`About ${zone.shortName}`}
+                              title={
+                                zoneId === "goToCash" ? "SICADFU" : zone.shortName
+                              }
+                              body={
+                                zoneId === "goToCash"
+                                  ? `${GO_TO_CASH_SICADFU}. ${zone.boxInfoBody}`
+                                  : zone.boxInfoBody
+                              }
+                              wide
+                            />
+                          </span>
+                          <button
+                            type="button"
+                            className="icon-btn icon-btn--blue"
+                            aria-label={`Edit ${zone.title}`}
+                            onClick={() => openEditor({ kind: zoneId })}
+                          >
+                            <PencilSimple aria-hidden weight="regular" />
+                          </button>
+                        </div>
+                        <div className="forge-box-body">
+                          {zoneRules.length > 0 || zoneTags.length > 0 ? (
+                            <>
+                              {zoneRules.map((chip) => (
+                                <ChipPill key={chip.id} chip={chip} />
+                              ))}
+                              {zoneTags.map((tag) => (
+                                <TagPill key={tag.id} tag={tag} />
+                              ))}
+                            </>
+                          ) : (
+                            <span className="forge-box-empty">{zone.emptyBox}</span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })
+                : null}
             </div>
           </div>
         );
@@ -934,13 +972,16 @@ export function StrategyForgePanel({ strategy }: { strategy: Strategy | undefine
           onDone={dismissEditor}
         />
       ) : null}
-      {editor?.kind === "trimZone" ? (
-        <TrimZoneTableModal
-          rules={trimZoneRules}
-          tags={trimZoneTags}
+      {editor && editor.kind in LAYER3_ZONES ? (
+        <Layer3ZoneTableModal
+          zone={LAYER3_ZONES[editor.kind as Layer3ZoneId]}
+          rules={layer3ByZone[editor.kind as Layer3ZoneId].rules}
+          tags={layer3ByZone[editor.kind as Layer3ZoneId].tags}
           sourceChips={rules}
           sourceTags={ruleTags}
-          onDraftChange={commitTrimZone}
+          onDraftChange={(next) =>
+            commitLayer3Zone(editor.kind as Layer3ZoneId, next)
+          }
           onCancel={cancelEditor}
           onDone={dismissEditor}
         />
