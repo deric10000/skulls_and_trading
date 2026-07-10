@@ -12,6 +12,12 @@ Source designs: the Configure card + table modals in Figma
 (`Skulls - Trading`, node `168-1323` and the six chip/tag table modals) and the
 algorithm board in FigJam (`Skulls and Trading`, node `30-1095`).
 
+**Table modal chrome:** all forge table modals (Rule Chips, Tags, Trim Zone, …)
+must use `src/components/forge/ForgeTableModal.tsx` for backdrop, title bar,
+intro + add-action row, weight total, caution, and Cancel/Update. Domain
+tables and pickers go in slots (`children` / `alternateView` / `titleAccessory`).
+Do not fork the shell per modal.
+
 ## 1. The model
 
 - A portfolio runs one or many **Strategies**, applied through **Buckets** (a
@@ -113,9 +119,11 @@ Portfolio-level Layer 2 uses market-value-weighted category scores across
 holdings (`aggregateCategoryScores` in `status.ts`).
 
 **Layer 3 — user-driven zones** (`Trim Zone`, `Add Zone`, `Go to Cash`) are
-registered on `StatusType` with tone/icon coverage, but are **not** emitted by
-`resolveStatus` and do **not** appear in the UI until trigger settings are
-wired. They are independent of conviction scores. Surfaces (when wired):
+registered on `StatusType` with tone/icon coverage. Trim Zone authoring lives
+on the Configure card under Position Size (`strategy.trimZoneRules` /
+`trimZoneTags`) — independent chip/tag copies that do **not** feed
+`scoreStock` or conviction. Zone labels are still **not** emitted by
+`resolveStatus` until trigger evaluation is wired. Surfaces (when wired):
 ticker `watch-align` labels for Trim Zone / Add Zone; portfolio StatusBadge
 chip only for Go to Cash (no ticker label).
 

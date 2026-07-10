@@ -282,6 +282,13 @@ export interface Strategy {
   rules?: RuleChip[];
   ruleTags?: RuleTag[]; // reusable chip groups ("lenses") per category
   categoryWeights?: CategoryWeights; // each category's share of conviction; sums to 100
+  /**
+   * Layer 3 Trim Zone overlay rules — independent copies of chips/tags used only
+   * to decide when the Trim Zone label fires. Never read by scoreStock /
+   * validateStrategy / conviction math.
+   */
+  trimZoneRules?: RuleChip[];
+  trimZoneTags?: RuleTag[];
   appliedPortfolioIds?: string[]; // portfolios/watchlists this strategy is applied to
   /** Custom strategies: tickers turned off per portfolio (defaults use strategyIds on holdings). */
   tickerExclusions?: Partial<Record<string, string[]>>;

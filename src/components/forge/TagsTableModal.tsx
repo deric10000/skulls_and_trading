@@ -9,9 +9,9 @@ import {
   PencilSimple,
   Plus,
   Trash,
-  X,
 } from "../../lib/icons";
 import { InfoTip } from "../Tooltip";
+import { ForgeTableModal } from "./ForgeTableModal";
 import { ForgePill } from "../ForgePill";
 import type { RuleCategory, RuleChip, RuleTag } from "../../types";
 
@@ -27,7 +27,8 @@ import type { RuleCategory, RuleChip, RuleTag } from "../../types";
 // system tag is duplicate-only. Custom tag weights should total 100%. Rows
 // toggle into an edit mode (pencil) where label/purpose/weight/auto-apply
 // are inputs and member chips are toggleable pills. On mobile the rows
-// reflow into stacked cards.
+// reflow into stacked cards. Chrome comes from ForgeTableModal — do not
+// re-implement that shell here.
 // ---------------------------------------------------------------------------
 
 type SortKey = "label" | "purpose" | "weightPct" | "autoApply" | "myPlan";
@@ -195,38 +196,32 @@ export function TagsTableModal({
     { key: "purpose", label: "Purpose" },
   ];
 
-  return (
-    <div className="modal-backdrop" role="presentation" onClick={onCancel}>
-      <div
-        className={
-          showMyPlan
-            ? "modal-card panel forge-table-modal forge-table-modal--with-plan"
-            : "modal-card panel forge-table-modal"
-        }
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="tag-table-title"
-        onClick={(event) => event.stopPropagation()}
-      >
-        <div className="forge-table-head">
-          <h2 id="tag-table-title">{meta.tagModalTitle}</h2>
-          <button
-            type="button"
-            className="forge-table-close"
-            onClick={onCancel}
-            aria-label="Close"
-          >
-            <X aria-hidden weight="bold" />
-          </button>
-        </div>
-
-        <div className="forge-table-intro">
-          <p>{meta.tagModalIntro}</p>
+  const addTagAction = (
           <button type="button" className="btn btn--small" onClick={addTag}>
             <Plus aria-hidden weight="regular" /> Add Tag
           </button>
-        </div>
+  );
 
+  return (
+    <ForgeTableModal
+      title={meta.tagModalTitle}
+      titleId="tag-table-title"
+      withPlan={showMyPlan}
+      onCancel={onCancel}
+      onDone={onDone}
+      intro={meta.tagModalIntro}
+      addAction={addTagAction}
+      totalLabel="Total"
+      totalValue={`${customTotal}%`}
+      totalWarn={customTotal !== 100}
+      caution={
+        customTotal !== 100 ? (
+          <p className="forge-table-caution" role="status">
+            Tag weights should total 100% — currently {customTotal}%.
+          </p>
+        ) : null
+      }
+    >
         <div
           className={
             showMyPlan
@@ -481,40 +476,6 @@ export function TagsTableModal({
             );
           })}
         </div>
-
-        <div
-          className={
-            customTotal === 100
-              ? "forge-table-total"
-              : "forge-table-total forge-table-total--warn"
-          }
-        >
-          <span>Total</span>
-          <span className="forge-table-total-val">{customTotal}%</span>
-        </div>
-        {customTotal !== 100 ? (
-          <p className="forge-table-caution" role="status">
-            Tag weights should total 100% — currently {customTotal}%.
-          </p>
-        ) : null}
-
-        <div className="forge-table-actions">
-          <button
-            type="button"
-            className="btn btn--small btn--link forge-cancel-btn"
-            onClick={onCancel}
-          >
-            <X aria-hidden weight="bold" /> Cancel
-          </button>
-          <button
-            type="button"
-            className="btn btn--small btn--solid"
-            onClick={onDone}
-          >
-            <Plus aria-hidden weight="regular" /> Update
-          </button>
-        </div>
-      </div>
-    </div>
+    </ForgeTableModal>
   );
 }

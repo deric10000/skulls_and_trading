@@ -219,6 +219,10 @@ snapshots (`data.ts`), and register it in `metrics.ts`. Nothing else changes.
   edited through the table modals on the Configure card. Duplicating a strategy
   deep-copies both; new blank strategies seed empty categories with default
   category weights and the system tags.
+- **Trim Zone overlay** (`strategy.trimZoneRules`, `strategy.trimZoneTags`) is
+  authored under Position Size → Trim Zone. These are independent copies used
+  only for future Layer 3 Trim Zone triggers — never read by `scoreStock` /
+  `validateStrategy`.
 - `strategy.appliedPortfolioIds` records which portfolios/watchlists the
   strategy is applied to. It's edited via the "Applied Portfolios" multi-select
   on the Configure card. Blank/duplicated strategies start unapplied (`[]`).

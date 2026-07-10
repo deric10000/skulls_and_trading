@@ -31,6 +31,7 @@ import { MultiSelect } from "./MultiSelect";
 import { InfoTip, Tooltip } from "./Tooltip";
 import { RuleChipsTableModal } from "./forge/RuleChipsTableModal";
 import { TagsTableModal } from "./forge/TagsTableModal";
+import { TrimZoneTableModal } from "./forge/TrimZoneTableModal";
 import type {
   CheckInterval,
   RuleCategory,
@@ -203,8 +204,8 @@ function TagPill({ tag }: { tag: RuleTag }) {
 // ---- Main panel ----------------------------------------------------------
 
 interface TableEditor {
-  kind: "chips" | "tags";
-  category: RuleCategory;
+  kind: "chips" | "tags" | "trimZone";
+  category?: RuleCategory;
 }
 
 export function StrategyForgePanel({ strategy }: { strategy: Strategy | undefined }) {
@@ -231,7 +232,9 @@ export function StrategyForgePanel({ strategy }: { strategy: Strategy | undefine
 
   const [editor, setEditor] = useState<TableEditor | null>(null);
   /** Chip/tag rows as they were when the table modal opened — Cancel restores this. */
-  const editorSnapshotRef = useRef<RuleChip[] | RuleTag[]>([]);
+  const editorSnapshotRef = useRef<
+    RuleChip[] | RuleTag[] | { rules: RuleChip[]; tags: RuleTag[] }
+  >([]);
   const [editingWeight, setEditingWeight] = useState<RuleCategory | null>(null);
   const [activeSection, setActiveSection] = useState<string>("identity");
   const [selectedTickerPortfolioId, setSelectedTickerPortfolioId] = useState("");
@@ -297,6 +300,8 @@ export function StrategyForgePanel({ strategy }: { strategy: Strategy | undefine
 
   const rules = useMemo(() => strategy?.rules ?? [], [strategy]);
   const ruleTags = useMemo(() => strategy?.ruleTags ?? [], [strategy]);
+  const trimZoneRules = useMemo(() => strategy?.trimZoneRules ?? [], [strategy]);
+  const trimZoneTags = useMemo(() => strategy?.trimZoneTags ?? [], [strategy]);
 
   const applyReady = useMemo(
     () => (strategy ? isStrategyApplyReady(strategy) : true),
@@ -339,14 +344,19 @@ export function StrategyForgePanel({ strategy }: { strategy: Strategy | undefine
   }
 
   function openEditor(next: TableEditor) {
-    if (next.kind === "chips") {
+    if (next.kind === "chips" && next.category) {
       editorSnapshotRef.current = rules
         .filter((chip) => chip.category === next.category)
         .map((chip) => ({ ...chip }));
-    } else {
+    } else if (next.kind === "tags" && next.category) {
       editorSnapshotRef.current = ruleTags
         .filter((tag) => tag.category === next.category)
         .map((tag) => ({ ...tag, chipIds: [...tag.chipIds] }));
+    } else if (next.kind === "trimZone") {
+      editorSnapshotRef.current = {
+        rules: trimZoneRules.map((chip) => ({ ...chip })),
+        tags: trimZoneTags.map((tag) => ({ ...tag, chipIds: [...tag.chipIds] })),
+      };
     }
     setEditor(next);
   }
@@ -372,12 +382,23 @@ export function StrategyForgePanel({ strategy }: { strategy: Strategy | undefine
     });
   }
 
+  function commitTrimZone(next: { rules: RuleChip[]; tags: RuleTag[] }) {
+    updateStrategy(id, {
+      trimZoneRules: next.rules,
+      trimZoneTags: next.tags,
+    });
+  }
+
   function cancelEditor() {
     if (!editor) return;
-    if (editor.kind === "chips") {
+    if (editor.kind === "chips" && editor.category) {
       commitChips(editor.category, editorSnapshotRef.current as RuleChip[]);
-    } else {
+    } else if (editor.kind === "tags" && editor.category) {
       commitTags(editor.category, editorSnapshotRef.current as RuleTag[]);
+    } else if (editor.kind === "trimZone") {
+      commitTrimZone(
+        editorSnapshotRef.current as { rules: RuleChip[]; tags: RuleTag[] },
+      );
     }
     setEditor(null);
   }
@@ -810,6 +831,46 @@ export function StrategyForgePanel({ strategy }: { strategy: Strategy | undefine
                   )}
                 </div>
               </div>
+
+              {category === "position" ? (
+                <div className="forge-box forge-box--chips forge-box--trim-zone">
+                  <div className="forge-box-head">
+                    <span className="config-label forge-label forge-label--muted">
+                      Trim Zone
+                      <InfoTip
+                        label="About Trim Zone"
+                        title="Trim Zone"
+                        body="Independent overlay rules that decide when the Trim Zone label fires. Copies from other categories do not change conviction scoring — you can set different thresholds here than on the original rule."
+                        wide
+                      />
+                    </span>
+                    <button
+                      type="button"
+                      className="icon-btn icon-btn--blue"
+                      aria-label="Edit Trim Zone"
+                      onClick={() => openEditor({ kind: "trimZone" })}
+                    >
+                      <PencilSimple aria-hidden weight="regular" />
+                    </button>
+                  </div>
+                  <div className="forge-box-body">
+                    {trimZoneRules.length > 0 || trimZoneTags.length > 0 ? (
+                      <>
+                        {trimZoneRules.map((chip) => (
+                          <ChipPill key={chip.id} chip={chip} />
+                        ))}
+                        {trimZoneTags.map((tag) => (
+                          <TagPill key={tag.id} tag={tag} />
+                        ))}
+                      </>
+                    ) : (
+                      <span className="forge-box-empty">
+                        No Trim Zone rules yet — use the edit icon to add them.
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ) : null}
             </div>
           </div>
         );
@@ -854,21 +915,32 @@ export function StrategyForgePanel({ strategy }: { strategy: Strategy | undefine
         </button>
       </ActionFooter>
 
-      {editor?.kind === "chips" ? (
+      {editor?.kind === "chips" && editor.category ? (
         <RuleChipsTableModal
           category={editor.category}
           chips={rules.filter((chip) => chip.category === editor.category)}
-          onDraftChange={(chips) => commitChips(editor.category, chips)}
+          onDraftChange={(chips) => commitChips(editor.category!, chips)}
           onCancel={cancelEditor}
           onDone={dismissEditor}
         />
       ) : null}
-      {editor?.kind === "tags" ? (
+      {editor?.kind === "tags" && editor.category ? (
         <TagsTableModal
           category={editor.category}
           tags={ruleTags.filter((tag) => tag.category === editor.category)}
           chips={rules.filter((chip) => chip.category === editor.category)}
-          onDraftChange={(tags) => commitTags(editor.category, tags)}
+          onDraftChange={(tags) => commitTags(editor.category!, tags)}
+          onCancel={cancelEditor}
+          onDone={dismissEditor}
+        />
+      ) : null}
+      {editor?.kind === "trimZone" ? (
+        <TrimZoneTableModal
+          rules={trimZoneRules}
+          tags={trimZoneTags}
+          sourceChips={rules}
+          sourceTags={ruleTags}
+          onDraftChange={commitTrimZone}
           onCancel={cancelEditor}
           onDone={dismissEditor}
         />

@@ -3410,6 +3410,26 @@ select.input:hover:not(:disabled) {
   color: var(--text-faint);
 }
 
+.forge-table-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.forge-trim-zone-tags {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  margin-top: 0.85rem;
+}
+
+.forge-pill-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
 /* Rule chip / tag pills — 4px-radius chips, #181e32 fill, #499dd7 11px Medium
    text (design "chip" component). The system "All Active Chips" tag is the
    muted variant. */
@@ -3721,6 +3741,9 @@ select.input:hover:not(:disabled) {
 /* Modal title: 18.4px Plex Sans SemiBold white (per design) */
 .forge-table-head h2 {
   margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
   font-size: 1.15rem;
   font-weight: 600;
   color: #ffffff;
