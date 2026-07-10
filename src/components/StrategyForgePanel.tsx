@@ -856,7 +856,7 @@ export function StrategyForgePanel({ strategy }: { strategy: Strategy | undefine
                 </div>
               </div>
 
-              {category === "position"
+              {category === "trade"
                 ? LAYER3_ZONE_ORDER.map((zoneId) => {
                     const zone = LAYER3_ZONES[zoneId];
                     const { rules: zoneRules, tags: zoneTags } =

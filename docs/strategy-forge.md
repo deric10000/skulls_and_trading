@@ -55,21 +55,24 @@ Category keys are stable identifiers (`thesis`, `setup`, `risk`, `position`,
 | 2 | **Technical Analysis (Setup / Timing)** (`setup`) | Does the current market/chart setup support the strategy? | 12 |
 | 3 | **Risk Rules** (`risk`) | Is the position still inside the user's risk limits? | 15 |
 | 4 | **Position Size** (`position`) | Is the allocation sized with discipline? | 8 |
-| 5 | **Trade Management** (`trade`) | Is the position behaving inside the plan's tolerances? | 6 |
-| 6 | **Hold Timeframe** (`timeframe`) | Is the holding being managed on the intended timeline? | 4 |
+| 5 | **Hold Timeframe** (`timeframe`) | Is the holding being managed on the intended timeline? | 4 |
+| 6 | **Trade Management** (`trade`) | Is the position behaving inside the plan's tolerances? | 6 |
 
-The Thesis/Technical/Risk weights (55 / 12 / 15) come straight from the design;
-Position / Trade / Timeframe split the remaining 18 points (8 / 6 / 4), keeping
-the per-stock score dominated by thesis fit and risk control — how an expert
-Value/Growth/Dividend investor actually weighs decisions. All six are
+UI order matches `CATEGORY_ORDER`: Trade Management is last because earlier
+categories feed the plan, and trade rules (plus Layer 3 Trim / Add / Go to Cash
+overlays) are where you decide how to act. Default weights are unchanged —
+Position / Trade / Timeframe still split the remaining 18 points (8 / 6 / 4),
+keeping the per-stock score dominated by thesis fit and risk control — how an
+expert Value/Growth/Dividend investor actually weighs decisions. All six are
 per-strategy adjustable and must sum to 100.
 
-**Position / Trade / Timeframe design note:** these categories use the *same*
+**Position / Timeframe / Trade design note:** these categories use the *same*
 chip + tag + table pattern as the first three (consistency beats a bespoke UI),
 but ship with deliberately small chip sets. Position-level risk-based sizing
 against the whole portfolio ("low risk score → smaller suggested size") is a
 later pass; today these categories score the per-stock, per-position facts we
-have (portfolio weight, open P&L, holding age).
+have (portfolio weight, open P&L, holding age). Trade Management also hosts the
+Layer 3 zone authoring boxes.
 
 ## 4. The scoring algorithm (per stock, per category)
 
@@ -121,7 +124,7 @@ holdings (`aggregateCategoryScores` in `status.ts`).
 
 **Layer 3 — user-driven zones** (`Trim Zone`, `Add Zone`, `Go to Cash`) are
 registered on `StatusType` with tone/icon coverage. Authoring lives on the
-Configure card under Position Size (`trimZone*` / `addZone*` / `goToCash*`
+Configure card under Trade Management (`trimZone*` / `addZone*` / `goToCash*`
 rules+tags) — independent chip/tag copies that do **not** feed `scoreStock` or
 conviction. Zone labels are still **not** emitted by `resolveStatus` until
 trigger evaluation is wired. Surfaces (when wired):

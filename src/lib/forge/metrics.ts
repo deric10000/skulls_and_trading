@@ -1044,10 +1044,10 @@ export const CATEGORY_META: Record<RuleCategory, CategoryMeta> = {
     plainLabel: "Acting on plan?",
     question: "Is the position behaving inside the plan's tolerances?",
     info:
-      "Whether the open position is inside your plan's tolerances — the drawdown you'll accept and the gain that triggers a trim review.",
+      "Last step — open-position tolerances and Layer 3 zone overlays (Trim Zone, Add Zone, Go to Cash). Earlier categories feed the plan; this is where you decide how to act when it breaks or pays off.",
     chipsLabel: "Trade Rule Chips",
     chipsInfo:
-      "What open-position tolerances define your plan — the loss you'll accept before review, the gain that triggers a trim?",
+      "What open-position tolerances define your plan — the loss you'll accept before review, the gain that triggers a trim? Zone overlays below use the same chip pattern for Trim / Add / Go to Cash triggers.",
     tagsLabel: "Trade Tags",
     tagsInfo:
       "Group trade-management rules into lenses like Drawdown Discipline. These become tags that you can later apply to individual stocks within your watchlists and portfolios.",
@@ -1085,6 +1085,6 @@ export const CATEGORY_ORDER: RuleCategory[] = [
   "setup",
   "risk",
   "position",
-  "trade",
   "timeframe",
+  "trade",
 ];

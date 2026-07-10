@@ -307,7 +307,8 @@ export type StrategyAssignments = Record<string, string[]>;
 // UI labels live in CATEGORY_META (src/lib/forge/metrics.ts):
 // thesis = "Thesis & Fundamentals", setup = "Technical Analysis (Setup /
 // Timing)", risk = "Risk Rules", position = "Position Size",
-// trade = "Trade Management", timeframe = "Hold Timeframe".
+// timeframe = "Hold Timeframe", trade = "Trade Management" (last in UI —
+// Layer 3 zone overlays live here). UI order is CATEGORY_ORDER in metrics.ts.
 export type RuleCategory =
   | "thesis"
   | "timeframe"

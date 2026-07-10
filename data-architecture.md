@@ -221,7 +221,7 @@ snapshots (`data.ts`), and register it in `metrics.ts`. Nothing else changes.
   category weights and the system tags.
 - **Layer 3 zone overlays** (`trimZoneRules`/`trimZoneTags`,
   `addZoneRules`/`addZoneTags`, `goToCashRules`/`goToCashTags`) are authored
-  under Position Size → Trim Zone / Add Zone / Go to Cash - SICADFU. These are
+  under Trade Management → Trim Zone / Add Zone / Go to Cash - SICADFU. These are
   independent copies used only for future Layer 3 triggers — never read by
   `scoreStock` / `validateStrategy`.
 - `strategy.appliedPortfolioIds` records which portfolios/watchlists the

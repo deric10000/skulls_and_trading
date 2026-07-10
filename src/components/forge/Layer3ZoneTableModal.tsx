@@ -314,7 +314,7 @@ export function Layer3ZoneTableModal({
     const chip: RuleChip = {
       id: nextZoneId(zone.idPrefix, "chip"),
       label: zone.blankChipLabel,
-      category: "position",
+      category: "trade",
       metric: metricMeta.key,
       dateRange: metricMeta.defaultDateRange,
       operator: metricMeta.operators[0],
