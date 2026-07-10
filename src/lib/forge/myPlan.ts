@@ -26,6 +26,7 @@ export function examplePlan(body: string): string {
 /**
  * Categories whose Layer-2 diagnostics can emit a given status. A status may
  * map to more than one category (e.g. Rule Break from thesis or trade).
+ * Layer 3 zones are not category-driven — Watch Summary reads zoneResults.
  */
 const STATUS_CATEGORIES: Partial<Record<StatusType, RuleCategory[]>> = {
   "Risk Drift": ["risk"],
@@ -41,6 +42,12 @@ const STATUS_CATEGORIES: Partial<Record<StatusType, RuleCategory[]>> = {
   "Concentration Review": ["position"],
   "Patience Review": ["timeframe"],
 };
+
+const LAYER3_STATUSES: StatusType[] = ["Trim Zone", "Add Zone", "Go to Cash"];
+
+export function isLayer3Status(status: StatusType): boolean {
+  return LAYER3_STATUSES.includes(status);
+}
 
 /** Categories that drive a single status label. */
 export function categoriesForStatus(status: StatusType): RuleCategory[] {

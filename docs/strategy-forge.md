@@ -123,13 +123,15 @@ Portfolio-level Layer 2 uses market-value-weighted category scores across
 holdings (`aggregateCategoryScores` in `status.ts`).
 
 **Layer 3 — user-driven zones** (`Trim Zone`, `Add Zone`, `Go to Cash`) are
-registered on `StatusType` with tone/icon coverage. Authoring lives on the
-Configure card under Trade Management (`trimZone*` / `addZone*` / `goToCash*`
-rules+tags) — independent chip/tag copies that do **not** feed `scoreStock` or
-conviction. Zone labels are still **not** emitted by `resolveStatus` until
-trigger evaluation is wired. Surfaces (when wired):
-ticker `watch-align` labels for Trim Zone / Add Zone; portfolio StatusBadge
-chip only for Go to Cash (no ticker label).
+authored under Trade Management (`trimZone*` / `addZone*` / `goToCash*`
+rules+tags) as independent chip/tag copies that do **not** feed `scoreStock`
+or conviction. A zone **fires when any of its active chips fails** (guardrail
+broken — same idea as My Plan). Evaluation: `evaluateZoneFlags` in
+`scoring.ts`, merged in `resolveStatus` via `zoneFlags` + `zoneSurface`.
+Surfaces: ticker `watch-align` for Trim Zone / Add Zone; portfolio
+`StatusBadge` only for Go to Cash (OR across holdings). Default strategies
+seed one chip per zone (VGD/AIH trade/position/regime copies with tighter
+wizard thresholds).
 
 The old hard **gates** (thesis composite → `Thesis Check`, breached risk chip →
 `Risk Check`, with conviction clamps) are **removed**: thesis and risk now

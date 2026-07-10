@@ -199,7 +199,7 @@ numerator and denominator — see §6 below).
 |------|------|
 | `metrics.ts` | The **metric registry** — single source of truth for every data point a chip can test (label + plainLabel, tooltip copy, source snapshot, conditions, date ranges, unit/format). Drives the table-modal dropdowns and tells the engine where to read each value. |
 | `scoring.ts` | Pure functions implementing the algorithm in `docs/strategy-forge.md`: resolve active chips (tag lens union, deduped; default = All Active Chips) → pass/fail per chip → **normalize active rule weights to 100% of the category** → `categoryScore × categoryWeight` → summed conviction. Also `validateStrategy` (completeness checks that gate "Apply to Portfolio"). No thesis/risk gates or conviction clamps — category weights carry that dominance. |
-| `status.ts` | **Unified status resolver** — Layer 1 conviction band + Layer 2 per-category diagnostic ladders → `ResolvedStatus` (primary + category flags). Layer 3 zone overlays (`Trim Zone` / `Add Zone` / `Go to Cash`) are registered on `StatusType` and authored via `trimZone*` / `addZone*` / `goToCash*` strategy fields, but not emitted until user-driven triggers are wired. Portfolio aggregation MV-weights category scores before resolving. Compass variant (bull/bear/placeholder) derived from primary only. |
+| `status.ts` | **Unified status resolver** — Layer 1 conviction band + Layer 2 per-category diagnostic ladders + Layer 3 zone flags (`zoneFlags` / `zoneSurface`) → `ResolvedStatus`. Zone overlays are authored on the strategy and evaluated by `evaluateZoneFlags` (fail → fire); Trim/Add on tickers, Go to Cash on portfolio. Portfolio aggregation MV-weights category scores before resolving. Compass variant (bull/bear/placeholder) derived from primary only. |
 | `alignment.ts` | The **bridge**: pulls snapshots through `dataSource`, scores each holding in each bucket (including `holdingDays` from the bucket `entryDate`), and aggregates **market-value-weighted** conviction + resolved status `byTicker` (best-aligned bucket = headline), `byBucket`, and `portfolio`. |
 | `scheduler.ts` | Stubbed per-bucket refresh scheduler. No-op against mock; establishes the gated (market-hours / tab-visible / cache-stale) contract for live data. |
 
@@ -222,8 +222,9 @@ snapshots (`data.ts`), and register it in `metrics.ts`. Nothing else changes.
 - **Layer 3 zone overlays** (`trimZoneRules`/`trimZoneTags`,
   `addZoneRules`/`addZoneTags`, `goToCashRules`/`goToCashTags`) are authored
   under Trade Management → Trim Zone / Add Zone / Go to Cash - SICADFU. These are
-  independent copies used only for future Layer 3 triggers — never read by
-  `scoreStock` / `validateStrategy`.
+  independent copies — never read by `scoreStock` / `validateStrategy` for
+  conviction. `evaluateZoneFlags` fires a zone when any active chip fails;
+  Trim/Add attach to ticker `ResolvedStatus`, Go to Cash to portfolio only.
 - `strategy.appliedPortfolioIds` records which portfolios/watchlists the
   strategy is applied to. It's edited via the "Applied Portfolios" multi-select
   on the Configure card. Blank/duplicated strategies start unapplied (`[]`).

@@ -781,6 +781,52 @@ export const DEFAULT_STRATEGIES: Strategy[] = [
       { id: "vgd-tag-patience", label: "Patience", category: "timeframe", purpose: "Confirms a long-term thesis has been given time to work.", chipIds: ["vgd-h1"], weightPct: 60, autoApply: "Apply to long-term compounders and dividend holdings.", myPlan: "Example: Stay patient; do not force an early exit before seasoning." },
       { id: "vgd-tag-review", label: "Review Cadence", category: "timeframe", purpose: "Confirms the holding gets a full thesis review at least annually.", chipIds: ["vgd-h2"], weightPct: 40, autoApply: "Apply to every long-term holding.", myPlan: "Example: Schedule a full thesis review before extending the hold." },
     ],
+    // Layer 3 overlays — independent copies; fail → fire. Tuned for a VGD wizard.
+    trimZoneRules: [
+      {
+        id: "vgd-trim-1",
+        label: "Gain Within Trim Band",
+        category: "trade",
+        metric: "openPnlPct",
+        dateRange: "Current",
+        operator: "<",
+        value: 50,
+        weightPct: 100,
+        enabled: true,
+        myPlan:
+          "Example: Trim one-third back to plan size and trail the rest (tighter than the 100% Gain Not Extreme conviction chip).",
+      },
+    ],
+    addZoneRules: [
+      {
+        id: "vgd-add-1",
+        label: "Sized to Plan Floor",
+        category: "position",
+        metric: "weightPct",
+        dateRange: "Current",
+        operator: ">=",
+        value: 8,
+        weightPct: 100,
+        enabled: true,
+        myPlan:
+          "Example: Add toward plan size while thesis and risk chips still clear (under 8% is an add opportunity vs the 1% Meaningful Allocation floor).",
+      },
+    ],
+    goToCashRules: [
+      {
+        id: "vgd-cash-1",
+        label: "Market Regime Stable",
+        category: "risk",
+        metric: "spyAbove200dSma",
+        dateRange: "Current",
+        operator: "is",
+        value: "TRUE",
+        weightPct: 100,
+        enabled: true,
+        myPlan:
+          "Example: Sit in cash (SICADFU) until SPY reclaims the 200-day — same regime chip as Risk, used here as the portfolio cash trigger.",
+      },
+    ],
     categoryWeights: { thesis: 55, setup: 12, risk: 15, position: 8, trade: 6, timeframe: 4 },
     appliedPortfolioIds: ["deric"],
     checkInterval: "1D",
@@ -845,6 +891,52 @@ export const DEFAULT_STRATEGIES: Strategy[] = [
       { id: "aih-tag-profit", label: "Profit Discipline", category: "trade", purpose: "Flags outsized gains for a trim-or-rebalance review.", chipIds: ["aih-tr2"], weightPct: 40, autoApply: "Apply to winners that have grown well past their entry thesis.", myPlan: "Example: Bank partial gains and rebalance the winner to plan size." },
       { id: "aih-tag-patience", label: "Patience", category: "timeframe", purpose: "Confirms the position has been given time to prove the setup.", chipIds: ["aih-h1"], weightPct: 50, autoApply: "Apply to swing and longer-horizon growth positions.", myPlan: "Example: Stay patient; let the setup prove itself before forcing an exit." },
       { id: "aih-tag-review", label: "Review Cadence", category: "timeframe", purpose: "Confirms the holding gets a full thesis review on schedule.", chipIds: ["aih-h2"], weightPct: 50, autoApply: "Apply to every open position.", myPlan: "Example: Schedule a full thesis review before extending the hold." },
+    ],
+    // Layer 3 overlays — high-beta wizard: let winners run further, add sooner, same regime cash.
+    trimZoneRules: [
+      {
+        id: "aih-trim-1",
+        label: "Gain Within Trim Band",
+        category: "trade",
+        metric: "openPnlPct",
+        dateRange: "Current",
+        operator: "<",
+        value: 80,
+        weightPct: 100,
+        enabled: true,
+        myPlan:
+          "Example: Bank partial gains and reset the winner to plan size (tighter than the 150% Gain Not Extreme conviction chip).",
+      },
+    ],
+    addZoneRules: [
+      {
+        id: "aih-add-1",
+        label: "Sized to Plan Floor",
+        category: "position",
+        metric: "weightPct",
+        dateRange: "Current",
+        operator: ">=",
+        value: 5,
+        weightPct: 100,
+        enabled: true,
+        myPlan:
+          "Example: Add toward the high-beta plan size while the growth thesis still clears (under 5% is an add opportunity vs the 2% Meaningful Allocation floor).",
+      },
+    ],
+    goToCashRules: [
+      {
+        id: "aih-cash-1",
+        label: "Market Regime Stable",
+        category: "risk",
+        metric: "spyAbove200dSma",
+        dateRange: "Current",
+        operator: "is",
+        value: "TRUE",
+        weightPct: 100,
+        enabled: true,
+        myPlan:
+          "Example: Sit in cash (SICADFU) until SPY reclaims the 200-day — high-beta books de-risk first when the regime breaks.",
+      },
     ],
     categoryWeights: { thesis: 40, setup: 20, risk: 20, position: 8, trade: 8, timeframe: 4 },
     appliedPortfolioIds: ["deric"],

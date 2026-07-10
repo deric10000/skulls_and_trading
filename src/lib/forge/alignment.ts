@@ -1,6 +1,7 @@
 import type { Bucket, Portfolio, PortfolioHolding, ResolvedStatus, StatusType, Strategy } from "../../types";
 import { dataSource } from "../datasource";
 import {
+  evaluateZoneFlags,
   scoreStock,
   type MetricContext,
   type StockAlignment,
@@ -320,8 +321,28 @@ export function computePortfolioAlignment(
       categories: byTicker[holding.ticker].alignment.categories,
     }));
 
+  // Go to Cash is portfolio-only: fire if any applied holding's go-to-cash
+  // overlay fails (market chips fail the same on every ticker; P&L chips OR).
+  const portfolioZoneFlags: StatusType[] = [];
+  for (const holding of portfolio.holdings) {
+    if (holding.shares <= 0) continue;
+    const applicable = strategiesForHolding(holding, portfolio.id, strategies);
+    if (applicable.length === 0) continue;
+    const strategy =
+      applicable.length === 1
+        ? applicable[0]
+        : mergeStrategiesForScoring(applicable);
+    const flags = evaluateZoneFlags(strategy, buildMetricContext(holding.ticker, holding));
+    if (flags.includes("Go to Cash")) {
+      portfolioZoneFlags.push("Go to Cash");
+      break;
+    }
+  }
+
   const portfolioResolved = resolveAggregatedStatus(portfolioHeadlineSlices, {
     hasStrategy: portfolioHasStrategy,
+    zoneFlags: portfolioZoneFlags,
+    zoneSurface: "portfolio",
   });
 
   return {

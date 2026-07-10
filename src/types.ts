@@ -163,14 +163,13 @@ export type StatusType =
   | "Rule Break"
   | "Concentration Review"
   | "Patience Review"
-  // Layer 3 — user-driven zone overlays (registered; not emitted by resolveStatus yet)
+  // Layer 3 — user-driven zone overlays (Trim/Add on tickers; Go to Cash on portfolio)
   | "Trim Zone"
   | "Add Zone"
   | "Go to Cash";
 
-/** Forge status: Layer 1 conviction band + Layer 2 category diagnostics.
- *  Layer 3 zone overlays (Trim Zone / Add Zone / Go to Cash) are in StatusType
- *  for tone/icon coverage but are not resolved or displayed until wired. */
+/** Forge status: Layer 1 conviction band + Layer 2 category diagnostics +
+ *  Layer 3 zone overlays when zone chips fail (see evaluateZoneFlags). */
 export interface ResolvedStatus {
   primary: StatusType;
   categoryFlags: StatusType[];
@@ -283,9 +282,9 @@ export interface Strategy {
   ruleTags?: RuleTag[]; // reusable chip groups ("lenses") per category
   categoryWeights?: CategoryWeights; // each category's share of conviction; sums to 100
   /**
-   * Layer 3 zone overlays — independent chip/tag copies used only to decide
-   * when Trim Zone / Add Zone / Go to Cash labels fire. Never read by
-   * scoreStock / validateStrategy / conviction math.
+   * Layer 3 zone overlays — independent chip/tag copies. A zone fires when any
+   * active chip fails (`evaluateZoneFlags`); never read for conviction math.
+   * Trim/Add → ticker labels; Go to Cash → portfolio badge only.
    */
   trimZoneRules?: RuleChip[];
   trimZoneTags?: RuleTag[];

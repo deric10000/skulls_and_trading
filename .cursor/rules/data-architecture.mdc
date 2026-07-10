@@ -73,7 +73,9 @@ contracts below.
   `status.ts` (`resolveStatus`: Layer 1 conviction band + Layer 2 category
   diagnostics → `ResolvedStatus`). Layer 3 zone overlays (Trim Zone / Add Zone /
   Go to Cash) are registered on `StatusType`; authoring uses
-  `strategy.trimZone*` / `addZone*` / `goToCash*` rules+tags (not scored). Don't
+  `strategy.trimZone*` / `addZone*` / `goToCash*` rules+tags (not scored).
+  Zones fire via `evaluateZoneFlags` (any active chip fail) into
+  `resolveStatus` (`zoneFlags` / `zoneSurface`). Don't
   fetch or import data inside scoring;
   feed it through `alignment.ts`, which reads the `dataSource` seam.
 - Forge inputs come **through the seam**: `getFundamentals`, `getTechnicals`,

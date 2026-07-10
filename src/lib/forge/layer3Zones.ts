@@ -2,8 +2,9 @@ import type { RuleChip, RuleTag, StatusType } from "../../types";
 
 /**
  * Layer 3 zone overlays — Trim Zone / Add Zone / Go to Cash. Each stores
- * independent chip/tag copies on the strategy; none feed scoreStock /
- * validateStrategy / conviction. Trigger evaluation is not wired yet.
+ * independent chip/tag copies on the strategy; none feed conviction math.
+ * Evaluation lives in `zoneTriggers.ts` (fail → fire). Surfaces: Trim/Add on
+ * ticker watch-align; Go to Cash on portfolio StatusBadge only.
  */
 export type Layer3ZoneId = "trimZone" | "addZone" | "goToCash";
 
@@ -42,6 +43,9 @@ export const LAYER3_ZONE_ORDER: Layer3ZoneId[] = [
   "addZone",
   "goToCash",
 ];
+
+export const TICKER_ZONE_STATUSES: StatusType[] = ["Trim Zone", "Add Zone"];
+export const PORTFOLIO_ZONE_STATUSES: StatusType[] = ["Go to Cash"];
 
 export const LAYER3_ZONES: Record<Layer3ZoneId, Layer3ZoneMeta> = {
   trimZone: {

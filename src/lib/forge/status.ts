@@ -3,20 +3,24 @@ import type { CategoryScore } from "./scoring";
 
 // ---------------------------------------------------------------------------
 // Unified Forge status resolver — Layer 1 conviction band + Layer 2 category
-// diagnostics. Layer 3 zone overlays (Trim Zone / Add Zone / Go to Cash) are
-// registered on StatusType for tone/icon coverage but are NOT emitted here
-// until user-driven triggers are wired. Conviction math is unchanged; this
-// module only maps scores to display labels (see docs/strategy-forge.md §4).
+// diagnostics + Layer 3 zone overlays (when zoneFlags are supplied). Conviction
+// math is unchanged; this module only maps scores/flags to display labels
+// (see docs/strategy-forge.md §4).
 // ---------------------------------------------------------------------------
 
 export interface ResolveContext {
   /** When false, Thesis Check fires regardless of scores. */
   hasStrategy: boolean;
+  /**
+   * Pre-evaluated Layer 3 zone labels (from evaluateZoneFlags). Filtered by
+   * `zoneSurface` before merging into categoryFlags / primary.
+   */
+  zoneFlags?: StatusType[];
+  /** ticker → Trim/Add only; portfolio → Go to Cash only. Default ticker. */
+  zoneSurface?: "ticker" | "portfolio";
 }
 
-/** Lower index = more severe (wins primary headline).
- *  Layer 3 zone labels are ranked for future use but are NOT emitted by
- *  collectCategoryFlags / resolveStatus until user-driven triggers are wired. */
+/** Lower index = more severe (wins primary headline). */
 const SEVERITY_ORDER: StatusType[] = [
   "Go to Cash",
   "Trim Zone",
@@ -38,6 +42,17 @@ const SEVERITY_ORDER: StatusType[] = [
   "Aligned",
   "High Alignment",
 ];
+
+const TICKER_ZONES: StatusType[] = ["Trim Zone", "Add Zone"];
+const PORTFOLIO_ZONES: StatusType[] = ["Go to Cash"];
+
+function zoneFlagsForSurface(
+  flags: StatusType[],
+  surface: "ticker" | "portfolio",
+): StatusType[] {
+  const allowed = surface === "ticker" ? TICKER_ZONES : PORTFOLIO_ZONES;
+  return flags.filter((flag) => allowed.includes(flag));
+}
 
 export function severityRank(status: StatusType): number {
   const index = SEVERITY_ORDER.indexOf(status);
@@ -140,6 +155,12 @@ export function resolveStatus(
   }
 
   const categoryFlags = collectCategoryFlags(categories);
+  const zoneFlags = zoneFlagsForSurface(
+    ctx.zoneFlags ?? [],
+    ctx.zoneSurface ?? "ticker",
+  );
+  for (const flag of zoneFlags) addFlag(categoryFlags, flag);
+  categoryFlags.sort((a, b) => severityRank(a) - severityRank(b));
   const primary = mostSevere(baseBand, ...categoryFlags);
 
   return {
@@ -317,21 +338,21 @@ export function statusCopy(status: StatusType): {
       };
     case "Trim Zone":
       return {
-        reason: "User-driven trim zone — trigger settings are not wired yet.",
-        invalidation: "Zone clears when the user-defined trim condition lifts.",
-        nextLevel: "Configure trim-zone triggers when available.",
+        reason: "A Trim Zone overlay rule is broken — take-profit / size-down territory.",
+        invalidation: "Zone clears when every Trim Zone chip passes again.",
+        nextLevel: "Follow your Trim Zone My Plan (partial trim, rebalance to plan size).",
       };
     case "Add Zone":
       return {
-        reason: "User-driven add zone — trigger settings are not wired yet.",
-        invalidation: "Zone clears when the user-defined add condition lifts.",
-        nextLevel: "Configure add-zone triggers when available.",
+        reason: "An Add Zone overlay rule is broken — room to add while the plan still holds.",
+        invalidation: "Zone clears when every Add Zone chip passes again.",
+        nextLevel: "Follow your Add Zone My Plan (scale toward plan size if thesis/risk clear).",
       };
     case "Go to Cash":
       return {
-        reason: "User-driven portfolio cash stance — trigger settings are not wired yet.",
-        invalidation: "Stance clears when the user-defined cash condition lifts.",
-        nextLevel: "Configure go-to-cash triggers when available.",
+        reason: "A Go to Cash overlay rule is broken — portfolio cash stance (SICADFU).",
+        invalidation: "Stance clears when every Go to Cash chip passes again.",
+        nextLevel: "Follow your Go to Cash My Plan; sit in cash until the trigger lifts.",
       };
     default:
       return {
