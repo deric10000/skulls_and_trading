@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useAppState } from "../state/AppState";
 import { dataSource } from "../lib/datasource";
 import { formatChange, formatPrice } from "../lib/format";
-import { formatChipCondition, formatMetricValue, METRICS } from "../lib/forge/metrics";
+import { formatChipCondition, formatObservedBreach } from "../lib/forge/metrics";
 import {
   categoriesForStatus,
   isExamplePlan,
@@ -47,12 +47,9 @@ type PlanTrigger =
       dataPoints: string[];
     };
 
-/** Live reading that failed the rule, e.g. "Revenue Growth YoY = 20%". */
+/** Live failing reading + threshold miss, for chips and tag members. */
 function formatObservedDataPoint(result: ChipResult): string {
-  const meta = METRICS[result.chip.metric];
-  const label = meta?.label ?? result.chip.metric;
-  if (result.value == null) return `${label} = —`;
-  return `${label} = ${formatMetricValue(result.value, meta)}`;
+  return formatObservedBreach(result.chip, result.value);
 }
 
 /** Title for the My Plan label — nickname + "is not met". */
@@ -218,37 +215,24 @@ function StrategyConvictionBlock({
   }, [ticker, strategy.id, triggerKey]);
 
   function togglePlanSection(statusLabel: StatusType) {
+    const willExpand = !expandedPlanStatuses.has(statusLabel);
     setExpandedPlanStatuses((current) => {
       const next = new Set(current);
       if (next.has(statusLabel)) next.delete(statusLabel);
       else next.add(statusLabel);
       return next;
     });
+    if (willExpand) {
+      const section = planSections.find((item) => item.status === statusLabel);
+      const first = section?.triggers[0];
+      if (first) setSelectedTriggerId(`${first.kind}:${first.id}`);
+    }
   }
 
   const selectedTrigger =
     planTriggers.find(
       (trigger) => `${trigger.kind}:${trigger.id}` === selectedTriggerId,
     ) ?? planTriggers[0];
-
-  const selectedTriggerKey = selectedTrigger
-    ? `${selectedTrigger.kind}:${selectedTrigger.id}`
-    : null;
-
-  const selectedPlanStatus =
-    planSections.find((section) =>
-      section.triggers.some(
-        (trigger) => `${trigger.kind}:${trigger.id}` === selectedTriggerKey,
-      ),
-    )?.status ?? statusLabels[0];
-
-  const myPlanTitle = selectedTrigger
-    ? formatPlanTriggerTitle(selectedTrigger)
-    : "My Plan";
-
-  const dataPointTone = selectedPlanStatus
-    ? STATUS_TONE[selectedPlanStatus]
-    : "negative";
 
   const sectionIdBase = `watch-plan-${strategy.id}`;
 
@@ -278,6 +262,20 @@ function StrategyConvictionBlock({
             {planSections.map((section) => {
               const expanded = expandedPlanStatuses.has(section.status);
               const panelId = `${sectionIdBase}-${section.status.replace(/\s+/g, "-").toLowerCase()}`;
+              const sectionTone = STATUS_TONE[section.status];
+              const sectionSelected =
+                selectedTrigger &&
+                section.triggers.some(
+                  (trigger) =>
+                    `${trigger.kind}:${trigger.id}` ===
+                    `${selectedTrigger.kind}:${selectedTrigger.id}`,
+                )
+                  ? selectedTrigger
+                  : null;
+              const sectionPlanTitle = sectionSelected
+                ? formatPlanTriggerTitle(sectionSelected)
+                : null;
+
               return (
                 <div
                   key={section.status}
@@ -302,52 +300,58 @@ function StrategyConvictionBlock({
                     />
                   </button>
                   {expanded ? (
-                    <ul id={panelId} className="watch-plan-triggers">
-                      {section.triggers.map((trigger) => {
-                        const key = `${trigger.kind}:${trigger.id}`;
-                        const selected = selectedTrigger
-                          ? `${selectedTrigger.kind}:${selectedTrigger.id}` === key
-                          : false;
-                        return (
-                          <li key={key}>
-                            <ForgePill
-                              state={selected ? "selected" : "inactive"}
-                              onClick={() => setSelectedTriggerId(key)}
+                    <div id={panelId} className="watch-plan-section-body">
+                      <ul className="watch-plan-triggers">
+                        {section.triggers.map((trigger) => {
+                          const key = `${trigger.kind}:${trigger.id}`;
+                          const selected = selectedTrigger
+                            ? `${selectedTrigger.kind}:${selectedTrigger.id}` === key
+                            : false;
+                          return (
+                            <li key={key}>
+                              <ForgePill
+                                state={selected ? "selected" : "inactive"}
+                                onClick={() => setSelectedTriggerId(key)}
+                              >
+                                {trigger.label}
+                              </ForgePill>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                      {sectionSelected && sectionPlanTitle ? (
+                        <div className="watch-summary-my-plan">
+                          <span className="config-label forge-label">
+                            {sectionPlanTitle}
+                          </span>
+                          {sectionSelected.dataPoints.length > 0 ? (
+                            <ul
+                              className={`watch-my-plan-datapoints watch-align--${sectionTone}`}
+                              aria-label="Failing data points"
                             >
-                              {trigger.label}
-                            </ForgePill>
-                          </li>
-                        );
-                      })}
-                    </ul>
+                              {sectionSelected.dataPoints.map((point) => (
+                                <li key={point}>{point}</li>
+                              ))}
+                            </ul>
+                          ) : null}
+                          <p
+                            className={
+                              isExamplePlan(sectionSelected.myPlan)
+                                ? "watch-my-plan-text watch-my-plan-text--example"
+                                : "watch-my-plan-text"
+                            }
+                          >
+                            {sectionSelected.myPlan?.trim()
+                              ? sectionSelected.myPlan
+                              : "No plan written yet for this rule."}
+                          </p>
+                        </div>
+                      ) : null}
+                    </div>
                   ) : null}
                 </div>
               );
             })}
-            <div className="watch-summary-my-plan">
-              <span className="config-label forge-label">{myPlanTitle}</span>
-              {selectedTrigger && selectedTrigger.dataPoints.length > 0 ? (
-                <ul
-                  className={`watch-my-plan-datapoints watch-align--${dataPointTone}`}
-                  aria-label="Failing data points"
-                >
-                  {selectedTrigger.dataPoints.map((point) => (
-                    <li key={point}>{point}</li>
-                  ))}
-                </ul>
-              ) : null}
-              <p
-                className={
-                  isExamplePlan(selectedTrigger?.myPlan)
-                    ? "watch-my-plan-text watch-my-plan-text--example"
-                    : "watch-my-plan-text"
-                }
-              >
-                {selectedTrigger?.myPlan?.trim()
-                  ? selectedTrigger.myPlan
-                  : "No plan written yet for this rule."}
-              </p>
-            </div>
           </div>
         ) : null}
       </div>

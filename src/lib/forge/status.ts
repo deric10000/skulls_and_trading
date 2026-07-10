@@ -3,8 +3,10 @@ import type { CategoryScore } from "./scoring";
 
 // ---------------------------------------------------------------------------
 // Unified Forge status resolver — Layer 1 conviction band + Layer 2 category
-// diagnostics. Conviction math is unchanged; this module only maps scores to
-// display labels (see docs/strategy-forge.md §4).
+// diagnostics. Layer 3 zone overlays (Trim Zone / Add Zone / Go to Cash) are
+// registered on StatusType for tone/icon coverage but are NOT emitted here
+// until user-driven triggers are wired. Conviction math is unchanged; this
+// module only maps scores to display labels (see docs/strategy-forge.md §4).
 // ---------------------------------------------------------------------------
 
 export interface ResolveContext {
@@ -12,8 +14,13 @@ export interface ResolveContext {
   hasStrategy: boolean;
 }
 
-/** Lower index = more severe (wins primary headline). */
+/** Lower index = more severe (wins primary headline).
+ *  Layer 3 zone labels are ranked for future use but are NOT emitted by
+ *  collectCategoryFlags / resolveStatus until user-driven triggers are wired. */
 const SEVERITY_ORDER: StatusType[] = [
+  "Go to Cash",
+  "Trim Zone",
+  "Add Zone",
   "Rule Break",
   "Rule Conflict",
   "Risk Drift",
@@ -307,6 +314,24 @@ export function statusCopy(status: StatusType): {
         reason: "Headline conviction is low across your active rules.",
         invalidation: "Conviction recovers above the review band.",
         nextLevel: "Review failing chips before acting.",
+      };
+    case "Trim Zone":
+      return {
+        reason: "User-driven trim zone — trigger settings are not wired yet.",
+        invalidation: "Zone clears when the user-defined trim condition lifts.",
+        nextLevel: "Configure trim-zone triggers when available.",
+      };
+    case "Add Zone":
+      return {
+        reason: "User-driven add zone — trigger settings are not wired yet.",
+        invalidation: "Zone clears when the user-defined add condition lifts.",
+        nextLevel: "Configure add-zone triggers when available.",
+      };
+    case "Go to Cash":
+      return {
+        reason: "User-driven portfolio cash stance — trigger settings are not wired yet.",
+        invalidation: "Stance clears when the user-defined cash condition lifts.",
+        nextLevel: "Configure go-to-cash triggers when available.",
       };
     default:
       return {

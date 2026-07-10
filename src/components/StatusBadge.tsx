@@ -1,13 +1,25 @@
 import { STATUS_ICON } from "../lib/icons";
-import { STATUS_TONE } from "../lib/status";
+import {
+  GO_TO_CASH_SICADFU,
+  STATUS_TONE,
+  statusChipLabel,
+} from "../lib/status";
 import type { ResolvedStatus, StatusType } from "../types";
+import { InfoTip } from "./Tooltip";
 
 export function StatusBadge({ status }: { status: StatusType }) {
   const Icon = STATUS_ICON[status];
   return (
     <span className={`chip status--${STATUS_TONE[status]}`}>
       <Icon aria-hidden />
-      {status}
+      {statusChipLabel(status)}
+      {status === "Go to Cash" ? (
+        <InfoTip
+          label="What SICADFU means"
+          title="SICADFU"
+          body={GO_TO_CASH_SICADFU}
+        />
+      ) : null}
     </span>
   );
 }

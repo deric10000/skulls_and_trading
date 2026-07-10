@@ -71,7 +71,9 @@ contracts below.
 - The scoring engine (`scoring.ts`) is **pure, no I/O** — it takes a strategy +
   a `MetricContext` and returns conviction. Display labels come from
   `status.ts` (`resolveStatus`: Layer 1 conviction band + Layer 2 category
-  diagnostics → `ResolvedStatus`). Don't fetch or import data inside scoring;
+  diagnostics → `ResolvedStatus`). Layer 3 zone overlays (Trim Zone / Add Zone /
+  Go to Cash) are registered on `StatusType` but not emitted until wired. Don't
+  fetch or import data inside scoring;
   feed it through `alignment.ts`, which reads the `dataSource` seam.
 - Forge inputs come **through the seam**: `getFundamentals`, `getTechnicals`,
   `getMarketContext`, `getBuckets`. A missing metric is `null` ("no data"),

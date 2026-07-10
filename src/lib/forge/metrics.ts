@@ -838,6 +838,100 @@ export function formatChipCondition(chip: RuleChip): string {
   return `${label} ${formatMetricValue(value, meta)}`;
 }
 
+/** Round display gaps so long floats stay readable (e.g. 82.08%). */
+function formatGapValue(
+  gap: number,
+  meta: Pick<MetricMeta, "format" | "unit">,
+): string {
+  const rounded =
+    meta.format === "percent" || meta.format === "ratio" || meta.format === "number"
+      ? Math.round(gap * 100) / 100
+      : gap;
+  return formatMetricValue(rounded, meta);
+}
+
+/** Plain-English threshold phrase, e.g. "5% or more", "below 30x". */
+function thresholdPhrase(
+  chip: RuleChip,
+  meta: Pick<MetricMeta, "format" | "unit">,
+): string {
+  if (chip.operator === "between" && Array.isArray(chip.value)) {
+    return `${formatMetricValue(chip.value[0], meta)}–${formatMetricValue(chip.value[1], meta)} band`;
+  }
+  const target = Array.isArray(chip.value) ? chip.value[0] : chip.value;
+  const formatted = formatMetricValue(target, meta);
+  switch (chip.operator) {
+    case ">=":
+      return `${formatted} or more`;
+    case ">":
+      return meta.format === "currency"
+        ? `greater than ${formatted}`
+        : `above ${formatted}`;
+    case "<=":
+      return `${formatted} or less`;
+    case "<":
+      return `below ${formatted}`;
+    case "is":
+      return formatted;
+    default:
+      return formatted;
+  }
+}
+
+/**
+ * Live failing reading + how far it missed the rule, e.g.
+ * "Diluted EPS Growth YoY = -77.08%, 82.08% below my 5% or more threshold".
+ */
+export function formatObservedBreach(
+  chip: RuleChip,
+  value: number | null,
+): string {
+  const meta = METRICS[chip.metric];
+  const label = meta?.label ?? chip.metric;
+  if (value == null) return `${label} = —`;
+
+  const observed = `${label} = ${formatMetricValue(value, meta)}`;
+
+  // Boolean / qualitative "is" — no numeric gap; state the expected value.
+  if (chip.operator === "is") {
+    const expected = Array.isArray(chip.value) ? chip.value[0] : chip.value;
+    return `${observed}, my rule requires ${formatMetricValue(expected, meta)}`;
+  }
+
+  if (chip.operator === "between" && Array.isArray(chip.value)) {
+    const [low, high] = chip.value;
+    const phrase = thresholdPhrase(chip, meta);
+    if (value < low) {
+      const gap = formatGapValue(low - value, meta);
+      return `${observed}, ${gap} below my ${phrase}`;
+    }
+    if (value > high) {
+      const gap = formatGapValue(value - high, meta);
+      return `${observed}, ${gap} above my ${phrase}`;
+    }
+    return observed;
+  }
+
+  const target = Array.isArray(chip.value) ? chip.value[0] : chip.value;
+  if (typeof target !== "number") return observed;
+
+  const phrase = thresholdPhrase(chip, meta);
+  if (chip.operator === ">=" || chip.operator === ">") {
+    if (value >= target && chip.operator === ">=") return observed;
+    if (value > target && chip.operator === ">") return observed;
+    const gap = formatGapValue(target - value, meta);
+    return `${observed}, ${gap} below my ${phrase} threshold`;
+  }
+  if (chip.operator === "<=" || chip.operator === "<") {
+    if (value <= target && chip.operator === "<=") return observed;
+    if (value < target && chip.operator === "<") return observed;
+    const gap = formatGapValue(value - target, meta);
+    return `${observed}, ${gap} above my ${phrase} threshold`;
+  }
+
+  return observed;
+}
+
 // ---- Category metadata --------------------------------------------------------
 // Order + labels + tooltip copy + section chrome for the six categories (used by
 // the registry consumers and the Configure card). Kept here so category metadata

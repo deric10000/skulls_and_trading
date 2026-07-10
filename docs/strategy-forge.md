@@ -90,7 +90,7 @@ Worked example (from the algorithm board): Thesis chips Revenue Growth (33%)
 fails, EPS Growth (33%) passes, EBITDA (34%) passes → Thesis score = 67%. With
 Thesis = 55% of conviction: `67% × 55 = 36.85` conviction points.
 
-### Status mapping (two layers)
+### Status mapping (three layers)
 
 **Layer 1 — conviction band** (unchanged math; display-only):
 
@@ -111,6 +111,13 @@ assigned → **Thesis Check** regardless of scores.
 
 Portfolio-level Layer 2 uses market-value-weighted category scores across
 holdings (`aggregateCategoryScores` in `status.ts`).
+
+**Layer 3 — user-driven zones** (`Trim Zone`, `Add Zone`, `Go to Cash`) are
+registered on `StatusType` with tone/icon coverage, but are **not** emitted by
+`resolveStatus` and do **not** appear in the UI until trigger settings are
+wired. They are independent of conviction scores. Surfaces (when wired):
+ticker `watch-align` labels for Trim Zone / Add Zone; portfolio StatusBadge
+chip only for Go to Cash (no ticker label).
 
 The old hard **gates** (thesis composite → `Thesis Check`, breached risk chip →
 `Risk Check`, with conviction clamps) are **removed**: thesis and risk now
