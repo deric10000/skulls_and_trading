@@ -1,6 +1,7 @@
 import { BadgeShowcase } from "../components/badges/BadgeShowcase";
 import { CaptainLogWidget } from "../components/CaptainLogWidget";
 import { ChartCard } from "../components/ChartCard";
+import { ComingSoonOverlay } from "../components/ComingSoonOverlay";
 import { TreasureLedger } from "../components/ledger/TreasureLedger";
 import { MarketFlowBar } from "../components/MarketFlowBar";
 import { ScoreSummary } from "../components/scores/ScoreSummary";
@@ -19,7 +20,7 @@ function Scoreboard() {
   );
 }
 
-export function DashboardPage() {
+function DashboardBody() {
   const { selectedItem } = useAppState();
 
   if (!selectedItem) {
@@ -76,5 +77,13 @@ export function DashboardPage() {
       <Scoreboard />
       <TreasureLedger />
     </div>
+  );
+}
+
+export function DashboardPage() {
+  return (
+    <ComingSoonOverlay>
+      <DashboardBody />
+    </ComingSoonOverlay>
   );
 }

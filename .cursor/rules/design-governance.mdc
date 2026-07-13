@@ -1,0 +1,46 @@
+---
+description: Design-system gate — reuse existing components; new components/states need an explicit user need + approval
+alwaysApply: true
+---
+
+# Design governance
+
+Before any UI is designed or novel chrome is invented — whether the agent is
+**designing** or implementing from **user-provided** Figma / PNG / specs — follow
+this order every time:
+
+1. Read **style / voice** docs: `design-system.md`, and `product-voice.md` when
+   copy is involved.
+2. Read **component contracts**: `.cursor/rules/components.mdc` (and any other
+   rules that match the files in scope).
+3. Prefer **existing reusable components and states** already in the app
+   (Tooltip, chip, panel, buttons, overlays, etc.). Do not invent one-offs that
+   fork the system.
+4. **New component or new state/variant — hard gate:**
+   - Allowed **only** when the **user** (or a plan the user **explicitly
+     confirmed**) names that need — e.g. “add a Coming Soon overlay component”,
+     “we need an X state on Tooltip”.
+   - **Not** allowed because the agent finds it convenient, “cleaner”, or a
+     nice-to-have while wiring behavior.
+   - If the need is real but **not** yet approved: **stop**, describe the gap,
+     propose the component/state, and wait for approval. Do not ship it in the
+     same turn.
+   - “Flag for approval” means **ask and wait** — it does **not** mean invent
+     now and document later.
+
+## Locked surfaces
+
+Do not restyle surfaces listed as stable in `.cursor/rules/components.mdc`
+unless the user **explicitly** asked for a visual change. Wiring new behavior
+(e.g. wrapping the Demo chip in the existing `Tooltip`) must leave the chip’s
+classes and appearance unchanged — no “help cursor”, no `font: inherit` hacks,
+no parallel chip CSS.
+
+## When implementing after approval
+
+- Document new reusable components (or new locked states) in
+  `.cursor/rules/components.mdc` in the same change.
+- Use design tokens from `src/index.css` / `design-system.md` — no one-off hex
+  that bypasses the token system.
+- Keep changes minimal on locked surfaces.
+- Run `.cursor/rules/locked-surface-qa.mdc` before claiming done.

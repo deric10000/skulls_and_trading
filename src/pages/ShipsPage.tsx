@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { DISCOVER_SHIPS, SHIP_MEMBERS, SHIP_MEMBERSHIPS } from "../data";
+import { ComingSoonOverlay } from "../components/ComingSoonOverlay";
 import { CreateShipForm } from "../components/ships/CreateShipForm";
 import { InviteMemberModal } from "../components/ships/InviteMemberModal";
 import { JoinShipForm } from "../components/ships/JoinShipForm";
@@ -26,6 +27,7 @@ export function ShipsPage() {
   }));
 
   return (
+    <ComingSoonOverlay>
     <div className="page ships-page">
       <header className="page-head">
         <h1>Ships</h1>
@@ -90,5 +92,6 @@ export function ShipsPage() {
 
       <InviteMemberModal open={inviteOpen} onClose={() => setInviteOpen(false)} />
     </div>
+    </ComingSoonOverlay>
   );
 }

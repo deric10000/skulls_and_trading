@@ -18,11 +18,12 @@ specific thing they ask for — never bundle in extra tweaks.
 | `TopNav` | `src/components/TopNav.tsx` | DOM order `brand → nav → account`; all three are direct siblings of `.site-header-inner`. Do not re-nest. |
 | Brand | `.brand`, `.brand-logo`, `.brand-wordmark` | Logo/wordmark `clamp()` sizing and ratio. |
 | Nav links | `.nav-link`, `.nav-link--active` | Padding, color, active state. |
-| Account | `.site-account`, `.chip--soon` | "Demo" chip + `LinkButton` "Sign Out" (link-button, **never** a filled button). |
+| Account | `.site-account`, `.chip--soon` | Demo / Beta chip (Closed Beta tooltip) + `LinkButton` "Sign Out" (link-button, **never** a filled button). |
 | `LinkButton` | `src/components/LinkButton.tsx` | Renders `.btn.btn--link`. |
 | `SiteFooter` | `src/components/SiteFooter.tsx` | Single shared footer in `AppShell`; content + behavior. Never add a second footer. |
 | Home widgets | `HeroCard`, `MarketFlowWidget`, `WatchlistWidget`, `Tabs` | Internal markup, content, and visual styling. |
 | `Tooltip` / `InfoTip` | `src/components/Tooltip.tsx` | Desktop hover/focus-within reveal; mobile tap-to-toggle bottom sheet + close button (see "Tooltip standard" below). |
+| `ComingSoonOverlay` | `src/components/ComingSoonOverlay.tsx` | Full-viewport fixed scrim portaled to `document.body` (scroll locked; header stays above for TopNav) + non-dismissible panel matching `.modal-card` / Forge title+body type. Filled HardHat (`--warning`) inline left of headline; copy from `src/lib/closedBeta.ts`. No close/actions. Desktop/tablet: centered. Mobile: panel under `--app-header-h`. Adopters: Dashboard, Ships. Do not one-off per page. |
 | `ActionFooter` | `src/components/ActionFooter.tsx` | Reports its own height as `--sticky-footer-h` (see App shell below) — don't remove without checking consumers. |
 
 When the user references the Figma wireframes, treat them as **structure only**
@@ -353,19 +354,24 @@ info-icon trigger, used beside Configure-card section labels). Always reach
 for `Tooltip`/`InfoTip` for hover/tap explanatory content — never hand-roll a
 one-off popover.
 
-- **Desktop/tablet (`≥ 768px`)** — pure CSS: reveals on `:hover` /
-  `:focus-within`, `pointer-events: none` (decorative, dismisses on
-  mouse-out/blur). No JS state involved. Don't add a close button or click
-  handler that would change this — it must stay a lightweight hover reveal.
+- **Desktop/tablet (`≥ 768px`)** — reveals on `:hover` / `:focus-within`,
+  `pointer-events: none` (decorative, dismisses on mouse-out/blur). No open
+  state / close button on desktop. After reveal, `Tooltip.tsx` clamps the
+  popover into the viewport (shift X; flip above only when there is room;
+  otherwise fixed-pin inside the viewport) so edge / header triggers are not
+  cut off. Do not invent a second tooltip component for edge placement.
 - **Mobile (`< 768px`)** — touch has no hover, so behavior switches to
   **tap-to-toggle**: tapping the trigger sets `.tooltip-wrap.is-open`, and the
   tooltip renders as a **sheet fixed to the bottom-center of the viewport**
-  (`position: fixed; left: 50%; transform: translateX(-50%)`) — **not**
-  anchored to the trigger — so it's reachable and legible no matter where the
-  trigger sits on the page. `pointer-events` flips to `auto` and a white
+  via `.tooltip--viewport-sheet` (`position: fixed; left: 50%;
+  transform: translateX(-50%)`) — **not** anchored to the trigger. The sheet is
+  **portaled to `document.body`** so sticky header `backdrop-filter` cannot
+  trap fixed positioning (TopNav Demo chip). Forge rule chips / tags use this
+  same bottom-center sheet — **do not** change that pin or invent a different
+  mobile placement for Forge. `pointer-events` flips to `auto` and a white
   Phosphor **`X`** close button (`.tooltip-close`, bold weight) dismisses it.
   The mobile CSS block in `index.css`, keyed off `@media (max-width: 767px)`,
-  is the single source of truth for this styling.
+  is the single source of truth for sheet styling.
 - **Dismissal (mobile):** the open tooltip closes on **any tap outside its own
   wrap** — a single `pointerdown` listener on `document` (added only while
   `open`, comparing `event.target` against a ref on `.tooltip-wrap`) drives
