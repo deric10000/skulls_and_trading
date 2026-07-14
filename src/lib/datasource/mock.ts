@@ -32,6 +32,16 @@ export const mockDataSource: DataSource = {
   getLogs: () => LOG_ENTRIES,
   getTickerAnalysis: (ticker) => TICKER_ANALYSIS[ticker],
   getTickerInfo: (ticker) => TICKERS[ticker],
+  getQuote: (ticker) => {
+    const info = TICKERS[ticker];
+    if (!info) return undefined;
+    return {
+      ticker,
+      lastPrice: info.lastPrice,
+      asOf: info.priceAsOf,
+      source: "mock",
+    };
+  },
   getPositions: () => POSITIONS,
   getAllocations: () => ALLOCATIONS,
   getRiskRules: () => RISK_RULES,

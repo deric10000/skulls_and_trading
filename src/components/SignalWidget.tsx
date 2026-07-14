@@ -36,7 +36,10 @@ export function SignalWidget() {
     conviction: selectedItem.conviction,
   };
   const tone = STATUS_TONE[resolved.primary];
-  const strategies = getAppliedStrategiesForTicker(selectedTicker);
+  const strategies = getAppliedStrategiesForTicker(
+    selectedTicker,
+    DEFAULT_PORTFOLIO_ID,
+  );
   const copy = statusCopy(resolved.primary);
 
   return (

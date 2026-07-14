@@ -1,14 +1,20 @@
 import type { ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { Plus, X } from "../../lib/icons";
 
 /**
  * Shared chrome for Strategy Forge table modals (Rule Chips, Tags, Layer 3
- * zones, …).
+ * zones, …) and any other full-viewport editor that needs the same shell
+ * (e.g. Current Watch add-ticker confirm).
  *
  * Owns the backdrop, card, title bar, intro + add-action row, weight total,
  * caution, and Cancel/Update footer — the pieces that must look and behave
  * identically across viewports. Domain tables / pickers render as `children`
  * or `alternateView` (e.g. the chip-library picker).
+ *
+ * Portaled to `document.body` so ancestors with `overflow` / `transform`
+ * (Home Embla slides, card scroll regions) cannot clip or re-contain
+ * `position: fixed`. Same pattern as ComingSoonOverlay / Tooltip.
  *
  * Do not restyle this shell per-modal. Put modal-specific UI in the slots.
  */
@@ -19,6 +25,7 @@ export function ForgeTableModal({
   withPlan = false,
   onCancel,
   onDone,
+  doneLabel = "Update",
   intro,
   addAction,
   totalLabel,
@@ -36,6 +43,8 @@ export function ForgeTableModal({
   withPlan?: boolean;
   onCancel: () => void;
   onDone: () => void;
+  /** Primary footer button label (default: Update). */
+  doneLabel?: string;
   /** Short intro line (left side of the intro row). */
   intro?: ReactNode;
   /** Primary add control (right side of the intro row) — button or ActionMenu. */
@@ -52,7 +61,9 @@ export function ForgeTableModal({
   /** Main table (and any in-flow extras below it, before the total row). */
   children?: ReactNode;
 }) {
-  return (
+  if (typeof document === "undefined") return null;
+
+  return createPortal(
     <div className="modal-backdrop" role="presentation" onClick={onCancel}>
       <div
         className={
@@ -120,12 +131,13 @@ export function ForgeTableModal({
                 className="btn btn--small btn--solid"
                 onClick={onDone}
               >
-                <Plus aria-hidden weight="regular" /> Update
+                <Plus aria-hidden weight="regular" /> {doneLabel}
               </button>
             </div>
           </>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

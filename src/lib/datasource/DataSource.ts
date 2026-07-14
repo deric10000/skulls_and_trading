@@ -13,6 +13,7 @@ import type {
   TechnicalSnapshot,
   TickerAnalysis,
   TickerInfo,
+  TickerQuote,
   WatchlistItem,
 } from "../../types";
 import type { MarketWeatherSnapshot, MarketWeatherTimeframe } from "../weather/types";
@@ -48,6 +49,12 @@ export interface DataSource {
 
   /** Company facts for a ticker (incl. its Market Weather sector/industry). */
   getTickerInfo(ticker: string): TickerInfo | undefined;
+
+  /**
+   * Latest tradable mark for fills / Open P&L. MOCK: TICKERS.lastPrice +
+   * priceAsOf. LIVE: swap to a quote provider (15m candle close preferred).
+   */
+  getQuote(ticker: string): TickerQuote | undefined;
 
   /** Treasure Ledger positions (weight, P&L, plan label). */
   getPositions(): Position[];

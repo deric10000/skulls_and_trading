@@ -1,4 +1,7 @@
 import { useAppState } from "../state/AppState";
+import { dataSource } from "../lib/datasource";
+
+const DEFAULT_PORTFOLIO_ID = dataSource.getPortfolios()[0]?.id ?? "deric";
 
 export function StrategyAssignmentWidget() {
   const {
@@ -19,7 +22,10 @@ export function StrategyAssignmentWidget() {
     );
   }
 
-  const assigned = getAppliedStrategiesForTicker(selectedTicker);
+  const assigned = getAppliedStrategiesForTicker(
+    selectedTicker,
+    DEFAULT_PORTFOLIO_ID,
+  );
 
   return (
     <section className="panel strategy-assign" aria-labelledby="assign-title">

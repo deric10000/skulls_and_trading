@@ -21,7 +21,7 @@ import {
   type PortfolioAlignment,
   type TickerAlignment,
 } from "../lib/forge/alignment";
-import { strategiesForTicker, isDefaultStrategyId } from "../lib/forge/tickerStrategy";
+import { strategiesForHolding, isDefaultStrategyId } from "../lib/forge/tickerStrategy";
 import {
   debounce,
   loadPersistedChipLibrary,
@@ -40,11 +40,18 @@ import type {
   CaptainProfile,
   LogEntry,
   PageId,
+  PendingQtyOrder,
   Portfolio,
   RuleChip,
+  ShareFillEvent,
   Strategy,
   WatchlistItem,
 } from "../types";
+import {
+  nextAverageCost,
+  openPnlPercent,
+} from "../lib/finance/averageCost";
+import { estimateFillTimestamp } from "../lib/finance/timestamps";
 
 function clonePortfolios(source: Portfolio[]): Portfolio[] {
   return source.map((portfolio) => ({
@@ -55,6 +62,23 @@ function clonePortfolios(source: Portfolio[]): Portfolio[] {
     })),
   }));
 }
+
+function cloneHoldings(
+  holdings: Portfolio["holdings"],
+): Portfolio["holdings"] {
+  return holdings.map((holding) => ({
+    ...holding,
+    strategyIds: [...holding.strategyIds],
+  }));
+}
+
+/** Session snapshot so Current Watch Cancel can discard in-edit mutations. */
+export type WatchEditSnapshot = {
+  portfolioId: string;
+  holdings: Portfolio["holdings"];
+  /** strategyId → tickerExclusions[portfolioId] at enter-edit time. */
+  tickerExclusionsByStrategy: Record<string, string[]>;
+};
 
 // The default portfolio (whose holdings seed the editable watchlist + dashboard).
 const DEFAULT_PORTFOLIO_ID = dataSource.getPortfolios()[0]?.id ?? "";
@@ -111,6 +135,36 @@ interface AppStateValue {
     portfolioId: string,
     ticker: string,
   ) => "added" | "exists" | "no-data";
+  /** Session-only: set share count on a holding (portfolios; watchlists ignore in UI). */
+  updateHoldingShares: (
+    portfolioId: string,
+    ticker: string,
+    shares: number,
+  ) => void;
+  /**
+   * Session-only: confirm review-modal qty orders (average-cost + fill ledger).
+   * LIVE later: POST fills to the brokerage API, then refresh holdings.
+   */
+  applyQtyOrders: (
+    portfolioId: string,
+    orders: PendingQtyOrder[],
+  ) => void;
+  /** Confirmed fill ledger for this session (mock; later from API). */
+  shareFills: ShareFillEvent[];
+  /** Session-only: drop a holding from a portfolio or watchlist. */
+  removeTickerFromPortfolio: (portfolioId: string, ticker: string) => void;
+  /**
+   * Session-only: create an empty portfolio or watchlist for Current Watch.
+   * Returns the new id. Not persisted / not a live brokerage link yet.
+   */
+  createPortfolioSource: (
+    label: string,
+    type: Portfolio["type"],
+  ) => string | null;
+  /** Capture holdings + strategy exclusions for Cancel→discard on Current Watch. */
+  captureWatchEditSnapshot: (portfolioId: string) => WatchEditSnapshot | null;
+  /** Restore a Current Watch edit-session snapshot (session-only). */
+  restoreWatchEditSnapshot: (snapshot: WatchEditSnapshot) => void;
 
   // ---- Strategy Forge chip library (reusable rule chips) ----
   chipLibrary: RuleChip[];
@@ -138,8 +192,11 @@ interface AppStateValue {
     portfolioId: string,
     ticker: string,
   ) => TickerAlignment | undefined;
-  // Informational (not scoring) — see the implementation comments below.
-  getAppliedStrategiesForTicker: (ticker: string) => Strategy[];
+  // Strategies applied to a ticker **in one portfolio** — never cross-source.
+  getAppliedStrategiesForTicker: (
+    ticker: string,
+    portfolioId: string,
+  ) => Strategy[];
   getStrategyChipBreakdown: (
     strategyId: string,
     ticker: string,
@@ -192,6 +249,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const [portfolios, setPortfolios] = useState<Portfolio[]>(() =>
     clonePortfolios(dataSource.getPortfolios()),
   );
+  const [shareFills, setShareFills] = useState<ShareFillEvent[]>([]);
   const [logsByTicker, setLogsByTicker] = useState<Record<string, LogEntry[]>>(
     () => dataSource.getLogs(),
   );
@@ -315,7 +373,6 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
             : {
                 ...item,
                 holdings: [
-                  ...item.holdings,
                   {
                     ticker,
                     shares: 0,
@@ -327,6 +384,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
                       "Pending research — assign a strategy and log your thesis.",
                     strategyIds: [],
                   },
+                  ...item.holdings,
                 ],
               },
         ),
@@ -336,7 +394,6 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         setWatchlist((current) => {
           if (current.some((item) => item.ticker === ticker)) return current;
           return [
-            ...current,
             {
               ticker,
               name: `${info.company} · ${info.category}`,
@@ -349,12 +406,247 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
               reason:
                 "Pending research — assign a strategy and log your thesis.",
             },
+            ...current,
           ];
         });
       }
       return "added";
     },
     [portfolios],
+  );
+
+  const updateHoldingShares = useCallback(
+    (portfolioId: string, ticker: string, shares: number) => {
+      const nextShares = Number.isFinite(shares) ? Math.max(0, shares) : 0;
+      setPortfolios((current) =>
+        current.map((item) =>
+          item.id !== portfolioId
+            ? item
+            : {
+                ...item,
+                holdings: item.holdings.map((holding) =>
+                  holding.ticker !== ticker
+                    ? holding
+                    : { ...holding, shares: nextShares },
+                ),
+              },
+        ),
+      );
+      if (portfolioId === DEFAULT_PORTFOLIO_ID) {
+        setWatchlist((current) =>
+          current.map((item) =>
+            item.ticker !== ticker ? item : { ...item, shares: nextShares },
+          ),
+        );
+      }
+    },
+    [],
+  );
+
+  const applyQtyOrders = useCallback(
+    (portfolioId: string, orders: PendingQtyOrder[]) => {
+      if (orders.length === 0) return;
+      const fills: ShareFillEvent[] = orders.map((order) => ({
+        id: nextId("fill"),
+        portfolioId,
+        ticker: order.ticker,
+        side: order.side,
+        deltaShares: order.deltaShares,
+        sharesBefore: order.sharesBefore,
+        sharesAfter: order.sharesAfter,
+        fillPrice: order.fillPrice,
+        filledAt: order.filledAt || estimateFillTimestamp(),
+        source: "mock",
+      }));
+
+      setShareFills((current) => [...fills, ...current]);
+
+      setPortfolios((current) =>
+        current.map((item) => {
+          if (item.id !== portfolioId) return item;
+          let holdings = item.holdings;
+          for (const order of orders) {
+            holdings = holdings.map((holding) => {
+              if (holding.ticker !== order.ticker) return holding;
+              const avgPrice = nextAverageCost({
+                sharesBefore: order.sharesBefore,
+                avgBefore: holding.avgPrice,
+                side: order.side,
+                deltaShares: order.deltaShares,
+                fillPrice: order.fillPrice,
+                sharesAfter: order.sharesAfter,
+              });
+              const quote = dataSource.getQuote(order.ticker);
+              const last = quote?.lastPrice ?? 0;
+              return {
+                ...holding,
+                shares: order.sharesAfter,
+                avgPrice,
+                openPnlPct: openPnlPercent(last, avgPrice),
+              };
+            });
+          }
+          return { ...item, holdings };
+        }),
+      );
+
+      if (portfolioId === DEFAULT_PORTFOLIO_ID) {
+        setWatchlist((current) => {
+          let next = current;
+          for (const order of orders) {
+            next = next.map((row) => {
+              if (row.ticker !== order.ticker) return row;
+              const holdingAvg =
+                /* after setState portfolios aren't readable — recompute */ nextAverageCost(
+                  {
+                    sharesBefore: order.sharesBefore,
+                    avgBefore: row.avgPrice,
+                    side: order.side,
+                    deltaShares: order.deltaShares,
+                    fillPrice: order.fillPrice,
+                    sharesAfter: order.sharesAfter,
+                  },
+                );
+              const quote = dataSource.getQuote(order.ticker);
+              const last = quote?.lastPrice ?? row.price;
+              return {
+                ...row,
+                shares: order.sharesAfter,
+                avgPrice: holdingAvg,
+                changePct: openPnlPercent(last, holdingAvg),
+                price: last,
+              };
+            });
+          }
+          return next;
+        });
+      }
+    },
+    [nextId],
+  );
+
+  const removeTickerFromPortfolio = useCallback(
+    (portfolioId: string, ticker: string) => {
+      setPortfolios((current) =>
+        current.map((item) =>
+          item.id !== portfolioId
+            ? item
+            : {
+                ...item,
+                holdings: item.holdings.filter(
+                  (holding) => holding.ticker !== ticker,
+                ),
+              },
+        ),
+      );
+      if (portfolioId === DEFAULT_PORTFOLIO_ID) {
+        setWatchlist((current) => {
+          const next = current.filter((item) => item.ticker !== ticker);
+          if (ticker === selectedTicker) {
+            setSelectedTicker(next[0]?.ticker ?? "");
+          }
+          return next;
+        });
+      }
+    },
+    [selectedTicker],
+  );
+
+  const createPortfolioSource = useCallback(
+    (label: string, type: Portfolio["type"]): string | null => {
+      const trimmed = label.trim();
+      if (!trimmed) return null;
+      const id = nextId(type === "watchlist" ? "watch" : "port");
+      setPortfolios((current) => [
+        ...current,
+        {
+          id,
+          label: trimmed,
+          type,
+          holdings: [],
+        },
+      ]);
+      return id;
+    },
+    [nextId],
+  );
+
+  const captureWatchEditSnapshot = useCallback(
+    (portfolioId: string): WatchEditSnapshot | null => {
+      const portfolio = portfolios.find((item) => item.id === portfolioId);
+      if (!portfolio) return null;
+      const tickerExclusionsByStrategy: Record<string, string[]> = {};
+      for (const strategy of strategies) {
+        tickerExclusionsByStrategy[strategy.id] = [
+          ...(strategy.tickerExclusions?.[portfolioId] ?? []),
+        ];
+      }
+      return {
+        portfolioId,
+        holdings: cloneHoldings(portfolio.holdings),
+        tickerExclusionsByStrategy,
+      };
+    },
+    [portfolios, strategies],
+  );
+
+  const restoreWatchEditSnapshot = useCallback(
+    (snapshot: WatchEditSnapshot) => {
+      const { portfolioId, holdings, tickerExclusionsByStrategy } = snapshot;
+      const nextHoldings = cloneHoldings(holdings);
+
+      setPortfolios((current) =>
+        current.map((item) =>
+          item.id !== portfolioId ? item : { ...item, holdings: nextHoldings },
+        ),
+      );
+
+      setStrategies((current) =>
+        current.map((strategy) => {
+          if (!(strategy.id in tickerExclusionsByStrategy)) return strategy;
+          const nextList = tickerExclusionsByStrategy[strategy.id] ?? [];
+          const exclusions = { ...(strategy.tickerExclusions ?? {}) };
+          if (nextList.length === 0) delete exclusions[portfolioId];
+          else exclusions[portfolioId] = [...nextList];
+          return { ...strategy, tickerExclusions: exclusions };
+        }),
+      );
+
+      if (portfolioId === DEFAULT_PORTFOLIO_ID) {
+        setWatchlist((current) => {
+          const byTicker = new Map(current.map((row) => [row.ticker, row]));
+          return nextHoldings.map((holding) => {
+            const prior = byTicker.get(holding.ticker);
+            if (prior) {
+              return {
+                ...prior,
+                shares: holding.shares,
+                avgPrice: holding.avgPrice,
+                changePct: holding.openPnlPct,
+                status: holding.status,
+                conviction: holding.conviction,
+                reason: holding.reason,
+              };
+            }
+            const info = dataSource.getTickerInfo(holding.ticker);
+            return {
+              ticker: holding.ticker,
+              name: info
+                ? `${info.company} · ${info.category}`
+                : holding.ticker,
+              price: info?.lastPrice ?? 0,
+              changePct: holding.openPnlPct,
+              status: holding.status,
+              conviction: holding.conviction,
+              shares: holding.shares,
+              avgPrice: holding.avgPrice,
+              reason: holding.reason,
+            };
+          });
+        });
+      }
+    },
+    [],
   );
 
   const createStrategy = useCallback(() => {
@@ -550,11 +842,16 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     [alignmentByPortfolio],
   );
 
-  // Per-ticker strategy assignment via holdings[].strategyIds (defaults) plus
-  // applied portfolios for custom copies — see tickerStrategy.ts.
+  // Per-ticker strategy assignment **within one portfolio** — holdings[].strategyIds
+  // (defaults) plus applied custom strategies for that portfolio only. Used by
+  // Current Watch drill-in and dashboard chips so sources never leak across each other.
   const getAppliedStrategiesForTicker = useCallback(
-    (ticker: string): Strategy[] =>
-      strategiesForTicker(ticker, portfolios, strategies),
+    (ticker: string, portfolioId: string): Strategy[] => {
+      const portfolio = portfolios.find((item) => item.id === portfolioId);
+      const holding = portfolio?.holdings.find((item) => item.ticker === ticker);
+      if (!holding) return [];
+      return strategiesForHolding(holding, portfolioId, strategies);
+    },
     [portfolios, strategies],
   );
 
@@ -697,6 +994,13 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       portfolios,
       setTickerEnabledForStrategy,
       addTickerToPortfolio,
+      updateHoldingShares,
+      applyQtyOrders,
+      shareFills,
+      removeTickerFromPortfolio,
+      createPortfolioSource,
+      captureWatchEditSnapshot,
+      restoreWatchEditSnapshot,
       getPortfolioAlignment,
       getStockAlignment,
       getAppliedStrategiesForTicker,
@@ -738,6 +1042,13 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       portfolios,
       setTickerEnabledForStrategy,
       addTickerToPortfolio,
+      updateHoldingShares,
+      applyQtyOrders,
+      shareFills,
+      removeTickerFromPortfolio,
+      createPortfolioSource,
+      captureWatchEditSnapshot,
+      restoreWatchEditSnapshot,
       getPortfolioAlignment,
       getStockAlignment,
       getAppliedStrategiesForTicker,
