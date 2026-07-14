@@ -1,6 +1,7 @@
 import { AppShell } from "./components/AppShell";
 import { LoginScreen } from "./components/auth/LoginScreen";
 import { Onboarding } from "./components/auth/Onboarding";
+import { useIosInputZoomReset } from "./lib/useIosInputZoomReset";
 import { CaptainProfilePage } from "./pages/CaptainProfilePage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { HomePage } from "./pages/HomePage";
@@ -32,6 +33,8 @@ function AuthGate() {
 }
 
 function App() {
+  useIosInputZoomReset();
+
   return (
     <AppStateProvider>
       <AuthGate />
