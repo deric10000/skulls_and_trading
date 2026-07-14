@@ -1,5 +1,6 @@
 import type { RuleChip, RuleTag, Strategy } from "../../types";
-import { CHIP_LIBRARY_SEED, DEFAULT_STRATEGIES } from "../../data";
+import { CHIP_LIBRARY_SEED, DEFAULT_STRATEGIES, PORTFOLIOS } from "../../data";
+import { portfolioIdsReferencingStrategy } from "./appliedPortfolios";
 
 const STORAGE_VERSION = 1;
 const STRATEGIES_KEY = "forge:strategies";
@@ -120,10 +121,40 @@ function backfillLayer3Overlays(strategies: Strategy[]): Strategy[] {
   });
 }
 
+/**
+ * Demo Captain is ephemeral — seed wins on reload. For `isDefault` strategies,
+ * ensure appliedPortfolioIds covers every seeded PORTFOLIOS entry whose
+ * holdings reference the strategy. Customs untouched. Do not run this against
+ * live API portfolios once Pass 2 moves strategies server-side.
+ */
+function backfillAppliedPortfolios(strategies: Strategy[]): Strategy[] {
+  return strategies.map((strategy) => {
+    if (!strategy.isDefault) return strategy;
+    const required = portfolioIdsReferencingStrategy(PORTFOLIOS, strategy.id);
+    const applied = new Set(strategy.appliedPortfolioIds ?? []);
+    let changed = false;
+    for (const id of required) {
+      if (!applied.has(id)) {
+        applied.add(id);
+        changed = true;
+      }
+    }
+    if (!changed) return strategy;
+    return {
+      ...strategy,
+      appliedPortfolioIds: Array.from(applied).sort((a, b) =>
+        a.localeCompare(b),
+      ),
+    };
+  });
+}
+
 export function loadPersistedStrategies(): Strategy[] {
   const stored = readPayload<Strategy[]>(STRATEGIES_KEY);
   if (!stored) return DEFAULT_STRATEGIES;
-  return backfillLayer3Overlays(backfillMyPlans(stored));
+  return backfillAppliedPortfolios(
+    backfillLayer3Overlays(backfillMyPlans(stored)),
+  );
 }
 
 /** Fill missing myPlan on library chips from CHIP_LIBRARY_SEED (by id). */

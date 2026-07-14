@@ -8,7 +8,7 @@ import { HardHat } from "../lib/icons";
 
 /**
  * Full-viewport overlay for Closed Beta unfinished surfaces (Dashboard,
- * Ships). Content stays visible underneath; the fixed scrim blocks
+ * Ships, Captain Profile). Content stays visible underneath; the fixed scrim blocks
  * interaction and page scroll. Header stays above so TopNav remains usable.
  *
  * The scrim is portaled to `document.body` so `app-main` padding / layout

@@ -37,6 +37,10 @@ import type {
   WatchlistItem,
   WeeklyReviewItem,
 } from "./types";
+import {
+  assertAppliedPortfoliosCoverHoldings,
+  portfolioIdsReferencingStrategy,
+} from "./lib/forge/appliedPortfolios";
 
 // The market date mock snapshots and log timestamps reflect.
 export const MARKET_ASOF = "2026-07-07";
@@ -961,7 +965,10 @@ export const DEFAULT_STRATEGIES: Strategy[] = [
       },
     ],
     categoryWeights: { thesis: 55, setup: 12, risk: 15, position: 8, trade: 6, timeframe: 4 },
-    appliedPortfolioIds: ["deric"],
+    appliedPortfolioIds: portfolioIdsReferencingStrategy(
+      PORTFOLIOS,
+      "value-growth-dividend",
+    ),
     checkInterval: "1D",
     technicalsInterval: "1D",
   },
@@ -1072,11 +1079,19 @@ export const DEFAULT_STRATEGIES: Strategy[] = [
       },
     ],
     categoryWeights: { thesis: 40, setup: 20, risk: 20, position: 8, trade: 8, timeframe: 4 },
-    appliedPortfolioIds: ["deric"],
+    appliedPortfolioIds: portfolioIdsReferencingStrategy(
+      PORTFOLIOS,
+      "aggressive-ai-high-beta",
+    ),
     checkInterval: "1D",
     technicalsInterval: "1D",
   },
 ];
+
+// Seed tripwire: every holdings[].strategyId must be covered by that strategy's
+// appliedPortfolioIds for the same source. Fails import/build if someone reseeds
+// apply lists for only one portfolio (e.g. deric) while others still reference it.
+assertAppliedPortfoliosCoverHoldings(PORTFOLIOS, DEFAULT_STRATEGIES);
 
 // Strategy assignments that drive the dashboard Strategy Check are derived from
 // the default portfolio's holdings, so a holding's strategy edits flow through.

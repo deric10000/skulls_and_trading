@@ -23,7 +23,7 @@ specific thing they ask for — never bundle in extra tweaks.
 | `SiteFooter` | `src/components/SiteFooter.tsx` | Single shared footer in `AppShell`; content + behavior. Never add a second footer. |
 | Home widgets | `HeroCard`, `MarketFlowWidget`, `WatchlistWidget`, `Tabs` | Internal markup, content, and visual styling. |
 | `Tooltip` / `InfoTip` | `src/components/Tooltip.tsx` | Desktop hover/focus-within reveal; mobile tap-to-toggle bottom sheet + close button (see "Tooltip standard" below). |
-| `ComingSoonOverlay` | `src/components/ComingSoonOverlay.tsx` | Full-viewport fixed scrim portaled to `document.body` (scroll locked; header stays above for TopNav) + non-dismissible panel matching `.modal-card` / Forge title+body type. Filled HardHat (`--warning`) inline left of headline; copy from `src/lib/closedBeta.ts`. No close/actions. Desktop/tablet: centered. Mobile: panel under `--app-header-h`. Adopters: Dashboard, Ships. Do not one-off per page. |
+| `ComingSoonOverlay` | `src/components/ComingSoonOverlay.tsx` | Full-viewport fixed scrim portaled to `document.body` (scroll locked; header stays above for TopNav) + non-dismissible panel matching `.modal-card` / Forge title+body type. Filled HardHat (`--warning`) inline left of headline; copy from `src/lib/closedBeta.ts`. No close/actions. Desktop/tablet: centered. Mobile: panel under `--app-header-h`. Adopters: Dashboard, Ships, Captain Profile. Do not one-off per page. |
 | `ActionFooter` | `src/components/ActionFooter.tsx` | Reports its own height as `--sticky-footer-h` (see App shell below) — don't remove without checking consumers. |
 
 When the user references the Figma wireframes, treat them as **structure only**

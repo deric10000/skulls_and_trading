@@ -33,6 +33,20 @@ contracts below.
   literals for now (see the reference doc). Don't "fix" them into derived values
   without explicit instruction — it changes displayed numbers.
 
+## All seeded sources unless the user scopes
+
+Any change to portfolio/watchlist seed, `appliedPortfolioIds`, scoring filters,
+edit-mode data paths, quotes/fills, or forge apply must cover **every**
+`PORTFOLIOS` entry (and the same pattern for session/API sources). Never
+hand-seed only `deric` / `PORTFOLIOS[0]`. Prefer derive-from-holdings
+(`portfolioIdsReferencingStrategy`). If scope is ambiguous, **stop and ask** —
+default is all.
+
+Prefer a derived helper over parallel hand-maintained apply lists so new seeded
+sources cannot be forgotten. Invariant:
+`assertAppliedPortfoliosCoverHoldings` — every `holdings[].strategyId` must be
+covered by that strategy's `appliedPortfolioIds` for the same source.
+
 ## The DataSource seam (`src/lib/datasource/`)
 
 - Components and `AppState` must read **live/portfolio data** through

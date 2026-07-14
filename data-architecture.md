@@ -26,6 +26,20 @@ holding-shaped is **derived** from them, so one edit updates every surface.
   qty edits append session `ShareFillEvent`s in AppState (live: brokerage fill
   ledger later).
 
+## 1a. All seeded sources unless the user scopes
+
+Any change that touches portfolio/watchlist seed data, `appliedPortfolioIds`,
+scoring filters, Current Watch edit-mode paths, quotes/fills, or Forge apply
+lists must cover **every** `PORTFOLIOS` entry (and the same pattern for
+session-created or future API sources). Never hand-seed only `deric` /
+`PORTFOLIOS[0]`. Prefer derive-from-holdings
+(`portfolioIdsReferencingStrategy` in `src/lib/forge/appliedPortfolios.ts`).
+If scope is ambiguous, **stop and ask** — the default is all sources.
+
+Prefer a derived helper over parallel hand-maintained apply lists so new seeded
+sources cannot be forgotten. Seed + demo-load assert via
+`assertAppliedPortfoliosCoverHoldings`.
+
 Derived exports (do **not** hand-edit these — edit the registries above):
 
 | Derived export | Derived from |
@@ -246,6 +260,15 @@ snapshots (`data.ts`), and register it in `metrics.ts`. Nothing else changes.
 - `strategy.appliedPortfolioIds` records which portfolios/watchlists the
   strategy is applied to. It's edited via the "Applied Portfolios" multi-select
   on the Configure card. Blank/duplicated strategies start unapplied (`[]`).
+  Default strategy seeds derive this list via
+  `portfolioIdsReferencingStrategy(PORTFOLIOS, strategyId)` — never
+  hand-seed only `["deric"]`. Demo localStorage backfills the same coverage
+  for `isDefault` strategies on load (seed wins; Demo Captain is ephemeral).
+  **Invariant:** for every portfolio `P` and holding `H`, every
+  `strategyId` in `H.strategyIds` must satisfy `P.id ∈ strategy.appliedPortfolioIds`
+  (`assertAppliedPortfoliosCoverHoldings`). Enabling a ticker for a strategy
+  via `setTickerEnabledForStrategy` also ensures the source is on the apply
+  list. New empty Create sources stay unapplied until Forge Apply.
   **Scoring respects `appliedPortfolioIds`:** a bucket only contributes when
   its strategy lists the bucket's portfolio; tickers in an applied portfolio
   with no bucket row for that strategy are scored via an **applied-portfolio
@@ -272,7 +295,7 @@ the Configure **Tickers** tab (`setTickerEnabledForStrategy`). Scoring
 (`computePortfolioAlignment`), Watch summary strategy chips
 (`getAppliedStrategiesForTicker`), and Forge ticker toggles all respect
 `shouldScoreTickerWithStrategy()` — NVDA scores Aggressive only, CRM VGD only,
-even though both strategies list `appliedPortfolioIds: ["deric"]`. When a
+within each applied source. When a
 holding lists **multiple** `strategyIds`, headline conviction merges both
 strategies via `mergeStrategiesForScoring()` (chip + category weights
 renormalized, then one `scoreStock` pass — not a conviction average or
@@ -292,6 +315,11 @@ the bucket/share-allocation **authoring UI is a later dashboard pass**.
 (`src/lib/forge/persistence.ts`) and debounce-save on change. Market snapshots,
 portfolios (holdings + `strategyIds`), and buckets remain static seeds on page
 load — ticker enable/disable edits live in AppState for the session.
+On load, `isDefault` strategies are backfilled so `appliedPortfolioIds` covers
+every seeded `PORTFOLIOS` entry whose holdings reference them (seed wins;
+Demo Captain does not keep apply prefs across reload/sign-out). Customs are
+untouched. When Pass 2 moves strategies server-side, **do not** run this seed
+backfill against API data.
 **Reset to default** on a default
 strategy restores `DEFAULT_STRATEGIES` and overwrites storage for that strategy
 set. No API required for demo tuning.

@@ -38,6 +38,12 @@ export function shouldScoreTickerWithStrategy(
 
 /** Strategies that apply to a ticker across any portfolio (legacy / diagnostics).
  * Prefer `strategiesForHolding` when a portfolio is known so sources never leak. */
+export {
+  assertAppliedPortfoliosCoverHoldings,
+  portfolioIdsReferencingStrategy,
+  withPortfolioApplied,
+} from "./appliedPortfolios";
+
 export function strategiesForTicker(
   ticker: string,
   portfolios: Portfolio[],
