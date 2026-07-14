@@ -1509,12 +1509,79 @@ select.input:hover:not(:disabled) {
   min-width: 0;
 }
 
+.watchlist-snapshot-title-row {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  max-width: 100%;
+}
+
 /* Snapshot heading — strong-tone label above the full alignment chip. */
 .watchlist-snapshot-label {
   font-size: 0.74rem;
   font-weight: 700;
   letter-spacing: 0.01em;
   color: var(--text-strong);
+}
+
+/* Compact strategy count — caret + count right of the snapshot label; native
+   select overlays the control (invisible) so the open menu keeps full labels. */
+.watchlist-strategy-link-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+  margin-left: 4px;
+  padding: 0.1rem 0.15rem;
+  color: var(--accent-strong);
+  border-radius: var(--radius-sm);
+}
+
+.watchlist-strategy-link-wrap > svg {
+  width: 0.85em;
+  height: 0.85em;
+  flex-shrink: 0;
+}
+
+.watchlist-strategy-count {
+  font-size: 0.74rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.watchlist-strategy-link {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  cursor: pointer;
+  font-size: 1rem;
+}
+
+.watchlist-strategy-link::-ms-expand {
+  display: none;
+}
+
+.watchlist-strategy-link-wrap:hover {
+  color: var(--accent);
+  background: rgb(241 178 74 / 0.08);
+}
+
+.watchlist-strategy-link:focus {
+  outline: none;
+}
+
+.watchlist-strategy-link-wrap:has(.watchlist-strategy-link:focus-visible) {
+  outline: 2px solid var(--accent-strong);
+  outline-offset: 2px;
 }
 
 /* Read-only ticker summary (home watchlist drill-in). Mostly text, no CRUD. */

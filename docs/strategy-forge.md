@@ -117,7 +117,7 @@ Each scorable category maps its 0–100 category score through its own ladder
 **primary** headline is the most severe label among Layer 1 and all firing
 Layer 2 flags (severity rank in `status.ts`). When multiple categories lag,
 **all** diagnostics render as chips (primary + secondary flags). No strategy
-assigned → **Thesis Check** regardless of scores.
+assigned → **No Strategy** regardless of scores.
 
 Portfolio-level Layer 2 uses market-value-weighted category scores across
 holdings (`aggregateCategoryScores` in `status.ts`).

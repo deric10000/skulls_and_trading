@@ -133,6 +133,7 @@ export const STATUS_ICON: Record<StatusType, Icon> = {
   "Risk Drift": TrendDown,
   "Risk Check": WarningOctagon,
   "Thesis Check": Warning,
+  "No Strategy": Warning,
   "Rule Conflict": WarningOctagon,
   "Rule Break": WarningOctagon,
   "Concentration Review": ChartBar,
