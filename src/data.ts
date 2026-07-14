@@ -429,7 +429,7 @@ export const PORTFOLIOS: Portfolio[] = [
         status: "High Alignment",
         reason:
           "AI infrastructure leader, positive open P&L, and a strong fit with the strategy.",
-        strategyIds: ["aggressive-ai-high-beta"],
+        strategyIds: ["aggressive-ai-high-beta", "value-growth-dividend"],
       },
       {
         ticker: "IONQ",

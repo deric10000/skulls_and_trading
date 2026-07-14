@@ -983,38 +983,42 @@ export function WatchlistWidget({
         <div className="watchlist-snapshot">
           <PortfolioCompass status={snapshotResolved.primary} />
           <div className="watchlist-snapshot-body">
-            <div className="watchlist-snapshot-title-row">
-              <span className="watchlist-snapshot-label">
-                Portfolio Strategy Alignment
-              </span>
-              {canCycleStrategies ? (
-                <div className="watchlist-strategy-link-wrap">
+            {canCycleStrategies ? (
+              <div className="watchlist-snapshot-title-row watchlist-strategy-link-wrap">
+                <span className="watchlist-snapshot-label" aria-hidden="true">
                   <CaretDown aria-hidden />
-                  <span className="watchlist-strategy-count" aria-hidden="true">
-                    {appliedStrategies.length}
+                  Portfolio Strategy Alignment{" "}
+                  <span className="watchlist-strategy-count">
+                    ({appliedStrategies.length})
                   </span>
-                  <label className="visually-hidden" htmlFor="strategy-view-select">
-                    Switch strategy view
-                  </label>
-                  <select
-                    id="strategy-view-select"
-                    className="watchlist-strategy-link"
-                    value={focusedStrategy?.id ?? "all"}
-                    onChange={(event) => onStrategyViewChange(event.target.value)}
-                    aria-label="Switch strategy view"
-                  >
-                    <option value="all">
-                      {appliedStrategies.length} Strategies Applied
+                </span>
+                <label className="visually-hidden" htmlFor="strategy-view-select">
+                  Switch strategy view
+                </label>
+                <select
+                  id="strategy-view-select"
+                  className="watchlist-strategy-link"
+                  value={focusedStrategy?.id ?? "all"}
+                  onChange={(event) => onStrategyViewChange(event.target.value)}
+                  aria-label="Switch strategy view"
+                >
+                  <option value="all">
+                    {appliedStrategies.length} Strategies Applied
+                  </option>
+                  {appliedStrategies.map((strategy) => (
+                    <option key={strategy.id} value={strategy.id}>
+                      {strategy.name}
                     </option>
-                    {appliedStrategies.map((strategy) => (
-                      <option key={strategy.id} value={strategy.id}>
-                        {strategy.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              ) : null}
-            </div>
+                  ))}
+                </select>
+              </div>
+            ) : (
+              <div className="watchlist-snapshot-title-row">
+                <span className="watchlist-snapshot-label">
+                  Portfolio Strategy Alignment
+                </span>
+              </div>
+            )}
             <StatusStack resolved={snapshotResolved} />
           </div>
         </div>
