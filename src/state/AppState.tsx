@@ -40,11 +40,18 @@ import type {
   CaptainProfile,
   LogEntry,
   PageId,
+  PendingQtyOrder,
   Portfolio,
   RuleChip,
+  ShareFillEvent,
   Strategy,
   WatchlistItem,
 } from "../types";
+import {
+  nextAverageCost,
+  openPnlPercent,
+} from "../lib/finance/averageCost";
+import { estimateFillTimestamp } from "../lib/finance/timestamps";
 
 function clonePortfolios(source: Portfolio[]): Portfolio[] {
   return source.map((portfolio) => ({
@@ -117,6 +124,16 @@ interface AppStateValue {
     ticker: string,
     shares: number,
   ) => void;
+  /**
+   * Session-only: confirm review-modal qty orders (average-cost + fill ledger).
+   * LIVE later: POST fills to the brokerage API, then refresh holdings.
+   */
+  applyQtyOrders: (
+    portfolioId: string,
+    orders: PendingQtyOrder[],
+  ) => void;
+  /** Confirmed fill ledger for this session (mock; later from API). */
+  shareFills: ShareFillEvent[];
   /** Session-only: drop a holding from a portfolio or watchlist. */
   removeTickerFromPortfolio: (portfolioId: string, ticker: string) => void;
 
@@ -200,6 +217,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const [portfolios, setPortfolios] = useState<Portfolio[]>(() =>
     clonePortfolios(dataSource.getPortfolios()),
   );
+  const [shareFills, setShareFills] = useState<ShareFillEvent[]>([]);
   const [logsByTicker, setLogsByTicker] = useState<Record<string, LogEntry[]>>(
     () => dataSource.getLogs(),
   );
@@ -391,6 +409,88 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       }
     },
     [],
+  );
+
+  const applyQtyOrders = useCallback(
+    (portfolioId: string, orders: PendingQtyOrder[]) => {
+      if (orders.length === 0) return;
+      const fills: ShareFillEvent[] = orders.map((order) => ({
+        id: nextId("fill"),
+        portfolioId,
+        ticker: order.ticker,
+        side: order.side,
+        deltaShares: order.deltaShares,
+        sharesBefore: order.sharesBefore,
+        sharesAfter: order.sharesAfter,
+        fillPrice: order.fillPrice,
+        filledAt: order.filledAt || estimateFillTimestamp(),
+        source: "mock",
+      }));
+
+      setShareFills((current) => [...fills, ...current]);
+
+      setPortfolios((current) =>
+        current.map((item) => {
+          if (item.id !== portfolioId) return item;
+          let holdings = item.holdings;
+          for (const order of orders) {
+            holdings = holdings.map((holding) => {
+              if (holding.ticker !== order.ticker) return holding;
+              const avgPrice = nextAverageCost({
+                sharesBefore: order.sharesBefore,
+                avgBefore: holding.avgPrice,
+                side: order.side,
+                deltaShares: order.deltaShares,
+                fillPrice: order.fillPrice,
+                sharesAfter: order.sharesAfter,
+              });
+              const quote = dataSource.getQuote(order.ticker);
+              const last = quote?.lastPrice ?? 0;
+              return {
+                ...holding,
+                shares: order.sharesAfter,
+                avgPrice,
+                openPnlPct: openPnlPercent(last, avgPrice),
+              };
+            });
+          }
+          return { ...item, holdings };
+        }),
+      );
+
+      if (portfolioId === DEFAULT_PORTFOLIO_ID) {
+        setWatchlist((current) => {
+          let next = current;
+          for (const order of orders) {
+            next = next.map((row) => {
+              if (row.ticker !== order.ticker) return row;
+              const holdingAvg =
+                /* after setState portfolios aren't readable — recompute */ nextAverageCost(
+                  {
+                    sharesBefore: order.sharesBefore,
+                    avgBefore: row.avgPrice,
+                    side: order.side,
+                    deltaShares: order.deltaShares,
+                    fillPrice: order.fillPrice,
+                    sharesAfter: order.sharesAfter,
+                  },
+                );
+              const quote = dataSource.getQuote(order.ticker);
+              const last = quote?.lastPrice ?? row.price;
+              return {
+                ...row,
+                shares: order.sharesAfter,
+                avgPrice: holdingAvg,
+                changePct: openPnlPercent(last, holdingAvg),
+                price: last,
+              };
+            });
+          }
+          return next;
+        });
+      }
+    },
+    [nextId],
   );
 
   const removeTickerFromPortfolio = useCallback(
@@ -761,6 +861,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       setTickerEnabledForStrategy,
       addTickerToPortfolio,
       updateHoldingShares,
+      applyQtyOrders,
+      shareFills,
       removeTickerFromPortfolio,
       getPortfolioAlignment,
       getStockAlignment,
@@ -804,6 +906,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       setTickerEnabledForStrategy,
       addTickerToPortfolio,
       updateHoldingShares,
+      applyQtyOrders,
+      shareFills,
       removeTickerFromPortfolio,
       getPortfolioAlignment,
       getStockAlignment,

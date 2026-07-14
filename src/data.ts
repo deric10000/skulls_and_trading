@@ -63,6 +63,10 @@ export function logTimestamp(time: string): string {
 // brokerage sync, or live market data.
 // ---------------------------------------------------------------------------
 
+// Mock quote capture for Current Watch fill estimates (one-time seed).
+// LIVE: DataSource.getQuote() swaps to a provider — keep stamp + price pair.
+export const MARKET_QUOTE_ASOF = "2026-07-14T11:15:00.000-04:00";
+
 export const TICKERS: Record<string, TickerInfo> = {
   ACHR: {
     company: "Archer Aviation",
@@ -70,6 +74,7 @@ export const TICKERS: Record<string, TickerInfo> = {
     sector: "Industrials",
     industry: "Aerospace & eVTOL",
     lastPrice: 4.93,
+    priceAsOf: MARKET_QUOTE_ASOF,
     analysis: {
       setupSummary:
         "Pulled back below recent highs; the trend is fragile while the market waits on certification progress.",
@@ -103,6 +108,7 @@ export const TICKERS: Record<string, TickerInfo> = {
     sector: "Consumer Staples",
     industry: "Beverages",
     lastPrice: 31.7,
+    priceAsOf: MARKET_QUOTE_ASOF,
     analysis: {
       setupSummary:
         "Stabilizing after a volatile stretch; trying to build a base as growth expectations reset.",
@@ -135,7 +141,8 @@ export const TICKERS: Record<string, TickerInfo> = {
     category: "Software / AI CRM",
     sector: "Technology",
     industry: "Software / Cloud",
-    lastPrice: 169.52,
+    lastPrice: 171.22,
+    priceAsOf: MARKET_QUOTE_ASOF,
     analysis: {
       setupSummary:
         "In a downtrend with a large open loss; the original reason to own needs a fresh look.",
@@ -169,6 +176,7 @@ export const TICKERS: Record<string, TickerInfo> = {
     sector: "Technology",
     industry: "AI Infrastructure / Cloud",
     lastPrice: 83.53,
+    priceAsOf: MARKET_QUOTE_ASOF,
     analysis: {
       setupSummary:
         "Volatile post-IPO name pulling back; strong narrative but the trend is unsettled.",
@@ -202,6 +210,7 @@ export const TICKERS: Record<string, TickerInfo> = {
     sector: "Consumer Discretionary",
     industry: "Beauty / Personal Care",
     lastPrice: 75.34,
+    priceAsOf: MARKET_QUOTE_ASOF,
     analysis: {
       setupSummary:
         "Holding up well with a healthy open gain; constructive, but outside the core thesis.",
@@ -235,6 +244,7 @@ export const TICKERS: Record<string, TickerInfo> = {
     sector: "Technology",
     industry: "Quantum Computing",
     lastPrice: 45.36,
+    priceAsOf: MARKET_QUOTE_ASOF,
     analysis: {
       setupSummary:
         "Pressing higher on speculative momentum; quantum exposure fits the high-beta growth tilt.",
@@ -267,7 +277,8 @@ export const TICKERS: Record<string, TickerInfo> = {
     category: "Mega-Cap AI / Cloud",
     sector: "Technology",
     industry: "Software / Cloud",
-    lastPrice: 388.84,
+    lastPrice: 390.99,
+    priceAsOf: MARKET_QUOTE_ASOF,
     analysis: {
       setupSummary:
         "Consolidating with a modest open loss; a lower-beta anchor relative to the rest of the book.",
@@ -300,7 +311,8 @@ export const TICKERS: Record<string, TickerInfo> = {
     category: "AI Infrastructure",
     sector: "Technology",
     industry: "Semiconductors",
-    lastPrice: 196.93,
+    lastPrice: 204.37,
+    priceAsOf: MARKET_QUOTE_ASOF,
     analysis: {
       setupSummary:
         "Trending above all key moving averages with volume confirming each push higher.",
@@ -341,6 +353,7 @@ export const TICKERS: Record<string, TickerInfo> = {
     sector: "Technology",
     industry: "Quantum Computing",
     lastPrice: 16.55,
+    priceAsOf: MARKET_QUOTE_ASOF,
     analysis: {
       setupSummary:
         "High-volatility quantum name under pressure; the open loss and sharp swings warrant a risk check.",
@@ -373,7 +386,8 @@ export const TICKERS: Record<string, TickerInfo> = {
     category: "Fintech",
     sector: "Financials",
     industry: "Fintech",
-    lastPrice: 17.75,
+    lastPrice: 18.49,
+    priceAsOf: MARKET_QUOTE_ASOF,
     analysis: {
       setupSummary:
         "Trending constructively as the profitability story plays out; fintech growth fits the strategy.",

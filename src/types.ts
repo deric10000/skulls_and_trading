@@ -232,8 +232,53 @@ export interface TickerInfo {
   sector: string; // Market Weather parent sector, e.g. "Technology"
   industry: string; // Market Weather peer group, e.g. "Semiconductors"
   lastPrice: number;
+  /**
+   * When `lastPrice` was captured (ISO). MOCK: one-time seed (e.g. 2026-07-14).
+   * LIVE: provider quote time / candle close — see DataSource.getQuote().
+   */
+  priceAsOf: string;
   analysis: TickerAnalysis;
   logs: LogEntry[];
+}
+
+/** Quote seam shape — today merged from TICKERS; later a live /quote API. */
+export interface TickerQuote {
+  ticker: string;
+  lastPrice: number;
+  asOf: string;
+  source: "mock" | "live";
+}
+
+export type QtySide = "buy" | "sell";
+
+/**
+ * Session (later: API) record of a confirmed qty fill. Lives beside portfolios
+ * so a live ledger can replace seed without reshaping holdings.
+ */
+export interface ShareFillEvent {
+  id: string;
+  portfolioId: string;
+  ticker: string;
+  side: QtySide;
+  /** Absolute share count bought or sold. */
+  deltaShares: number;
+  sharesBefore: number;
+  sharesAfter: number;
+  fillPrice: number;
+  /** ISO — floored to 15m candle close (EST) for fill-price proximity. */
+  filledAt: string;
+  source: "mock" | "live";
+}
+
+/** Editable review row before committing qty changes from Current Watch edit. */
+export interface PendingQtyOrder {
+  ticker: string;
+  side: QtySide;
+  deltaShares: number;
+  sharesBefore: number;
+  sharesAfter: number;
+  fillPrice: number;
+  filledAt: string;
 }
 
 // Holding-level facts that belong to a specific portfolio (cost basis, size, and
@@ -241,8 +286,9 @@ export interface TickerInfo {
 export interface PortfolioHolding {
   ticker: string;
   shares: number;
-  avgPrice: number; // DCA / average cost
-  openPnlPct: number; // open profit/loss vs. avg price
+  avgPrice: number; // average cost (DCA); drives Open P&L with last price
+  /** Cached open P&L % — prefer recomputing from last vs avg when displaying. */
+  openPnlPct: number;
   conviction: number;
   status: StatusType; // alignment with the portfolio's assigned strategy
   reason: string;

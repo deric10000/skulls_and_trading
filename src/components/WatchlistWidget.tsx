@@ -33,8 +33,19 @@ import {
   Square,
   Trash,
 } from "../lib/icons";
+import {
+  nextAverageCost,
+  openPnlPercent,
+  openPnlTotal,
+  qtySideFromDelta,
+} from "../lib/finance/averageCost";
+import {
+  estimateFillTimestamp,
+  formatFillTimestampEst,
+} from "../lib/finance/timestamps";
 import type {
   LogEntry,
+  PendingQtyOrder,
   PortfolioHolding,
   RuleCategory,
   RuleChip,
@@ -698,15 +709,17 @@ const DEFAULT_SOURCE_ID = PORTFOLIOS[0]?.id ?? "";
 
 function watchItemFromHolding(holding: PortfolioHolding): WatchlistItem {
   const info = dataSource.getTickerInfo(holding.ticker);
+  const last = info?.lastPrice ?? 0;
+  const avg = holding.avgPrice;
   return {
     ticker: holding.ticker,
     name: info ? `${info.company} · ${info.category}` : holding.ticker,
-    price: info?.lastPrice ?? 0,
-    changePct: holding.openPnlPct,
+    price: last,
+    changePct: openPnlPercent(last, avg),
     status: holding.status,
     conviction: holding.conviction,
     shares: holding.shares,
-    avgPrice: holding.avgPrice,
+    avgPrice: avg,
     reason: holding.reason,
   };
 }
@@ -814,6 +827,84 @@ function WatchItemPreviewCard({ item }: { item: WatchlistItem }) {
       </div>
     </div>
   );
+}
+
+/** Qty field — local string draft while focused so caret/select behave normally. */
+function WatchQtyInput({
+  ticker,
+  shares,
+  onCommit,
+}: {
+  ticker: string;
+  shares: number;
+  onCommit: (shares: number) => void;
+}) {
+  const [draft, setDraft] = useState<string | null>(null);
+  const display = draft ?? String(shares);
+
+  function commit(raw: string | null) {
+    const next =
+      raw == null || raw.trim() === ""
+        ? 0
+        : Number.parseInt(raw, 10);
+    onCommit(Number.isFinite(next) ? Math.max(0, next) : 0);
+    setDraft(null);
+  }
+
+  return (
+    <label className="watch-qty-edit">
+      <span className="visually-hidden">Share quantity for {ticker}</span>
+      <input
+        type="number"
+        className="input watch-qty-input"
+        min={0}
+        step={1}
+        inputMode="numeric"
+        autoComplete="off"
+        value={display}
+        onFocus={() => setDraft(String(shares))}
+        onChange={(event) => {
+          const raw = event.target.value;
+          // Allow empty while typing; reject non-integers (e.g. "1e").
+          if (raw !== "" && !/^\d+$/.test(raw)) return;
+          setDraft(raw);
+        }}
+        onBlur={(event) => commit(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") {
+            event.currentTarget.blur();
+          }
+        }}
+      />
+    </label>
+  );
+}
+
+function buildPendingQtyOrders(
+  baseline: Record<string, number>,
+  drafts: Record<string, number>,
+): PendingQtyOrder[] {
+  const filledAt = estimateFillTimestamp();
+  const tickers = new Set([...Object.keys(baseline), ...Object.keys(drafts)]);
+  const orders: PendingQtyOrder[] = [];
+  for (const ticker of tickers) {
+    const before = baseline[ticker] ?? 0;
+    const after = drafts[ticker] ?? before;
+    const delta = after - before;
+    const side = qtySideFromDelta(delta);
+    if (!side) continue;
+    const quote = dataSource.getQuote(ticker);
+    orders.push({
+      ticker,
+      side,
+      deltaShares: Math.abs(delta),
+      sharesBefore: before,
+      sharesAfter: after,
+      fillPrice: quote?.lastPrice ?? 0,
+      filledAt,
+    });
+  }
+  return orders.sort((a, b) => a.ticker.localeCompare(b.ticker));
 }
 
 /** Edit-mode strategy picker — ticker-suggestion droplist chrome + checkbox. */
@@ -966,7 +1057,7 @@ export function WatchlistWidget({
     getStrategyChipBreakdown,
     addTickerToPortfolio,
     setTickerEnabledForStrategy,
-    updateHoldingShares,
+    applyQtyOrders,
     removeTickerFromPortfolio,
   } = useAppState();
   const [draft, setDraft] = useState("");
@@ -975,6 +1066,13 @@ export function WatchlistWidget({
   const [editToast, setEditToast] = useState<string | null>(null);
   const [tickerSuggestionsOpen, setTickerSuggestionsOpen] = useState(false);
   const [addPreview, setAddPreview] = useState<WatchlistItem | null>(null);
+  /** Qty before this edit session (for buy/sell deltas). */
+  const [qtyBaseline, setQtyBaseline] = useState<Record<string, number>>({});
+  /** In-session qty drafts — committed only via Update → review modal. */
+  const [qtyDrafts, setQtyDrafts] = useState<Record<string, number>>({});
+  const [pendingOrders, setPendingOrders] = useState<PendingQtyOrder[] | null>(
+    null,
+  );
   // Read-only (home) selection is local to this widget so it never mutates the
   // global selected ticker that drives the dashboard. Defaults to none selected.
   const [localSelected, setLocalSelected] = useState<string | null>(null);
@@ -1017,6 +1115,9 @@ export function WatchlistWidget({
     setEditToast(null);
     setTickerSuggestionsOpen(false);
     setAddPreview(null);
+    setQtyBaseline({});
+    setQtyDrafts({});
+    setPendingOrders(null);
   }, [selectedSource.id]);
 
   useEffect(() => {
@@ -1116,6 +1217,45 @@ export function WatchlistWidget({
         };
       });
   }, [items, focusedStrategy, livePortfolio, getStrategyChipBreakdown]);
+
+  function enterEditMode() {
+    const baseline: Record<string, number> = {};
+    for (const item of items) baseline[item.ticker] = item.shares;
+    setQtyBaseline(baseline);
+    setQtyDrafts({ ...baseline });
+    setEditMode(true);
+  }
+
+  function cancelEditMode() {
+    setEditMode(false);
+    setEditDraft("");
+    setEditToast(null);
+    setTickerSuggestionsOpen(false);
+    setAddPreview(null);
+    setQtyBaseline({});
+    setQtyDrafts({});
+    setPendingOrders(null);
+  }
+
+  function requestUpdateOrders() {
+    const orders = buildPendingQtyOrders(qtyBaseline, qtyDrafts);
+    if (orders.length === 0) {
+      cancelEditMode();
+      return;
+    }
+    setPendingOrders(orders);
+  }
+
+  function confirmPendingOrders() {
+    if (!pendingOrders || pendingOrders.length === 0) {
+      setPendingOrders(null);
+      cancelEditMode();
+      return;
+    }
+    applyQtyOrders(selectedSource.id, pendingOrders);
+    setPendingOrders(null);
+    cancelEditMode();
+  }
 
   // Leave drill-in if the focused strategy filter hides the selected ticker.
   useEffect(() => {
@@ -1269,7 +1409,12 @@ export function WatchlistWidget({
   }
 
   return (
-    <section className="panel watchlist" aria-labelledby="watchlist-title">
+    <section
+      className={
+        editMode ? "panel watchlist watchlist--editing" : "panel watchlist"
+      }
+      aria-labelledby="watchlist-title"
+    >
       <div className="panel-head">
         <h2 id="watchlist-title">Current Watch</h2>
         <span className="panel-tag watchlist-tag">{displayItems.length} stocks</span>
@@ -1295,7 +1440,8 @@ export function WatchlistWidget({
           }
           aria-pressed={editMode}
           onClick={() => {
-            setEditMode((current) => !current);
+            if (editMode) cancelEditMode();
+            else enterEditMode();
             setEditDraft("");
             setEditToast(null);
             setTickerSuggestionsOpen(false);
@@ -1468,10 +1614,30 @@ export function WatchlistWidget({
             (entry) => entry.ticker === item.ticker,
           );
           const canEditQty = editMode && !isWatchlistSource;
-          const showOwnedMetrics = item.shares > 0 || canEditQty;
-          const marketValue = item.price * item.shares;
-          const totalPnl = (item.price - item.avgPrice) * item.shares;
-          const changeUp = item.changePct >= 0;
+          const baselineShares = qtyBaseline[item.ticker] ?? item.shares;
+          const displayShares = canEditQty
+            ? (qtyDrafts[item.ticker] ?? item.shares)
+            : item.shares;
+          const showOwnedMetrics = displayShares > 0 || canEditQty;
+          const lastPrice = item.price;
+          let displayAvg = item.avgPrice;
+          if (canEditQty && displayShares !== baselineShares) {
+            const side = qtySideFromDelta(displayShares - baselineShares);
+            if (side) {
+              displayAvg = nextAverageCost({
+                sharesBefore: baselineShares,
+                avgBefore: item.avgPrice,
+                side,
+                deltaShares: Math.abs(displayShares - baselineShares),
+                fillPrice: lastPrice,
+                sharesAfter: displayShares,
+              });
+            }
+          }
+          const marketValue = lastPrice * displayShares;
+          const changePct = openPnlPercent(lastPrice, displayAvg);
+          const totalPnl = openPnlTotal(lastPrice, displayAvg, displayShares);
+          const changeUp = changePct >= 0;
           const changeClass = changeUp ? "watch-change--up" : "watch-change--down";
           const cardClass = isActive
             ? "watch-item select-card is-selected"
@@ -1503,29 +1669,18 @@ export function WatchlistWidget({
                   <span className="watch-mvqty-col">
                     <span className="watch-field-label">Qty</span>
                     {canEditQty ? (
-                      <label className="watch-qty-edit">
-                        <span className="visually-hidden">
-                          Share quantity for {item.ticker}
-                        </span>
-                        <input
-                          type="number"
-                          className="input watch-qty-input"
-                          min={0}
-                          step={1}
-                          inputMode="numeric"
-                          value={item.shares}
-                          onChange={(event) => {
-                            const next = Number.parseInt(event.target.value, 10);
-                            updateHoldingShares(
-                              selectedSource.id,
-                              item.ticker,
-                              Number.isFinite(next) ? next : 0,
-                            );
-                          }}
-                        />
-                      </label>
+                      <WatchQtyInput
+                        ticker={item.ticker}
+                        shares={displayShares}
+                        onCommit={(next) =>
+                          setQtyDrafts((current) => ({
+                            ...current,
+                            [item.ticker]: next,
+                          }))
+                        }
+                      />
                     ) : (
-                      <span className="watch-figure">{item.shares}</span>
+                      <span className="watch-figure">{displayShares}</span>
                     )}
                   </span>
                   <span className="watch-mvqty-col">
@@ -1554,7 +1709,7 @@ export function WatchlistWidget({
                   <span className="watch-figure watch-figure--strong">
                     {formatPrice(marketValue)}
                   </span>
-                  <span className="watch-figure">{item.shares}</span>
+                  <span className="watch-figure">{displayShares}</span>
                 </span>
               ) : null}
             </span>
@@ -1562,18 +1717,18 @@ export function WatchlistWidget({
 
           const metrics = (
             <span className="watch-metrics">
-              {showOwnedMetrics && item.shares > 0 ? (
+              {showOwnedMetrics && displayShares > 0 ? (
                 <span className="watch-metric-pair">
                   <span className="watch-metric">
                     <span className="watch-field-label">Last Price</span>
                     <span className="watch-figure watch-figure--strong">
-                      {formatPrice(item.price)}
+                      {formatPrice(lastPrice)}
                     </span>
                   </span>
                   <span className="watch-metric">
                     <span className="watch-field-label">Avg. Price</span>
                     <span className="watch-figure">
-                      {formatPrice(item.avgPrice)}
+                      {formatPrice(displayAvg)}
                     </span>
                   </span>
                 </span>
@@ -1581,16 +1736,16 @@ export function WatchlistWidget({
                 <span className="watch-metric">
                   <span className="watch-field-label">Last Price</span>
                   <span className="watch-figure watch-figure--strong">
-                    {formatPrice(item.price)}
+                    {formatPrice(lastPrice)}
                   </span>
                 </span>
               )}
-              {item.shares > 0 ? (
+              {displayShares > 0 ? (
                 <span className="watch-metric">
                   <span className="watch-field-label">{"Open P&L% | Total"}</span>
                   <span className="watch-pnl">
                     <span className={`watch-figure watch-figure--medium ${changeClass}`}>
-                      {formatChange(item.changePct)}
+                      {formatChange(changePct)}
                     </span>
                     <span className={`watch-figure ${changeClass}`}>
                       {formatPrice(totalPnl)}
@@ -1686,6 +1841,137 @@ export function WatchlistWidget({
           </li>
         ) : null}
       </ul>
+      {editMode ? (
+        <div className="watch-edit-actions forge-table-actions">
+          <button
+            type="button"
+            className="btn btn--small btn--link forge-cancel-btn"
+            onClick={cancelEditMode}
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            className="btn btn--small btn--solid"
+            onClick={requestUpdateOrders}
+          >
+            <Plus aria-hidden weight="regular" /> Update
+          </button>
+        </div>
+      ) : null}
+      {pendingOrders ? (
+        <ForgeTableModal
+          title="Review quantity changes"
+          titleId="qty-order-review-title"
+          onCancel={() => setPendingOrders(null)}
+          onDone={confirmPendingOrders}
+          doneLabel="Confirm"
+          intro={`Fill times use the ${formatFillTimestampEst(pendingOrders[0]?.filledAt ?? estimateFillTimestamp())} candle (15m). Adjust fill prices before confirming.`}
+        >
+          <div className="forge-table watch-qty-order-table" role="table">
+            {pendingOrders.map((order, index) => (
+              <div
+                key={order.ticker}
+                className="forge-table-row watch-qty-order-row"
+                role="row"
+              >
+                <div className="forge-table-cell" role="cell">
+                  <span className="watch-field-label">
+                    {order.side === "buy" ? "Buy Order" : "Sell Order"}
+                  </span>
+                  <span className="watch-figure watch-figure--strong">
+                    {order.ticker}
+                  </span>
+                </div>
+                <label className="forge-table-cell" role="cell">
+                  <span className="watch-field-label">
+                    Qty {order.side === "buy" ? "bought" : "sold"}
+                  </span>
+                  <input
+                    type="number"
+                    className="input watch-qty-input"
+                    min={1}
+                    step={1}
+                    value={order.deltaShares}
+                    onChange={(event) => {
+                      const next = Number.parseInt(event.target.value, 10);
+                      if (!Number.isFinite(next) || next < 1) return;
+                      setPendingOrders((current) =>
+                        current
+                          ? current.map((row, i) =>
+                              i !== index
+                                ? row
+                                : {
+                                    ...row,
+                                    deltaShares: next,
+                                    sharesAfter:
+                                      row.side === "buy"
+                                        ? row.sharesBefore + next
+                                        : Math.max(0, row.sharesBefore - next),
+                                  },
+                            )
+                          : current,
+                      );
+                    }}
+                  />
+                </label>
+                <label className="forge-table-cell" role="cell">
+                  <span className="watch-field-label">Total qty</span>
+                  <input
+                    type="number"
+                    className="input watch-qty-input"
+                    min={0}
+                    step={1}
+                    value={order.sharesAfter}
+                    onChange={(event) => {
+                      const after = Number.parseInt(event.target.value, 10);
+                      if (!Number.isFinite(after) || after < 0) return;
+                      const delta = after - order.sharesBefore;
+                      const side = qtySideFromDelta(delta);
+                      if (!side) return;
+                      setPendingOrders((current) =>
+                        current
+                          ? current.map((row, i) =>
+                              i !== index
+                                ? row
+                                : {
+                                    ...row,
+                                    side,
+                                    deltaShares: Math.abs(delta),
+                                    sharesAfter: after,
+                                  },
+                            )
+                          : current,
+                      );
+                    }}
+                  />
+                </label>
+                <label className="forge-table-cell" role="cell">
+                  <span className="watch-field-label">Fill price</span>
+                  <input
+                    type="number"
+                    className="input watch-qty-input"
+                    min={0}
+                    step={0.01}
+                    value={order.fillPrice}
+                    onChange={(event) => {
+                      const price = Number.parseFloat(event.target.value);
+                      if (!Number.isFinite(price) || price < 0) return;
+                      setPendingOrders((current) =>
+                        current
+                          ? current.map((row, i) =>
+                              i !== index ? row : { ...row, fillPrice: price },
+                            )
+                          : current,
+                      );
+                    }}
+                  />
+                </label>
+              </div>
+            ))}
+          </div>
+        </ForgeTableModal>
+      ) : null}
     </section>
   );
 }

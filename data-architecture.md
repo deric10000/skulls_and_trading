@@ -16,10 +16,15 @@ holding-shaped is **derived** from them, so one edit updates every surface.
 
 - **`TICKERS`** — company-level facts that are the same regardless of who holds
   the name: `company`, `category`, `sector`, `industry`, `lastPrice`,
-  `analysis`, `logs`. (`sector`/`industry` drive the Market Weather layers.)
+  `priceAsOf`, `analysis`, `logs`. (`sector`/`industry` drive the Market Weather
+  layers; `lastPrice`/`priceAsOf` are the mock quote seed — swap via
+  `DataSource.getQuote()` when live.)
 - **`PORTFOLIOS[].holdings`** — holding-level facts that belong to a specific
   portfolio/watchlist: `shares`, `avgPrice`, `openPnlPct`, `conviction`,
-  `status`, `reason`, `strategyIds`.
+  `status`, `reason`, `strategyIds`. Open P&L display should prefer
+  recomputing from `lastPrice` vs `avgPrice` (average-cost method). Confirmed
+  qty edits append session `ShareFillEvent`s in AppState (live: brokerage fill
+  ledger later).
 
 Derived exports (do **not** hand-edit these — edit the registries above):
 
