@@ -36,7 +36,8 @@ export function shouldScoreTickerWithStrategy(
   return isTickerEnabledForStrategy(holding, strategy, portfolioId);
 }
 
-/** Strategies that apply to a ticker for Watch summary / Forge ticker chips. */
+/** Strategies that apply to a ticker across any portfolio (legacy / diagnostics).
+ * Prefer `strategiesForHolding` when a portfolio is known so sources never leak. */
 export function strategiesForTicker(
   ticker: string,
   portfolios: Portfolio[],

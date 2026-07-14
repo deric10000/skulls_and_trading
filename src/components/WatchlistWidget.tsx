@@ -487,11 +487,11 @@ function WatchSummary({
 }: {
   item: WatchlistItem;
   logs: LogEntry[];
-  /** Every strategy currently applied to this ticker's portfolio(s) (see
-      AppState.getAppliedStrategiesForTicker), each with its OWN rule-chip
-      breakdown — not just the one bucket happens to score it with. Drives
-      both the strategy-name chip stack and the "calculating"/"excluded"
-      sections below, so the two always agree. */
+  /** Strategies applied to this ticker in the **current** portfolio only
+      (AppState.getAppliedStrategiesForTicker(ticker, portfolioId)). Each carries
+      its own rule-chip breakdown — not a cross-portfolio union. Drives both
+      the strategy-name chip stack and the "calculating"/"excluded" sections
+      below, so the two always agree. */
   strategyBreakdowns: StrategyBreakdown[];
 }) {
   const owned = item.shares > 0;
@@ -1550,12 +1550,15 @@ export function WatchlistWidget({
       ? displayItems.find((item) => item.ticker === localSelected)
       : undefined;
 
-  // Every strategy applied to this ticker (via appliedPortfolioIds), each
-  // with its own chip breakdown — computed once here so the strategy-name
-  // chip stack and the "calculating"/"excluded" sections always agree.
+  // Strategies applied to this ticker in the **selected** portfolio only —
+  // never a cross-source union (that was leaking Deric's Webull into other
+  // Current Watch drill-ins for the same symbol).
   const strategyBreakdowns = useMemo(() => {
     if (!summaryItem) return [];
-    return getAppliedStrategiesForTicker(summaryItem.ticker).map((strategy) => ({
+    return getAppliedStrategiesForTicker(
+      summaryItem.ticker,
+      selectedSource.id,
+    ).map((strategy) => ({
       strategy,
       alignment: getStrategyChipBreakdown(
         strategy.id,

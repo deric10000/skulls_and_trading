@@ -21,7 +21,7 @@ import {
   type PortfolioAlignment,
   type TickerAlignment,
 } from "../lib/forge/alignment";
-import { strategiesForTicker, isDefaultStrategyId } from "../lib/forge/tickerStrategy";
+import { strategiesForHolding, isDefaultStrategyId } from "../lib/forge/tickerStrategy";
 import {
   debounce,
   loadPersistedChipLibrary,
@@ -192,8 +192,11 @@ interface AppStateValue {
     portfolioId: string,
     ticker: string,
   ) => TickerAlignment | undefined;
-  // Informational (not scoring) — see the implementation comments below.
-  getAppliedStrategiesForTicker: (ticker: string) => Strategy[];
+  // Strategies applied to a ticker **in one portfolio** — never cross-source.
+  getAppliedStrategiesForTicker: (
+    ticker: string,
+    portfolioId: string,
+  ) => Strategy[];
   getStrategyChipBreakdown: (
     strategyId: string,
     ticker: string,
@@ -839,11 +842,16 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     [alignmentByPortfolio],
   );
 
-  // Per-ticker strategy assignment via holdings[].strategyIds (defaults) plus
-  // applied portfolios for custom copies — see tickerStrategy.ts.
+  // Per-ticker strategy assignment **within one portfolio** — holdings[].strategyIds
+  // (defaults) plus applied custom strategies for that portfolio only. Used by
+  // Current Watch drill-in and dashboard chips so sources never leak across each other.
   const getAppliedStrategiesForTicker = useCallback(
-    (ticker: string): Strategy[] =>
-      strategiesForTicker(ticker, portfolios, strategies),
+    (ticker: string, portfolioId: string): Strategy[] => {
+      const portfolio = portfolios.find((item) => item.id === portfolioId);
+      const holding = portfolio?.holdings.find((item) => item.ticker === ticker);
+      if (!holding) return [];
+      return strategiesForHolding(holding, portfolioId, strategies);
+    },
     [portfolios, strategies],
   );
 
