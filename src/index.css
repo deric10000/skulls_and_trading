@@ -1487,19 +1487,18 @@ select.input:hover:not(:disabled) {
 
 /* Read-only snapshot header (home) — sits where the add form is on the
    dashboard. Emblem + chip are static placeholders for a future live insight. */
-/* Portfolio switcher + edit-mode lookup share one grid so the field column and
-   44×44 icon button line up across rows/viewports. */
-.portfolio-switcher,
-.portfolio-edit-add {
+/* Portfolio switcher: field + 44×44 edit button. Edit-mode lookup is full-width
+   so its right edge matches the edit button above; Add lives inside suggestions. */
+.portfolio-switcher {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 44px;
   column-gap: var(--space-2);
-  align-items: start;
+  align-items: center;
   margin-bottom: var(--space-3);
 }
 
-.portfolio-switcher {
-  align-items: center;
+.portfolio-edit-add {
+  margin-bottom: var(--space-3);
 }
 
 .portfolio-field {
@@ -1514,16 +1513,14 @@ select.input:hover:not(:disabled) {
   box-sizing: border-box;
 }
 
-.portfolio-switcher .icon-btn,
-.portfolio-edit-add .icon-btn {
+.portfolio-switcher .icon-btn {
   width: 44px;
   height: 44px;
   flex: 0 0 auto;
   justify-self: end;
 }
 
-.portfolio-switcher .icon-btn svg,
-.portfolio-edit-add .icon-btn svg {
+.portfolio-switcher .icon-btn svg {
   width: 20px;
   height: 20px;
 }
@@ -1540,13 +1537,31 @@ select.input:hover:not(:disabled) {
   box-sizing: border-box;
 }
 
-.portfolio-ticker-suggestions .multiselect-option {
+.portfolio-ticker-suggestion {
   display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.portfolio-ticker-suggestion .multiselect-option {
+  display: flex;
+  flex: 1;
+  min-width: 0;
   align-items: baseline;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 0.75rem;
-  width: 100%;
   text-align: left;
+}
+
+.portfolio-ticker-suggestion .icon-btn {
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+}
+
+.portfolio-ticker-suggestion .icon-btn svg {
+  width: 16px;
+  height: 16px;
 }
 
 .portfolio-ticker-symbol {
@@ -1557,6 +1572,16 @@ select.input:hover:not(:disabled) {
 .portfolio-ticker-name {
   font-size: 0.8rem;
   color: var(--text-muted);
+}
+
+/* Preview card padding inside ForgeTableModal's scroll region (.forge-table). */
+.forge-table.watch-add-preview {
+  padding: var(--space-3);
+  box-sizing: border-box;
+}
+
+.forge-table.watch-add-preview .watch-item--preview {
+  pointer-events: none;
 }
 
 .portfolio-edit-toast {

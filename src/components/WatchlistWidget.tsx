@@ -32,6 +32,7 @@ import type {
   WatchlistItem,
 } from "../types";
 import { ForgeToast } from "./forge/ForgeToast";
+import { ForgeTableModal } from "./forge/ForgeTableModal";
 
 /** Closed Beta: hide under-conviction Watch Summary detail until Dashboard ships. */
 const SHOW_WATCH_SUMMARY_DETAIL = false;
@@ -698,6 +699,111 @@ function watchItemFromHolding(holding: PortfolioHolding): WatchlistItem {
   };
 }
 
+/** Session add preview — matches seeded card layout before confirming. */
+function previewWatchItem(ticker: string): WatchlistItem | null {
+  const info = dataSource.getTickerInfo(ticker);
+  if (!info) return null;
+  const resolved = resolveStatus(0, [], { hasStrategy: false });
+  return {
+    ticker,
+    name: `${info.company} · ${info.category}`,
+    price: info.lastPrice,
+    changePct: 0,
+    status: resolved.primary,
+    conviction: 0,
+    shares: 0,
+    avgPrice: 0,
+    reason: "Pending research — assign a strategy and log your thesis.",
+    resolved,
+  };
+}
+
+/** Read-only Current Watch row used in the add-confirm modal. */
+function WatchItemPreviewCard({ item }: { item: WatchlistItem }) {
+  const owned = item.shares > 0;
+  const marketValue = item.price * item.shares;
+  const totalPnl = (item.price - item.avgPrice) * item.shares;
+  const changeUp = item.changePct >= 0;
+  const changeClass = changeUp ? "watch-change--up" : "watch-change--down";
+
+  return (
+    <div className="watch-item select-card watch-item--preview">
+      <div className="watch-select">
+        <span className="watch-head">
+          <span className="watch-id">
+            <span className="watch-ticker">{item.ticker}</span>
+            <span className="watch-name">{item.name}</span>
+          </span>
+          {owned ? (
+            <span className="watch-mvqty">
+              <span className="watch-field-label">Market Value | Qty</span>
+              <span className="watch-figure watch-figure--strong">
+                {formatPrice(marketValue)}
+              </span>
+              <span className="watch-figure">{item.shares}</span>
+            </span>
+          ) : null}
+        </span>
+
+        <span className="watch-body">
+          <span className="watch-metrics">
+            {owned ? (
+              <span className="watch-metric-pair">
+                <span className="watch-metric">
+                  <span className="watch-field-label">Last Price</span>
+                  <span className="watch-figure watch-figure--strong">
+                    {formatPrice(item.price)}
+                  </span>
+                </span>
+                <span className="watch-metric">
+                  <span className="watch-field-label">Avg. Price</span>
+                  <span className="watch-figure">{formatPrice(item.avgPrice)}</span>
+                </span>
+              </span>
+            ) : (
+              <span className="watch-metric">
+                <span className="watch-field-label">Last Price</span>
+                <span className="watch-figure watch-figure--strong">
+                  {formatPrice(item.price)}
+                </span>
+              </span>
+            )}
+            {owned ? (
+              <span className="watch-metric">
+                <span className="watch-field-label">{"Open P&L% | Total"}</span>
+                <span className="watch-pnl">
+                  <span className={`watch-figure watch-figure--medium ${changeClass}`}>
+                    {formatChange(item.changePct)}
+                  </span>
+                  <span className={`watch-figure ${changeClass}`}>
+                    {formatPrice(totalPnl)}
+                  </span>
+                </span>
+              </span>
+            ) : null}
+          </span>
+
+          <span className="watch-conviction-box">
+            <WatchConvictionHead
+              resolved={item.resolved}
+              fallbackStatus={item.status}
+            />
+            <span className="watch-conviction-meter">
+              <span className="watch-conviction-track">
+                <span
+                  className="watch-conviction-fill"
+                  style={{ width: `${item.conviction}%` }}
+                />
+              </span>
+              <span className="watch-conviction-score">{item.conviction}</span>
+            </span>
+          </span>
+        </span>
+      </div>
+    </div>
+  );
+}
+
 export function WatchlistWidget({
   readOnly = false,
   onSelectTicker,
@@ -727,6 +833,7 @@ export function WatchlistWidget({
   const [editDraft, setEditDraft] = useState("");
   const [editToast, setEditToast] = useState<string | null>(null);
   const [tickerSuggestionsOpen, setTickerSuggestionsOpen] = useState(false);
+  const [addPreview, setAddPreview] = useState<WatchlistItem | null>(null);
   // Read-only (home) selection is local to this widget so it never mutates the
   // global selected ticker that drives the dashboard. Defaults to none selected.
   const [localSelected, setLocalSelected] = useState<string | null>(null);
@@ -768,6 +875,7 @@ export function WatchlistWidget({
     setEditDraft("");
     setEditToast(null);
     setTickerSuggestionsOpen(false);
+    setAddPreview(null);
   }, [selectedSource.id]);
 
   useEffect(() => {
@@ -779,6 +887,15 @@ export function WatchlistWidget({
       setStrategyViewIndex(0);
     }
   }, [canCycleStrategies, cycleLength, strategyViewIndex]);
+
+  useEffect(() => {
+    if (!addPreview) return;
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") setAddPreview(null);
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [addPreview]);
 
   // Non-default sources: keep a local mirror synced from session AppState
   // portfolios (so adds in edit mode show up without hitting the static seed).
@@ -876,10 +993,23 @@ export function WatchlistWidget({
     window.setTimeout(() => setEditToast(null), 2500);
   }
 
-  function tryAddEditTicker(raw?: string) {
+  function openAddPreview(raw?: string) {
     const next = (raw ?? editDraft).trim().toUpperCase();
     if (!next) return;
-    const result = addTickerToPortfolio(selectedSource.id, next);
+    setTickerSuggestionsOpen(false);
+    const preview = previewWatchItem(next);
+    if (!preview) {
+      showEditToast("No Data");
+      return;
+    }
+    setEditDraft(next);
+    setAddPreview(preview);
+  }
+
+  function confirmAddPreview() {
+    if (!addPreview) return;
+    const result = addTickerToPortfolio(selectedSource.id, addPreview.ticker);
+    setAddPreview(null);
     if (result === "no-data") {
       showEditToast("No Data");
       return;
@@ -1027,6 +1157,7 @@ export function WatchlistWidget({
             setEditDraft("");
             setEditToast(null);
             setTickerSuggestionsOpen(false);
+            setAddPreview(null);
           }}
         >
           <PencilSimple aria-hidden weight="regular" />
@@ -1058,7 +1189,7 @@ export function WatchlistWidget({
                 onKeyDown={(event) => {
                   if (event.key === "Enter") {
                     event.preventDefault();
-                    tryAddEditTicker();
+                    openAddPreview();
                   }
                   if (event.key === "Escape") {
                     setTickerSuggestionsOpen(false);
@@ -1073,7 +1204,7 @@ export function WatchlistWidget({
                 aria-label="Matching tickers"
               >
                 {editSuggestions.map((hit) => (
-                  <li key={hit.symbol}>
+                  <li key={hit.symbol} className="portfolio-ticker-suggestion">
                     <button
                       type="button"
                       className="multiselect-option"
@@ -1086,20 +1217,34 @@ export function WatchlistWidget({
                       <span className="portfolio-ticker-symbol">{hit.symbol}</span>
                       <span className="portfolio-ticker-name">{hit.name}</span>
                     </button>
+                    <button
+                      type="button"
+                      className="icon-btn"
+                      aria-label={`Add ${hit.symbol}`}
+                      onClick={() => openAddPreview(hit.symbol)}
+                    >
+                      <Plus aria-hidden weight="regular" />
+                    </button>
                   </li>
                 ))}
               </ul>
             ) : null}
           </div>
-          <button
-            type="button"
-            className="icon-btn"
-            aria-label="Add ticker"
-            onClick={() => tryAddEditTicker()}
-          >
-            <Plus aria-hidden weight="regular" />
-          </button>
         </div>
+      ) : null}
+      {addPreview ? (
+        <ForgeTableModal
+          title={`Add ${addPreview.ticker}?`}
+          titleId="watch-add-preview-title"
+          onCancel={() => setAddPreview(null)}
+          onDone={confirmAddPreview}
+          doneLabel="Add"
+          intro="Preview how this name will appear on Current Watch."
+        >
+          <div className="forge-table watch-add-preview">
+            <WatchItemPreviewCard item={addPreview} />
+          </div>
+        </ForgeTableModal>
       ) : null}
       {editToast ? (
         <div className="forge-toast-stack portfolio-edit-toast">

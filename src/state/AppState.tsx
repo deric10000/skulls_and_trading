@@ -315,7 +315,6 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
             : {
                 ...item,
                 holdings: [
-                  ...item.holdings,
                   {
                     ticker,
                     shares: 0,
@@ -327,6 +326,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
                       "Pending research — assign a strategy and log your thesis.",
                     strategyIds: [],
                   },
+                  ...item.holdings,
                 ],
               },
         ),
@@ -336,7 +336,6 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         setWatchlist((current) => {
           if (current.some((item) => item.ticker === ticker)) return current;
           return [
-            ...current,
             {
               ticker,
               name: `${info.company} · ${info.category}`,
@@ -349,6 +348,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
               reason:
                 "Pending research — assign a strategy and log your thesis.",
             },
+            ...current,
           ];
         });
       }
