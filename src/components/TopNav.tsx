@@ -9,9 +9,14 @@ import {
   Sparkle,
   UserCircle,
 } from "../lib/icons";
+import {
+  CLOSED_BETA_LABEL,
+  CLOSED_BETA_TRUST,
+} from "../lib/closedBeta";
 import { useAppState } from "../state/AppState";
 import type { PageId } from "../types";
 import { LinkButton } from "./LinkButton";
+import { Tooltip } from "./Tooltip";
 
 // `icon` drives the mobile glass-pill nav (Figma node 100:1092); the text
 // `label` drives the desktop/tablet nav and the icon's accessible name.
@@ -25,6 +30,7 @@ const NAV_ITEMS: { id: PageId; label: string; icon: Icon }[] = [
 
 export function TopNav() {
   const { activePage, setActivePage, demoMode, signOut } = useAppState();
+  const chipLabel = demoMode ? "Demo" : "Beta";
 
   return (
     <header className="site-header">
@@ -59,12 +65,12 @@ export function TopNav() {
           ))}
         </nav>
         <div className="site-account">
-          {demoMode ? (
+          <Tooltip title={CLOSED_BETA_LABEL} body={CLOSED_BETA_TRUST} wide>
             <span className="chip chip--soon">
               <Sparkle aria-hidden />
-              Demo
+              {chipLabel}
             </span>
-          ) : null}
+          </Tooltip>
           <LinkButton className="site-account-link" onClick={signOut}>
             Sign Out
           </LinkButton>

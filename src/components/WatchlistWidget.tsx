@@ -26,6 +26,9 @@ import type {
   WatchlistItem,
 } from "../types";
 
+/** Closed Beta: hide under-conviction Watch Summary detail until Dashboard ships. */
+const SHOW_WATCH_SUMMARY_DETAIL = false;
+
 interface StrategyBreakdown {
   strategy: Strategy;
   alignment: StockAlignment | undefined;
@@ -457,14 +460,16 @@ function WatchSummary({
       sections below, so the two always agree. */
   strategyBreakdowns: StrategyBreakdown[];
 }) {
-  const analysis = dataSource.getTickerAnalysis(item.ticker);
-  const latestLog = logs[0];
-
   const owned = item.shares > 0;
   const marketValue = item.price * item.shares;
   const totalPnl = (item.price - item.avgPrice) * item.shares;
   const changeUp = item.changePct >= 0;
   const changeClass = changeUp ? "watch-change--up" : "watch-change--down";
+
+  const analysis = SHOW_WATCH_SUMMARY_DETAIL
+    ? dataSource.getTickerAnalysis(item.ticker)
+    : null;
+  const latestLog = SHOW_WATCH_SUMMARY_DETAIL ? logs[0] : undefined;
 
   return (
     <div className="watch-summary">
@@ -568,88 +573,102 @@ function WatchSummary({
         </div>
       </div>
 
-      <dl className="watch-summary-detail">
-        <div className="watch-summary-row">
-          <dt>Why</dt>
-          <dd>{item.reason}</dd>
-        </div>
-        {analysis ? (
-          <>
+      {SHOW_WATCH_SUMMARY_DETAIL ? (
+        <>
+          <dl className="watch-summary-detail">
             <div className="watch-summary-row">
-              <dt>Setup</dt>
-              <dd>{analysis.setupSummary}</dd>
+              <dt>Why</dt>
+              <dd>{item.reason}</dd>
             </div>
-            <div className="watch-summary-row">
-              <dt>Thesis</dt>
-              <dd>{analysis.thesis}</dd>
-            </div>
-            <div className="watch-summary-row">
-              <dt>Risk</dt>
-              <dd>{analysis.risk}</dd>
-            </div>
-          </>
-        ) : null}
-      </dl>
+            {analysis ? (
+              <>
+                <div className="watch-summary-row">
+                  <dt>Setup</dt>
+                  <dd>{analysis.setupSummary}</dd>
+                </div>
+                <div className="watch-summary-row">
+                  <dt>Thesis</dt>
+                  <dd>{analysis.thesis}</dd>
+                </div>
+                <div className="watch-summary-row">
+                  <dt>Risk</dt>
+                  <dd>{analysis.risk}</dd>
+                </div>
+              </>
+            ) : null}
+          </dl>
 
-      {latestLog ? (
-        <div className="watch-summary-log">
-          <span className="watch-summary-log-label">
-            Captain&rsquo;s Log · {logs.length}
-          </span>
-          <div className="watch-summary-log-entry">
-            <span className="watch-summary-log-title">{latestLog.title}</span>
-            <span className="watch-summary-log-time">{latestLog.timestamp}</span>
-          </div>
-          <p className="watch-summary-log-note">{latestLog.note}</p>
-        </div>
+          {latestLog ? (
+            <div className="watch-summary-log">
+              <span className="watch-summary-log-label">
+                Captain&rsquo;s Log · {logs.length}
+              </span>
+              <div className="watch-summary-log-entry">
+                <span className="watch-summary-log-title">{latestLog.title}</span>
+                <span className="watch-summary-log-time">{latestLog.timestamp}</span>
+              </div>
+              <p className="watch-summary-log-note">{latestLog.note}</p>
+            </div>
+          ) : null}
+
+          {/* What's actually driving (or excluded from) this ticker's conviction
+              per applied strategy — one block per strategy shown in the chip
+              stack above, each with its OWN rule chips, split by whether they had
+              real data to evaluate. See components.mdc "Conviction chip
+              breakdown standard". */}
+          {strategyBreakdowns.map(({ strategy, alignment }) => {
+            const results = alignment?.results ?? [];
+            const activeResults = results.filter(
+              (result) => result.outcome !== "no-data",
+            );
+            const excludedResults = results.filter(
+              (result) => result.outcome === "no-data",
+            );
+            return (
+              <div key={strategy.id} className="watch-summary-chips">
+                <span className="watch-summary-chips-strategy">{strategy.name}</span>
+                <div className="watch-summary-chip-group">
+                  <span className="config-label forge-label">
+                    Calculating Conviction
+                  </span>
+                  <div className="forge-box-body">
+                    {activeResults.length > 0 ? (
+                      activeResults.map((result) => (
+                        <ForgePill
+                          key={result.chip.id}
+                          title={formatChipCondition(result.chip)}
+                        >
+                          {result.chip.label}
+                        </ForgePill>
+                      ))
+                    ) : (
+                      <span className="forge-box-empty">
+                        No rule chips have data yet.
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div className="watch-summary-chip-group">
+                  <span className="config-label forge-label">Excluded (No Data)</span>
+                  <div className="forge-box-body">
+                    {excludedResults.length > 0 ? (
+                      excludedResults.map((result) => (
+                        <ForgePill key={result.chip.id} state="off">
+                          {result.chip.label}
+                        </ForgePill>
+                      ))
+                    ) : (
+                      <span className="forge-box-empty">
+                        Every rule chip has data.
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </>
       ) : null}
-
-      {/* What's actually driving (or excluded from) this ticker's conviction
-          per applied strategy — one block per strategy shown in the chip
-          stack above, each with its OWN rule chips, split by whether they had
-          real data to evaluate. See components.mdc "Conviction chip
-          breakdown standard". */}
-      {strategyBreakdowns.map(({ strategy, alignment }) => {
-        const results = alignment?.results ?? [];
-        const activeResults = results.filter((result) => result.outcome !== "no-data");
-        const excludedResults = results.filter((result) => result.outcome === "no-data");
-        return (
-          <div key={strategy.id} className="watch-summary-chips">
-            <span className="watch-summary-chips-strategy">{strategy.name}</span>
-            <div className="watch-summary-chip-group">
-              <span className="config-label forge-label">Calculating Conviction</span>
-              <div className="forge-box-body">
-                {activeResults.length > 0 ? (
-                  activeResults.map((result) => (
-                    <ForgePill
-                      key={result.chip.id}
-                      title={formatChipCondition(result.chip)}
-                    >
-                      {result.chip.label}
-                    </ForgePill>
-                  ))
-                ) : (
-                  <span className="forge-box-empty">No rule chips have data yet.</span>
-                )}
-              </div>
-            </div>
-            <div className="watch-summary-chip-group">
-              <span className="config-label forge-label">Excluded (No Data)</span>
-              <div className="forge-box-body">
-                {excludedResults.length > 0 ? (
-                  excludedResults.map((result) => (
-                    <ForgePill key={result.chip.id} state="off">
-                      {result.chip.label}
-                    </ForgePill>
-                  ))
-                ) : (
-                  <span className="forge-box-empty">Every rule chip has data.</span>
-                )}
-              </div>
-            </div>
-          </div>
-        );
-      })}
     </div>
   );
 }

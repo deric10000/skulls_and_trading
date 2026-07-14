@@ -1,0 +1,37 @@
+---
+description: Locked-surface QA gate — self-check and/or review agent before claiming UI work done
+alwaysApply: true
+---
+
+# Locked-surface QA (before “done”)
+
+After any change that touches **UI / CSS / components / pages**, do **not** tell
+the user the work is finished until this gate passes.
+
+## Locked surfaces (zero drive-by restyle)
+
+Treat these as **visual freeze** unless the user **explicitly** asked to change
+how they look (not just “add a tooltip” / “wire behavior”):
+
+- TopNav account chip (`.chip.chip--soon` in `TopNav`)
+- Brand, nav links, `LinkButton`, `SiteFooter`
+- Home widgets listed in `.cursor/rules/components.mdc` (`HeroCard`,
+  `MarketFlowWidget`, `WatchlistWidget`, `Tabs`) — content/markup/styling
+- `Tooltip` / `InfoTip` — use stock component + existing `.tooltip*` classes only
+
+**Behavior-only** changes (wrap with existing `Tooltip`, toggle visibility, new
+adopter of an approved component) must **not** add CSS that restyles the locked
+control (`font`, `cursor`, `color`, `background`, `padding`, `border`, etc.).
+
+## Before claiming done
+
+1. Run `git diff` (staged + unstaged + vs `main` if on a feature branch).
+2. Walk [`.cursor/hooks/LOCKED_SURFACE_QA.md`](.cursor/hooks/LOCKED_SURFACE_QA.md).
+3. If any checklist item fails: **fix it yourself** before the user sees it.
+4. Prefer also launching a **readonly** review subagent (or second pass) with:
+   “Diff vs main. Flag locked-surface restyles and novel component/CSS forks.
+   Violations only.”
+5. Only then summarize for the user.
+
+A project `stop` hook may auto-nudge a follow-up when the diff looks dirty —
+treat that as mandatory QA, not optional.
