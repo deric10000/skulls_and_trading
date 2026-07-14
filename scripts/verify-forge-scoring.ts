@@ -13,6 +13,7 @@
  *  4. validateStrategy flags an incomplete blank strategy and passes VGD.
  */
 import { DEFAULT_BUCKETS, DEFAULT_STRATEGIES, FUNDAMENTAL_SNAPSHOTS, MARKET_CONTEXT, PORTFOLIOS, TECHNICAL_SNAPSHOTS } from "../src/data";
+import { assertAppliedPortfoliosCoverHoldings } from "../src/lib/forge/appliedPortfolios";
 import { computePortfolioAlignment } from "../src/lib/forge/alignment";
 import { mergeStrategiesForScoring } from "../src/lib/forge/mergeStrategies";
 import { strategiesForTicker } from "../src/lib/forge/tickerStrategy";
@@ -280,6 +281,18 @@ const noPortfolio: Strategy = { ...vgd, appliedPortfolioIds: [] };
 check("Strategy without portfolio is not apply-ready", !isStrategyApplyReady(noPortfolio));
 const noRules: Strategy = { ...vgd, rules: [] };
 check("Strategy without rules is not apply-ready", !isStrategyApplyReady(noRules));
+
+// 8. Applied Portfolios cover every seeded holding.strategyIds (all sources)
+try {
+  assertAppliedPortfoliosCoverHoldings(PORTFOLIOS, DEFAULT_STRATEGIES);
+  check("Applied Portfolios cover all seeded holdings.strategyIds", true);
+} catch (error) {
+  check(
+    "Applied Portfolios cover all seeded holdings.strategyIds",
+    false,
+    error instanceof Error ? error.message : String(error),
+  );
+}
 
 console.log(failures === 0 ? "\nALL CHECKS PASSED" : `\n${failures} CHECKS FAILED`);
 process.exit(failures === 0 ? 0 : 1);

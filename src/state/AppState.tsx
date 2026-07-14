@@ -21,6 +21,7 @@ import {
   type PortfolioAlignment,
   type TickerAlignment,
 } from "../lib/forge/alignment";
+import { withPortfolioApplied } from "../lib/forge/appliedPortfolios";
 import { strategiesForHolding, isDefaultStrategyId } from "../lib/forge/tickerStrategy";
 import {
   debounce,
@@ -794,18 +795,21 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         }),
       );
 
-      if (isDefaultStrategyId(strategyId)) return;
-
       setStrategies((current) =>
         current.map((strategy) => {
           if (strategy.id !== strategyId) return strategy;
-          const exclusions = { ...(strategy.tickerExclusions ?? {}) };
+          let next = strategy;
+          // Enabling a ticker on source P also ensures P is on the apply list
+          // (invariant: holdings.strategyIds ⊆ appliedPortfolioIds).
+          if (enabled) next = withPortfolioApplied(next, portfolioId);
+          if (isDefaultStrategyId(strategyId)) return next;
+          const exclusions = { ...(next.tickerExclusions ?? {}) };
           const tickers = new Set(exclusions[portfolioId] ?? []);
           if (enabled) tickers.delete(ticker);
           else tickers.add(ticker);
           if (tickers.size === 0) delete exclusions[portfolioId];
           else exclusions[portfolioId] = Array.from(tickers).sort();
-          return { ...strategy, tickerExclusions: exclusions };
+          return { ...next, tickerExclusions: exclusions };
         }),
       );
     },
