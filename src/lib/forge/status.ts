@@ -9,7 +9,7 @@ import type { CategoryScore } from "./scoring";
 // ---------------------------------------------------------------------------
 
 export interface ResolveContext {
-  /** When false, Thesis Check fires regardless of scores. */
+  /** When false, No Strategy fires regardless of scores. */
   hasStrategy: boolean;
   /**
    * Pre-evaluated Layer 3 zone labels (from evaluateZoneFlags). Filtered by
@@ -33,6 +33,7 @@ const SEVERITY_ORDER: StatusType[] = [
   "Exit Review",
   "Trim Review",
   "Thesis Check",
+  "No Strategy",
   "Concentration Review",
   "Patience Review",
   "Watch Setup",
@@ -147,8 +148,8 @@ export function resolveStatus(
 
   if (!ctx.hasStrategy) {
     return {
-      primary: "Thesis Check",
-      categoryFlags: ["Thesis Check"],
+      primary: "No Strategy",
+      categoryFlags: ["No Strategy"],
       baseBand,
       conviction,
     };
@@ -245,11 +246,17 @@ export function statusCopy(status: StatusType): {
   nextLevel: string;
 } {
   switch (status) {
+    case "No Strategy":
+      return {
+        reason: "No strategy is assigned to this name in the current view.",
+        invalidation: "Apply a strategy (or switch to All / a strategy that covers it).",
+        nextLevel: "Assign or enable a strategy in Strategy Forge.",
+      };
     case "Thesis Check":
       return {
-        reason: "No strategy is assigned yet, or fundamentals are weakening against your rules.",
-        invalidation: "Assign a strategy and re-check once the thesis re-aligns.",
-        nextLevel: "Assign or review your strategy in Strategy Forge.",
+        reason: "Fundamentals are weakening against your assigned thesis rules.",
+        invalidation: "Re-check once the thesis re-aligns with your rules.",
+        nextLevel: "Review thesis chips in Strategy Forge.",
       };
     case "Rule Break":
       return {

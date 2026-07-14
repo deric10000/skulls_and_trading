@@ -13,6 +13,7 @@ import {
   TECHNICAL_SNAPSHOTS,
   TICKERS,
   TICKER_ANALYSIS,
+  TOP_SEARCH_TICKERS,
   watchlistFromHoldings,
 } from "../../data";
 import { getMarketWeatherSnapshot } from "../weather/mock";
@@ -41,4 +42,14 @@ export const mockDataSource: DataSource = {
   getTechnicals: (ticker) => TECHNICAL_SNAPSHOTS[ticker],
   getMarketContext: () => MARKET_CONTEXT,
   getBuckets: () => DEFAULT_BUCKETS,
+  // MOCK-ONLY typeahead — delete this body when ApiDataSource.searchTickers
+  // calls a real symbol search. Never concatenate TOP_SEARCH_TICKERS with live.
+  searchTickers: (query) => {
+    const needle = query.trim().toUpperCase();
+    if (needle.length < 2) return [];
+    return TOP_SEARCH_TICKERS.filter((hit) => hit.symbol.startsWith(needle)).slice(
+      0,
+      12,
+    );
+  },
 };

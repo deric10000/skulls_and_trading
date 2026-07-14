@@ -17,6 +17,7 @@ export const STATUS_TONE: Record<StatusType, SignalTone> = {
   "Risk Drift": "warning",
   "Risk Check": "warning",
   "Thesis Check": "warning",
+  "No Strategy": "warning",
   "Rule Conflict": "negative",
   "Rule Break": "negative",
   "Concentration Review": "warning",

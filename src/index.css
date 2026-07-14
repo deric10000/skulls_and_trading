@@ -1487,10 +1487,79 @@ select.input:hover:not(:disabled) {
 
 /* Read-only snapshot header (home) — sits where the add form is on the
    dashboard. Emblem + chip are static placeholders for a future live insight. */
-/* Portfolio switcher — full-width dropdown above the snapshot. The flex wrapper
-   lets the shared `.input` (flex: 1) stretch edge-to-edge. */
+/* Portfolio switcher + edit-mode lookup share one grid so the field column and
+   44×44 icon button line up across rows/viewports. */
+.portfolio-switcher,
+.portfolio-edit-add {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 44px;
+  column-gap: var(--space-2);
+  align-items: start;
+  margin-bottom: var(--space-3);
+}
+
 .portfolio-switcher {
+  align-items: center;
+}
+
+.portfolio-field {
+  position: relative;
+  min-width: 0;
+  width: 100%;
+}
+
+.portfolio-field > select.input,
+.portfolio-field .chip-search-input {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.portfolio-switcher .icon-btn,
+.portfolio-edit-add .icon-btn {
+  width: 44px;
+  height: 44px;
+  flex: 0 0 auto;
+  justify-self: end;
+}
+
+.portfolio-switcher .icon-btn svg,
+.portfolio-edit-add .icon-btn svg {
+  width: 20px;
+  height: 20px;
+}
+
+.multiselect-menu.portfolio-ticker-suggestions {
+  position: absolute;
+  z-index: 5;
+  top: calc(100% + 0.25rem);
+  left: 0;
+  width: 100%;
+  right: auto;
+  max-height: 12rem;
+  overflow: auto;
+  box-sizing: border-box;
+}
+
+.portfolio-ticker-suggestions .multiselect-option {
   display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  width: 100%;
+  text-align: left;
+}
+
+.portfolio-ticker-symbol {
+  font-weight: 700;
+  color: var(--text-strong);
+}
+
+.portfolio-ticker-name {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.portfolio-edit-toast {
   margin-bottom: var(--space-3);
 }
 
@@ -1509,12 +1578,90 @@ select.input:hover:not(:disabled) {
   min-width: 0;
 }
 
+.watchlist-snapshot-title-row {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+}
+
 /* Snapshot heading — strong-tone label above the full alignment chip. */
 .watchlist-snapshot-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
   font-size: 0.74rem;
   font-weight: 700;
   letter-spacing: 0.01em;
   color: var(--text-strong);
+  white-space: nowrap;
+}
+
+.watchlist-snapshot-label > svg {
+  width: 0.85em;
+  height: 0.85em;
+  flex-shrink: 0;
+}
+
+/* Multi-strategy: one line — caret + label + (count); entire row opens the menu. */
+.watchlist-strategy-link-wrap {
+  position: relative;
+  flex-wrap: nowrap;
+  min-width: max-content;
+  padding: 0.1rem 0.15rem;
+  margin-left: -0.15rem;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.watchlist-strategy-link-wrap .watchlist-snapshot-label {
+  color: var(--accent-strong);
+}
+
+.watchlist-strategy-link-wrap .watchlist-snapshot-label > svg,
+.watchlist-strategy-count {
+  color: inherit;
+}
+
+.watchlist-strategy-count {
+  font-variant-numeric: tabular-nums;
+}
+
+.watchlist-strategy-link {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  cursor: pointer;
+  font-size: 1rem;
+}
+
+.watchlist-strategy-link::-ms-expand {
+  display: none;
+}
+
+.watchlist-strategy-link-wrap:hover {
+  background: rgb(241 178 74 / 0.08);
+}
+
+.watchlist-strategy-link-wrap:hover .watchlist-snapshot-label {
+  color: var(--accent);
+}
+
+.watchlist-strategy-link:focus {
+  outline: none;
+}
+
+.watchlist-strategy-link-wrap:has(.watchlist-strategy-link:focus-visible) {
+  outline: 2px solid var(--accent-strong);
+  outline-offset: 2px;
 }
 
 /* Read-only ticker summary (home watchlist drill-in). Mostly text, no CRUD. */

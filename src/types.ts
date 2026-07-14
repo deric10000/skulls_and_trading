@@ -159,6 +159,7 @@ export type StatusType =
   | "Risk Drift"
   | "Risk Check"
   | "Thesis Check"
+  | "No Strategy"
   | "Rule Conflict"
   | "Rule Break"
   | "Concentration Review"

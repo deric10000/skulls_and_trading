@@ -52,6 +52,9 @@ contracts below.
   `ApiDataSource`. Don't scatter API calls into components.
 - Async + loading/error and the live-vs-overlay field split land in `AppState`
   only, when the first real API is wired (Pass 2).
+- **STOP:** when wiring live symbol search / quotes, remove
+  `TOP_SEARCH_TICKERS` and the mock `searchTickers` body — never blend mock
+  catalog hits with live API results.
 
 ## Market Weather (`src/lib/weather/`)
 

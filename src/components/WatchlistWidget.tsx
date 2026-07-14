@@ -10,14 +10,20 @@ import {
 } from "../lib/forge/myPlan";
 import { LAYER3_ZONES, type Layer3ZoneId } from "../lib/forge/layer3Zones";
 import type { ChipResult, StockAlignment } from "../lib/forge/scoring";
+import {
+  resolveAggregatedStatus,
+  resolveStatus,
+} from "../lib/forge/status";
+import { shouldScoreTickerWithStrategy } from "../lib/forge/tickerStrategy";
 import { STATUS_TONE } from "../lib/status";
 import { StatusStack, WatchAlignLabel, WatchConvictionHead } from "./StatusBadge";
 import { ForgePill } from "./ForgePill";
 import { PortfolioCompass } from "./PortfolioCompass";
 import { Dropdown } from "./Dropdown";
-import { CaretDown, CaretLeft } from "../lib/icons";
+import { CaretDown, CaretLeft, MagnifyingGlass, PencilSimple, Plus } from "../lib/icons";
 import type {
   LogEntry,
+  PortfolioHolding,
   RuleCategory,
   RuleChip,
   RuleTag,
@@ -25,6 +31,7 @@ import type {
   Strategy,
   WatchlistItem,
 } from "../types";
+import { ForgeToast } from "./forge/ForgeToast";
 
 /** Closed Beta: hide under-conviction Watch Summary detail until Dashboard ships. */
 const SHOW_WATCH_SUMMARY_DETAIL = false;
@@ -676,6 +683,21 @@ function WatchSummary({
 const PORTFOLIOS = dataSource.getPortfolios();
 const DEFAULT_SOURCE_ID = PORTFOLIOS[0]?.id ?? "";
 
+function watchItemFromHolding(holding: PortfolioHolding): WatchlistItem {
+  const info = dataSource.getTickerInfo(holding.ticker);
+  return {
+    ticker: holding.ticker,
+    name: info ? `${info.company} · ${info.category}` : holding.ticker,
+    price: info?.lastPrice ?? 0,
+    changePct: holding.openPnlPct,
+    status: holding.status,
+    conviction: holding.conviction,
+    shares: holding.shares,
+    avgPrice: holding.avgPrice,
+    reason: holding.reason,
+  };
+}
+
 export function WatchlistWidget({
   readOnly = false,
   onSelectTicker,
@@ -693,84 +715,192 @@ export function WatchlistWidget({
     selectedTicker,
     selectTicker,
     logsByTicker,
+    portfolios,
+    strategies,
     getPortfolioAlignment,
     getAppliedStrategiesForTicker,
     getStrategyChipBreakdown,
+    addTickerToPortfolio,
   } = useAppState();
   const [draft, setDraft] = useState("");
+  const [editMode, setEditMode] = useState(false);
+  const [editDraft, setEditDraft] = useState("");
+  const [editToast, setEditToast] = useState<string | null>(null);
+  const [tickerSuggestionsOpen, setTickerSuggestionsOpen] = useState(false);
   // Read-only (home) selection is local to this widget so it never mutates the
   // global selected ticker that drives the dashboard. Defaults to none selected.
   const [localSelected, setLocalSelected] = useState<string | null>(null);
   // Which portfolio/watchlist is shown. Portfolios (live-connected accounts) are
   // read-only; only a watchlist can add/remove tickers.
   const [portfolio, setPortfolio] = useState(DEFAULT_SOURCE_ID);
+  // 0 = All (merged); 1..n = appliedStrategies[n-1]. Only used when ≥2 applied.
+  const [strategyViewIndex, setStrategyViewIndex] = useState(0);
   const selectedSource =
     PORTFOLIOS.find((option) => option.id === portfolio) ?? PORTFOLIOS[0];
   const isWatchlistSource = selectedSource.type === "watchlist";
   const isDefaultSource = selectedSource.id === DEFAULT_SOURCE_ID;
+  const livePortfolio = portfolios.find((item) => item.id === selectedSource.id);
 
-  // A watchlist is user-editable, so its (mock) list lives in local state and is
-  // re-seeded whenever the selected source changes — keeps add/remove from
-  // mutating the read-only portfolio data.
+  const editSuggestions = useMemo(
+    () => dataSource.searchTickers(editDraft),
+    [editDraft],
+  );
+
+  const appliedStrategies = useMemo(
+    () =>
+      strategies
+        .filter((strategy) =>
+          (strategy.appliedPortfolioIds ?? []).includes(selectedSource.id),
+        )
+        .sort((a, b) => a.id.localeCompare(b.id)),
+    [strategies, selectedSource.id],
+  );
+  const canCycleStrategies = readOnly && appliedStrategies.length >= 2;
+  const cycleLength = appliedStrategies.length + 1; // All + each strategy
+  const focusedStrategy =
+    canCycleStrategies && strategyViewIndex > 0
+      ? appliedStrategies[strategyViewIndex - 1]
+      : undefined;
+
+  useEffect(() => {
+    setStrategyViewIndex(0);
+    setEditMode(false);
+    setEditDraft("");
+    setEditToast(null);
+    setTickerSuggestionsOpen(false);
+  }, [selectedSource.id]);
+
+  useEffect(() => {
+    if (!canCycleStrategies) {
+      setStrategyViewIndex(0);
+      return;
+    }
+    if (strategyViewIndex >= cycleLength) {
+      setStrategyViewIndex(0);
+    }
+  }, [canCycleStrategies, cycleLength, strategyViewIndex]);
+
+  // Non-default sources: keep a local mirror synced from session AppState
+  // portfolios (so adds in edit mode show up without hitting the static seed).
   const [watchlistItems, setWatchlistItems] = useState<WatchlistItem[]>(() =>
-    dataSource.getWatchlistForPortfolio(selectedSource.id),
+    (livePortfolio?.holdings ?? []).map(watchItemFromHolding),
   );
   useEffect(() => {
-    if (isWatchlistSource) {
-      setWatchlistItems(dataSource.getWatchlistForPortfolio(selectedSource.id));
-    }
-  }, [isWatchlistSource, selectedSource]);
+    if (isDefaultSource) return;
+    setWatchlistItems((livePortfolio?.holdings ?? []).map(watchItemFromHolding));
+  }, [isDefaultSource, livePortfolio]);
 
   // The list to render: the default portfolio mirrors live app state (already
-  // decorated with computed alignment); a watchlist uses its editable local
-  // list; any other portfolio is derived (read-only) from its holdings. For the
-  // non-default sources we overlay the Forge-computed conviction/status here so
-  // every source reflects the engine (default is decorated upstream in AppState).
+  // decorated with computed alignment); other sources use session holdings
+  // with Forge conviction/status overlaid.
   const items = useMemo<WatchlistItem[]>(() => {
     if (isDefaultSource) return watchlist;
-    const base = isWatchlistSource
-      ? watchlistItems
-      : dataSource.getWatchlistForPortfolio(selectedSource.id);
+    const base = watchlistItems;
     const byTicker = getPortfolioAlignment(selectedSource.id).byTicker;
     return base.map((item) => {
       const aligned = byTicker[item.ticker];
       return aligned
-        ? { ...item, conviction: aligned.conviction, status: aligned.status }
+        ? {
+            ...item,
+            conviction: aligned.conviction,
+            status: aligned.status,
+            resolved: aligned.resolved,
+          }
         : item;
     });
   }, [
     isDefaultSource,
-    isWatchlistSource,
     watchlist,
     watchlistItems,
     selectedSource,
     getPortfolioAlignment,
   ]);
 
+  // When a single applied strategy is focused (only with ≥2 applied), show only
+  // that strategy's tickers with its own scores. All / single-applied-strategy
+  // portfolios keep every ticker (including names with no strategy).
+  const displayItems = useMemo<WatchlistItem[]>(() => {
+    if (!focusedStrategy || !livePortfolio) return items;
+    return items
+      .filter((item) => {
+        const holding = livePortfolio.holdings.find(
+          (entry) => entry.ticker === item.ticker,
+        );
+        return (
+          holding != null &&
+          shouldScoreTickerWithStrategy(
+            holding,
+            focusedStrategy,
+            livePortfolio.id,
+          )
+        );
+      })
+      .map((item) => {
+        const alignment = getStrategyChipBreakdown(
+          focusedStrategy.id,
+          item.ticker,
+          livePortfolio.id,
+        );
+        if (!alignment) {
+          const resolved = resolveStatus(0, [], { hasStrategy: false });
+          return {
+            ...item,
+            conviction: 0,
+            status: resolved.primary,
+            resolved,
+          };
+        }
+        return {
+          ...item,
+          conviction: alignment.conviction,
+          status: alignment.status,
+          resolved: alignment.resolved,
+        };
+      });
+  }, [items, focusedStrategy, livePortfolio, getStrategyChipBreakdown]);
+
+  // Leave drill-in if the focused strategy filter hides the selected ticker.
+  useEffect(() => {
+    if (
+      localSelected &&
+      !displayItems.some((item) => item.ticker === localSelected)
+    ) {
+      setLocalSelected(null);
+    }
+  }, [displayItems, localSelected]);
+
   const activeTicker = readOnly ? localSelected : selectedTicker;
+
+  function showEditToast(message: string) {
+    setEditToast(message);
+    window.setTimeout(() => setEditToast(null), 2500);
+  }
+
+  function tryAddEditTicker(raw?: string) {
+    const next = (raw ?? editDraft).trim().toUpperCase();
+    if (!next) return;
+    const result = addTickerToPortfolio(selectedSource.id, next);
+    if (result === "no-data") {
+      showEditToast("No Data");
+      return;
+    }
+    if (result === "exists") {
+      showEditToast("Already on this list");
+      return;
+    }
+    setEditDraft("");
+    setTickerSuggestionsOpen(false);
+  }
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const next = draft.trim().toUpperCase();
     if (!next) return;
-    setWatchlistItems((current) =>
-      current.some((item) => item.ticker === next)
-        ? current
-        : [
-            ...current,
-            {
-              ticker: next,
-              name: "New position · Pending research",
-              price: 0,
-              changePct: 0,
-              status: "Thesis Check",
-              conviction: 40,
-              shares: 0,
-              avgPrice: 0,
-              reason: "Pending research — assign a strategy and log your thesis.",
-            },
-          ],
-    );
+    const result = addTickerToPortfolio(selectedSource.id, next);
+    if (result === "no-data") {
+      showEditToast("No Data");
+      return;
+    }
     setDraft("");
   }
 
@@ -782,7 +912,7 @@ export function WatchlistWidget({
   // (drawn from the dashboard's signal / analysis / log data, no CRUD).
   const summaryItem =
     readOnly && localSelected
-      ? items.find((item) => item.ticker === localSelected)
+      ? displayItems.find((item) => item.ticker === localSelected)
       : undefined;
 
   // Every strategy applied to this ticker (via appliedPortfolioIds), each
@@ -801,9 +931,46 @@ export function WatchlistWidget({
   }, [summaryItem, selectedSource.id, getAppliedStrategiesForTicker, getStrategyChipBreakdown]);
 
   // Snapshot chip reflects the selected portfolio's market-value-weighted
-  // alignment (not the first watchlist row's status).
+  // alignment (not the first watchlist row's status). When a single strategy
+  // is focused, re-weight across the filtered (on-strategy) holdings only.
   const portfolioAlignment = getPortfolioAlignment(selectedSource.id);
-  const snapshotResolved = portfolioAlignment.portfolio.resolved;
+  const snapshotResolved = useMemo(() => {
+    if (!focusedStrategy) {
+      return portfolioAlignment.portfolio.resolved;
+    }
+    const slices = displayItems
+      .filter((item) => item.shares > 0)
+      .map((item) => {
+        const alignment = getStrategyChipBreakdown(
+          focusedStrategy.id,
+          item.ticker,
+          selectedSource.id,
+        );
+        return {
+          marketValue: item.price * item.shares,
+          conviction: alignment?.conviction ?? item.conviction,
+          categories: alignment?.categories ?? [],
+        };
+      });
+    return resolveAggregatedStatus(slices, {
+      hasStrategy: displayItems.length > 0,
+    });
+  }, [
+    focusedStrategy,
+    displayItems,
+    portfolioAlignment.portfolio.resolved,
+    getStrategyChipBreakdown,
+    selectedSource.id,
+  ]);
+
+  function onStrategyViewChange(value: string) {
+    if (value === "all") {
+      setStrategyViewIndex(0);
+      return;
+    }
+    const index = appliedStrategies.findIndex((strategy) => strategy.id === value);
+    if (index >= 0) setStrategyViewIndex(index + 1);
+  }
 
   if (summaryItem) {
     return (
@@ -833,29 +1000,156 @@ export function WatchlistWidget({
     <section className="panel watchlist" aria-labelledby="watchlist-title">
       <div className="panel-head">
         <h2 id="watchlist-title">Current Watch</h2>
-        <span className="panel-tag watchlist-tag">{items.length} stocks</span>
+        <span className="panel-tag watchlist-tag">{displayItems.length} stocks</span>
       </div>
       <div className="portfolio-switcher">
-        <Dropdown
-          id="portfolio-select"
-          label="Switch portfolio or watchlist"
-          value={portfolio}
-          onChange={setPortfolio}
-          options={PORTFOLIOS.map((option) => ({
-            value: option.id,
-            label: option.label,
-          }))}
-        />
+        <div className="portfolio-field">
+          <Dropdown
+            id="portfolio-select"
+            label="Switch portfolio or watchlist"
+            value={portfolio}
+            onChange={setPortfolio}
+            options={PORTFOLIOS.map((option) => ({
+              value: option.id,
+              label: option.label,
+            }))}
+          />
+        </div>
+        <button
+          type="button"
+          className={editMode ? "icon-btn icon-btn--active" : "icon-btn"}
+          aria-label={
+            editMode ? "Done editing portfolio or watchlist" : "Edit portfolio or watchlist"
+          }
+          aria-pressed={editMode}
+          onClick={() => {
+            setEditMode((current) => !current);
+            setEditDraft("");
+            setEditToast(null);
+            setTickerSuggestionsOpen(false);
+          }}
+        >
+          <PencilSimple aria-hidden weight="regular" />
+        </button>
       </div>
+      {editMode ? (
+        <div className="portfolio-edit-add">
+          <div className="portfolio-field portfolio-ticker-lookup">
+            <label className="visually-hidden" htmlFor="portfolio-ticker-lookup">
+              Look up a ticker
+            </label>
+            <div className="chip-search-field">
+              <MagnifyingGlass
+                className="chip-search-icon"
+                aria-hidden
+                weight="regular"
+              />
+              <input
+                id="portfolio-ticker-lookup"
+                className="input chip-search-input"
+                placeholder="Search ticker…"
+                value={editDraft}
+                maxLength={8}
+                autoComplete="off"
+                onChange={(event) => {
+                  setEditDraft(event.target.value.toUpperCase());
+                  setTickerSuggestionsOpen(true);
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    tryAddEditTicker();
+                  }
+                  if (event.key === "Escape") {
+                    setTickerSuggestionsOpen(false);
+                  }
+                }}
+              />
+            </div>
+            {tickerSuggestionsOpen && editSuggestions.length > 0 ? (
+              <ul
+                className="multiselect-menu portfolio-ticker-suggestions"
+                role="listbox"
+                aria-label="Matching tickers"
+              >
+                {editSuggestions.map((hit) => (
+                  <li key={hit.symbol}>
+                    <button
+                      type="button"
+                      className="multiselect-option"
+                      role="option"
+                      onClick={() => {
+                        setEditDraft(hit.symbol);
+                        setTickerSuggestionsOpen(false);
+                      }}
+                    >
+                      <span className="portfolio-ticker-symbol">{hit.symbol}</span>
+                      <span className="portfolio-ticker-name">{hit.name}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
+          <button
+            type="button"
+            className="icon-btn"
+            aria-label="Add ticker"
+            onClick={() => tryAddEditTicker()}
+          >
+            <Plus aria-hidden weight="regular" />
+          </button>
+        </div>
+      ) : null}
+      {editToast ? (
+        <div className="forge-toast-stack portfolio-edit-toast">
+          <ForgeToast tone="warning" onDismiss={() => setEditToast(null)}>
+            {editToast}
+          </ForgeToast>
+        </div>
+      ) : null}
       {readOnly ? (
-        // Snapshot headline reflects the selected source's lead alignment. The
-        // emblem is a static placeholder until driven by live insights.
+        // Snapshot headline reflects the selected source's lead alignment.
+        // With ≥2 applied strategies, a link-style select cycles All ↔ each strategy.
         <div className="watchlist-snapshot">
           <PortfolioCompass status={snapshotResolved.primary} />
           <div className="watchlist-snapshot-body">
-            <span className="watchlist-snapshot-label">
-              Portfolio Strategy Alignment
-            </span>
+            {canCycleStrategies ? (
+              <div className="watchlist-snapshot-title-row watchlist-strategy-link-wrap">
+                <span className="watchlist-snapshot-label" aria-hidden="true">
+                  <CaretDown aria-hidden />
+                  Portfolio Strategy Alignment{" "}
+                  <span className="watchlist-strategy-count">
+                    ({appliedStrategies.length})
+                  </span>
+                </span>
+                <label className="visually-hidden" htmlFor="strategy-view-select">
+                  Switch strategy view
+                </label>
+                <select
+                  id="strategy-view-select"
+                  className="watchlist-strategy-link"
+                  value={focusedStrategy?.id ?? "all"}
+                  onChange={(event) => onStrategyViewChange(event.target.value)}
+                  aria-label="Switch strategy view"
+                >
+                  <option value="all">
+                    {appliedStrategies.length} Strategies Applied
+                  </option>
+                  {appliedStrategies.map((strategy) => (
+                    <option key={strategy.id} value={strategy.id}>
+                      {strategy.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : (
+              <div className="watchlist-snapshot-title-row">
+                <span className="watchlist-snapshot-label">
+                  Portfolio Strategy Alignment
+                </span>
+              </div>
+            )}
             <StatusStack resolved={snapshotResolved} />
           </div>
         </div>
@@ -880,7 +1174,7 @@ export function WatchlistWidget({
         </form>
       ) : null}
       <ul className="watchlist-items">
-        {items.map((item) => {
+        {displayItems.map((item) => {
           const isActive = item.ticker === activeTicker;
           const owned = item.shares > 0;
           const marketValue = item.price * item.shares;

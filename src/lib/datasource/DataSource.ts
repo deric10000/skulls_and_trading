@@ -89,4 +89,11 @@ export interface DataSource {
 
   /** Seed buckets (portfolio slices governed by a strategy). User-editable later. */
   getBuckets(): Bucket[];
+
+  /**
+   * Symbol typeahead for Current Watch edit-mode. Mock: filters
+   * `TOP_SEARCH_TICKERS` after ≥2 characters. LIVE: replace with a real
+   * symbol-search API — do NOT merge mock hits with live hits.
+   */
+  searchTickers(query: string): { symbol: string; name: string }[];
 }
