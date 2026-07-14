@@ -1487,10 +1487,79 @@ select.input:hover:not(:disabled) {
 
 /* Read-only snapshot header (home) — sits where the add form is on the
    dashboard. Emblem + chip are static placeholders for a future live insight. */
-/* Portfolio switcher — full-width dropdown above the snapshot. The flex wrapper
-   lets the shared `.input` (flex: 1) stretch edge-to-edge. */
+/* Portfolio switcher + edit-mode lookup share one grid so the field column and
+   44×44 icon button line up across rows/viewports. */
+.portfolio-switcher,
+.portfolio-edit-add {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 44px;
+  column-gap: var(--space-2);
+  align-items: start;
+  margin-bottom: var(--space-3);
+}
+
 .portfolio-switcher {
+  align-items: center;
+}
+
+.portfolio-field {
+  position: relative;
+  min-width: 0;
+  width: 100%;
+}
+
+.portfolio-field > select.input,
+.portfolio-field .chip-search-input {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.portfolio-switcher .icon-btn,
+.portfolio-edit-add .icon-btn {
+  width: 44px;
+  height: 44px;
+  flex: 0 0 auto;
+  justify-self: end;
+}
+
+.portfolio-switcher .icon-btn svg,
+.portfolio-edit-add .icon-btn svg {
+  width: 20px;
+  height: 20px;
+}
+
+.multiselect-menu.portfolio-ticker-suggestions {
+  position: absolute;
+  z-index: 5;
+  top: calc(100% + 0.25rem);
+  left: 0;
+  width: 100%;
+  right: auto;
+  max-height: 12rem;
+  overflow: auto;
+  box-sizing: border-box;
+}
+
+.portfolio-ticker-suggestions .multiselect-option {
   display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  width: 100%;
+  text-align: left;
+}
+
+.portfolio-ticker-symbol {
+  font-weight: 700;
+  color: var(--text-strong);
+}
+
+.portfolio-ticker-name {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.portfolio-edit-toast {
   margin-bottom: var(--space-3);
 }
 

@@ -103,6 +103,14 @@ interface AppStateValue {
     strategyId: string,
     enabled: boolean,
   ) => void;
+  /**
+   * Session-only add (not persisted across refresh/logout yet). Requires a
+   * `TICKERS` / getTickerInfo hit — otherwise returns `no-data`.
+   */
+  addTickerToPortfolio: (
+    portfolioId: string,
+    ticker: string,
+  ) => "added" | "exists" | "no-data";
 
   // ---- Strategy Forge chip library (reusable rule chips) ----
   chipLibrary: RuleChip[];
@@ -241,19 +249,32 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const addTicker = useCallback((rawTicker: string) => {
     const ticker = rawTicker.trim().toUpperCase();
     if (!ticker) return;
+    const info = dataSource.getTickerInfo(ticker);
     setWatchlist((current) => {
       if (current.some((item) => item.ticker === ticker)) return current;
-      const newItem: WatchlistItem = {
-        ticker,
-        name: "New position · Pending research",
-        price: 0,
-        changePct: 0,
-        status: "Thesis Check",
-        conviction: 40,
-        shares: 0,
-        avgPrice: 0,
-        reason: "Pending research — assign a strategy and log your thesis.",
-      };
+      const newItem: WatchlistItem = info
+        ? {
+            ticker,
+            name: `${info.company} · ${info.category}`,
+            price: info.lastPrice,
+            changePct: 0,
+            status: "No Strategy",
+            conviction: 0,
+            shares: 0,
+            avgPrice: 0,
+            reason: "Pending research — assign a strategy and log your thesis.",
+          }
+        : {
+            ticker,
+            name: "New position · Pending research",
+            price: 0,
+            changePct: 0,
+            status: "No Strategy",
+            conviction: 0,
+            shares: 0,
+            avgPrice: 0,
+            reason: "Pending research — assign a strategy and log your thesis.",
+          };
       return [...current, newItem];
     });
     setSelectedTicker(ticker);
@@ -270,6 +291,70 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       });
     },
     [selectedTicker],
+  );
+
+  // Session-only: mutates AppState.portfolios (+ default watchlist mirror).
+  // Not written to localStorage / Demo Captain persistence yet.
+  const addTickerToPortfolio = useCallback(
+    (portfolioId: string, rawTicker: string): "added" | "exists" | "no-data" => {
+      const ticker = rawTicker.trim().toUpperCase();
+      if (!ticker) return "no-data";
+      const info = dataSource.getTickerInfo(ticker);
+      if (!info) return "no-data";
+
+      const portfolio = portfolios.find((item) => item.id === portfolioId);
+      if (!portfolio) return "no-data";
+      if (portfolio.holdings.some((holding) => holding.ticker === ticker)) {
+        return "exists";
+      }
+
+      setPortfolios((current) =>
+        current.map((item) =>
+          item.id !== portfolioId
+            ? item
+            : {
+                ...item,
+                holdings: [
+                  ...item.holdings,
+                  {
+                    ticker,
+                    shares: 0,
+                    avgPrice: 0,
+                    openPnlPct: 0,
+                    conviction: 0,
+                    status: "No Strategy",
+                    reason:
+                      "Pending research — assign a strategy and log your thesis.",
+                    strategyIds: [],
+                  },
+                ],
+              },
+        ),
+      );
+
+      if (portfolioId === DEFAULT_PORTFOLIO_ID) {
+        setWatchlist((current) => {
+          if (current.some((item) => item.ticker === ticker)) return current;
+          return [
+            ...current,
+            {
+              ticker,
+              name: `${info.company} · ${info.category}`,
+              price: info.lastPrice,
+              changePct: 0,
+              status: "No Strategy",
+              conviction: 0,
+              shares: 0,
+              avgPrice: 0,
+              reason:
+                "Pending research — assign a strategy and log your thesis.",
+            },
+          ];
+        });
+      }
+      return "added";
+    },
+    [portfolios],
   );
 
   const createStrategy = useCallback(() => {
@@ -611,6 +696,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       buckets,
       portfolios,
       setTickerEnabledForStrategy,
+      addTickerToPortfolio,
       getPortfolioAlignment,
       getStockAlignment,
       getAppliedStrategiesForTicker,
@@ -651,6 +737,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       buckets,
       portfolios,
       setTickerEnabledForStrategy,
+      addTickerToPortfolio,
       getPortfolioAlignment,
       getStockAlignment,
       getAppliedStrategiesForTicker,

@@ -87,9 +87,20 @@ When the first real API is chosen:
    `openPnlPct`, `lastPrice`) vs. **app overlay** (user/AI: `conviction`,
    `status`, `reason`, `strategyIds`, analysis, logs), merged by ticker — so a
    quote tick never overwrites an AI-generated status.
+5. **Ticker search:** replace `DataSource.searchTickers` + delete
+   `TOP_SEARCH_TICKERS` in `src/data.ts`. Never serve mock catalog hits
+   alongside a live symbol-search API — that mixes fake symbols with real data.
 
 Keep all transforms (e.g. `watchlistFromHoldings()`) **pure** so they work
 unchanged once data arrives over the wire.
+
+### Mock-only search catalog
+
+`TOP_SEARCH_TICKERS` powers Current Watch edit-mode typeahead via
+`dataSource.searchTickers`. It is **not** a second holdings registry. "Can this
+name be added?" still requires a `TICKERS` entry (mock company facts). Session
+adds update `AppState.portfolios` only — not persisted across refresh/logout
+yet.
 
 ## 4. How to add or change data
 

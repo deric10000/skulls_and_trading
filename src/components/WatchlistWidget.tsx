@@ -20,9 +20,10 @@ import { StatusStack, WatchAlignLabel, WatchConvictionHead } from "./StatusBadge
 import { ForgePill } from "./ForgePill";
 import { PortfolioCompass } from "./PortfolioCompass";
 import { Dropdown } from "./Dropdown";
-import { CaretDown, CaretLeft } from "../lib/icons";
+import { CaretDown, CaretLeft, MagnifyingGlass, PencilSimple, Plus } from "../lib/icons";
 import type {
   LogEntry,
+  PortfolioHolding,
   RuleCategory,
   RuleChip,
   RuleTag,
@@ -30,6 +31,7 @@ import type {
   Strategy,
   WatchlistItem,
 } from "../types";
+import { ForgeToast } from "./forge/ForgeToast";
 
 /** Closed Beta: hide under-conviction Watch Summary detail until Dashboard ships. */
 const SHOW_WATCH_SUMMARY_DETAIL = false;
@@ -681,6 +683,21 @@ function WatchSummary({
 const PORTFOLIOS = dataSource.getPortfolios();
 const DEFAULT_SOURCE_ID = PORTFOLIOS[0]?.id ?? "";
 
+function watchItemFromHolding(holding: PortfolioHolding): WatchlistItem {
+  const info = dataSource.getTickerInfo(holding.ticker);
+  return {
+    ticker: holding.ticker,
+    name: info ? `${info.company} · ${info.category}` : holding.ticker,
+    price: info?.lastPrice ?? 0,
+    changePct: holding.openPnlPct,
+    status: holding.status,
+    conviction: holding.conviction,
+    shares: holding.shares,
+    avgPrice: holding.avgPrice,
+    reason: holding.reason,
+  };
+}
+
 export function WatchlistWidget({
   readOnly = false,
   onSelectTicker,
@@ -703,8 +720,13 @@ export function WatchlistWidget({
     getPortfolioAlignment,
     getAppliedStrategiesForTicker,
     getStrategyChipBreakdown,
+    addTickerToPortfolio,
   } = useAppState();
   const [draft, setDraft] = useState("");
+  const [editMode, setEditMode] = useState(false);
+  const [editDraft, setEditDraft] = useState("");
+  const [editToast, setEditToast] = useState<string | null>(null);
+  const [tickerSuggestionsOpen, setTickerSuggestionsOpen] = useState(false);
   // Read-only (home) selection is local to this widget so it never mutates the
   // global selected ticker that drives the dashboard. Defaults to none selected.
   const [localSelected, setLocalSelected] = useState<string | null>(null);
@@ -718,6 +740,11 @@ export function WatchlistWidget({
   const isWatchlistSource = selectedSource.type === "watchlist";
   const isDefaultSource = selectedSource.id === DEFAULT_SOURCE_ID;
   const livePortfolio = portfolios.find((item) => item.id === selectedSource.id);
+
+  const editSuggestions = useMemo(
+    () => dataSource.searchTickers(editDraft),
+    [editDraft],
+  );
 
   const appliedStrategies = useMemo(
     () =>
@@ -737,6 +764,10 @@ export function WatchlistWidget({
 
   useEffect(() => {
     setStrategyViewIndex(0);
+    setEditMode(false);
+    setEditDraft("");
+    setEditToast(null);
+    setTickerSuggestionsOpen(false);
   }, [selectedSource.id]);
 
   useEffect(() => {
@@ -749,38 +780,36 @@ export function WatchlistWidget({
     }
   }, [canCycleStrategies, cycleLength, strategyViewIndex]);
 
-  // A watchlist is user-editable, so its (mock) list lives in local state and is
-  // re-seeded whenever the selected source changes — keeps add/remove from
-  // mutating the read-only portfolio data.
+  // Non-default sources: keep a local mirror synced from session AppState
+  // portfolios (so adds in edit mode show up without hitting the static seed).
   const [watchlistItems, setWatchlistItems] = useState<WatchlistItem[]>(() =>
-    dataSource.getWatchlistForPortfolio(selectedSource.id),
+    (livePortfolio?.holdings ?? []).map(watchItemFromHolding),
   );
   useEffect(() => {
-    if (isWatchlistSource) {
-      setWatchlistItems(dataSource.getWatchlistForPortfolio(selectedSource.id));
-    }
-  }, [isWatchlistSource, selectedSource]);
+    if (isDefaultSource) return;
+    setWatchlistItems((livePortfolio?.holdings ?? []).map(watchItemFromHolding));
+  }, [isDefaultSource, livePortfolio]);
 
   // The list to render: the default portfolio mirrors live app state (already
-  // decorated with computed alignment); a watchlist uses its editable local
-  // list; any other portfolio is derived (read-only) from its holdings. For the
-  // non-default sources we overlay the Forge-computed conviction/status here so
-  // every source reflects the engine (default is decorated upstream in AppState).
+  // decorated with computed alignment); other sources use session holdings
+  // with Forge conviction/status overlaid.
   const items = useMemo<WatchlistItem[]>(() => {
     if (isDefaultSource) return watchlist;
-    const base = isWatchlistSource
-      ? watchlistItems
-      : dataSource.getWatchlistForPortfolio(selectedSource.id);
+    const base = watchlistItems;
     const byTicker = getPortfolioAlignment(selectedSource.id).byTicker;
     return base.map((item) => {
       const aligned = byTicker[item.ticker];
       return aligned
-        ? { ...item, conviction: aligned.conviction, status: aligned.status }
+        ? {
+            ...item,
+            conviction: aligned.conviction,
+            status: aligned.status,
+            resolved: aligned.resolved,
+          }
         : item;
     });
   }, [
     isDefaultSource,
-    isWatchlistSource,
     watchlist,
     watchlistItems,
     selectedSource,
@@ -842,28 +871,36 @@ export function WatchlistWidget({
 
   const activeTicker = readOnly ? localSelected : selectedTicker;
 
+  function showEditToast(message: string) {
+    setEditToast(message);
+    window.setTimeout(() => setEditToast(null), 2500);
+  }
+
+  function tryAddEditTicker(raw?: string) {
+    const next = (raw ?? editDraft).trim().toUpperCase();
+    if (!next) return;
+    const result = addTickerToPortfolio(selectedSource.id, next);
+    if (result === "no-data") {
+      showEditToast("No Data");
+      return;
+    }
+    if (result === "exists") {
+      showEditToast("Already on this list");
+      return;
+    }
+    setEditDraft("");
+    setTickerSuggestionsOpen(false);
+  }
+
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const next = draft.trim().toUpperCase();
     if (!next) return;
-    setWatchlistItems((current) =>
-      current.some((item) => item.ticker === next)
-        ? current
-        : [
-            ...current,
-            {
-              ticker: next,
-              name: "New position · Pending research",
-              price: 0,
-              changePct: 0,
-              status: "Thesis Check",
-              conviction: 40,
-              shares: 0,
-              avgPrice: 0,
-              reason: "Pending research — assign a strategy and log your thesis.",
-            },
-          ],
-    );
+    const result = addTickerToPortfolio(selectedSource.id, next);
+    if (result === "no-data") {
+      showEditToast("No Data");
+      return;
+    }
     setDraft("");
   }
 
@@ -966,17 +1003,111 @@ export function WatchlistWidget({
         <span className="panel-tag watchlist-tag">{displayItems.length} stocks</span>
       </div>
       <div className="portfolio-switcher">
-        <Dropdown
-          id="portfolio-select"
-          label="Switch portfolio or watchlist"
-          value={portfolio}
-          onChange={setPortfolio}
-          options={PORTFOLIOS.map((option) => ({
-            value: option.id,
-            label: option.label,
-          }))}
-        />
+        <div className="portfolio-field">
+          <Dropdown
+            id="portfolio-select"
+            label="Switch portfolio or watchlist"
+            value={portfolio}
+            onChange={setPortfolio}
+            options={PORTFOLIOS.map((option) => ({
+              value: option.id,
+              label: option.label,
+            }))}
+          />
+        </div>
+        <button
+          type="button"
+          className={editMode ? "icon-btn icon-btn--active" : "icon-btn"}
+          aria-label={
+            editMode ? "Done editing portfolio or watchlist" : "Edit portfolio or watchlist"
+          }
+          aria-pressed={editMode}
+          onClick={() => {
+            setEditMode((current) => !current);
+            setEditDraft("");
+            setEditToast(null);
+            setTickerSuggestionsOpen(false);
+          }}
+        >
+          <PencilSimple aria-hidden weight="regular" />
+        </button>
       </div>
+      {editMode ? (
+        <div className="portfolio-edit-add">
+          <div className="portfolio-field portfolio-ticker-lookup">
+            <label className="visually-hidden" htmlFor="portfolio-ticker-lookup">
+              Look up a ticker
+            </label>
+            <div className="chip-search-field">
+              <MagnifyingGlass
+                className="chip-search-icon"
+                aria-hidden
+                weight="regular"
+              />
+              <input
+                id="portfolio-ticker-lookup"
+                className="input chip-search-input"
+                placeholder="Search ticker…"
+                value={editDraft}
+                maxLength={8}
+                autoComplete="off"
+                onChange={(event) => {
+                  setEditDraft(event.target.value.toUpperCase());
+                  setTickerSuggestionsOpen(true);
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    tryAddEditTicker();
+                  }
+                  if (event.key === "Escape") {
+                    setTickerSuggestionsOpen(false);
+                  }
+                }}
+              />
+            </div>
+            {tickerSuggestionsOpen && editSuggestions.length > 0 ? (
+              <ul
+                className="multiselect-menu portfolio-ticker-suggestions"
+                role="listbox"
+                aria-label="Matching tickers"
+              >
+                {editSuggestions.map((hit) => (
+                  <li key={hit.symbol}>
+                    <button
+                      type="button"
+                      className="multiselect-option"
+                      role="option"
+                      onClick={() => {
+                        setEditDraft(hit.symbol);
+                        setTickerSuggestionsOpen(false);
+                      }}
+                    >
+                      <span className="portfolio-ticker-symbol">{hit.symbol}</span>
+                      <span className="portfolio-ticker-name">{hit.name}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
+          <button
+            type="button"
+            className="icon-btn"
+            aria-label="Add ticker"
+            onClick={() => tryAddEditTicker()}
+          >
+            <Plus aria-hidden weight="regular" />
+          </button>
+        </div>
+      ) : null}
+      {editToast ? (
+        <div className="forge-toast-stack portfolio-edit-toast">
+          <ForgeToast tone="warning" onDismiss={() => setEditToast(null)}>
+            {editToast}
+          </ForgeToast>
+        </div>
+      ) : null}
       {readOnly ? (
         // Snapshot headline reflects the selected source's lead alignment.
         // With ≥2 applied strategies, a link-style select cycles All ↔ each strategy.
