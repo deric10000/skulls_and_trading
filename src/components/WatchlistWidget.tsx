@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useAppState } from "../state/AppState";
 import { dataSource } from "../lib/datasource";
 import { formatChange, formatPrice } from "../lib/format";
@@ -14,13 +14,25 @@ import {
   resolveAggregatedStatus,
   resolveStatus,
 } from "../lib/forge/status";
-import { shouldScoreTickerWithStrategy } from "../lib/forge/tickerStrategy";
+import {
+  isTickerEnabledForStrategy,
+  shouldScoreTickerWithStrategy,
+} from "../lib/forge/tickerStrategy";
 import { STATUS_TONE } from "../lib/status";
 import { StatusStack, WatchAlignLabel, WatchConvictionHead } from "./StatusBadge";
 import { ForgePill } from "./ForgePill";
 import { PortfolioCompass } from "./PortfolioCompass";
 import { Dropdown } from "./Dropdown";
-import { CaretDown, CaretLeft, MagnifyingGlass, PencilSimple, Plus } from "../lib/icons";
+import {
+  CaretDown,
+  CaretLeft,
+  CheckSquare,
+  MagnifyingGlass,
+  PencilSimple,
+  Plus,
+  Square,
+  Trash,
+} from "../lib/icons";
 import type {
   LogEntry,
   PortfolioHolding,
@@ -804,6 +816,132 @@ function WatchItemPreviewCard({ item }: { item: WatchlistItem }) {
   );
 }
 
+/** Edit-mode strategy picker — ticker-suggestion droplist chrome + checkbox. */
+function WatchStrategyEditPicker({
+  ticker,
+  portfolioId,
+  strategies,
+  holding,
+  onToggle,
+}: {
+  ticker: string;
+  portfolioId: string;
+  strategies: Strategy[];
+  holding: PortfolioHolding | undefined;
+  onToggle: (strategyId: string, enabled: boolean) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const enabledCount = strategies.filter((strategy) =>
+    holding
+      ? isTickerEnabledForStrategy(holding, strategy, portfolioId)
+      : false,
+  ).length;
+
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (event: MouseEvent) => {
+      if (rootRef.current && !rootRef.current.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onDoc);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDoc);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  return (
+    <div
+      className={open ? "watch-strategy-edit is-open" : "watch-strategy-edit"}
+      ref={rootRef}
+    >
+      <span className="watch-field-label">Strategies</span>
+      <button
+        type="button"
+        className="input multiselect-trigger watch-strategy-edit-trigger"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-label={`Strategies for ${ticker}`}
+        onClick={() => setOpen((current) => !current)}
+      >
+        <span className="multiselect-value">
+          {strategies.length === 0 ? (
+            <span className="multiselect-placeholder">No strategies applied</span>
+          ) : enabledCount > 0 ? (
+            <span>
+              {enabledCount} of {strategies.length} on
+            </span>
+          ) : (
+            <span className="multiselect-placeholder">Select strategies…</span>
+          )}
+        </span>
+        <CaretDown className="multiselect-caret" aria-hidden weight="regular" />
+      </button>
+      {open ? (
+        <ul
+          className="multiselect-menu portfolio-ticker-suggestions watch-strategy-edit-menu"
+          role="listbox"
+          aria-multiselectable="true"
+          aria-label={`Strategies for ${ticker}`}
+        >
+          {strategies.map((strategy) => {
+            const on = holding
+              ? isTickerEnabledForStrategy(holding, strategy, portfolioId)
+              : false;
+            return (
+              <li key={strategy.id} className="portfolio-ticker-suggestion">
+                <button
+                  type="button"
+                  className={
+                    on ? "multiselect-option is-selected" : "multiselect-option"
+                  }
+                  role="option"
+                  aria-selected={on}
+                  onClick={() => onToggle(strategy.id, !on)}
+                >
+                  <span className="portfolio-ticker-symbol">{strategy.name}</span>
+                </button>
+                <button
+                  type="button"
+                  className={
+                    on
+                      ? "watch-strategy-check watch-strategy-check--on"
+                      : "watch-strategy-check"
+                  }
+                  aria-label={
+                    on
+                      ? `Remove ${strategy.name} from ${ticker}`
+                      : `Add ${strategy.name} to ${ticker}`
+                  }
+                  aria-pressed={on}
+                  onClick={() => onToggle(strategy.id, !on)}
+                >
+                  {on ? (
+                    <CheckSquare aria-hidden weight="fill" />
+                  ) : (
+                    <Square aria-hidden weight="regular" />
+                  )}
+                </button>
+              </li>
+            );
+          })}
+          {strategies.length === 0 ? (
+            <li className="multiselect-empty">
+              Apply a strategy to this list in Strategy Forge first.
+            </li>
+          ) : null}
+        </ul>
+      ) : null}
+    </div>
+  );
+}
+
 export function WatchlistWidget({
   readOnly = false,
   onSelectTicker,
@@ -827,6 +965,9 @@ export function WatchlistWidget({
     getAppliedStrategiesForTicker,
     getStrategyChipBreakdown,
     addTickerToPortfolio,
+    setTickerEnabledForStrategy,
+    updateHoldingShares,
+    removeTickerFromPortfolio,
   } = useAppState();
   const [draft, setDraft] = useState("");
   const [editMode, setEditMode] = useState(false);
@@ -1035,7 +1176,8 @@ export function WatchlistWidget({
   }
 
   function handleRemove(ticker: string) {
-    setWatchlistItems((current) => current.filter((item) => item.ticker !== ticker));
+    removeTickerFromPortfolio(selectedSource.id, ticker);
+    setLocalSelected((current) => (current === ticker ? null : current));
   }
 
   // Read-only detail view: a condensed, read-only summary of the selected ticker
@@ -1253,9 +1395,10 @@ export function WatchlistWidget({
           </ForgeToast>
         </div>
       ) : null}
-      {readOnly ? (
+      {readOnly && !editMode ? (
         // Snapshot headline reflects the selected source's lead alignment.
         // With ≥2 applied strategies, a link-style select cycles All ↔ each strategy.
+        // Hidden while editing so the lookup field has room.
         <div className="watchlist-snapshot">
           <PortfolioCompass status={snapshotResolved.primary} />
           <div className="watchlist-snapshot-body">
@@ -1321,119 +1464,209 @@ export function WatchlistWidget({
       <ul className="watchlist-items">
         {displayItems.map((item) => {
           const isActive = item.ticker === activeTicker;
-          const owned = item.shares > 0;
+          const holding = livePortfolio?.holdings.find(
+            (entry) => entry.ticker === item.ticker,
+          );
+          const canEditQty = editMode && !isWatchlistSource;
+          const showOwnedMetrics = item.shares > 0 || canEditQty;
           const marketValue = item.price * item.shares;
           const totalPnl = (item.price - item.avgPrice) * item.shares;
           const changeUp = item.changePct >= 0;
           const changeClass = changeUp ? "watch-change--up" : "watch-change--down";
-          return (
-            <li key={item.ticker}>
-              <div
-                className={
-                  isActive
-                    ? "watch-item select-card is-selected"
-                    : "watch-item select-card"
-                }
-              >
+          const cardClass = isActive
+            ? "watch-item select-card is-selected"
+            : "watch-item select-card";
+          const cardClassEditing = editMode
+            ? `${cardClass} watch-item--editing`
+            : cardClass;
+
+          const head = editMode ? (
+            <span className="watch-head watch-head--editing">
+              <span className="watch-head-top">
+                <span className="watch-id">
+                  <span className="watch-ticker">{item.ticker}</span>
+                  <span className="watch-name">{item.name}</span>
+                </span>
                 <button
                   type="button"
-                  className="watch-select"
-                  onClick={() => {
-                    if (readOnly) {
-                      setLocalSelected(item.ticker);
-                      onSelectTicker?.(item.ticker);
-                    } else {
-                      selectTicker(item.ticker);
-                    }
-                  }}
-                  aria-pressed={isActive}
+                  className="icon-btn icon-btn--danger watch-remove-icon"
+                  onClick={() => handleRemove(item.ticker)}
+                  aria-label={`Remove ${item.ticker} from ${
+                    isWatchlistSource ? "watchlist" : "portfolio"
+                  }`}
                 >
-                  <span className="watch-head">
-                    <span className="watch-id">
-                      <span className="watch-ticker">
-                        {isActive ? (
-                          <span className="watch-selected-dot" aria-hidden="true" />
-                        ) : null}
-                        {item.ticker}
-                      </span>
-                      <span className="watch-name">{item.name}</span>
-                    </span>
-                    {owned ? (
-                      <span className="watch-mvqty">
-                        <span className="watch-field-label">Market Value | Qty</span>
-                        <span className="watch-figure watch-figure--strong">
-                          {formatPrice(marketValue)}
-                        </span>
-                        <span className="watch-figure">{item.shares}</span>
-                      </span>
-                    ) : null}
-                  </span>
-
-                  <span className="watch-body">
-                    <span className="watch-metrics">
-                      {owned ? (
-                        <span className="watch-metric-pair">
-                          <span className="watch-metric">
-                            <span className="watch-field-label">Last Price</span>
-                            <span className="watch-figure watch-figure--strong">
-                              {formatPrice(item.price)}
-                            </span>
-                          </span>
-                          <span className="watch-metric">
-                            <span className="watch-field-label">Avg. Price</span>
-                            <span className="watch-figure">
-                              {formatPrice(item.avgPrice)}
-                            </span>
-                          </span>
-                        </span>
-                      ) : (
-                        <span className="watch-metric">
-                          <span className="watch-field-label">Last Price</span>
-                          <span className="watch-figure watch-figure--strong">
-                            {formatPrice(item.price)}
-                          </span>
-                        </span>
-                      )}
-                      {owned ? (
-                        <span className="watch-metric">
-                          <span className="watch-field-label">
-                            {"Open P&L% | Total"}
-                          </span>
-                          <span className="watch-pnl">
-                            <span className={`watch-figure watch-figure--medium ${changeClass}`}>
-                              {formatChange(item.changePct)}
-                            </span>
-                            <span className={`watch-figure ${changeClass}`}>
-                              {formatPrice(totalPnl)}
-                            </span>
-                          </span>
-                        </span>
-                      ) : null}
-                    </span>
-
-                    <span className="watch-conviction-box">
-                      <WatchConvictionHead
-                        resolved={item.resolved}
-                        fallbackStatus={item.status}
-                      />
-                      <span className="watch-conviction-meter">
-                        <span className="watch-conviction-track">
-                          <span
-                            className="watch-conviction-fill"
-                            style={{ width: `${item.conviction}%` }}
-                          />
-                        </span>
-                        <span className="watch-conviction-score">
-                          {item.conviction}
-                        </span>
-                      </span>
-                    </span>
-                  </span>
+                  <Trash aria-hidden weight="regular" />
                 </button>
-                {/* Removing names is only valid on a user-curated watchlist.
-                    Portfolios are (future) live-connected accounts, so their
-                    holdings can't be hand-removed. */}
-                {!readOnly && isWatchlistSource ? (
+              </span>
+              {showOwnedMetrics ? (
+                <span className="watch-mvqty watch-mvqty--edit">
+                  <span className="watch-mvqty-col">
+                    <span className="watch-field-label">Qty</span>
+                    {canEditQty ? (
+                      <label className="watch-qty-edit">
+                        <span className="visually-hidden">
+                          Share quantity for {item.ticker}
+                        </span>
+                        <input
+                          type="number"
+                          className="input watch-qty-input"
+                          min={0}
+                          step={1}
+                          inputMode="numeric"
+                          value={item.shares}
+                          onChange={(event) => {
+                            const next = Number.parseInt(event.target.value, 10);
+                            updateHoldingShares(
+                              selectedSource.id,
+                              item.ticker,
+                              Number.isFinite(next) ? next : 0,
+                            );
+                          }}
+                        />
+                      </label>
+                    ) : (
+                      <span className="watch-figure">{item.shares}</span>
+                    )}
+                  </span>
+                  <span className="watch-mvqty-col">
+                    <span className="watch-field-label">Market Value</span>
+                    <span className="watch-figure watch-figure--strong">
+                      {formatPrice(marketValue)}
+                    </span>
+                  </span>
+                </span>
+              ) : null}
+            </span>
+          ) : (
+            <span className="watch-head">
+              <span className="watch-id">
+                <span className="watch-ticker">
+                  {isActive ? (
+                    <span className="watch-selected-dot" aria-hidden="true" />
+                  ) : null}
+                  {item.ticker}
+                </span>
+                <span className="watch-name">{item.name}</span>
+              </span>
+              {showOwnedMetrics ? (
+                <span className="watch-mvqty">
+                  <span className="watch-field-label">Market Value | Qty</span>
+                  <span className="watch-figure watch-figure--strong">
+                    {formatPrice(marketValue)}
+                  </span>
+                  <span className="watch-figure">{item.shares}</span>
+                </span>
+              ) : null}
+            </span>
+          );
+
+          const metrics = (
+            <span className="watch-metrics">
+              {showOwnedMetrics && item.shares > 0 ? (
+                <span className="watch-metric-pair">
+                  <span className="watch-metric">
+                    <span className="watch-field-label">Last Price</span>
+                    <span className="watch-figure watch-figure--strong">
+                      {formatPrice(item.price)}
+                    </span>
+                  </span>
+                  <span className="watch-metric">
+                    <span className="watch-field-label">Avg. Price</span>
+                    <span className="watch-figure">
+                      {formatPrice(item.avgPrice)}
+                    </span>
+                  </span>
+                </span>
+              ) : (
+                <span className="watch-metric">
+                  <span className="watch-field-label">Last Price</span>
+                  <span className="watch-figure watch-figure--strong">
+                    {formatPrice(item.price)}
+                  </span>
+                </span>
+              )}
+              {item.shares > 0 ? (
+                <span className="watch-metric">
+                  <span className="watch-field-label">{"Open P&L% | Total"}</span>
+                  <span className="watch-pnl">
+                    <span className={`watch-figure watch-figure--medium ${changeClass}`}>
+                      {formatChange(item.changePct)}
+                    </span>
+                    <span className={`watch-figure ${changeClass}`}>
+                      {formatPrice(totalPnl)}
+                    </span>
+                  </span>
+                </span>
+              ) : null}
+            </span>
+          );
+
+          const convictionOrStrategies = editMode ? (
+            <WatchStrategyEditPicker
+              ticker={item.ticker}
+              portfolioId={selectedSource.id}
+              strategies={appliedStrategies}
+              holding={holding}
+              onToggle={(strategyId, enabled) =>
+                setTickerEnabledForStrategy(
+                  selectedSource.id,
+                  item.ticker,
+                  strategyId,
+                  enabled,
+                )
+              }
+            />
+          ) : (
+            <span className="watch-conviction-box">
+              <WatchConvictionHead
+                resolved={item.resolved}
+                fallbackStatus={item.status}
+              />
+              <span className="watch-conviction-meter">
+                <span className="watch-conviction-track">
+                  <span
+                    className="watch-conviction-fill"
+                    style={{ width: `${item.conviction}%` }}
+                  />
+                </span>
+                <span className="watch-conviction-score">{item.conviction}</span>
+              </span>
+            </span>
+          );
+
+          return (
+            <li key={item.ticker}>
+              <div className={cardClassEditing}>
+                {editMode ? (
+                  <div className="watch-select">
+                    {head}
+                    <span className="watch-body">
+                      {metrics}
+                      {convictionOrStrategies}
+                    </span>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    className="watch-select"
+                    onClick={() => {
+                      if (readOnly) {
+                        setLocalSelected(item.ticker);
+                        onSelectTicker?.(item.ticker);
+                      } else {
+                        selectTicker(item.ticker);
+                      }
+                    }}
+                    aria-pressed={isActive}
+                  >
+                    {head}
+                    <span className="watch-body">
+                      {metrics}
+                      {convictionOrStrategies}
+                    </span>
+                  </button>
+                )}
+                {editMode ? null : !readOnly && isWatchlistSource ? (
                   <button
                     type="button"
                     className="watch-remove"

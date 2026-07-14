@@ -111,6 +111,14 @@ interface AppStateValue {
     portfolioId: string,
     ticker: string,
   ) => "added" | "exists" | "no-data";
+  /** Session-only: set share count on a holding (portfolios; watchlists ignore in UI). */
+  updateHoldingShares: (
+    portfolioId: string,
+    ticker: string,
+    shares: number,
+  ) => void;
+  /** Session-only: drop a holding from a portfolio or watchlist. */
+  removeTickerFromPortfolio: (portfolioId: string, ticker: string) => void;
 
   // ---- Strategy Forge chip library (reusable rule chips) ----
   chipLibrary: RuleChip[];
@@ -355,6 +363,61 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       return "added";
     },
     [portfolios],
+  );
+
+  const updateHoldingShares = useCallback(
+    (portfolioId: string, ticker: string, shares: number) => {
+      const nextShares = Number.isFinite(shares) ? Math.max(0, shares) : 0;
+      setPortfolios((current) =>
+        current.map((item) =>
+          item.id !== portfolioId
+            ? item
+            : {
+                ...item,
+                holdings: item.holdings.map((holding) =>
+                  holding.ticker !== ticker
+                    ? holding
+                    : { ...holding, shares: nextShares },
+                ),
+              },
+        ),
+      );
+      if (portfolioId === DEFAULT_PORTFOLIO_ID) {
+        setWatchlist((current) =>
+          current.map((item) =>
+            item.ticker !== ticker ? item : { ...item, shares: nextShares },
+          ),
+        );
+      }
+    },
+    [],
+  );
+
+  const removeTickerFromPortfolio = useCallback(
+    (portfolioId: string, ticker: string) => {
+      setPortfolios((current) =>
+        current.map((item) =>
+          item.id !== portfolioId
+            ? item
+            : {
+                ...item,
+                holdings: item.holdings.filter(
+                  (holding) => holding.ticker !== ticker,
+                ),
+              },
+        ),
+      );
+      if (portfolioId === DEFAULT_PORTFOLIO_ID) {
+        setWatchlist((current) => {
+          const next = current.filter((item) => item.ticker !== ticker);
+          if (ticker === selectedTicker) {
+            setSelectedTicker(next[0]?.ticker ?? "");
+          }
+          return next;
+        });
+      }
+    },
+    [selectedTicker],
   );
 
   const createStrategy = useCallback(() => {
@@ -697,6 +760,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       portfolios,
       setTickerEnabledForStrategy,
       addTickerToPortfolio,
+      updateHoldingShares,
+      removeTickerFromPortfolio,
       getPortfolioAlignment,
       getStockAlignment,
       getAppliedStrategiesForTicker,
@@ -738,6 +803,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       portfolios,
       setTickerEnabledForStrategy,
       addTickerToPortfolio,
+      updateHoldingShares,
+      removeTickerFromPortfolio,
       getPortfolioAlignment,
       getStockAlignment,
       getAppliedStrategiesForTicker,

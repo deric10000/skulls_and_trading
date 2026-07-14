@@ -1584,6 +1584,155 @@ select.input:hover:not(:disabled) {
   pointer-events: none;
 }
 
+/* Edit-mode qty + strategy picker (replaces conviction box). */
+.watch-item--editing .watch-select {
+  cursor: default;
+}
+
+.watch-item--editing .watch-head--editing {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: 0.3rem;
+  width: 100%;
+}
+
+.watch-item--editing .watch-head-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
+  width: 100%;
+}
+
+.watch-item--editing .watch-head-top .watch-id {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* Beat `.watch-mvqty { flex-direction: column }` later in the file. */
+.watch-item--editing .watch-mvqty.watch-mvqty--edit {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: flex-start;
+  justify-content: flex-start;
+  gap: 0.75rem;
+  margin: 0;
+  text-align: left;
+  flex: 0 0 auto;
+  align-self: flex-start;
+}
+
+.watch-mvqty-col {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.05rem;
+  min-width: 0;
+}
+
+.watch-qty-edit {
+  display: block;
+  width: 3.25rem;
+}
+
+.watch-qty-input {
+  width: 100%;
+  min-height: 0;
+  padding: 0.15rem 0.3rem;
+  font-size: 0.875rem;
+  font-variant-numeric: tabular-nums;
+  text-align: left;
+}
+
+.watch-item--editing .watch-body {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.55rem;
+}
+
+.watch-item--editing .watch-metrics {
+  flex: 0 0 auto;
+  width: 100%;
+}
+
+.watch-strategy-edit {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: 0.2rem;
+  flex: 0 0 auto;
+  min-width: 0;
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-sizing: border-box;
+}
+
+.watch-strategy-edit.is-open {
+  z-index: 6;
+}
+
+/* Lift the open card above following siblings so the droplist is not covered. */
+.watchlist-items > li:has(.watch-strategy-edit.is-open) {
+  position: relative;
+  z-index: 6;
+}
+
+.watch-strategy-edit-trigger {
+  min-height: 2rem;
+  padding: 0.25rem 0.45rem;
+  font-size: 0.8rem;
+}
+
+.watch-strategy-edit-menu {
+  z-index: 7;
+}
+
+.watch-strategy-check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: rgb(86 182 240 / 0.1);
+  color: var(--info);
+  cursor: pointer;
+}
+
+.watch-strategy-check svg {
+  width: 18px;
+  height: 18px;
+}
+
+.watch-strategy-check--on {
+  background: rgb(86 182 240 / 0.22);
+}
+
+.watch-strategy-check:hover {
+  background: rgb(86 182 240 / 0.28);
+}
+
+.watch-remove svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+.watch-remove-icon {
+  margin-top: 0.1rem;
+}
+
 .portfolio-edit-toast {
   margin-bottom: var(--space-3);
 }
@@ -2098,6 +2247,12 @@ select.input:hover:not(:disabled) {
   flex: 0 0 auto;
 }
 
+.watch-item--editing .watch-mvqty.watch-mvqty--edit {
+  flex-direction: row;
+  align-items: flex-start;
+  text-align: left;
+}
+
 /* Field labels (Last Price, Avg. Price, Market Value | Qty, Open P&L%…). */
 .watch-field-label {
   font-size: 0.75rem;
@@ -2189,6 +2344,7 @@ select.input:hover:not(:disabled) {
 
   .watch-metrics,
   .watch-conviction-box,
+  .watch-strategy-edit,
   .watch-strategy-stack {
     flex: 1 1 auto;
   }
@@ -2328,6 +2484,9 @@ select.input:hover:not(:disabled) {
 }
 
 .watch-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: 2.2rem;
   border: none;
   border-left: 1px solid var(--border-soft);
