@@ -63,6 +63,23 @@ function clonePortfolios(source: Portfolio[]): Portfolio[] {
   }));
 }
 
+function cloneHoldings(
+  holdings: Portfolio["holdings"],
+): Portfolio["holdings"] {
+  return holdings.map((holding) => ({
+    ...holding,
+    strategyIds: [...holding.strategyIds],
+  }));
+}
+
+/** Session snapshot so Current Watch Cancel can discard in-edit mutations. */
+export type WatchEditSnapshot = {
+  portfolioId: string;
+  holdings: Portfolio["holdings"];
+  /** strategyId → tickerExclusions[portfolioId] at enter-edit time. */
+  tickerExclusionsByStrategy: Record<string, string[]>;
+};
+
 // The default portfolio (whose holdings seed the editable watchlist + dashboard).
 const DEFAULT_PORTFOLIO_ID = dataSource.getPortfolios()[0]?.id ?? "";
 
@@ -136,6 +153,18 @@ interface AppStateValue {
   shareFills: ShareFillEvent[];
   /** Session-only: drop a holding from a portfolio or watchlist. */
   removeTickerFromPortfolio: (portfolioId: string, ticker: string) => void;
+  /**
+   * Session-only: create an empty portfolio or watchlist for Current Watch.
+   * Returns the new id. Not persisted / not a live brokerage link yet.
+   */
+  createPortfolioSource: (
+    label: string,
+    type: Portfolio["type"],
+  ) => string | null;
+  /** Capture holdings + strategy exclusions for Cancel→discard on Current Watch. */
+  captureWatchEditSnapshot: (portfolioId: string) => WatchEditSnapshot | null;
+  /** Restore a Current Watch edit-session snapshot (session-only). */
+  restoreWatchEditSnapshot: (snapshot: WatchEditSnapshot) => void;
 
   // ---- Strategy Forge chip library (reusable rule chips) ----
   chipLibrary: RuleChip[];
@@ -520,6 +549,103 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     [selectedTicker],
   );
 
+  const createPortfolioSource = useCallback(
+    (label: string, type: Portfolio["type"]): string | null => {
+      const trimmed = label.trim();
+      if (!trimmed) return null;
+      const id = nextId(type === "watchlist" ? "watch" : "port");
+      setPortfolios((current) => [
+        ...current,
+        {
+          id,
+          label: trimmed,
+          type,
+          holdings: [],
+        },
+      ]);
+      return id;
+    },
+    [nextId],
+  );
+
+  const captureWatchEditSnapshot = useCallback(
+    (portfolioId: string): WatchEditSnapshot | null => {
+      const portfolio = portfolios.find((item) => item.id === portfolioId);
+      if (!portfolio) return null;
+      const tickerExclusionsByStrategy: Record<string, string[]> = {};
+      for (const strategy of strategies) {
+        tickerExclusionsByStrategy[strategy.id] = [
+          ...(strategy.tickerExclusions?.[portfolioId] ?? []),
+        ];
+      }
+      return {
+        portfolioId,
+        holdings: cloneHoldings(portfolio.holdings),
+        tickerExclusionsByStrategy,
+      };
+    },
+    [portfolios, strategies],
+  );
+
+  const restoreWatchEditSnapshot = useCallback(
+    (snapshot: WatchEditSnapshot) => {
+      const { portfolioId, holdings, tickerExclusionsByStrategy } = snapshot;
+      const nextHoldings = cloneHoldings(holdings);
+
+      setPortfolios((current) =>
+        current.map((item) =>
+          item.id !== portfolioId ? item : { ...item, holdings: nextHoldings },
+        ),
+      );
+
+      setStrategies((current) =>
+        current.map((strategy) => {
+          if (!(strategy.id in tickerExclusionsByStrategy)) return strategy;
+          const nextList = tickerExclusionsByStrategy[strategy.id] ?? [];
+          const exclusions = { ...(strategy.tickerExclusions ?? {}) };
+          if (nextList.length === 0) delete exclusions[portfolioId];
+          else exclusions[portfolioId] = [...nextList];
+          return { ...strategy, tickerExclusions: exclusions };
+        }),
+      );
+
+      if (portfolioId === DEFAULT_PORTFOLIO_ID) {
+        setWatchlist((current) => {
+          const byTicker = new Map(current.map((row) => [row.ticker, row]));
+          return nextHoldings.map((holding) => {
+            const prior = byTicker.get(holding.ticker);
+            if (prior) {
+              return {
+                ...prior,
+                shares: holding.shares,
+                avgPrice: holding.avgPrice,
+                changePct: holding.openPnlPct,
+                status: holding.status,
+                conviction: holding.conviction,
+                reason: holding.reason,
+              };
+            }
+            const info = dataSource.getTickerInfo(holding.ticker);
+            return {
+              ticker: holding.ticker,
+              name: info
+                ? `${info.company} · ${info.category}`
+                : holding.ticker,
+              price: info?.lastPrice ?? 0,
+              changePct: holding.openPnlPct,
+              status: holding.status,
+              conviction: holding.conviction,
+              shares: holding.shares,
+              avgPrice: holding.avgPrice,
+              reason: holding.reason,
+            };
+          });
+        });
+      }
+    },
+    [],
+  );
+
   const createStrategy = useCallback(() => {
     const id = nextId("strategy");
     // New blank strategies start with empty rule sets, the built-in
@@ -864,6 +990,9 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       applyQtyOrders,
       shareFills,
       removeTickerFromPortfolio,
+      createPortfolioSource,
+      captureWatchEditSnapshot,
+      restoreWatchEditSnapshot,
       getPortfolioAlignment,
       getStockAlignment,
       getAppliedStrategiesForTicker,
@@ -909,6 +1038,9 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       applyQtyOrders,
       shareFills,
       removeTickerFromPortfolio,
+      createPortfolioSource,
+      captureWatchEditSnapshot,
+      restoreWatchEditSnapshot,
       getPortfolioAlignment,
       getStockAlignment,
       getAppliedStrategiesForTicker,

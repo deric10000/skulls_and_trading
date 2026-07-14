@@ -1478,15 +1478,8 @@ select.input:hover:not(:disabled) {
   vertical-align: middle;
 }
 
-/* Watchlist */
-.watchlist-add {
-  display: flex;
-  gap: 0.5rem;
-  margin-bottom: var(--space-3);
-}
-
-/* Read-only snapshot header (home) — sits where the add form is on the
-   dashboard. Emblem + chip are static placeholders for a future live insight. */
+/* Read-only snapshot header (home) — sits under the portfolio switcher.
+   Emblem + chip are static placeholders for a future live insight. */
 /* Portfolio switcher: field + 44×44 edit button. Edit-mode lookup is full-width
    so its right edge matches the edit button above; Add lives inside suggestions. */
 .portfolio-switcher {
@@ -1508,9 +1501,70 @@ select.input:hover:not(:disabled) {
 }
 
 .portfolio-field > select.input,
-.portfolio-field .chip-search-input {
+.portfolio-field .chip-search-input,
+.portfolio-field .multiselect-trigger {
   width: 100%;
   box-sizing: border-box;
+}
+
+.portfolio-source-switcher {
+  position: relative;
+  width: 100%;
+}
+
+.portfolio-source-add-row {
+  padding: 0.35rem 0.5rem;
+  border-bottom: 1px solid var(--border-soft);
+  margin-bottom: 0.15rem;
+}
+
+.portfolio-source-add-input {
+  flex: 1;
+  min-width: 0;
+  height: 36px;
+  min-height: 0;
+  padding: 0.35rem 0.55rem;
+  font-size: 0.85rem;
+}
+
+.portfolio-source-add-row .icon-btn {
+  width: 36px;
+  height: 36px;
+  flex: 0 0 auto;
+}
+
+.portfolio-source-add-row .icon-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+.watch-source-type-picker {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-block: var(--space-2);
+}
+
+.watch-source-type-option {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.35rem;
+  text-align: left;
+  width: 100%;
+  padding: 0.85rem 1rem;
+}
+
+.watch-source-type-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text-strong);
+}
+
+.watch-source-type-copy {
+  font-size: 0.82rem;
+  line-height: 1.35;
+  color: var(--text-muted);
 }
 
 .portfolio-switcher .icon-btn {
@@ -1756,13 +1810,35 @@ select.input:hover:not(:disabled) {
   min-height: 0;
 }
 
+/* Desktop: Cancel (forge link) + Update (solid) sit at the trailing edge of the
+   panel, matching ForgeTableModal / Configure affordances. */
 .watch-edit-actions {
-  position: sticky;
-  bottom: 0;
-  z-index: 4;
   margin-top: auto;
-  border-top: 1px solid var(--border-soft);
+  justify-content: flex-end;
+  gap: var(--space-3);
   background: var(--surface-1);
+}
+
+/* Mobile icon dock: Cancel left, Update right — same split as Delete/Add. */
+.watch-edit-actions.strategy-footer--icons > .btn:first-child {
+  margin-right: auto;
+}
+
+@media (max-width: 767px) {
+  /* Portaled onto .app-main (out of Embla), then rides .strategy-dock sticky. */
+  .app-main:has(.watch-edit-actions.strategy-dock) {
+    min-height: calc(100svh - var(--app-header-h, 96px));
+    padding-bottom: 0;
+  }
+
+  .strategy-dock.watch-edit-actions {
+    padding-top: var(--space-3);
+    border-top: 1px solid var(--border-soft);
+  }
+
+  .watchlist--editing {
+    padding-bottom: calc(var(--sticky-footer-h, 4.5rem) + var(--space-3));
+  }
 }
 
 .watch-qty-order-table {

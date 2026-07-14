@@ -105,7 +105,9 @@ unchanged once data arrives over the wire.
 `dataSource.searchTickers`. It is **not** a second holdings registry. "Can this
 name be added?" still requires a `TICKERS` entry (mock company facts). Session
 adds update `AppState.portfolios` only — not persisted across refresh/logout
-yet.
+yet. Creating a new portfolio/watchlist from the Current Watch switcher likewise
+appends an empty `Portfolio` to `AppState.portfolios` only (session stub —
+`type: "portfolio"` is not a live brokerage link yet).
 
 ## 4. How to add or change data
 
