@@ -58,6 +58,59 @@ const budgets: Record<ProviderId, ProviderBudget> = {
 
 const inFlight = new Map<string, Promise<unknown>>();
 
+const YAHOO_UA =
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
+
+interface YahooSession {
+  cookie: string;
+  crumb: string;
+  expiresAt: number;
+}
+
+let yahooSession: YahooSession | null = null;
+
+function collectSetCookies(res: Response): string[] {
+  const headers = res.headers as Headers & { getSetCookie?: () => string[] };
+  if (typeof headers.getSetCookie === "function") {
+    return headers.getSetCookie().map((c) => c.split(";")[0]!).filter(Boolean);
+  }
+  const single = res.headers.get("set-cookie");
+  return single ? [single.split(";")[0]!] : [];
+}
+
+/** Yahoo blocks crumb-less quote/quoteSummary; chart still works without crumb. */
+async function ensureYahooSession(): Promise<YahooSession | null> {
+  if (yahooSession && Date.now() < yahooSession.expiresAt) return yahooSession;
+  const cookies: string[] = [];
+  try {
+    const fc = await fetch("https://fc.yahoo.com", {
+      headers: { "user-agent": YAHOO_UA },
+      redirect: "manual",
+    });
+    cookies.push(...collectSetCookies(fc));
+  } catch {
+    // ignore — getcrumb often works without fc
+  }
+  const crumbRes = await fetch("https://query1.finance.yahoo.com/v1/test/getcrumb", {
+    headers: {
+      "user-agent": YAHOO_UA,
+      cookie: cookies.join("; "),
+    },
+  });
+  cookies.push(...collectSetCookies(crumbRes));
+  const crumb = (await crumbRes.text()).trim();
+  if (!crumb || crumb.includes("<") || crumb.length > 120) {
+    yahooSession = null;
+    return null;
+  }
+  yahooSession = {
+    cookie: [...new Set(cookies)].join("; "),
+    crumb,
+    expiresAt: Date.now() + 30 * MINUTE_MS,
+  };
+  return yahooSession;
+}
+
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -125,19 +178,22 @@ function cacheSet<T>(
 
 async function fetchYahooQuote(symbol: string): Promise<QuotePayload | null> {
   if (!consumeBudget("yahoo", 30)) return null;
-  const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(symbol)}`;
-  const res = await fetch(url, {
-    headers: { "user-agent": "Mozilla/5.0 SkullsAndTradingWorker/1.0" },
-  });
-  if (!res.ok) return null;
-  const data = (await res.json()) as {
-    quoteResponse?: { result?: Array<{ symbol?: string; regularMarketPrice?: number; regularMarketTime?: number }> };
+  // v7 /finance/quote is Unauthorized without auth; v8 chart.meta still works.
+  const chart = await fetchYahooChart(symbol, "5d", "1d", { skipBudget: true });
+  if (!chart) return null;
+  const meta = (chart.meta ?? {}) as {
+    regularMarketPrice?: number;
+    regularMarketTime?: number;
+    previousClose?: number;
+    chartPreviousClose?: number;
   };
-  const row = data.quoteResponse?.result?.[0];
-  const price = row?.regularMarketPrice;
-  if (typeof price !== "number" || !Number.isFinite(price)) return null;
-  const asOf = row.regularMarketTime
-    ? new Date(row.regularMarketTime * 1000).toISOString()
+  const price =
+    typeof meta.regularMarketPrice === "number" && Number.isFinite(meta.regularMarketPrice)
+      ? meta.regularMarketPrice
+      : null;
+  if (price == null || price <= 0) return null;
+  const asOf = meta.regularMarketTime
+    ? new Date(meta.regularMarketTime * 1000).toISOString()
     : new Date().toISOString();
   return {
     ticker: symbol.toUpperCase(),
@@ -216,9 +272,16 @@ async function resolveQuote(
 
 async function searchYahoo(query: string): Promise<SearchHit[]> {
   if (!consumeBudget("yahoo", 30)) return [];
-  const url = `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(query)}&quotesCount=12&newsCount=0`;
+  const session = await ensureYahooSession();
+  const crumbQ = session
+    ? `&crumb=${encodeURIComponent(session.crumb)}`
+    : "";
+  const url = `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(query)}&quotesCount=12&newsCount=0${crumbQ}`;
   const res = await fetch(url, {
-    headers: { "user-agent": "Mozilla/5.0 SkullsAndTradingWorker/1.0" },
+    headers: {
+      "user-agent": YAHOO_UA,
+      ...(session?.cookie ? { cookie: session.cookie } : {}),
+    },
   });
   if (!res.ok) return [];
   const data = (await res.json()) as {
@@ -237,6 +300,8 @@ async function fetchYahooQuoteSummary(
   symbol: string,
 ): Promise<Record<string, unknown> | null> {
   if (!consumeBudget("yahoo", 30)) return null;
+  const session = await ensureYahooSession();
+  if (!session) return null;
   const modules = [
     "defaultKeyStatistics",
     "financialData",
@@ -244,14 +309,26 @@ async function fetchYahooQuoteSummary(
     "earningsTrend",
     "calendarEvents",
   ].join(",");
-  const url = `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(symbol)}?modules=${modules}`;
+  const url = `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(symbol)}?modules=${modules}&crumb=${encodeURIComponent(session.crumb)}`;
   const res = await fetch(url, {
-    headers: { "user-agent": "Mozilla/5.0 SkullsAndTradingWorker/1.0" },
+    headers: {
+      "user-agent": YAHOO_UA,
+      cookie: session.cookie,
+    },
   });
-  if (!res.ok) return null;
+  if (!res.ok) {
+    // Crumb may have expired — force refresh once.
+    yahooSession = null;
+    return null;
+  }
   const data = (await res.json()) as {
-    quoteSummary?: { result?: Array<Record<string, unknown>> };
+    quoteSummary?: { result?: Array<Record<string, unknown>>; error?: { description?: string } };
+    finance?: { error?: { code?: string } };
   };
+  if (data.finance?.error || data.quoteSummary?.error) {
+    yahooSession = null;
+    return null;
+  }
   return data.quoteSummary?.result?.[0] ?? null;
 }
 
@@ -259,11 +336,12 @@ async function fetchYahooChart(
   symbol: string,
   range = "1y",
   interval = "1d",
+  opts?: { skipBudget?: boolean },
 ): Promise<Record<string, unknown> | null> {
-  if (!consumeBudget("yahoo", 30)) return null;
+  if (!opts?.skipBudget && !consumeBudget("yahoo", 30)) return null;
   const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=${range}&interval=${interval}`;
   const res = await fetch(url, {
-    headers: { "user-agent": "Mozilla/5.0 SkullsAndTradingWorker/1.0" },
+    headers: { "user-agent": YAHOO_UA },
   });
   if (!res.ok) return null;
   const data = (await res.json()) as {
@@ -535,7 +613,7 @@ export async function handleMarketApi(
     const cached = cacheGet(fundyCache, symbol);
     if (cached) return json({ fundamentals: cached, budgets: Object.values(budgets) });
     const summary = await fetchYahooQuoteSummary(symbol);
-    if (!summary) return json({ fundamentals: null, budgets: Object.values(budgets) }, 404);
+    if (!summary) return json({ fundamentals: null, budgets: Object.values(budgets) });
     const fundamentals = mapFundamentals(symbol, summary);
     cacheSet(fundyCache, symbol, fundamentals, FUNDY_TTL_MS);
     return json({ fundamentals, budgets: Object.values(budgets) });

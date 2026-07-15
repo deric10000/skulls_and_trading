@@ -15,17 +15,22 @@ export function ForgeToast({
   children,
   onDismiss,
   dismissLabel = "Dismiss notification",
+  className,
 }: {
   tone: ForgeToastTone;
   children: ReactNode;
   onDismiss?: () => void;
   dismissLabel?: string;
+  className?: string;
 }) {
   const Icon = TONE_ICON[tone];
   const role = tone === "success" ? "status" : "alert";
+  const classes = ["forge-toast", `forge-toast--${tone}`, className]
+    .filter(Boolean)
+    .join(" ");
 
   return (
-    <div className={`forge-toast forge-toast--${tone}`} role={role}>
+    <div className={classes} role={role}>
       {tone === "error" ? (
         <span className="forge-toast-icon forge-toast-icon--error" aria-hidden="true">
           !

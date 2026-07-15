@@ -12,6 +12,7 @@ import {
   WEATHER_CONDITIONS,
   type WeatherGraphic,
 } from "../lib/weather";
+import { formatDecimals } from "../lib/format";
 import type {
   MarketWeatherLayer,
   WeatherLayerReading,
@@ -79,7 +80,7 @@ function ConfidenceChip({ value }: { value: number }) {
   return (
     <span className={`chip status--${confidenceTone(value)} weather-confidence-chip`}>
       <SealPercent aria-hidden />
-      {value}%
+      {formatDecimals(value)}%
     </span>
   );
 }
@@ -121,7 +122,7 @@ function SubScoreRow({
       <span className="weather-score-track" aria-hidden>
         <span className="weather-score-fill" style={{ width: `${value}%` }} />
       </span>
-      <span className="weather-score-value">{value}</span>
+      <span className="weather-score-value">{formatDecimals(value)}</span>
     </div>
   );
 }
@@ -316,7 +317,8 @@ export function MarketFlowWidget({
               </span>
             </header>
             <p className="weather-confidence-line">
-              Confidence {detailReading.confidence}% · Score {detailReading.score}/100
+              Confidence {formatDecimals(detailReading.confidence)}% · Score{" "}
+              {formatDecimals(detailReading.score)}/100
             </p>
             <p className="flow-summary-note">{detailReading.explanation}</p>
             <p className="weather-why-line">
@@ -395,7 +397,7 @@ export function MarketFlowWidget({
                 disabled={!reading}
                 aria-label={
                   reading
-                    ? `${cardLabel}: ${WEATHER_CONDITIONS[reading.conditionId].label}, confidence ${reading.confidence}%. View details.`
+                    ? `${cardLabel}: ${WEATHER_CONDITIONS[reading.conditionId].label}, confidence ${formatDecimals(reading.confidence)}%. View details.`
                     : undefined
                 }
               />

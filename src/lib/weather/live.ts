@@ -15,7 +15,7 @@ import type {
 } from "./types";
 
 const clamp = (n: number, min = 0, max = 100) =>
-  Math.min(max, Math.max(min, n));
+  Math.min(max, Math.max(min, Math.round(n * 100) / 100));
 
 /** Map plan-safe MarketContext fields into 0–100 weather instruments. */
 export function subScoresFromMarketContext(ctx: MarketContext): WeatherSubScores {

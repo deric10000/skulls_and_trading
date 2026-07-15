@@ -824,7 +824,7 @@ export function formatMetricValue(
   if (meta.format === "boolean") {
     return value === 1 ? "TRUE" : "FALSE";
   }
-  const display = roundMetricDisplay(value);
+  const display = roundMetricDisplay(value).toFixed(2);
   switch (meta.format) {
     case "percent":
       return `${display}%`;

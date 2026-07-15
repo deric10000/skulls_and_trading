@@ -1,4 +1,5 @@
 import type { ScoreMetric } from "../../types";
+import { formatDecimals } from "../../lib/format";
 
 export function ScoreCard({
   metric,
@@ -21,8 +22,8 @@ export function ScoreCard({
         </span>
       </div>
       <div className="score-card-value">
-        <span className="score-card-number">{metric.value}</span>
-        <span className="score-card-max">/ {metric.max}</span>
+        <span className="score-card-number">{formatDecimals(metric.value)}</span>
+        <span className="score-card-max">/ {formatDecimals(metric.max)}</span>
       </div>
       <div className="score-track" aria-hidden="true">
         <span

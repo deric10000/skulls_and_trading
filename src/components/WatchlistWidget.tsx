@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { useAppState, type WatchEditSnapshot } from "../state/AppState";
 import { asyncSearchTickers, dataSource } from "../lib/datasource";
 import { getLiveQuote } from "../lib/market/liveCache";
-import { formatChange, formatPrice } from "../lib/format";
+import { formatChange, formatPrice, formatDecimals } from "../lib/format";
 import { NeedsDataReviewFlag } from "./NeedsDataReviewFlag";
 import { formatChipCondition, formatObservedBreach } from "../lib/forge/metrics";
 import {
@@ -378,7 +378,7 @@ function StrategyConvictionBlock({
               style={{ width: `${conviction}%` }}
             />
           </span>
-          <span className="watch-conviction-score">{conviction}</span>
+          <span className="watch-conviction-score">{formatDecimals(conviction)}</span>
         </span>
 
         {planSections.length > 0 ? (
@@ -600,7 +600,7 @@ function WatchSummary({
                       />
                     </span>
                     <span className="watch-conviction-score">
-                      {item.conviction}
+                      {formatDecimals(item.conviction)}
                     </span>
                   </span>
                 </div>
@@ -960,7 +960,7 @@ function WatchItemPreviewCard({ item }: { item: WatchlistItem }) {
                   style={{ width: `${item.conviction}%` }}
                 />
               </span>
-              <span className="watch-conviction-score">{item.conviction}</span>
+              <span className="watch-conviction-score">{formatDecimals(item.conviction)}</span>
             </span>
           </span>
         </span>
@@ -2094,7 +2094,7 @@ export function WatchlistWidget({
                     style={{ width: `${item.conviction}%` }}
                   />
                 </span>
-                <span className="watch-conviction-score">{item.conviction}</span>
+                <span className="watch-conviction-score">{formatDecimals(item.conviction)}</span>
               </span>
             </span>
           );
