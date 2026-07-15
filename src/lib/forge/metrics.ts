@@ -5,6 +5,7 @@ import type {
   RuleChip,
   RuleOperator,
 } from "../../types";
+import { isLiveSupportedMetric } from "./liveCoverage";
 
 // ---------------------------------------------------------------------------
 // Metric registry — the single source of truth for every data point a rule chip
@@ -773,7 +774,10 @@ export const METRICS: Record<MetricKey, MetricMeta> = {
 export const ALL_METRICS: MetricMeta[] = Object.values(METRICS);
 
 export function metricsForCategory(category: RuleCategory): MetricMeta[] {
-  return ALL_METRICS.filter((metric) => metric.category === category);
+  return ALL_METRICS.filter(
+    (metric) =>
+      metric.category === category && isLiveSupportedMetric(metric.key),
+  );
 }
 
 // ---- Condition labels ------------------------------------------------------

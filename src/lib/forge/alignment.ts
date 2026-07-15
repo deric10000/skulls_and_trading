@@ -74,16 +74,17 @@ export function computePortfolioAlignment(
   strategies: Strategy[],
 ): PortfolioAlignment {
   if (!portfolio) return EMPTY;
+  const activePortfolio = portfolio;
 
   const lastPrice = (ticker: string): number =>
     dataSource.getTickerInfo(ticker)?.lastPrice ?? 0;
 
-  const bookValue = portfolio.holdings.reduce(
+  const bookValue = activePortfolio.holdings.reduce(
     (sum, holding) => sum + holding.shares * lastPrice(holding.ticker),
     0,
   );
   const holdingByTicker = new Map(
-    portfolio.holdings.map((holding) => [holding.ticker, holding]),
+    activePortfolio.holdings.map((holding) => [holding.ticker, holding]),
   );
   const weightPctFor = (ticker: string): number => {
     const holding = holdingByTicker.get(ticker);
@@ -92,7 +93,7 @@ export function computePortfolioAlignment(
   };
 
   const portfolioBuckets = buckets.filter(
-    (bucket) => bucket.portfolioId === portfolio.id,
+    (bucket) => bucket.portfolioId === activePortfolio.id,
   );
   const market = dataSource.getMarketContext();
 
@@ -148,7 +149,7 @@ export function computePortfolioAlignment(
     bucketId?: string,
   ): void {
     const holding = holdingByTicker.get(ticker);
-    const hasStrategy = tickerHasAssignedStrategy(ticker, portfolio, strategies);
+    const hasStrategy = tickerHasAssignedStrategy(ticker, activePortfolio, strategies);
     const scored = scoreStock(strategy, ctx, { hasStrategy });
     const conviction = scored.hasRules ? scored.conviction : holding?.conviction ?? 0;
     const categories = scored.hasRules ? scored.categories : [];
@@ -177,12 +178,12 @@ export function computePortfolioAlignment(
   for (const bucket of portfolioBuckets) {
     const strategy = strategies.find((item) => item.id === bucket.strategyId);
     if (!strategy) continue;
-    if (!strategyAppliesToPortfolio(strategy, portfolio.id)) continue;
+    if (!strategyAppliesToPortfolio(strategy, activePortfolio.id)) continue;
 
     for (const allocation of bucket.holdings) {
       const ticker = allocation.ticker;
       const holding = holdingByTicker.get(ticker);
-      if (!holding || !shouldScoreTickerWithStrategy(holding, strategy, portfolio.id)) continue;
+      if (!holding || !shouldScoreTickerWithStrategy(holding, strategy, activePortfolio.id)) continue;
 
       coveredPairs.add(coverageKey(strategy.id, ticker));
       const ctx: MetricContext = {
@@ -208,11 +209,11 @@ export function computePortfolioAlignment(
   // Applied-portfolio fallback: score holdings when a strategy is applied but
   // no bucket allocation covers that (strategy, ticker) pair yet.
   for (const strategy of strategies) {
-    if (!strategyAppliesToPortfolio(strategy, portfolio.id)) continue;
+    if (!strategyAppliesToPortfolio(strategy, activePortfolio.id)) continue;
 
-    for (const holding of portfolio.holdings) {
+    for (const holding of activePortfolio.holdings) {
       if (holding.shares <= 0) continue;
-      if (!shouldScoreTickerWithStrategy(holding, strategy, portfolio.id)) continue;
+      if (!shouldScoreTickerWithStrategy(holding, strategy, activePortfolio.id)) continue;
       const ticker = holding.ticker;
       if (coveredPairs.has(coverageKey(strategy.id, ticker))) continue;
 
@@ -272,10 +273,10 @@ export function computePortfolioAlignment(
 
   // Headline per ticker: one strategy scores as-is; multiple strategies merge
   // chip + category weights then score once (not max conviction across slices).
-  for (const holding of portfolio.holdings) {
+  for (const holding of activePortfolio.holdings) {
     if (holding.shares <= 0) continue;
     const ticker = holding.ticker;
-    const applicable = strategiesForHolding(holding, portfolio.id, strategies);
+    const applicable = strategiesForHolding(holding, activePortfolio.id, strategies);
     if (applicable.length === 0) continue;
 
     const ctx = buildMetricContext(ticker, holding);
@@ -299,8 +300,8 @@ export function computePortfolioAlignment(
     };
   }
 
-  const portfolioHasStrategy = portfolio.holdings.some((holding) =>
-    tickerHasAssignedStrategy(holding.ticker, portfolio, strategies),
+  const portfolioHasStrategy = activePortfolio.holdings.some((holding) =>
+    tickerHasAssignedStrategy(holding.ticker, activePortfolio, strategies),
   );
 
   const byBucket: PortfolioAlignment["byBucket"] = {};
@@ -313,7 +314,7 @@ export function computePortfolioAlignment(
     };
   }
 
-  const portfolioHeadlineSlices: WeightedCategorySlice[] = portfolio.holdings
+  const portfolioHeadlineSlices: WeightedCategorySlice[] = activePortfolio.holdings
     .filter((holding) => holding.shares > 0 && byTicker[holding.ticker])
     .map((holding) => ({
       conviction: byTicker[holding.ticker].conviction,
@@ -324,9 +325,9 @@ export function computePortfolioAlignment(
   // Go to Cash is portfolio-only: fire if any applied holding's go-to-cash
   // overlay fails (market chips fail the same on every ticker; P&L chips OR).
   const portfolioZoneFlags: StatusType[] = [];
-  for (const holding of portfolio.holdings) {
+  for (const holding of activePortfolio.holdings) {
     if (holding.shares <= 0) continue;
-    const applicable = strategiesForHolding(holding, portfolio.id, strategies);
+    const applicable = strategiesForHolding(holding, activePortfolio.id, strategies);
     if (applicable.length === 0) continue;
     const strategy =
       applicable.length === 1

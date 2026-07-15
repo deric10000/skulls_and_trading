@@ -1,6 +1,7 @@
 import { AppShell } from "./components/AppShell";
 import { LoginScreen } from "./components/auth/LoginScreen";
 import { Onboarding } from "./components/auth/Onboarding";
+import { MarketBudgetToasts } from "./components/MarketBudgetToasts";
 import { CaptainProfilePage } from "./pages/CaptainProfilePage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { HomePage } from "./pages/HomePage";
@@ -26,6 +27,7 @@ function AuthGate() {
 
   return (
     <AppShell>
+      <MarketBudgetToasts />
       <ActivePage />
     </AppShell>
   );

@@ -6,6 +6,8 @@ export * from "./conditions";
 export * from "./scoring";
 export * from "./session";
 export * from "./graphics";
+export { buildLiveWeatherSnapshot, subScoresFromMarketContext } from "./live";
+/** Mock-only — FreeTier uses `weather/live` via dataSource.getMarketWeather. */
 export { getMarketWeatherSnapshot } from "./mock";
 
 // Map a condition's severity to a design-system signal tone (chip coloring).

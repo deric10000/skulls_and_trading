@@ -60,15 +60,19 @@ covered by that strategy's `appliedPortfolioIds` for the same source.
 - Adding a new live-data accessor → add it to the `DataSource` interface AND
   `mockDataSource`.
 
-## Going live
+## Going live (Pass 2 — FreeTier)
 
-- Swap the single `dataSource` binding in `src/lib/datasource/index.ts` to an
-  `ApiDataSource`. Don't scatter API calls into components.
-- Async + loading/error and the live-vs-overlay field split land in `AppState`
-  only, when the first real API is wired (Pass 2).
-- **STOP:** when wiring live symbol search / quotes, remove
-  `TOP_SEARCH_TICKERS` and the mock `searchTickers` body — never blend mock
-  catalog hits with live API results.
+- Active binding: `freeTierDataSource` in `src/lib/datasource/index.ts`.
+  Paid/brokerage later swaps the same export — don't scatter `fetch()` into UI.
+- Live fields (quotes, fundies, techs, market context, Weather, search) go through
+  Worker `/api/market/*` → `liveCache` → FreeTier; loading/error/pull stamps live
+  in `AppState` only. Never dual-read mock seeds for a field once it's live.
+- Quarantined: `TOP_SEARCH_TICKERS`, static `MARKET_CONTEXT`, `weather/mock` —
+  mockDataSource / fixtures only. Live search = `asyncSearchTickers`.
+- Beta 0 cadence floor: hide/clamp Check+Technicals faster than `1D`; scheduler
+  + Worker TTL respect daily+.
+- Layer 1 coverage: `liveCoverage.ts` / Forge dropdowns / default strategies.
+  Layer 2: null = no-data. Layer 3: `NeedsDataReviewFlag` for critical gaps.
 
 ## Market Weather (`src/lib/weather/`)
 
@@ -78,9 +82,9 @@ covered by that strategy's `appliedPortfolioIds` for the same source.
   `conditions.ts`; per-condition CSS is `.weather--<id>` / `.weather-bg--<id>`.
 - Read weather through `dataSource.getMarketWeather(timeframe)`, never by
   importing `weather/mock.ts` from a component.
-- Going live: fetch **one** snapshot per session (premarket/live/afterhours),
-  refresh at each session boundary, cache **app-wide** (not per user), and filter
-  per user client-side via `TICKERS[ticker].sector`/`.industry`. See
+- FreeTier: `weather/live.ts` builds from live `MarketContext` (Worker FRED +
+  index ETFs). Cache app-wide per timeframe until context refreshes; filter per
+  user client-side via `TICKERS[ticker].sector`/`.industry`. See
   `data-architecture.md` §5.
 
 ## Strategy Forge (`src/lib/forge/`)
@@ -113,8 +117,8 @@ covered by that strategy's `appliedPortfolioIds` for the same source.
   conviction/status/resolved onto the watchlist — downstream chips (`StatusStack`,
   `PortfolioCompass`) reflect it. "Notify" = in-app chips updating; **no**
   push-notification system.
-- Cadence: `technicalsInterval` is clamped **≥ 15m and ≥ `checkInterval`**;
-  fundamentals refresh daily and are not user-selectable. See
+- Cadence: Beta 0 floors Check/Technicals to **`1D`/`1W`/`1M`** (sub-daily hidden);
+  `technicalsInterval` ≥ `checkInterval`; fundamentals refresh daily. See
   `data-architecture.md` §6.
 
 ## Safety

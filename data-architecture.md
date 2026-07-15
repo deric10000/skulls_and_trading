@@ -69,14 +69,13 @@ real API is a **single-line change** and touches no consumers.
 - `DataSource.ts` — the interface. Covers only data that will eventually come
   from a market/brokerage feed: portfolios/holdings, ticker analysis, logs,
   assignments, positions, allocations, risk rules, portfolio metrics, market
-  flow.
-- `mock.ts` — `mockDataSource`, backed by `src/data.ts`, returns today's values
-  verbatim.
-- `index.ts` — exports the active `dataSource` (defaults to `mockDataSource`).
+  flow, Forge snapshots, Weather.
+- `mock.ts` — `mockDataSource`, backed by `src/data.ts` (fixtures / offline).
+- `freeTier.ts` — FreeTier live paths via Worker + `liveCache` (active).
+- `index.ts` — exports the active `dataSource` (`freeTierDataSource`).
 
 ```ts
-// To go live, swap one binding:
-export const dataSource: DataSource = apiDataSource; // was mockDataSource
+export const dataSource = freeTierDataSource;
 ```
 
 ### Live vs. static boundary
@@ -94,34 +93,42 @@ education cards, ships/badges, score copy.
 `DEFAULT_CAPTAIN` and `DEFAULT_STRATEGIES` as direct imports (config, not feed
 data).
 
-## 3. Going live later (Pass 2 — not done yet)
+## 3. Going live (Pass 2 — FreeTier live market data)
 
-When the first real API is chosen:
+Active binding: `src/lib/datasource/index.ts` exports `freeTierDataSource`.
+Market quotes, fundamentals, technicals, market context, Weather inputs, and
+symbol search are filled through Cloudflare Worker routes under `/api/market/*`
+(`worker/market.ts`), cached in `src/lib/market/liveCache.ts`, and refreshed by
+`AppState` (`refreshLiveMarket`, loading/error, strategy pull stamps).
 
-1. Add an `ApiDataSource` implementing `DataSource` (fetch quotes + positions).
-2. Make the interface **async** (return `Promise<…>`).
-3. Add `loading` / `error` / `lastUpdated` handling **in `AppState` only** — the
-   single owner of app state. Components keep reading from `AppState`.
-4. Split a holding into **brokerage/quote fields** (live: `shares`, `avgPrice`,
-   `openPnlPct`, `lastPrice`) vs. **app overlay** (user/AI: `conviction`,
-   `status`, `reason`, `strategyIds`, analysis, logs), merged by ticker — so a
-   quote tick never overwrites an AI-generated status.
-5. **Ticker search:** replace `DataSource.searchTickers` + delete
-   `TOP_SEARCH_TICKERS` in `src/data.ts`. Never serve mock catalog hits
-   alongside a live symbol-search API — that mixes fake symbols with real data.
+1. **FreeTierDataSource** implements `DataSource` for live fields; portfolios /
+   holdings / logs remain mock seeds until brokerage Pass 2+.
+2. Loading / error / `lastDataPullAtByStrategyId` live **in `AppState` only**.
+3. Holding split: live quote fields (`lastPrice` via `getQuote` /
+   `getTickerInfo`) vs app overlay (`conviction`, `status`, `reason`,
+   `strategyIds`) — a quote tick never wipes Forge overlay.
+4. **Ticker search:** `asyncSearchTickers` → Worker Yahoo search. Never merge
+   with quarantined `TOP_SEARCH_TICKERS` (mock-only).
+5. **Cadence (Beta 0):** Check / Technicals UI floors to `1D` / `1W` / `1M`;
+   load-time clamp + Worker TTL ≥ 1 day. Scheduler in
+   `src/lib/forge/scheduler.ts` gates on market hours + tab visibility.
+6. **Availability layers:** `liveCoverage.ts` + Forge dropdown prune; null =
+   no-data; critical nulls → `NeedsDataReviewFlag`.
+7. **Weather:** FreeTier builds readings from live `MarketContext` via
+   `weather/live.ts` (mock seeds quarantined for `mockDataSource` only).
 
-Keep all transforms (e.g. `watchlistFromHoldings()`) **pure** so they work
-unchanged once data arrives over the wire.
+```ts
+// Active binding today:
+export const dataSource = freeTierDataSource;
+```
 
-### Mock-only search catalog
+Keep all transforms (e.g. `watchlistFromHoldings()`) **pure**.
 
-`TOP_SEARCH_TICKERS` powers Current Watch edit-mode typeahead via
-`dataSource.searchTickers`. It is **not** a second holdings registry. "Can this
-name be added?" still requires a `TICKERS` entry (mock company facts). Session
-adds update `AppState.portfolios` only — not persisted across refresh/logout
-yet. Creating a new portfolio/watchlist from the Current Watch switcher likewise
-appends an empty `Portfolio` to `AppState.portfolios` only (session stub —
-`type: "portfolio"` is not a live brokerage link yet).
+### Quarantined mock catalogs
+
+`TOP_SEARCH_TICKERS` and static `MARKET_CONTEXT` remain in `src/data.ts` for
+`mockDataSource` / fixtures only. FreeTier must not dual-read them for the
+same field once that field is on the live path.
 
 ## 4. How to add or change data
 
@@ -148,28 +155,20 @@ Module map:
 | `conditions.ts` | The shared 10-condition library (label, colors, icon, copy, `dynamicGraphicKey`). |
 | `scoring.ts` | Pure engine: trend score, weather score, priority classification, confidence (+ session caps), 200-day climate context, "why" copy. |
 | `session.ts` | ET-clock session detection (premarket / live / afterhours), DST-safe via `Intl`. |
-| `mock.ts` | Authored sub-score seeds → readings via the engine, assembled into a per-session snapshot. |
+| `mock.ts` | Authored sub-score seeds for `mockDataSource` only (quarantined). |
+| `live.ts` | FreeTier Weather from live `MarketContext` via `buildReading()`. |
 | `graphics.ts` | Resolves a `dynamicGraphicKey` to a background treatment (gradient fallback now, image/video later). |
 
 Scoring is **provider-agnostic** — `buildReading()` takes normalized 0–100
-sub-scores and climate inputs, so the same engine runs on mock and real data.
+sub-scores and climate inputs, so the same engine runs on mock and live data.
 
 ### Going live — one fetch per session, app-wide
 
-`getMarketWeather(timeframe)` returns a `MarketWeatherSnapshot` covering **every**
-sector, industry, and tracked stock, plus `industrySectors` (the industry→sector
-taxonomy the client uses to cascade the layers). The contract for the real API
-layer:
-
-- Fetch **one** snapshot per session (premarket / live / afterhours), not per
-  user and not per render.
-- Refresh it at each **session boundary** (the time a session starts), so it
-  updates automatically for everyone; logging in mid-session reuses the cached
-  snapshot instead of re-fetching.
-- Cache it **app-wide** (shared across users). The mock approximates this with a
-  per-session `Map` cache in `weather/mock.ts`.
-- Filter per user **client-side** by mapping their watch tickers →
-  `TICKERS[ticker].sector` / `.industry` (no extra calls per user).
+`getMarketWeather(timeframe)` on FreeTier builds from the latest live
+`MarketContext` (Worker: SPY / VIX / FRED) and caches per timeframe until the
+next context refresh clears it. Macro inputs refresh with market context
+(session / daily TTL on the Worker). Filter per user **client-side** by
+mapping watch tickers → `TICKERS[ticker].sector` / `.industry`.
 
 The widget (`MarketFlowWidget`) is read-only on the home page: it detects the
 session, pulls the snapshot through the `dataSource` seam, and focuses

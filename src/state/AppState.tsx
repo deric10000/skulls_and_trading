@@ -17,11 +17,22 @@ import {
 } from "../data";
 import { dataSource } from "../lib/datasource";
 import {
+  getLiveCacheGeneration,
+  getLastDataPullAt,
+  getLastDataPullAtMap,
+  subscribeLiveCache,
+} from "../lib/market/liveCache";
+import {
+  formatPullStamp,
+  refreshLiveMarketForPortfolios,
+} from "../lib/market/refresh";
+import {
   computePortfolioAlignment,
   type PortfolioAlignment,
   type TickerAlignment,
 } from "../lib/forge/alignment";
 import { withPortfolioApplied } from "../lib/forge/appliedPortfolios";
+import { createRefreshScheduler } from "../lib/forge/scheduler";
 import { strategiesForHolding, isDefaultStrategyId } from "../lib/forge/tickerStrategy";
 import {
   debounce,
@@ -204,6 +215,17 @@ interface AppStateValue {
     portfolioId?: string,
   ) => StockAlignment | undefined;
 
+  /** ISO last successful live pull per strategy id. */
+  lastDataPullAtByStrategyId: Record<string, string>;
+  /** mm/dd/yyyy for Current Watch stamp given applied strategies + optional focus. */
+  getWatchPullStamp: (
+    appliedStrategyIds: string[],
+    focusedStrategyId?: string | null,
+  ) => string | null;
+  marketLoading: boolean;
+  marketError: string | null;
+  refreshLiveMarket: () => Promise<void>;
+
   logsByTicker: Record<string, LogEntry[]>;
   addLog: (ticker: string, draft: LogDraft) => void;
   updateLog: (ticker: string, id: string, draft: LogDraft) => void;
@@ -254,6 +276,51 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const [logsByTicker, setLogsByTicker] = useState<Record<string, LogEntry[]>>(
     () => dataSource.getLogs(),
   );
+  const [marketGeneration, setMarketGeneration] = useState(0);
+  const [marketLoading, setMarketLoading] = useState(false);
+  const [marketError, setMarketError] = useState<string | null>(null);
+
+  useEffect(() => {
+    return subscribeLiveCache(() => setMarketGeneration(getLiveCacheGeneration()));
+  }, []);
+
+  const refreshLiveMarket = useCallback(async () => {
+    const tickers = [
+      ...new Set(
+        portfolios.flatMap((portfolio) =>
+          portfolio.holdings.map((holding) => holding.ticker),
+        ),
+      ),
+    ];
+    const applied = strategies.filter(
+      (strategy) => (strategy.appliedPortfolioIds ?? []).length > 0,
+    );
+    setMarketLoading(true);
+    setMarketError(null);
+    try {
+      await refreshLiveMarketForPortfolios(tickers, applied);
+    } catch (error) {
+      setMarketError(
+        error instanceof Error ? error.message : "Market refresh failed",
+      );
+    } finally {
+      setMarketLoading(false);
+    }
+  }, [portfolios, strategies]);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    void refreshLiveMarket();
+  }, [isAuthenticated, refreshLiveMarket]);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    const scheduler = createRefreshScheduler(buckets, strategies, () => {
+      void refreshLiveMarket();
+    });
+    scheduler.start();
+    return () => scheduler.stop();
+  }, [isAuthenticated, buckets, strategies, refreshLiveMarket]);
 
   useEffect(() => {
     persistStrategiesDebounced(strategies);
@@ -824,7 +891,33 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       map[portfolio.id] = computePortfolioAlignment(portfolio, buckets, strategies);
     }
     return map;
-  }, [portfolios, buckets, strategies]);
+    // marketGeneration: liveCache quotes/fundies/techs changed
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [portfolios, buckets, strategies, marketGeneration]);
+
+  const lastDataPullAtByStrategyId = useMemo(
+    () => getLastDataPullAtMap(),
+    [marketGeneration],
+  );
+
+  const getWatchPullStamp = useCallback(
+    (
+      appliedStrategyIds: string[],
+      focusedStrategyId?: string | null,
+    ): string | null => {
+      if (focusedStrategyId) {
+        return formatPullStamp(getLastDataPullAt(focusedStrategyId));
+      }
+      const stamps = appliedStrategyIds
+        .map((id) => getLastDataPullAt(id))
+        .filter((iso): iso is string => Boolean(iso))
+        .map((iso) => Date.parse(iso))
+        .filter((ms) => !Number.isNaN(ms));
+      if (stamps.length === 0) return null;
+      return formatPullStamp(new Date(Math.max(...stamps)).toISOString());
+    },
+    [marketGeneration],
+  );
 
   const getPortfolioAlignment = useCallback(
     (portfolioId: string): PortfolioAlignment =>
@@ -904,16 +997,19 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     const byTicker = alignmentByPortfolio[DEFAULT_PORTFOLIO_ID]?.byTicker ?? {};
     return watchlist.map((item) => {
       const aligned = byTicker[item.ticker];
+      const livePrice = dataSource.getTickerInfo(item.ticker)?.lastPrice ?? 0;
+      const withPrice = { ...item, price: livePrice };
       return aligned
         ? {
-            ...item,
+            ...withPrice,
             conviction: aligned.conviction,
             status: aligned.status,
             resolved: aligned.resolved,
           }
-        : item;
+        : withPrice;
     });
-  }, [watchlist, alignmentByPortfolio]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- marketGeneration: live quotes
+  }, [watchlist, alignmentByPortfolio, marketGeneration]);
 
   const addLog = useCallback(
     (ticker: string, draft: LogDraft) => {
@@ -1009,6 +1105,11 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       getStockAlignment,
       getAppliedStrategiesForTicker,
       getStrategyChipBreakdown,
+      lastDataPullAtByStrategyId,
+      getWatchPullStamp,
+      marketLoading,
+      marketError,
+      refreshLiveMarket,
       logsByTicker,
       addLog,
       updateLog,
@@ -1057,6 +1158,11 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       getStockAlignment,
       getAppliedStrategiesForTicker,
       getStrategyChipBreakdown,
+      lastDataPullAtByStrategyId,
+      getWatchPullStamp,
+      marketLoading,
+      marketError,
+      refreshLiveMarket,
       logsByTicker,
       addLog,
       updateLog,

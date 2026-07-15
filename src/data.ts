@@ -422,19 +422,16 @@ export const TICKERS: Record<string, TickerInfo> = {
 };
 
 /**
- * MOCK-ONLY ticker search catalog for Current Watch edit-mode typeahead.
- *
- * STOP before going live: remove / stop serving this list when a real quote/
- * symbol-search API is wired through `DataSource.searchTickers`. Never blend
- * these mock symbols with live search results — captains would see fake hits
- * alongside real ones. Seeded `TICKERS` entries remain the gate for "has mock
- * data / can add"; symbols here only make search look populated.
+ * QUARANTINED — mock-only search catalog. FreeTier uses Worker `/api/market/search`
+ * + `asyncSearchTickers` and never reads this list. Kept only for `mockDataSource`
+ * / offline fixtures. Do not reintroduce into the live path.
  */
 export interface TickerSearchHit {
   symbol: string;
   name: string;
 }
 
+/** @deprecated FreeTier ignores this — see Worker symbol search. */
 export const TOP_SEARCH_TICKERS: TickerSearchHit[] = [
   { symbol: "AAPL", name: "Apple" },
   { symbol: "MSFT", name: "Microsoft" },
@@ -840,23 +837,21 @@ export const DEFAULT_STRATEGIES: Strategy[] = [
     // 100 within each category; tag weights sum to 100 within each category.
     rules: [
       // ---- Thesis & Fundamentals (17 chips, weights sum to 100) ----
-      { id: "vgd-f1", label: "Revenue Growth", category: "thesis", metric: "revenueGrowthPct", dateRange: "TTM / Latest FY", operator: ">=", value: 3, weightPct: 6, enabled: true, myPlan: "Example: Pause adds until revenue growth re-accelerates above my floor." },
+      { id: "vgd-f1", label: "Revenue Growth", category: "thesis", metric: "revenueGrowthPct", dateRange: "TTM / Latest FY", operator: ">=", value: 3, weightPct: 8, enabled: true, myPlan: "Example: Pause adds until revenue growth re-accelerates above my floor." },
       { id: "vgd-f2", label: "EPS Growth", category: "thesis", metric: "epsGrowthPct", dateRange: "TTM / Latest FY", operator: ">=", value: 5, weightPct: 8, enabled: true, myPlan: "Example: Hold size; no new buys until EPS growth clears my threshold." },
-      { id: "vgd-f3", label: "Profitable", category: "thesis", metric: "netIncome", dateRange: "TTM / Latest FY", operator: ">", value: 0, weightPct: 8, enabled: true, myPlan: "Example: Cut size until the company is profitable again." },
-      { id: "vgd-f4", label: "Cash Flow Positive", category: "thesis", metric: "operatingCashFlow", dateRange: "TTM / Latest FY", operator: ">", value: 0, weightPct: 9, enabled: true, myPlan: "Example: Trim 10% and wait for operating cash flow to turn positive." },
+      { id: "vgd-f3", label: "Profitable", category: "thesis", metric: "netMarginPct", dateRange: "TTM / Latest FY", operator: ">", value: 0, weightPct: 8, enabled: true, myPlan: "Example: Cut size until the company is profitable again." },
+      { id: "vgd-f4", label: "Cash Flow Positive", category: "thesis", metric: "operatingCashFlow", dateRange: "TTM / Latest FY", operator: ">", value: 0, weightPct: 11, enabled: true, myPlan: "Example: Trim 10% and wait for operating cash flow to turn positive." },
       { id: "vgd-f5", label: "Forward P/E", category: "thesis", metric: "forwardPE", dateRange: "Current", operator: "<", value: 25, weightPct: 7, enabled: true, myPlan: "Example: Wait for a cheaper forward P/E before adding." },
       { id: "vgd-f6", label: "Price/Sales", category: "thesis", metric: "priceToSales", dateRange: "Current / TTM", operator: "<", value: 4, weightPct: 5, enabled: true, myPlan: "Example: Stand aside until Price/Sales compresses into my band." },
       { id: "vgd-f7", label: "EV/EBITDA", category: "thesis", metric: "evToEbitda", dateRange: "Current / TTM", operator: "<", value: 12, weightPct: 6, enabled: true, myPlan: "Example: No adds until EV/EBITDA returns to a reasonable multiple." },
-      { id: "vgd-f8", label: "Return on Equity", category: "thesis", metric: "returnOnEquityPct", dateRange: "TTM / Latest FY", operator: ">=", value: 10, weightPct: 8, enabled: true, myPlan: "Example: Review the thesis; pause adds while ROE stays weak." },
+      { id: "vgd-f8", label: "Return on Equity", category: "thesis", metric: "returnOnEquityPct", dateRange: "TTM / Latest FY", operator: ">=", value: 10, weightPct: 10, enabled: true, myPlan: "Example: Review the thesis; pause adds while ROE stays weak." },
       { id: "vgd-f9", label: "Operating Margin", category: "thesis", metric: "operatingMarginPct", dateRange: "TTM / Latest FY", operator: ">=", value: 10, weightPct: 6, enabled: true, myPlan: "Example: Trim 10% if operating margins keep slipping." },
       { id: "vgd-f10", label: "Debt/Equity", category: "thesis", metric: "debtToEquity", dateRange: "Most Recent Quarter", operator: "<", value: 1.5, weightPct: 6, enabled: true, myPlan: "Example: Reduce size until leverage is back under my Debt/Equity limit." },
-      { id: "vgd-f11", label: "Interest Coverage", category: "thesis", metric: "interestCoverage", dateRange: "TTM / Latest FY", operator: ">=", value: 4, weightPct: 5, enabled: true, myPlan: "Example: Hold cash on this name until interest coverage recovers." },
+      { id: "vgd-f11", label: "Gross Margin Strength", category: "thesis", metric: "grossMarginPct", dateRange: "TTM / Latest FY", operator: ">=", value: 30, weightPct: 5, enabled: true, myPlan: "Example: Hold cash on this name until gross margins recover." },
       { id: "vgd-f12", label: "Current Ratio", category: "thesis", metric: "currentRatio", dateRange: "Most Recent Quarter", operator: ">=", value: 1.0, weightPct: 3, enabled: true, myPlan: "Example: No adds until liquidity (current ratio) is healthy again." },
       { id: "vgd-f13", label: "Dividend Yield Floor", category: "thesis", metric: "dividendYieldPct", dateRange: "Current", operator: ">=", value: 1.5, weightPct: 5, enabled: true, myPlan: "Example: Re-check income thesis; pause adds while yield is below my floor." },
       { id: "vgd-f14", label: "Dividend Yield Ceiling", category: "thesis", metric: "dividendYieldPct", dateRange: "Current", operator: "<", value: 6, weightPct: 4, enabled: true, myPlan: "Example: Treat the yield as a warning; trim if it stays stretched." },
       { id: "vgd-f15", label: "Payout Ratio", category: "thesis", metric: "payoutRatioPct", dateRange: "TTM / Latest FY", operator: "<", value: 70, weightPct: 8, enabled: true, myPlan: "Example: Cut size until the payout ratio is sustainable again." },
-      { id: "vgd-f16", label: "Dividend Growth", category: "thesis", metric: "dividendGrowth5yPct", dateRange: "5Y", operator: ">=", value: 3, weightPct: 5, enabled: true, myPlan: "Example: Hold size; no adds until dividend growth re-proves itself." },
-      { id: "vgd-f17", label: "Buyback Support", category: "thesis", metric: "buybackYieldPct", dateRange: "TTM / Latest FY", operator: ">=", value: 1, weightPct: 1, enabled: true, myPlan: "Example: Ignore buybacks for now; focus on the core thesis chips." },
       // ---- Technical Analysis (Setup / Timing) (8 chips) ----
       { id: "vgd-s1", label: "Trend Healthy", category: "setup", metric: "priceAbove200dSma", dateRange: "Current", operator: "is", value: "TRUE", weightPct: 18, enabled: true, myPlan: "Example: No adds until price reclaims the 200-day." },
       { id: "vgd-s2", label: "Intermediate Trend Healthy", category: "setup", metric: "priceAbove50dSma", dateRange: "Current", operator: "is", value: "TRUE", weightPct: 16, enabled: true, myPlan: "Example: Wait for a reclaim of the 50-day before buying." },
@@ -865,16 +860,16 @@ export const DEFAULT_STRATEGIES: Strategy[] = [
       { id: "vgd-s5", label: "Relative Strength Positive", category: "setup", metric: "priceChange3mPct", dateRange: "3M", operator: ">", value: 0, weightPct: 14, enabled: true, myPlan: "Example: Rotate capital to stronger relative-strength names for now." },
       { id: "vgd-s6", label: "Buyers Present", category: "setup", metric: "relativeVolume", dateRange: "Current", operator: ">=", value: 0.8, weightPct: 8, enabled: true, myPlan: "Example: Wait for volume confirmation before adding." },
       { id: "vgd-s7", label: "Price Above Short-Term Trend", category: "setup", metric: "priceAbove20dSma", dateRange: "Current", operator: "is", value: "TRUE", weightPct: 9, enabled: true, myPlan: "Example: No adds until price reclaims the 20-day trend." },
-      { id: "vgd-s8", label: "No Earnings Trap", category: "setup", metric: "daysUntilEarnings", dateRange: "Current", operator: ">", value: 7, weightPct: 10, enabled: true, myPlan: "Example: Stay flat into the print; reassess after earnings." },
+      { id: "vgd-s8", label: "Liquidity For Entry", category: "setup", metric: "avgDollarVolume20d", dateRange: "20D", operator: ">=", value: 5, weightPct: 10, enabled: true, myPlan: "Example: Prefer more liquid names when timing entries." },
       // ---- Risk Rules (9 chips) ----
       { id: "vgd-r1", label: "Market Regime Stable", category: "risk", metric: "spyAbove200dSma", dateRange: "Current", operator: "is", value: "TRUE", weightPct: 18, enabled: true, myPlan: "Example: Pause new buys until SPY reclaims the 200-day." },
       { id: "vgd-r2", label: "Market Stress Contained", category: "risk", metric: "vix", dateRange: "Current", operator: "<", value: 35, weightPct: 16, enabled: true, myPlan: "Example: Cut position size by half until VIX cools." },
       { id: "vgd-r3", label: "No Broad Market Shock", category: "risk", metric: "spy5dChangePct", dateRange: "5D", operator: ">", value: -5, weightPct: 12, enabled: true, myPlan: "Example: Hold cash and wait one session before adding." },
-      { id: "vgd-r4", label: "Sector Stress Contained", category: "risk", metric: "sectorEtf1mChangePct", dateRange: "1M", operator: ">", value: -10, weightPct: 12, enabled: true, myPlan: "Example: Trim 10% of the position on sector weakness." },
+      { id: "vgd-r4", label: "SPY Momentum OK", category: "risk", metric: "spyRsi", dateRange: "Current", operator: ">", value: 40, weightPct: 12, enabled: true, myPlan: "Example: Trim 10% of the position on broad momentum weakness." },
       { id: "vgd-r5", label: "Credit Stress Contained", category: "risk", metric: "highYieldSpreadPct", dateRange: "Current", operator: "<", value: 6, weightPct: 12, enabled: true, myPlan: "Example: Stop adding risk until credit spreads tighten." },
       { id: "vgd-r6", label: "Rate Shock Controlled", category: "risk", metric: "treasury10y5dChangePct", dateRange: "5D", operator: "<", value: 0.25, weightPct: 10, enabled: true, myPlan: "Example: Review rate-sensitive names before any add." },
       { id: "vgd-r7", label: "Liquidity Risk Acceptable", category: "risk", metric: "avgDollarVolume20d", dateRange: "20D", operator: ">=", value: 10, weightPct: 8, enabled: true, myPlan: "Example: Exit in smaller clips over two sessions." },
-      { id: "vgd-r8", label: "Stock Volatility Not Extreme", category: "risk", metric: "atrPct14d", dateRange: "14D", operator: "<", value: 8, weightPct: 7, enabled: true, myPlan: "Example: Reduce size until ATR settles under my limit." },
+      { id: "vgd-r8", label: "Drawdown Not Extreme", category: "risk", metric: "drawdownFrom52wHighPct", dateRange: "Current", operator: "<", value: 40, weightPct: 7, enabled: true, myPlan: "Example: Reduce size until drawdown settles under my limit." },
       { id: "vgd-r9", label: "Beta Risk Acceptable", category: "risk", metric: "beta1y", dateRange: "1Y", operator: "<", value: 2.0, weightPct: 5, enabled: true, myPlan: "Example: Cap this name at half my normal size." },
       // ---- Position Size (2 chips) ----
       { id: "vgd-p1", label: "Position Cap Respected", category: "position", metric: "weightPct", dateRange: "Current", operator: "<=", value: 25, weightPct: 60, enabled: true, myPlan: "Example: Trim back to my position-cap before any new risk." },
@@ -889,12 +884,11 @@ export const DEFAULT_STRATEGIES: Strategy[] = [
     ruleTags: [
       ...buildSystemTags("vgd"),
       // ---- Thesis Tags (weights sum to 100) ----
-      { id: "vgd-tag-quality", label: "Quality", category: "thesis", purpose: "Confirms the company is profitable, cash-generative, and operationally strong.", chipIds: ["vgd-f3", "vgd-f4", "vgd-f8", "vgd-f9"], weightPct: 31, autoApply: "Apply when the company is growing with positive cash flow and healthy operating metrics.", myPlan: "Example: Cut size until quality metrics (profits, cash, margins) re-clear." },
-      { id: "vgd-tag-dividend", label: "Dividend", category: "thesis", purpose: "Confirms the stock provides sustainable shareholder income.", chipIds: ["vgd-f13", "vgd-f14", "vgd-f15", "vgd-f16", "vgd-f5"], weightPct: 22, autoApply: "Apply when the company pays a stable dividend and has dividend history.", myPlan: "Example: Re-check the income thesis before any add." },
+      { id: "vgd-tag-quality", label: "Quality", category: "thesis", purpose: "Confirms the company is profitable, cash-generative, and operationally strong.", chipIds: ["vgd-f3", "vgd-f4", "vgd-f8", "vgd-f9"], weightPct: 32, autoApply: "Apply when the company is growing with positive cash flow and healthy operating metrics.", myPlan: "Example: Cut size until quality metrics (profits, cash, margins) re-clear." },
+      { id: "vgd-tag-dividend", label: "Dividend", category: "thesis", purpose: "Confirms the stock provides sustainable shareholder income.", chipIds: ["vgd-f13", "vgd-f14", "vgd-f15", "vgd-f5"], weightPct: 22, autoApply: "Apply when the company pays a stable dividend and has dividend history.", myPlan: "Example: Re-check the income thesis before any add." },
       { id: "vgd-tag-value", label: "Value", category: "thesis", purpose: "Confirms the stock is reasonably priced.", chipIds: ["vgd-f5", "vgd-f6", "vgd-f7"], weightPct: 18, autoApply: "Apply when valuation is central to the stock's thesis.", myPlan: "Example: Wait for valuation to re-enter my buy zone." },
       { id: "vgd-tag-growth", label: "Growth", category: "thesis", purpose: "Confirms the business is expanding.", chipIds: ["vgd-f1", "vgd-f2"], weightPct: 14, autoApply: "Apply when the stock is owned for growth, expansion, earnings growth, or future upside.", myPlan: "Example: Pause adds until growth chips re-accelerate." },
       { id: "vgd-tag-balance", label: "Balance Sheet", category: "thesis", purpose: "Confirms the company has manageable debt and liquidity risk.", chipIds: ["vgd-f10", "vgd-f11", "vgd-f12"], weightPct: 14, autoApply: "Apply to most strategies, especially cyclical, leveraged, dividend, or defensive holdings.", myPlan: "Example: Reduce size until the balance sheet is back in bounds." },
-      { id: "vgd-tag-shreturns", label: "Shareholder Returns", category: "thesis", purpose: "Gives light credit for buyback support.", chipIds: ["vgd-f17"], weightPct: 1, autoApply: "Apply when buybacks are part of the shareholder return thesis.", myPlan: "Example: De-emphasize buybacks; lean on the core thesis instead." },
       // ---- Technical Setup Tags ----
       { id: "vgd-tag-trend", label: "Trend Health", category: "setup", purpose: "Confirms the stock is trading in a constructive uptrend before buying or adding.", chipIds: ["vgd-s1", "vgd-s2", "vgd-s7"], weightPct: 30, autoApply: "Apply to most stocks. Especially useful for growth, quality, and compounder positions.", myPlan: "Example: No adds until the trend health tag clears." },
       { id: "vgd-tag-entry", label: "Entry Timing", category: "setup", purpose: "Confirms the entry is not obviously stretched, exhausted, or too close to a risky event.", chipIds: ["vgd-s3", "vgd-s8"], weightPct: 25, autoApply: "Apply before opening or adding to any position.", myPlan: "Example: Stand aside until the entry timing setup clears." },
@@ -997,12 +991,12 @@ export const DEFAULT_STRATEGIES: Strategy[] = [
       { id: "aih-s2", label: "Intermediate Trend Healthy", category: "setup", metric: "priceAbove50dSma", dateRange: "Current", operator: "is", value: "TRUE", weightPct: 20, enabled: true, myPlan: "Example: Wait for a reclaim of the 50-day before buying." },
       { id: "aih-s3", label: "Momentum Not Exhausted", category: "setup", metric: "rsi14", dateRange: "Current", operator: "<", value: 75, weightPct: 20, enabled: true, myPlan: "Example: Let RSI cool before adding size." },
       { id: "aih-s4", label: "Relative Strength Positive", category: "setup", metric: "priceChange3mPct", dateRange: "3M", operator: ">", value: 0, weightPct: 20, enabled: true, myPlan: "Example: Rotate capital to stronger names for now." },
-      { id: "aih-s5", label: "No Earnings Trap", category: "setup", metric: "daysUntilEarnings", dateRange: "Current", operator: ">", value: 5, weightPct: 15, enabled: true, myPlan: "Example: Stay flat into the print; reassess after." },
+      { id: "aih-s5", label: "Buyers Present", category: "setup", metric: "relativeVolume", dateRange: "Current", operator: ">=", value: 0.8, weightPct: 15, enabled: true, myPlan: "Example: Wait for volume confirmation before adding." },
       // ---- Risk Rules (5 chips) ----
       { id: "aih-r1", label: "Market Regime Stable", category: "risk", metric: "spyAbove200dSma", dateRange: "Current", operator: "is", value: "TRUE", weightPct: 25, enabled: true, myPlan: "Example: Pause new buys until SPY reclaims the 200-day." },
       { id: "aih-r2", label: "Market Stress Contained", category: "risk", metric: "vix", dateRange: "Current", operator: "<", value: 30, weightPct: 20, enabled: true, myPlan: "Example: Cut position size by half until VIX cools." },
       { id: "aih-r3", label: "No Broad Market Shock", category: "risk", metric: "spy5dChangePct", dateRange: "5D", operator: ">", value: -4, weightPct: 20, enabled: true, myPlan: "Example: Hold cash and wait one session before adding." },
-      { id: "aih-r4", label: "Volatility Tolerable", category: "risk", metric: "atrPct14d", dateRange: "14D", operator: "<", value: 12, weightPct: 20, enabled: true, myPlan: "Example: Reduce size until ATR settles under my limit." },
+      { id: "aih-r4", label: "Drawdown Tolerable", category: "risk", metric: "drawdownFrom52wHighPct", dateRange: "Current", operator: "<", value: 50, weightPct: 20, enabled: true, myPlan: "Example: Reduce size until drawdown settles under my limit." },
       { id: "aih-r5", label: "Liquidity Risk Acceptable", category: "risk", metric: "avgDollarVolume20d", dateRange: "20D", operator: ">=", value: 25, weightPct: 15, enabled: true, myPlan: "Example: Exit in smaller clips over two sessions." },
       // ---- Position Size (2 chips) ----
       { id: "aih-p1", label: "Position Cap Respected", category: "position", metric: "weightPct", dateRange: "Current", operator: "<=", value: 15, weightPct: 60, enabled: true, myPlan: "Example: Trim back under my high-beta position cap before adding." },
@@ -1955,7 +1949,9 @@ export const TECHNICAL_SNAPSHOTS: Record<string, TechnicalSnapshot> = {
 
 // Plan-safe market mood as of MARKET_ASOF: VIX, SPY 14-day RSI, the SPY 200D
 // regime flag, SPY 5-day change, high-yield credit spread, and the 5-day move
-// in the 10-year Treasury yield (percentage points).
+// QUARANTINED — mock MarketContext for mockDataSource only. FreeTier serves
+// Worker `/api/market/context` (SPY/VIX + optional FRED DGS10 / HY OAS) via
+// liveCache. Do not dual-read this seed on the live path.
 export const MARKET_CONTEXT: MarketContext = {
   vix: 16.13,
   spyRsi: 55.0,
@@ -1966,7 +1962,7 @@ export const MARKET_CONTEXT: MarketContext = {
   asOf: MARKET_ASOF,
   source: "mock",
   sourceNotes:
-    "CBOE (VIX), FRED series BAMLH0A0HYM2 (HY OAS, dated 2026-07-06), CNBC/YCharts (SPY, 10Y Treasury). spyRsi is a midpoint of a 54–58 range reported across providers (Finviz/TipRanks/AltIndex/Finbox) due to calc-timing differences.",
+    "QUARANTINED mock seed. Live: Worker market context (FRED BAMLH0A0HYM2 / DGS10 + Yahoo SPY/VIX).",
 };
 
 // Reusable starter chips for the Forge chip library (kept for a later pass —
