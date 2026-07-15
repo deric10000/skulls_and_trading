@@ -1,10 +1,12 @@
-import type { RuleChip, RuleTag, Strategy } from "../../types";
+import type { CheckInterval, MetricKey, RuleChip, RuleTag, Strategy } from "../../types";
 import { CHIP_LIBRARY_SEED, DEFAULT_STRATEGIES, PORTFOLIOS } from "../../data";
 import { portfolioIdsReferencingStrategy } from "./appliedPortfolios";
+import { isLiveSupportedMetric } from "./liveCoverage";
 
 const STORAGE_VERSION = 1;
 const STRATEGIES_KEY = "forge:strategies";
 const CHIP_LIBRARY_KEY = "forge:chipLibrary";
+const BETA0_FLOOR: CheckInterval[] = ["1D", "1W", "1M"];
 
 interface StoredPayload<T> {
   version: number;
@@ -149,11 +151,52 @@ function backfillAppliedPortfolios(strategies: Strategy[]): Strategy[] {
   });
 }
 
+function clampCadence(interval?: CheckInterval): CheckInterval {
+  if (interval && BETA0_FLOOR.includes(interval)) return interval;
+  return "1D";
+}
+
+function pruneUnsupportedChips(chips: RuleChip[] | undefined): RuleChip[] {
+  return (chips ?? []).filter((chip) =>
+    isLiveSupportedMetric(chip.metric as MetricKey),
+  );
+}
+
+/** Layer 1 + Beta 0 cadence: drop unsupported metrics; floor intervals to daily+. */
+function pruneStrategiesForLive(strategies: Strategy[]): Strategy[] {
+  return strategies.map((strategy) => {
+    const rules = pruneUnsupportedChips(strategy.rules);
+    const allowedIds = new Set(rules.map((chip) => chip.id));
+    const pruneTags = (tags: RuleTag[] | undefined): RuleTag[] | undefined => {
+      if (!tags) return tags;
+      return tags.map((tag) => ({
+        ...tag,
+        chipIds: tag.chipIds.filter((id) => allowedIds.has(id) || tag.system),
+      }));
+    };
+    const checkInterval = clampCadence(strategy.checkInterval);
+    return {
+      ...strategy,
+      checkInterval,
+      technicalsInterval: clampCadence(
+        strategy.technicalsInterval ?? checkInterval,
+      ),
+      rules,
+      ruleTags: pruneTags(strategy.ruleTags),
+      trimZoneRules: pruneUnsupportedChips(strategy.trimZoneRules),
+      addZoneRules: pruneUnsupportedChips(strategy.addZoneRules),
+      goToCashRules: pruneUnsupportedChips(strategy.goToCashRules),
+    };
+  });
+}
+
 export function loadPersistedStrategies(): Strategy[] {
   const stored = readPayload<Strategy[]>(STRATEGIES_KEY);
-  if (!stored) return DEFAULT_STRATEGIES;
-  return backfillAppliedPortfolios(
-    backfillLayer3Overlays(backfillMyPlans(stored)),
+  if (!stored) return pruneStrategiesForLive(DEFAULT_STRATEGIES);
+  return pruneStrategiesForLive(
+    backfillAppliedPortfolios(
+      backfillLayer3Overlays(backfillMyPlans(stored)),
+    ),
   );
 }
 
@@ -176,8 +219,10 @@ function backfillChipLibraryPlans(chips: RuleChip[]): RuleChip[] {
 
 export function loadPersistedChipLibrary(): RuleChip[] {
   const stored = readPayload<RuleChip[]>(CHIP_LIBRARY_KEY);
-  if (!stored) return CHIP_LIBRARY_SEED;
-  return backfillChipLibraryPlans(stored);
+  const base = stored
+    ? backfillChipLibraryPlans(stored)
+    : CHIP_LIBRARY_SEED;
+  return pruneUnsupportedChips(base);
 }
 
 export function persistStrategies(strategies: Strategy[]): void {

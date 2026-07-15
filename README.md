@@ -9,6 +9,30 @@ npm install
 npm run dev
 ```
 
+For **live market data** (quotes / search / fundies / Weather inputs), also run
+the Worker so Vite can proxy `/api/market/*`:
+
+```bash
+# Terminal 1 — SPA
+npm run dev
+
+# Terminal 2 — Worker (default port 8787; vite.config.ts proxies /api here)
+npx wrangler dev --config wrangler.jsonc --port 8787
+```
+
+Optional `.dev.vars` (git-ignored) for local Worker secrets:
+
+```bash
+DEMO_PASSWORD=...
+AUTH_SECRET=...
+# Optional free-tier provider keys (Yahoo works without keys; FRED/Finnhub optional)
+FINNHUB_API_KEY=...
+FRED_API_KEY=...
+```
+
+Without wrangler, `npm run dev` still runs the UI; market pulls fail softly
+(null / Needs Data Review) until `/api` is available.
+
 ## Deploy to Cloudflare
 
 This repo is a Cloudflare Worker (`worker/index.ts`) that serves the built SPA

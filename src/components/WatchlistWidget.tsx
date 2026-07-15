@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useAppState, type WatchEditSnapshot } from "../state/AppState";
-import { dataSource } from "../lib/datasource";
-import { formatChange, formatPrice } from "../lib/format";
+import { asyncSearchTickers, dataSource } from "../lib/datasource";
+import { getLiveQuote } from "../lib/market/liveCache";
+import { formatChange, formatPrice, formatDecimals } from "../lib/format";
+import { NeedsDataReviewFlag } from "./NeedsDataReviewFlag";
 import { formatChipCondition, formatObservedBreach } from "../lib/forge/metrics";
 import {
   categoriesForStatus,
@@ -146,6 +148,7 @@ function collectTriggersForCategories(
     }
 
     const failingIds = new Set(failing.map((result) => result.chip.id));
+    void failingIds;
     // Merged scoring prefixes chip ids with `strategyId:` — match tag members
     // against both the raw id and the suffix after the last colon.
     const chipMatchesTag = (chipId: string, tagChipId: string) =>
@@ -375,7 +378,7 @@ function StrategyConvictionBlock({
               style={{ width: `${conviction}%` }}
             />
           </span>
-          <span className="watch-conviction-score">{conviction}</span>
+          <span className="watch-conviction-score">{formatDecimals(conviction)}</span>
         </span>
 
         {planSections.length > 0 ? (
@@ -597,7 +600,7 @@ function WatchSummary({
                       />
                     </span>
                     <span className="watch-conviction-score">
-                      {item.conviction}
+                      {formatDecimals(item.conviction)}
                     </span>
                   </span>
                 </div>
@@ -957,7 +960,7 @@ function WatchItemPreviewCard({ item }: { item: WatchlistItem }) {
                   style={{ width: `${item.conviction}%` }}
                 />
               </span>
-              <span className="watch-conviction-score">{item.conviction}</span>
+              <span className="watch-conviction-score">{formatDecimals(item.conviction)}</span>
             </span>
           </span>
         </span>
@@ -1202,11 +1205,16 @@ export function WatchlistWidget({
     captureWatchEditSnapshot,
     restoreWatchEditSnapshot,
     createPortfolioSource,
+    getWatchPullStamp,
+    lastDataPullAtByStrategyId,
   } = useAppState();
   const [editMode, setEditMode] = useState(false);
   const [editDraft, setEditDraft] = useState("");
   const [editToast, setEditToast] = useState<string | null>(null);
   const [tickerSuggestionsOpen, setTickerSuggestionsOpen] = useState(false);
+  const [editSuggestions, setEditSuggestions] = useState<
+    { symbol: string; name: string }[]
+  >([]);
   const [addPreview, setAddPreview] = useState<WatchlistItem | null>(null);
   /** Qty before this edit session (for buy/sell deltas). */
   const [qtyBaseline, setQtyBaseline] = useState<Record<string, number>>({});
@@ -1250,10 +1258,23 @@ export function WatchlistWidget({
   const isDefaultSource = selectedSource.id === DEFAULT_SOURCE_ID;
   const livePortfolio = portfolios.find((item) => item.id === selectedSource.id);
 
-  const editSuggestions = useMemo(
-    () => dataSource.searchTickers(editDraft),
-    [editDraft],
-  );
+  useEffect(() => {
+    const q = editDraft.trim();
+    if (q.length < 2) {
+      setEditSuggestions([]);
+      return;
+    }
+    let cancelled = false;
+    const handle = window.setTimeout(() => {
+      void asyncSearchTickers(q).then((hits) => {
+        if (!cancelled) setEditSuggestions(hits);
+      });
+    }, 250);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(handle);
+    };
+  }, [editDraft]);
 
   const appliedStrategies = useMemo(
     () =>
@@ -1322,7 +1343,7 @@ export function WatchlistWidget({
   useEffect(() => {
     if (isDefaultSource) return;
     setWatchlistItems((livePortfolio?.holdings ?? []).map(watchItemFromHolding));
-  }, [isDefaultSource, livePortfolio]);
+  }, [isDefaultSource, livePortfolio, lastDataPullAtByStrategyId]);
 
   // The list to render: the default portfolio mirrors live app state (already
   // decorated with computed alignment); other sources use session holdings
@@ -1610,6 +1631,15 @@ export function WatchlistWidget({
     if (index >= 0) setStrategyViewIndex(index + 1);
   }
 
+  const pullStamp = getWatchPullStamp(
+    appliedStrategies.map((strategy) => strategy.id),
+    focusedStrategy?.id ?? null,
+  );
+  const stocksTag =
+    appliedStrategies.length === 0 || !pullStamp
+      ? `${displayItems.length} stocks`
+      : `${displayItems.length} stocks, ${pullStamp}`;
+
   if (summaryItem) {
     return (
       <section className="panel watchlist" aria-labelledby="watchlist-title">
@@ -1643,7 +1673,7 @@ export function WatchlistWidget({
     >
       <div className="panel-head">
         <h2 id="watchlist-title">Current Watch</h2>
-        <span className="panel-tag watchlist-tag">{displayItems.length} stocks</span>
+        <span className="panel-tag watchlist-tag">{stocksTag}</span>
       </div>
       <div className="portfolio-switcher">
         <div className="portfolio-field">
@@ -1891,6 +1921,7 @@ export function WatchlistWidget({
             : item.shares;
           const showOwnedMetrics = displayShares > 0 || canEditQty;
           const lastPrice = item.price;
+          const priceNeedsReview = !getLiveQuote(item.ticker);
           let displayAvg = item.avgPrice;
           if (canEditQty && displayShares !== baselineShares) {
             const side = qtySideFromDelta(displayShares - baselineShares);
@@ -1993,7 +2024,11 @@ export function WatchlistWidget({
                   <span className="watch-metric">
                     <span className="watch-field-label">Last Price</span>
                     <span className="watch-figure watch-figure--strong">
-                      {formatPrice(lastPrice)}
+                      {priceNeedsReview ? (
+                        <NeedsDataReviewFlag />
+                      ) : (
+                        formatPrice(lastPrice)
+                      )}
                     </span>
                   </span>
                   <span className="watch-metric">
@@ -2007,7 +2042,11 @@ export function WatchlistWidget({
                 <span className="watch-metric">
                   <span className="watch-field-label">Last Price</span>
                   <span className="watch-figure watch-figure--strong">
-                    {formatPrice(lastPrice)}
+                    {priceNeedsReview ? (
+                      <NeedsDataReviewFlag />
+                    ) : (
+                      formatPrice(lastPrice)
+                    )}
                   </span>
                 </span>
               )}
@@ -2055,7 +2094,7 @@ export function WatchlistWidget({
                     style={{ width: `${item.conviction}%` }}
                   />
                 </span>
-                <span className="watch-conviction-score">{item.conviction}</span>
+                <span className="watch-conviction-score">{formatDecimals(item.conviction)}</span>
               </span>
             </span>
           );

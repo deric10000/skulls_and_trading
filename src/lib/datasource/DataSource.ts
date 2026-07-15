@@ -9,7 +9,6 @@ import type {
   PortfolioMetric,
   Position,
   RiskRule,
-  Strategy,
   TechnicalSnapshot,
   TickerAnalysis,
   TickerInfo,

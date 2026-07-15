@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { dataSource } from "../lib/datasource";
 import {
   CATEGORY_META,
@@ -17,7 +17,6 @@ import {
 } from "../lib/forge/applyReadiness";
 import {
   ArrowCounterClockwise,
-  CheckCircle,
   FloppyDisk,
   PencilSimple,
   Trash,
@@ -57,7 +56,7 @@ import type {
 
 // ---- Cadence helpers -------------------------------------------------------
 
-const INTERVAL_ORDER: CheckInterval[] = ["15m", "30m", "1h", "4h", "1D", "1W", "1M"];
+const BETA0_CADENCE_FLOOR: CheckInterval[] = ["1D", "1W", "1M"];
 const INTERVAL_LABEL: Record<CheckInterval, string> = {
   "15m": "Every 15 min",
   "30m": "Every 30 min",
@@ -77,41 +76,6 @@ const INTERVAL_LABEL: Record<CheckInterval, string> = {
 export interface StepItem {
   label: string;
   complete: boolean;
-}
-
-function Stepper({
-  steps,
-  tone = "info",
-}: {
-  steps: StepItem[];
-  tone?: "info" | "accent";
-}) {
-  return (
-    <ol className={`forge-stepper forge-stepper--${tone}`}>
-      {steps.map((step, index) => (
-        <Fragment key={step.label}>
-          <li
-            className={step.complete ? "forge-step forge-step--done" : "forge-step"}
-          >
-            {step.complete ? (
-              <CheckCircle className="forge-step-check" aria-hidden weight="fill" />
-            ) : (
-              <span className="forge-step-index">{index + 1}</span>
-            )}
-            <span className="forge-step-label">
-              {step.label}
-              {step.complete ? (
-                <span className="visually-hidden"> (complete)</span>
-              ) : null}
-            </span>
-          </li>
-          {index < steps.length - 1 ? (
-            <li className="forge-step-line" aria-hidden />
-          ) : null}
-        </Fragment>
-      ))}
-    </ol>
-  );
 }
 
 // ---- In-card section tabs (all viewports) ---------------------------------
@@ -346,18 +310,30 @@ export function StrategyForgePanel({ strategy }: { strategy: Strategy | undefine
   const checkInterval = strategy.checkInterval ?? "1D";
   const technicalsInterval = strategy.technicalsInterval ?? checkInterval;
 
-  // Technicals can't refresh faster than the strategy check (we wouldn't have
-  // the data) and never below 15m. Clamp the option list to >= checkInterval.
-  const checkIndex = INTERVAL_ORDER.indexOf(checkInterval);
-  const technicalsOptions = INTERVAL_ORDER.slice(Math.max(0, checkIndex)).map(
+  // Beta 0: only daily+ options. Technicals can't be faster than check.
+  const checkOptions = BETA0_CADENCE_FLOOR.map((interval) => ({
+    value: interval,
+    label: INTERVAL_LABEL[interval],
+  }));
+  const checkIndex = BETA0_CADENCE_FLOOR.indexOf(
+    (BETA0_CADENCE_FLOOR.includes(checkInterval)
+      ? checkInterval
+      : "1D") as (typeof BETA0_CADENCE_FLOOR)[number],
+  );
+  const technicalsOptions = BETA0_CADENCE_FLOOR.slice(Math.max(0, checkIndex)).map(
     (interval) => ({ value: interval, label: INTERVAL_LABEL[interval] }),
   );
 
   function handleCheckIntervalChange(value: string) {
     const next = value as CheckInterval;
-    const nextIndex = INTERVAL_ORDER.indexOf(next);
-    const techIndex = INTERVAL_ORDER.indexOf(technicalsInterval);
-    const nextTech = techIndex < nextIndex ? next : technicalsInterval;
+    const nextIndex = BETA0_CADENCE_FLOOR.indexOf(
+      next as (typeof BETA0_CADENCE_FLOOR)[number],
+    );
+    const techIndex = BETA0_CADENCE_FLOOR.indexOf(
+      technicalsInterval as (typeof BETA0_CADENCE_FLOOR)[number],
+    );
+    const nextTech =
+      techIndex < nextIndex || techIndex < 0 ? next : technicalsInterval;
     updateStrategy(id, { checkInterval: next, technicalsInterval: nextTech });
   }
 
@@ -663,12 +639,11 @@ export function StrategyForgePanel({ strategy }: { strategy: Strategy | undefine
             <Dropdown
               id="forge-check-interval"
               label="Strategy check interval"
-              value={checkInterval}
+              value={
+                BETA0_CADENCE_FLOOR.includes(checkInterval) ? checkInterval : "1D"
+              }
               onChange={handleCheckIntervalChange}
-              options={INTERVAL_ORDER.map((interval) => ({
-                value: interval,
-                label: INTERVAL_LABEL[interval],
-              }))}
+              options={checkOptions}
             />
           </label>
           <label className="config-field">
@@ -676,13 +651,17 @@ export function StrategyForgePanel({ strategy }: { strategy: Strategy | undefine
               Technical Indicators
               <InfoTip
                 label="About the technicals cadence"
-                body="The candle size technical indicators use. It can't refresh faster than the strategy check, and never below 15 minutes."
+                body="The candle size technical indicators use. Beta 0 free-tier floor is daily or slower; can't refresh faster than the strategy check."
               />
             </span>
             <Dropdown
               id="forge-technicals-interval"
               label="Technicals interval"
-              value={technicalsInterval}
+              value={
+                BETA0_CADENCE_FLOOR.includes(technicalsInterval)
+                  ? technicalsInterval
+                  : "1D"
+              }
               onChange={(value) =>
                 updateStrategy(id, { technicalsInterval: value as CheckInterval })
               }

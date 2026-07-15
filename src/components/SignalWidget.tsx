@@ -1,5 +1,6 @@
 import { useAppState } from "../state/AppState";
 import { dataSource } from "../lib/datasource";
+import { formatDecimals } from "../lib/format";
 import { statusCopy } from "../lib/forge/status";
 import { STATUS_TONE } from "../lib/status";
 import { WatchAlignStack } from "./StatusBadge";
@@ -53,7 +54,7 @@ export function SignalWidget() {
         <WatchAlignStack resolved={resolved} fallbackStatus={selectedItem.status} />
         <div className="signal-confidence">
           <span className="signal-confidence-label">
-            Conviction {resolved.conviction}%
+            Conviction {formatDecimals(resolved.conviction)}%
           </span>
           <span className="conviction-track">
             <span

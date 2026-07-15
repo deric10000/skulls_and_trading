@@ -299,7 +299,7 @@ export function Layer3ZoneTableModal({
         : metricMeta.format === "text"
           ? ""
           : operator === "between"
-            ? [0, 0]
+            ? ([0, 0] as [number, number])
             : 0;
     patchChip(id, {
       metric: metricKey,

@@ -2,14 +2,17 @@
 //
 // Validates the shared "Demo Captain" password server-side so it never ships in
 // the client bundle, then sets a signed, HttpOnly cookie. IMPORTANT: this gates
-// the login *flow* only. The static SPA bundle (fake demo data) is still
-// publicly downloadable and the signed-in state lives in client React, so this
-// is NOT a security boundary. Harden before handling real/live data.
+// the login *flow* only. The static SPA bundle is still publicly downloadable
+// and the signed-in state lives in client React, so this is NOT a security
+// boundary for personal/brokerage data.
+//
+// Free-tier *public* market data is proxied under /api/market/* (secrets stay
+// on the Worker). Harden further before any real personal holdings APIs.
 
-interface Env {
-  // Static asset binding (the built SPA in ./dist), configured in wrangler.jsonc.
+import { handleMarketApi, type MarketEnv } from "./market";
+
+interface Env extends MarketEnv {
   ASSETS: { fetch: (request: Request) => Promise<Response> };
-  // Secrets — set with `wrangler secret put DEMO_PASSWORD` / `AUTH_SECRET`.
   DEMO_PASSWORD: string;
   AUTH_SECRET: string;
 }
@@ -28,8 +31,6 @@ function jsonResponse(
   });
 }
 
-// Length-safe-ish constant-time compare so the password check doesn't leak via
-// early-return timing.
 function timingSafeEqual(a: string, b: string): boolean {
   if (a.length !== b.length) return false;
   let mismatch = 0;
@@ -96,8 +97,9 @@ export default {
       });
     }
 
-    // Everything else is served by the static asset pipeline (with the
-    // single-page-application fallback configured in wrangler.jsonc).
+    const market = await handleMarketApi(request, env, url.pathname);
+    if (market) return market;
+
     return env.ASSETS.fetch(request);
   },
 };
