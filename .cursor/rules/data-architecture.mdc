@@ -83,8 +83,9 @@ covered by that strategy's `appliedPortfolioIds` for the same source.
 - Read weather through `dataSource.getMarketWeather(timeframe)`, never by
   importing `weather/mock.ts` from a component.
 - FreeTier: `weather/live.ts` builds from live `MarketContext` (Worker FRED +
-  index ETFs). Cache app-wide per timeframe until context refreshes; filter per
-  user client-side via `TICKERS[ticker].sector`/`.industry`. See
+  index ETFs). Sector/industry taxonomy is derived from `TICKERS` (same labels
+  the Home cascade uses). Cache app-wide per timeframe until context refreshes;
+  filter per user client-side via `TICKERS[ticker].sector`/`.industry`. See
   `data-architecture.md` §5.
 
 ## Strategy Forge (`src/lib/forge/`)

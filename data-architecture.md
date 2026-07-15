@@ -116,6 +116,8 @@ symbol search are filled through Cloudflare Worker routes under `/api/market/*`
    no-data; critical nulls → `NeedsDataReviewFlag`.
 7. **Weather:** FreeTier builds readings from live `MarketContext` via
    `weather/live.ts` (mock seeds quarantined for `mockDataSource` only).
+   Sector/industry keys come from `TICKERS` (SSOT) — do not maintain a
+   parallel industry name list in `live.ts`.
 
 ```ts
 // Active binding today:
@@ -156,7 +158,7 @@ Module map:
 | `scoring.ts` | Pure engine: trend score, weather score, priority classification, confidence (+ session caps), 200-day climate context, "why" copy. |
 | `session.ts` | ET-clock session detection (premarket / live / afterhours), DST-safe via `Intl`. |
 | `mock.ts` | Authored sub-score seeds for `mockDataSource` only (quarantined). |
-| `live.ts` | FreeTier Weather from live `MarketContext` via `buildReading()`. |
+| `live.ts` | FreeTier Weather from live `MarketContext`; sector/industry keys from `TICKERS`. |
 | `graphics.ts` | Resolves a `dynamicGraphicKey` to a background treatment (gradient fallback now, image/video later). |
 
 Scoring is **provider-agnostic** — `buildReading()` takes normalized 0–100

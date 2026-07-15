@@ -59,6 +59,7 @@ function tilt(
   };
 }
 
+/** Soft tilts until real sector RS ships — keyed by `TICKERS[].sector`. */
 const SECTOR_TILT: Record<string, number> = {
   Technology: 6,
   Financials: 0,
@@ -67,14 +68,28 @@ const SECTOR_TILT: Record<string, number> = {
   "Consumer Discretionary": -4,
 };
 
-const INDUSTRY_SECTOR: Record<string, string> = {
-  Semiconductors: "Technology",
-  "Software / Cloud": "Technology",
-  "Consumer Finance": "Financials",
-  "Aerospace / Defense Tech": "Industrials",
-  Beverages: "Consumer Staples",
-  "Personal Care": "Consumer Discretionary",
-};
+/**
+ * Industry → sector taxonomy from `TICKERS` (SSOT). Keeps Industry Weather
+ * keys identical to stock cascade labels (ACHR → "Aerospace & eVTOL", etc.).
+ */
+function industrySectorsFromTickers(): Record<string, string> {
+  const map: Record<string, string> = {};
+  for (const info of Object.values(TICKERS)) {
+    if (info.industry && info.sector) map[info.industry] = info.sector;
+  }
+  return map;
+}
+
+function sectorsFromTickers(
+  industrySectors: Record<string, string>,
+): string[] {
+  const names = new Set<string>();
+  for (const info of Object.values(TICKERS)) {
+    if (info.sector) names.add(info.sector);
+  }
+  for (const sector of Object.values(industrySectors)) names.add(sector);
+  return [...names].sort((a, b) => a.localeCompare(b));
+}
 
 /**
  * Build one session snapshot from live MarketContext. Cached by caller/freeTier.
@@ -88,6 +103,8 @@ export function buildLiveWeatherSnapshot(
     : new Date().toISOString();
   const marketSub = subScoresFromMarketContext(ctx);
   const climate = climateFromContext(ctx);
+  const industrySectors = industrySectorsFromTickers();
+  const sectorNames = sectorsFromTickers(industrySectors);
 
   const market = buildReading({
     layer: "market",
@@ -100,7 +117,8 @@ export function buildLiveWeatherSnapshot(
   });
 
   const sectors: Record<string, WeatherLayerReading> = {};
-  for (const [name, delta] of Object.entries(SECTOR_TILT)) {
+  for (const name of sectorNames) {
+    const delta = SECTOR_TILT[name] ?? 0;
     sectors[name] = buildReading({
       layer: "sector",
       label: name,
@@ -114,13 +132,14 @@ export function buildLiveWeatherSnapshot(
   }
 
   const industries: Record<string, WeatherLayerReading> = {};
-  for (const [name, sector] of Object.entries(INDUSTRY_SECTOR)) {
+  for (const [name, sector] of Object.entries(industrySectors)) {
     const parent = sectors[sector];
+    const delta = (SECTOR_TILT[sector] ?? 0) + 2;
     industries[name] = buildReading({
       layer: "industry",
       label: name,
       timeframe,
-      subScores: tilt(marketSub, (SECTOR_TILT[sector] ?? 0) + 2),
+      subScores: tilt(marketSub, delta),
       priceVs200DayMA: climate.priceVs200DayMA,
       distanceFrom200DayMA: climate.distanceFrom200DayMA,
       classify: { higherLayerScore: parent?.score },
@@ -152,6 +171,6 @@ export function buildLiveWeatherSnapshot(
     sectors,
     industries,
     stocks,
-    industrySectors: { ...INDUSTRY_SECTOR },
+    industrySectors,
   };
 }
