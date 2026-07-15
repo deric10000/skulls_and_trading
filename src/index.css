@@ -7963,6 +7963,46 @@ button.nav-link {
   color: var(--text-strong);
 }
 
+/* ----------------------------------------------------------------------
+   Mobile text-entry: prevent iOS WebKit sticky page-zoom + app-owned fill.
+
+   Safari auto-zooms the *page* when a focused native control’s computed
+   font-size is < 16px, and often does not restore scale on blur (no
+   visualViewport.resetScale() in WebKit yet). Meta-viewport “unzoom” hacks
+   only snapped layout. Instead: keep page scale at 1 via a 16px floor, and
+   enlarge the focused field with CSS so typing still feels filled.
+
+   Element selectors cover current and future input/textarea/select
+   (contenteditable would need its own ≥16px rule if added later).
+---------------------------------------------------------------------- */
+@media (max-width: 767px) {
+  input:not([type="button"]):not([type="submit"]):not([type="reset"]):not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]):not([type="color"]):not([type="hidden"]):not([type="image"]),
+  textarea,
+  select {
+    /* !important: beat .forge-cell-input / .auth-field rem+px overrides */
+    font-size: 16px !important;
+  }
+
+  input:not([type="button"]):not([type="submit"]):not([type="reset"]):not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]):not([type="color"]):not([type="hidden"]):not([type="image"]):focus,
+  textarea:focus,
+  select:focus {
+    position: relative;
+    z-index: 3;
+    transform: scale(1.12);
+    transform-origin: center center;
+    transition: transform 120ms ease;
+  }
+}
+
+@media (max-width: 767px) and (prefers-reduced-motion: reduce) {
+  input:not([type="button"]):not([type="submit"]):not([type="reset"]):not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]):not([type="color"]):not([type="hidden"]):not([type="image"]):focus,
+  textarea:focus,
+  select:focus {
+    transform: none;
+    transition: none;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   * {
     transition: none !important;
