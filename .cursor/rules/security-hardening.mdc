@@ -1,39 +1,34 @@
 ---
-description: Security posture reminder — the demo login is a cosmetic B1 gate, not a real boundary. Require hardening before any real/live or realistic personal/financial data.
+description: Security posture — Beta 0 uses Supabase invite-only auth for personal saves; Demo Captain is retired as a save path.
 alwaysApply: true
 ---
 
-# Security hardening reminder (the demo gate is NOT a real boundary)
+# Security hardening
 
-The app ships a **B1 demo gate** (see `worker/index.ts` and
-`src/components/auth/LoginScreen.tsx`):
+## Beta 0 identity boundary (invite-only)
 
-- The "Continue as Demo Captain" password is validated **server-side** in the
-  Cloudflare Worker (`DEMO_PASSWORD` secret), so it never ships in the bundle.
-- BUT the static SPA bundle is public, all demo data is fake/in-bundle, and the
-  "signed-in" state is plain client-side React. It gates the **flow**, not the
-  **data**, and is trivially bypassable by a technical user. Treat it as a
-  speed bump, not security.
+Persisted portfolios/strategies for Beta accounts use **Supabase Auth + Postgres
+RLS** (`supabase/schema.sql`). Sign-up requires a **one-time invite code**.
+Admin Captain (`profiles.role = admin`) vs beta. Local and Cloudflare share the
+same Supabase project when env vars match.
 
-## STOP and remind the user before building any of these
+- SPA: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`
+- Worker: `SUPABASE_URL`, `SUPABASE_ANON_KEY` (JWT check on `/api/market/*` when
+  configured; set `MARKET_AUTH_REQUIRED=false` for open local market proxy)
+- Demo Captain (`ENABLE_DEMO_GATE=true`) is **legacy only** — not a save path
+  for personal holdings
 
-Proactively warn the user (don't just start coding) when a request involves:
+## STOP and remind before
 
-- Real or **live** data, real brokerage/account **connections** (Webull,
-  E*Trade, MooMoo, Plaid, OAuth), API keys, or fetching real market/portfolio
-  data.
-- Inputting data that resembles a **real person's** account, holdings,
-  balances, PII, or credentials — the user's own or anyone else's — even if
-  labeled "sample" or "test" data.
-- Persisting user data to a real backend or database.
+- Real brokerage/account connections (Webull, E*Trade, MooMoo, Plaid, OAuth)
+- Putting **unauthenticated** or shared-demo password saves in front of real
+  personal/financial data
+- Shipping secrets in the SPA bundle
 
-## What to say
+## What to say if someone proposes Demo-persisted real books
 
-> "The current demo gate is cosmetic (B1) — the bundle is public and auth is
-> client-side, so it doesn't actually protect data. Before we handle real or
-> realistic personal/financial data we should harden: move data behind the
-> Worker (cookie-required API), add a real auth provider
-> (Supabase/Clerk/Auth0/Cognito) and/or Cloudflare Access, keep secrets
-> server-side, and enforce real sessions. Want to do that first?"
+> "Demo Captain is retired for saved Beta work. Personal strategies/holdings go
+> behind invite-only Supabase accounts with RLS. Want to issue an invite and use
+> Admin Captain instead?"
 
-Do not silently build real-data features on top of the demo gate.
+Do not silently put real-data persistence back on the B1 demo cookie.

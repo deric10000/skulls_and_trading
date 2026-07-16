@@ -5,9 +5,11 @@ brokerage data later. Pairs with the enforceable rule in
 `.cursor/rules/data-architecture.mdc` (this file is the long-form reference;
 the `.mdc` is the short contract the agent follows on edits).
 
-> All data today is **static mock**. There are no APIs, no brokerage sync, and no
-> live market data. Values are placeholders — see
-> `.cursor/rules/security-hardening.mdc` before wiring anything realistic.
+> **Beta 0:** Market quotes/fundies/techs/Weather are FreeTier via the Worker.
+> **User workspaces** (portfolios, strategies, chips) persist in **Supabase
+> Postgres** behind invite-only auth — see § Forge / user persistence below.
+> Seed `PORTFOLIOS` in `src/data.ts` are fixtures for mock/demo catalogs only;
+> Beta accounts start empty and do not hydrate those books.
 
 ## 1. Single source of truth
 
@@ -310,38 +312,31 @@ allocation of one or more tickers. A ticker may live in **several** slices withi
 the same strategy (different share counts / entry dates). Modeled + seeded now;
 the bucket/share-allocation **authoring UI is a later dashboard pass**.
 
-### Forge persistence (demo)
+### User persistence (Beta 0 — Supabase)
 
-`strategies` and `chipLibrary` hydrate from `localStorage` on load
-(`src/lib/forge/persistence.ts`) and debounce-save on change. Market snapshots,
-portfolios (holdings + `strategyIds`), and buckets remain static seeds on page
-load — ticker enable/disable edits live in AppState for the session.
-On load, `isDefault` strategies are backfilled so `appliedPortfolioIds` covers
-every seeded `PORTFOLIOS` entry whose holdings reference them (seed wins;
-Demo Captain does not keep apply prefs across reload/sign-out). Customs are
-untouched. When Pass 2 moves strategies server-side, **do not** run this seed
-backfill against API data.
-**Reset to default** on a default
-strategy restores `DEFAULT_STRATEGIES` and overwrites storage for that strategy
-set. No API required for demo tuning.
+Invite-only accounts hydrate Home + Forge editable state from Postgres
+`user_state` (`src/lib/userStore/`, RLS by `auth.uid()`). Debounced save on
+change. **Postgres is source of truth** (not `localStorage`).
 
-### Conviction flows downstream (no new UI system)
+- New Beta users start with **empty portfolios/watchlists**; seed `PORTFOLIOS`
+  are not hydrated.
+- `DEFAULT_STRATEGIES` remain available; bodies always re-seed from
+  `src/data.ts` on hydrate; only `appliedPortfolioIds` / `tickerExclusions`
+  merge from storage. Defaults reject body patches in `updateStrategy`.
+- `conviction_snapshots` append on per-strategy cadence refresh (charts later).
+- Soft caps: `src/lib/forge/budgets.ts` (tickers + active chips); Admin bypass.
+- Schema: `supabase/schema.sql`. Auth helpers: `src/lib/auth/`.
 
-`AppState` computes `alignmentByPortfolio` from `buckets` + `strategies` +
-`appliedPortfolioIds` + the snapshots, then **overlays** the computed
-`conviction`/`status`/`resolved` onto the watchlist items. The portfolio
-snapshot uses **market-value-weighted portfolio alignment** (`StatusStack` +
-`PortfolioCompass`), not the first row's status. Dashboard Strategy Check reads
-the same Forge alignment (mock `computeSignal` archived). Forge
-edits re-score immediately across Home, Dashboard, and Forge Preview watchlists.
+Legacy `src/lib/forge/persistence.ts` localStorage helpers remain for fixtures /
+offline only — do not use as SoT for Beta accounts.
 
-### Cadence rules (enforced in the Forge UI)
+### Cadence rules (Beta 0)
 
-- `checkInterval` (15m → 1M, default Daily) is the re-score + chip-refresh
-  cadence and the **default** technicals candle size.
-- `technicalsInterval` is user-adjustable but clamped: **≥ 15m** and **never
-  faster than `checkInterval`** (we couldn't refresh data we don't poll for).
-- Fundamentals refresh on a fixed daily cadence and are **not** user-selectable.
+- Scheduler: `src/lib/forge/scheduler.ts` — **per-strategy** dues for assigned
+  tickers; Beta 0 floor `1D` / `1W` / `1M`; daily uses ET regular-session due
+  semantics (not a rolling “refresh everything on login” only).
+- Same ticker under two strategies → two dues / independent pulls for scoring.
+- Sub-daily intervals remain UI-clamped / not enabled for free-tier Beta 0.
 
 ### Chip library — "Add Rule" (System Defaults / My Chips)
 

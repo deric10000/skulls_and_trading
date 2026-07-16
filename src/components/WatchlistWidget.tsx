@@ -1547,6 +1547,10 @@ export function WatchlistWidget({
       showEditToast("Already on this list");
       return;
     }
+    if (result === "budget") {
+      showEditToast("Ticker budget reached");
+      return;
+    }
     setEditDraft("");
     setTickerSuggestionsOpen(false);
   }

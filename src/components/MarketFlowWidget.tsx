@@ -212,13 +212,34 @@ export function MarketFlowWidget({
   };
   const selectionForStock = useCallback((ticker: string | null): Selection => {
     const info = ticker ? dataSource.getTickerInfo(ticker) : undefined;
-    return { sector: info?.sector ?? null, industry: info?.industry ?? null, stock: ticker };
-  }, []);
+    if (info?.sector || info?.industry) {
+      return {
+        sector: info.sector ?? null,
+        industry: info.industry ?? null,
+        stock: ticker,
+      };
+    }
+    // Empty watch: still open Market → Sector → Industry from catalog taxonomy.
+    const sector = Object.keys(snapshot.sectors).sort((a, b) =>
+      a.localeCompare(b),
+    )[0] ?? null;
+    const industry =
+      (sector
+        ? Object.entries(snapshot.industrySectors)
+            .filter(([, s]) => s === sector)
+            .map(([name]) => name)
+            .sort((a, b) => a.localeCompare(b))[0]
+        : null) ??
+      Object.keys(snapshot.industries).sort((a, b) => a.localeCompare(b))[0] ??
+      null;
+    return { sector, industry, stock: null };
+  }, [snapshot]);
 
   // The watch-driven base = the focused name (or the first watch name, in watch
   // order — only Prev/Next stepping is alphabetical). Selecting a name in Current
   // Watch refocuses every layer; local dropdown / Prev-Next overrides then
-  // persist until the base changes again.
+  // persist until the base changes again. With no watch names, base stays null
+  // and selectionForStock picks the first catalog sector/industry.
   const baseTicker =
     focusTicker ?? watchTickers.find((ticker) => snapshot.stocks[ticker]) ?? null;
   const [sel, setSel] = useState<Selection>(() => selectionForStock(baseTicker));

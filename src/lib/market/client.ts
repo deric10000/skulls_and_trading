@@ -1,5 +1,6 @@
 /**
  * SPA client for Worker `/api/market/*` routes. No provider secrets here.
+ * Attaches Supabase access token when present (Beta Worker JWT gate).
  */
 
 import type {
@@ -8,7 +9,18 @@ import type {
   TechnicalSnapshot,
   TickerQuote,
 } from "../../types";
+import { getAccessToken } from "../auth/session";
 import type { ProviderBudget } from "./liveCache";
+
+async function authHeaders(
+  extra: Record<string, string> = {},
+): Promise<Record<string, string>> {
+  const token = await getAccessToken();
+  return {
+    ...extra,
+    ...(token ? { authorization: `Bearer ${token}` } : {}),
+  };
+}
 
 async function readJson<T>(res: Response): Promise<T | null> {
   if (!res.ok) return null;
@@ -27,7 +39,7 @@ export async function fetchMarketQuotes(
   try {
     const res = await fetch("/api/market/quotes", {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: await authHeaders({ "content-type": "application/json" }),
       body: JSON.stringify({ symbols: unique }),
     });
     return readJson(res);
@@ -42,6 +54,7 @@ export async function fetchMarketSearch(
   try {
     const res = await fetch(
       `/api/market/search?q=${encodeURIComponent(query.trim())}`,
+      { headers: await authHeaders() },
     );
     return readJson(res);
   } catch {
@@ -55,6 +68,7 @@ export async function fetchMarketFundamentals(
   try {
     const res = await fetch(
       `/api/market/fundamentals?symbol=${encodeURIComponent(symbol)}`,
+      { headers: await authHeaders() },
     );
     return readJson(res);
   } catch {
@@ -68,6 +82,7 @@ export async function fetchMarketTechnicals(
   try {
     const res = await fetch(
       `/api/market/technicals?symbol=${encodeURIComponent(symbol)}`,
+      { headers: await authHeaders() },
     );
     return readJson(res);
   } catch {
@@ -80,7 +95,9 @@ export async function fetchMarketContext(): Promise<{
   budgets?: ProviderBudget[];
 } | null> {
   try {
-    const res = await fetch("/api/market/context");
+    const res = await fetch("/api/market/context", {
+      headers: await authHeaders(),
+    });
     return readJson(res);
   } catch {
     return null;

@@ -3,6 +3,10 @@ dist
 .DS_Store
 *.log
 *.tsbuildinfo
+# Local Vite env (Supabase URL/anon — never commit)
+.env
+.env.*
+!.env.example
 # Local Cloudflare Worker secrets for `wrangler dev` (never commit secrets)
 .dev.vars
 .dev.vars.*
