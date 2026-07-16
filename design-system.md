@@ -301,18 +301,14 @@ This section maps the design system to what is implemented in code.
 - Card content is a dark translucent **head pill** (`.weather-headpill`, the
   click target that opens the detail view) holding: the shared numbered badge
   (`.flow-index` — soft-gold disc + `--accent-strong` number), the layer/entity
-  label (`.weather-layer`, matches
-  `.watch-ticker`), the condition chip (`ConditionChip`), and the confidence chip
-  (`ConfidenceChip` — `SealPercent` icon + `NN%`). The card stays minimal — the
-  full "why"/sub-scores live in the detail view.
-- **Chip coloring (two different rules):**
-  - `ConditionChip` is tone-colored by the condition's severity via
-    `SEVERITY_TONE` (e.g. positive conditions → green `.status--positive`).
-  - `ConfidenceChip` is colored by **range, not condition tone**, via
-    `confidenceTone(value)`: `>= 70` → `.status--positive` (high), `40–69` →
-    `.status--warning` (medium), `< 40` → `.status--negative` (low). Thresholds
-    (`CONFIDENCE_HIGH_MIN` / `CONFIDENCE_MEDIUM_MIN` in `lib/weather`) anchor to
-    the Figma examples (90/60/39) and sit just under the session confidence caps.
+  label (`.weather-layer`, matches `.watch-ticker`), and the condition chip
+  (`ConditionChip`). The card stays minimal — the full "why"/sub-scores live in
+  the detail view. Confidence is not shown on cards or in the detail score line;
+  detail ends with a snapshot disclaimer under Climate.
+- **Chip coloring:** `ConditionChip` is tone-colored by the condition's severity
+  via `SEVERITY_TONE` (e.g. positive conditions → green `.status--positive`).
+  Range-based helpers such as `confidenceTone` remain in `lib/weather` for any
+  future measure chip; they are not used on Market Weather cards.
 - Condition icons live in the shared library (`WEATHER_CONDITIONS[id].defaultIcon`):
   Risk-On Tide → `Waves`, Breakout Wind → `Wind`, Rotation Current → `Hurricane`,
   Headwind → `WindReversed` (the `Wind` glyph mirrored on X, so the gust opposes

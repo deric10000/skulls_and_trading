@@ -5479,10 +5479,10 @@ select.forge-cell-input {
 }
 
 /* Head pill: dark translucent capsule holding the index badge, layer label, and
-   the condition + confidence chips (matches the Figma design). A non-interactive
-   `<div>` (the whole card is the click target) that inherits IBM Plex Sans + the
-   1.55 line-height, so the chips match the design-system chips elsewhere. Wraps
-   gracefully on narrow widths rather than clipping. */
+   the condition chip. A non-interactive `<div>` (the whole card is the click
+   target) that inherits IBM Plex Sans + the 1.55 line-height, so the chips match
+   the design-system chips elsewhere. Wraps gracefully on narrow widths rather
+   than clipping. */
 .weather-headpill {
   display: inline-flex;
   align-items: center;
@@ -5504,13 +5504,8 @@ select.forge-cell-input {
   color: var(--text-strong);
 }
 
-.weather-condition-chip,
-.weather-confidence-chip {
+.weather-condition-chip {
   gap: 0.3rem;
-}
-
-.weather-confidence-chip {
-  font-variant-numeric: tabular-nums;
 }
 
 /* Empty stock card prompt — kept legible over art with its own dark capsule. */
@@ -5590,7 +5585,7 @@ select.forge-cell-input {
 }
 
 /* Detail view (selecting a layer). */
-.weather-confidence-line {
+.weather-score-line {
   margin: 0;
   font-size: 0.78rem;
   color: var(--text-muted);
@@ -5608,6 +5603,13 @@ select.forge-cell-input {
 .weather-why-line strong,
 .weather-climate strong {
   color: var(--text-strong);
+}
+
+.weather-disclaimer {
+  margin: 0;
+  font-size: 0.78rem;
+  line-height: 1.5;
+  color: var(--text-muted);
 }
 
 .weather-scores {

@@ -2,9 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAppState } from "../state/AppState";
 import { dataSource } from "../lib/datasource";
 import { Dropdown } from "./Dropdown";
-import { CaretLeft, CaretRight, SealPercent } from "../lib/icons";
+import { CaretLeft, CaretRight } from "../lib/icons";
 import {
-  confidenceTone,
   getMarketSession,
   resolveWeatherGraphic,
   SESSION_META,
@@ -18,6 +17,10 @@ import type {
   WeatherLayerReading,
   WeatherSubScores,
 } from "../lib/weather";
+
+/** Detail-view footer — conditions are a read, not a forecast. */
+const WEATHER_SNAPSHOT_DISCLAIMER =
+  "This is a snapshot of how conditions look right now — not a prediction of where the market will go.";
 
 // Beginner-friendly tooltip copy for the five instruments (product spec).
 const SUBSCORE_META: {
@@ -69,18 +72,6 @@ function ConditionChip({ reading }: { reading: WeatherLayerReading }) {
     >
       <Icon aria-hidden />
       {condition.label}
-    </span>
-  );
-}
-
-// Confidence chip — SealPercent icon + NN%. Colored by RANGE (high=positive,
-// medium=warning, low=negative) via `confidenceTone`, independent of the
-// condition's own tone (matches the Figma confidence chip set).
-function ConfidenceChip({ value }: { value: number }) {
-  return (
-    <span className={`chip status--${confidenceTone(value)} weather-confidence-chip`}>
-      <SealPercent aria-hidden />
-      {formatDecimals(value)}%
     </span>
   );
 }
@@ -337,9 +328,8 @@ export function MarketFlowWidget({
                 <ConditionChip reading={detailReading} />
               </span>
             </header>
-            <p className="weather-confidence-line">
-              Confidence {formatDecimals(detailReading.confidence)}% · Score{" "}
-              {formatDecimals(detailReading.score)}/100
+            <p className="weather-score-line">
+              Score {formatDecimals(detailReading.score)}/100
             </p>
             <p className="flow-summary-note">{detailReading.explanation}</p>
             <p className="weather-why-line">
@@ -358,6 +348,7 @@ export function MarketFlowWidget({
             <p className="weather-climate">
               <strong>Climate:</strong> {detailReading.climateContext.note}
             </p>
+            <p className="weather-disclaimer">{WEATHER_SNAPSHOT_DISCLAIMER}</p>
           </div>
         </div>
       </section>
@@ -371,8 +362,8 @@ export function MarketFlowWidget({
         <span className="panel-tag">{SESSION_META[session].label}</span>
       </div>
       <p className="panel-intro">
-        We don&rsquo;t predict the future — we read the conditions. Is your name
-        moving with the weather, or against it? Work it from the top down.
+        See if your names sail with the weather or fight the wind — Market down
+        to Stock.
       </p>
       <ol className="flow-steps flow-steps--vertical">
         {cards.map((card, index) => {
@@ -418,7 +409,7 @@ export function MarketFlowWidget({
                 disabled={!reading}
                 aria-label={
                   reading
-                    ? `${cardLabel}: ${WEATHER_CONDITIONS[reading.conditionId].label}, confidence ${formatDecimals(reading.confidence)}%. View details.`
+                    ? `${cardLabel}: ${WEATHER_CONDITIONS[reading.conditionId].label}, score ${formatDecimals(reading.score)}/100. View details.`
                     : undefined
                 }
               />
@@ -426,12 +417,7 @@ export function MarketFlowWidget({
                 <div className="weather-headpill" aria-hidden="true">
                   <span className="flow-index">{index + 1}</span>
                   <span className="weather-layer">{cardLabel}</span>
-                  {reading ? (
-                    <>
-                      <ConditionChip reading={reading} />
-                      <ConfidenceChip value={reading.confidence} />
-                    </>
-                  ) : null}
+                  {reading ? <ConditionChip reading={reading} /> : null}
                 </div>
                 {!reading ? (
                   <p className="weather-empty">

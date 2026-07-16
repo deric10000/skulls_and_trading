@@ -413,11 +413,12 @@ rules in play (don't conflate them):
   tone via `SEVERITY_TONE`. A positive condition is always green regardless of
   any number.
 - **Measure / range chips** color by **where a value lands in a range**, not by
-  the surrounding item's tone. The weather `ConfidenceChip` is the reference:
-  `confidenceTone(value)` → `>= 70` positive, `40–69` warning, `< 40` negative
-  (thresholds `CONFIDENCE_HIGH_MIN` / `CONFIDENCE_MEDIUM_MIN` in `lib/weather`).
-  A new "how good is this number" chip (score, fill %, etc.) follows this band
-  pattern with its own named thresholds — never reuse the parent's tone.
+  the surrounding item's tone. Use a small `*Tone(value)` helper with named
+  thresholds (e.g. `confidenceTone` in `lib/weather` when a confidence % is
+  shown elsewhere): `>= 70` positive, `40–69` warning, `< 40` negative. A new
+  "how good is this number" chip (score, fill %, etc.) follows this band
+  pattern — never reuse the parent's tone. Market Weather layer cards show
+  condition only (no confidence chip).
 
 When adding a chip, decide which rule applies first, then reuse the matching
 helper (or add a small `*Tone(value)` helper next to its data) so the mapping is
