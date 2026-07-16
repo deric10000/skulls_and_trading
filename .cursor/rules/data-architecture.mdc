@@ -83,10 +83,10 @@ covered by that strategy's `appliedPortfolioIds` for the same source.
 - Read weather through `dataSource.getMarketWeather(timeframe)`, never by
   importing `weather/mock.ts` from a component.
 - FreeTier: `weather/live.ts` builds from live `MarketContext` (Worker FRED +
-  index ETFs). Sector/industry taxonomy is derived from `TICKERS` (same labels
-  the Home cascade uses) so Market/Sector/Industry work with an empty watch.
-  Cache app-wide per timeframe until context refreshes; filter per user
-  client-side via `TICKERS[ticker].sector`/`.industry`. See
+  index ETFs). Sector/industry keys come from `weather/taxonomy.ts` (GICS 11 /
+  74); `TICKERS[].sector`/`.industry` must use those exact keys for cascade.
+  Snapshot covers the full taxonomy so users can browse weather without
+  holdings. Cache app-wide per timeframe until context refreshes. See
   `data-architecture.md` §5.
 - **Beta 0 user data:** Supabase Auth + Postgres RLS (`user_state`,
   `conviction_snapshots`). Not localStorage SoT. Invite codes + Admin role.

@@ -6,6 +6,7 @@ export * from "./conditions";
 export * from "./scoring";
 export * from "./session";
 export * from "./graphics";
+export * from "./taxonomy";
 export { buildLiveWeatherSnapshot, subScoresFromMarketContext } from "./live";
 /** Mock-only — FreeTier uses `weather/live` via dataSource.getMarketWeather. */
 export { getMarketWeatherSnapshot } from "./mock";

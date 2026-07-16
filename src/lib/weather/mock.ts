@@ -1,5 +1,12 @@
 import { TICKERS } from "../../data";
 import { buildReading, type ClassifyContext } from "./scoring";
+import {
+  assertTickerTaxonomy,
+  industries,
+  industrySectorMap,
+  industryTiltOffset,
+  sectors,
+} from "./taxonomy";
 import type {
   MarketWeatherLayer,
   MarketWeatherSnapshot,
@@ -14,10 +21,11 @@ import type {
 // >>> FUTURE API WIRING <<<
 // Replace this file with real provider calls. The contract a provider must meet:
 // build ONE MarketWeatherSnapshot per session (premarket/live/afterhours) that
-// covers EVERY sector, industry, and tracked stock — fetched once, cached app-
-// wide, then filtered per user on the client (see getMarketWeatherSnapshot).
-// Feed each entity's normalized sub-scores + climate inputs into buildReading()
-// exactly as below; the scoring engine and UI stay unchanged.
+// covers EVERY GICS sector and industry (+ tracked stocks) — fetched once,
+// cached app-wide, then filtered per user on the client. Taxonomy keys come
+// from weather/taxonomy.ts (not from TICKERS). Feed each entity's normalized
+// sub-scores + climate inputs into buildReading() exactly as below; the scoring
+// engine and UI stay unchanged.
 // ---------------------------------------------------------------------------
 
 interface WeatherSeed {
@@ -36,8 +44,9 @@ const MARKET_SEED: WeatherSeed = {
   distanceFrom200DayMA: 6,
 };
 
+/** Authored sector seeds (GICS keys). Missing sectors inherit from market + tilt. */
 const SECTOR_SEEDS: Record<string, WeatherSeed> = {
-  Technology: {
+  "Information Technology": {
     subScores: { trend: 70, breadth: 62, volatility: 58, riskAppetite: 62, rotation: 74 },
     priceVs200DayMA: 82,
     distanceFrom200DayMA: 8,
@@ -65,58 +74,55 @@ const SECTOR_SEEDS: Record<string, WeatherSeed> = {
   },
 };
 
-interface IndustrySeed extends WeatherSeed {
-  sector: string;
-}
+const SECTOR_TILT: Record<string, number> = {
+  Energy: -1,
+  Materials: -1,
+  Industrials: -2,
+  "Consumer Discretionary": -4,
+  "Consumer Staples": 1,
+  "Health Care": 1,
+  Financials: 0,
+  "Information Technology": 6,
+  "Communication Services": 2,
+  Utilities: 0,
+  "Real Estate": -1,
+};
 
-const INDUSTRY_SEEDS: Record<string, IndustrySeed> = {
-  Semiconductors: {
-    sector: "Technology",
+/** Authored industry seeds (GICS keys). Missing industries inherit parent + offset. */
+const INDUSTRY_SEEDS: Record<string, WeatherSeed> = {
+  "Semiconductors & Semiconductor Equipment": {
     subScores: { trend: 74, breadth: 64, volatility: 58, riskAppetite: 64, rotation: 62 },
     priceVs200DayMA: 86,
     distanceFrom200DayMA: 11,
     liveClassify: { volumeRatio: 1.35, breakingResistance: true },
   },
-  "Software / Cloud": {
-    sector: "Technology",
+  Software: {
     subScores: { trend: 60, breadth: 56, volatility: 56, riskAppetite: 56, rotation: 50 },
     priceVs200DayMA: 70,
     distanceFrom200DayMA: 5,
   },
-  "Quantum Computing": {
-    sector: "Technology",
-    subScores: { trend: 62, breadth: 50, volatility: 42, riskAppetite: 60, rotation: 64 },
-    priceVs200DayMA: 60,
-    distanceFrom200DayMA: 4,
-    liveClassify: { catalyst: true, dailyRangeMultiple: 1.7, volumeRatio: 2.3 },
-  },
-  "AI Infrastructure / Cloud": {
-    sector: "Technology",
+  "IT Services": {
     subScores: { trend: 68, breadth: 60, volatility: 56, riskAppetite: 60, rotation: 72 },
     priceVs200DayMA: 78,
     distanceFrom200DayMA: 7,
     classify: { relativeStrength: 73, rsImproving: true },
   },
-  Fintech: {
-    sector: "Financials",
+  "Financial Services": {
     subScores: { trend: 54, breadth: 48, volatility: 50, riskAppetite: 52, rotation: 48 },
     priceVs200DayMA: 58,
     distanceFrom200DayMA: 3,
   },
-  "Aerospace & eVTOL": {
-    sector: "Industrials",
+  "Aerospace & Defense": {
     subScores: { trend: 46, breadth: 38, volatility: 44, riskAppetite: 42, rotation: 40 },
     priceVs200DayMA: 38,
     distanceFrom200DayMA: -6,
   },
   Beverages: {
-    sector: "Consumer Staples",
     subScores: { trend: 49, breadth: 50, volatility: 70, riskAppetite: 58, rotation: 56 },
     priceVs200DayMA: 53,
     distanceFrom200DayMA: 2.5,
   },
-  "Beauty / Personal Care": {
-    sector: "Consumer Discretionary",
+  "Personal Care Products": {
     subScores: { trend: 58, breadth: 54, volatility: 54, riskAppetite: 54, rotation: 50 },
     priceVs200DayMA: 62,
     distanceFrom200DayMA: 5,
@@ -180,8 +186,6 @@ const STOCK_SEEDS: Record<string, WeatherSeed> = {
 
 const clamp = (n: number) => Math.min(100, Math.max(0, n));
 
-// Pre/after-hours liquidity is thinner, so pull readings toward neutral (50) to
-// reflect lower conviction. Live stays at the authored base.
 function sessionSubScores(
   base: WeatherSubScores,
   tf: MarketWeatherTimeframe,
@@ -230,48 +234,96 @@ function readingFor(
   });
 }
 
+function inheritSectorSeed(name: string): WeatherSeed {
+  const authored = SECTOR_SEEDS[name];
+  if (authored) return authored;
+  const delta = SECTOR_TILT[name] ?? 0;
+  const adjust = (v: number) => clamp(v + delta);
+  return {
+    subScores: {
+      trend: adjust(MARKET_SEED.subScores.trend),
+      breadth: adjust(MARKET_SEED.subScores.breadth),
+      volatility: adjust(MARKET_SEED.subScores.volatility),
+      riskAppetite: adjust(MARKET_SEED.subScores.riskAppetite),
+      rotation: adjust(MARKET_SEED.subScores.rotation),
+    },
+    priceVs200DayMA: clamp(MARKET_SEED.priceVs200DayMA + delta),
+    distanceFrom200DayMA: MARKET_SEED.distanceFrom200DayMA,
+  };
+}
+
+function inheritIndustrySeed(
+  name: string,
+  sector: string,
+  parentSeed: WeatherSeed,
+): WeatherSeed {
+  const authored = INDUSTRY_SEEDS[name];
+  if (authored) return authored;
+  const delta = 2 + industryTiltOffset(name);
+  const adjust = (v: number) => clamp(v + delta);
+  return {
+    subScores: {
+      trend: adjust(parentSeed.subScores.trend),
+      breadth: adjust(parentSeed.subScores.breadth),
+      volatility: adjust(parentSeed.subScores.volatility),
+      riskAppetite: adjust(parentSeed.subScores.riskAppetite),
+      rotation: adjust(parentSeed.subScores.rotation),
+    },
+    priceVs200DayMA: clamp(parentSeed.priceVs200DayMA + delta * 0.5),
+    distanceFrom200DayMA: parentSeed.distanceFrom200DayMA,
+  };
+}
+
 function buildSnapshot(tf: MarketWeatherTimeframe): MarketWeatherSnapshot {
+  assertTickerTaxonomy();
   const generatedAt = new Date().toISOString();
+  const industrySectors = industrySectorMap();
 
   const market = readingFor(MARKET_SEED, "market", "Market", tf, generatedAt);
 
-  const sectors: Record<string, WeatherLayerReading> = {};
-  for (const [name, seed] of Object.entries(SECTOR_SEEDS)) {
-    sectors[name] = readingFor(seed, "sector", name, tf, generatedAt, market.score);
+  const sectorSeedByName: Record<string, WeatherSeed> = {};
+  const sectorsOut: Record<string, WeatherLayerReading> = {};
+  for (const name of sectors()) {
+    const seed = inheritSectorSeed(name);
+    sectorSeedByName[name] = seed;
+    sectorsOut[name] = readingFor(
+      seed,
+      "sector",
+      name,
+      tf,
+      generatedAt,
+      market.score,
+    );
   }
 
-  const industries: Record<string, WeatherLayerReading> = {};
-  for (const [name, seed] of Object.entries(INDUSTRY_SEEDS)) {
-    const parent = sectors[seed.sector];
-    industries[name] = readingFor(
+  const industriesOut: Record<string, WeatherLayerReading> = {};
+  for (const name of industries()) {
+    const sector = industrySectors[name];
+    const parentSeed = sectorSeedByName[sector] ?? MARKET_SEED;
+    const seed = inheritIndustrySeed(name, sector, parentSeed);
+    industriesOut[name] = readingFor(
       seed,
       "industry",
       name,
       tf,
       generatedAt,
-      parent?.score,
+      sectorsOut[sector]?.score,
     );
   }
 
   const stocks: Record<string, WeatherLayerReading> = {};
   for (const [ticker, seed] of Object.entries(STOCK_SEEDS)) {
     const industryName = TICKERS[ticker]?.industry;
-    const parent = industryName ? industries[industryName] : undefined;
+    const parent = industryName ? industriesOut[industryName] : undefined;
     stocks[ticker] = readingFor(seed, "stock", ticker, tf, generatedAt, parent?.score);
-  }
-
-  // Universe taxonomy (industry → sector) so the client can cascade the layers.
-  const industrySectors: Record<string, string> = {};
-  for (const [name, seed] of Object.entries(INDUSTRY_SEEDS)) {
-    industrySectors[name] = seed.sector;
   }
 
   return {
     timeframe: tf,
     generatedAt,
     market,
-    sectors,
-    industries,
+    sectors: sectorsOut,
+    industries: industriesOut,
     stocks,
     industrySectors,
   };

@@ -3801,6 +3801,71 @@ span.checkbox {
   color: var(--text-strong);
 }
 
+.multiselect-option.is-active {
+  background: var(--surface-2);
+}
+
+/* Searchable single-select — closed trigger matches `input` / Dropdown;
+   open panel reuses ticker-suggestion typeahead (chip-search + multiselect-menu). */
+.searchable-select {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+
+.searchable-select-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  width: 100%;
+  cursor: pointer;
+  text-align: left;
+}
+
+.searchable-select-value {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.searchable-select-caret {
+  flex: 0 0 auto;
+  width: 1.1rem;
+  height: 1.1rem;
+  color: var(--text-muted);
+}
+
+.searchable-select-panel {
+  position: fixed;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg-deep);
+  box-shadow: 0 12px 32px rgb(0 0 0 / 0.45);
+}
+
+.searchable-select-panel .chip-search-field {
+  flex-shrink: 0;
+}
+
+.searchable-select-menu.multiselect-menu {
+  position: static;
+  top: auto;
+  left: auto;
+  right: auto;
+  max-height: 220px;
+  border: 0;
+  box-shadow: none;
+  background: transparent;
+  padding: 0;
+}
+
 .multiselect-option .checkbox {
   margin-right: 0.15rem;
 }
@@ -5689,10 +5754,10 @@ select.forge-cell-input {
   color: var(--text-muted);
 }
 
-/* Sector / Industry selector: a droplist (shared <Dropdown>, `on-graphics` skin)
-   that steps through the watch's groups. Spans the card width, below the head
-   pill. Re-enables pointer events (the rest of the overlay is click-through to
-   the card hit target) so changing the group doesn't open the detail view. */
+/* Sector / Industry selector: SearchableSelect (`on-graphics` trigger + typeahead
+   menu). Spans the card width, below the head pill. Re-enables pointer events
+   (the rest of the overlay is click-through to the card hit target) so changing
+   the group doesn't open the detail view. */
 .weather-select {
   display: flex;
   align-self: stretch;

@@ -7,6 +7,13 @@
 import { TICKERS } from "../../data";
 import type { MarketContext } from "../../types";
 import { buildReading } from "./scoring";
+import {
+  assertTickerTaxonomy,
+  industries,
+  industrySectorMap,
+  industryTiltOffset,
+  sectors,
+} from "./taxonomy";
 import type {
   MarketWeatherSnapshot,
   MarketWeatherTimeframe,
@@ -59,37 +66,20 @@ function tilt(
   };
 }
 
-/** Soft tilts until real sector RS ships — keyed by `TICKERS[].sector`. */
+/** Soft tilts until real sector RS ships — keyed by GICS sector names. */
 const SECTOR_TILT: Record<string, number> = {
-  Technology: 6,
-  Financials: 0,
+  Energy: -1,
+  Materials: -1,
   Industrials: -2,
-  "Consumer Staples": 1,
   "Consumer Discretionary": -4,
+  "Consumer Staples": 1,
+  "Health Care": 1,
+  Financials: 0,
+  "Information Technology": 6,
+  "Communication Services": 2,
+  Utilities: 0,
+  "Real Estate": -1,
 };
-
-/**
- * Industry → sector taxonomy from `TICKERS` (SSOT). Keeps Industry Weather
- * keys identical to stock cascade labels (ACHR → "Aerospace & eVTOL", etc.).
- */
-function industrySectorsFromTickers(): Record<string, string> {
-  const map: Record<string, string> = {};
-  for (const info of Object.values(TICKERS)) {
-    if (info.industry && info.sector) map[info.industry] = info.sector;
-  }
-  return map;
-}
-
-function sectorsFromTickers(
-  industrySectors: Record<string, string>,
-): string[] {
-  const names = new Set<string>();
-  for (const info of Object.values(TICKERS)) {
-    if (info.sector) names.add(info.sector);
-  }
-  for (const sector of Object.values(industrySectors)) names.add(sector);
-  return [...names].sort((a, b) => a.localeCompare(b));
-}
 
 /**
  * Build one session snapshot from live MarketContext. Cached by caller/freeTier.
@@ -98,13 +88,14 @@ export function buildLiveWeatherSnapshot(
   timeframe: MarketWeatherTimeframe,
   ctx: MarketContext,
 ): MarketWeatherSnapshot {
+  assertTickerTaxonomy();
   const generatedAt = ctx.asOf
     ? `${ctx.asOf}T16:00:00.000Z`
     : new Date().toISOString();
   const marketSub = subScoresFromMarketContext(ctx);
   const climate = climateFromContext(ctx);
-  const industrySectors = industrySectorsFromTickers();
-  const sectorNames = sectorsFromTickers(industrySectors);
+  const industrySectors = industrySectorMap();
+  const sectorNames = sectors();
 
   const market = buildReading({
     layer: "market",
@@ -116,10 +107,10 @@ export function buildLiveWeatherSnapshot(
     lastUpdated: generatedAt,
   });
 
-  const sectors: Record<string, WeatherLayerReading> = {};
+  const sectorsOut: Record<string, WeatherLayerReading> = {};
   for (const name of sectorNames) {
     const delta = SECTOR_TILT[name] ?? 0;
-    sectors[name] = buildReading({
+    sectorsOut[name] = buildReading({
       layer: "sector",
       label: name,
       timeframe,
@@ -131,11 +122,13 @@ export function buildLiveWeatherSnapshot(
     });
   }
 
-  const industries: Record<string, WeatherLayerReading> = {};
-  for (const [name, sector] of Object.entries(industrySectors)) {
-    const parent = sectors[sector];
-    const delta = (SECTOR_TILT[sector] ?? 0) + 2;
-    industries[name] = buildReading({
+  const industriesOut: Record<string, WeatherLayerReading> = {};
+  for (const name of industries()) {
+    const sector = industrySectors[name];
+    const parent = sectorsOut[sector];
+    const delta =
+      (SECTOR_TILT[sector] ?? 0) + 2 + industryTiltOffset(name);
+    industriesOut[name] = buildReading({
       layer: "industry",
       label: name,
       timeframe,
@@ -150,7 +143,7 @@ export function buildLiveWeatherSnapshot(
   const stocks: Record<string, WeatherLayerReading> = {};
   for (const [ticker, info] of Object.entries(TICKERS)) {
     const industryName = info.industry;
-    const parent = industryName ? industries[industryName] : undefined;
+    const parent = industryName ? industriesOut[industryName] : undefined;
     const sector = info.sector;
     stocks[ticker] = buildReading({
       layer: "stock",
@@ -159,7 +152,7 @@ export function buildLiveWeatherSnapshot(
       subScores: tilt(marketSub, (SECTOR_TILT[sector] ?? 0) - 1),
       priceVs200DayMA: climate.priceVs200DayMA,
       distanceFrom200DayMA: climate.distanceFrom200DayMA,
-      classify: { higherLayerScore: parent?.score ?? sectors[sector]?.score },
+      classify: { higherLayerScore: parent?.score ?? sectorsOut[sector]?.score },
       lastUpdated: generatedAt,
     });
   }
@@ -168,8 +161,8 @@ export function buildLiveWeatherSnapshot(
     timeframe,
     generatedAt,
     market,
-    sectors,
-    industries,
+    sectors: sectorsOut,
+    industries: industriesOut,
     stocks,
     industrySectors,
   };

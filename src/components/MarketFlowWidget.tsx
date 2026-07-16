@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAppState } from "../state/AppState";
 import { dataSource } from "../lib/datasource";
-import { Dropdown } from "./Dropdown";
+import { SearchableSelect } from "./SearchableSelect";
 import { CaretLeft, CaretRight } from "../lib/icons";
 import {
   getMarketSession,
@@ -161,19 +161,14 @@ export function MarketFlowWidget({
     [watchTickers, snapshot],
   );
 
-  // Sector / Industry dropdowns list the FULL market universe (every sector /
-  // industry the weather covers), not just the watch — so you can read any
-  // slice's weather even when you hold no name there. Alphabetical for a
-  // predictable list; the industry→sector taxonomy comes from the snapshot.
+  // Sector / Industry list the full GICS universe from the weather snapshot
+  // (not the watch) so any slice is browsable. Industry options are scoped to
+  // the selected sector for a relevant typeahead.
   const sectorOptions = useMemo(
     () => Object.keys(snapshot.sectors).sort((a, b) => a.localeCompare(b)),
     [snapshot],
   );
-  const industryOptions = useMemo(
-    () => Object.keys(snapshot.industries).sort((a, b) => a.localeCompare(b)),
-    [snapshot],
-  );
-  // sector → its industries (alpha), derived from the snapshot taxonomy.
+  // sector → its industries (alpha), from the snapshot taxonomy (GICS SSOT).
   const sectorIndustries = useMemo(() => {
     const map: Record<string, string[]> = {};
     for (const [industry, sector] of Object.entries(snapshot.industrySectors)) {
@@ -268,6 +263,9 @@ export function MarketFlowWidget({
   const sectorReading = sel.sector ? snapshot.sectors[sel.sector] : undefined;
   const industryReading = sel.industry ? snapshot.industries[sel.industry] : undefined;
   const stockReading = sel.stock ? snapshot.stocks[sel.stock] : undefined;
+  const industryOptions = sel.sector
+    ? (sectorIndustries[sel.sector] ?? [])
+    : Object.keys(snapshot.industries).sort((a, b) => a.localeCompare(b));
 
   const [selectedLayer, setSelectedLayer] = useState<MarketWeatherLayer | null>(null);
 
@@ -428,12 +426,13 @@ export function MarketFlowWidget({
                 ) : null}
                 {showDropdown ? (
                   <div className="weather-select">
-                    <Dropdown
+                    <SearchableSelect
                       variant="on-graphics"
                       id={`weather-${card.layer}-select`}
                       label={`Switch ${LAYER_LABEL[card.layer].toLowerCase()}`}
                       value={card.active!}
                       onChange={(value) => card.onPick?.(value)}
+                      searchPlaceholder={`Search ${LAYER_LABEL[card.layer].toLowerCase()}…`}
                       options={options.map((option) => ({
                         value: option,
                         label: option,

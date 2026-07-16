@@ -18,8 +18,9 @@ holding-shaped is **derived** from them, so one edit updates every surface.
 
 - **`TICKERS`** — company-level facts that are the same regardless of who holds
   the name: `company`, `category`, `sector`, `industry`, `lastPrice`,
-  `priceAsOf`, `analysis`, `logs`. (`sector`/`industry` drive the Market Weather
-  layers; `lastPrice`/`priceAsOf` are the mock quote seed — swap via
+  `priceAsOf`, `analysis`, `logs`. (`sector`/`industry` must be exact GICS keys
+  from `weather/taxonomy.ts` so Market Weather cascade labels match weather
+  readings 1:1; `lastPrice`/`priceAsOf` are the mock quote seed — swap via
   `DataSource.getQuote()` when live.)
 - **`PORTFOLIOS[].holdings`** — holding-level facts that belong to a specific
   portfolio/watchlist: `shares`, `avgPrice`, `openPnlPct`, `conviction`,
@@ -118,8 +119,9 @@ symbol search are filled through Cloudflare Worker routes under `/api/market/*`
    no-data; critical nulls → `NeedsDataReviewFlag`.
 7. **Weather:** FreeTier builds readings from live `MarketContext` via
    `weather/live.ts` (mock seeds quarantined for `mockDataSource` only).
-   Sector/industry keys come from `TICKERS` (SSOT) — do not maintain a
-   parallel industry name list in `live.ts`.
+   Sector/industry keys come from `weather/taxonomy.ts` (GICS 11 / 74 SSOT).
+   `TICKERS[].sector` / `.industry` must map into that taxonomy (asserted at
+   snapshot build) — do not invent parallel nicknames in `live.ts` / `mock.ts`.
 
 ```ts
 // Active binding today:
@@ -137,6 +139,7 @@ same field once that field is on the live path.
 ## 4. How to add or change data
 
 - **New ticker:** add an entry to `TICKERS` (company facts + analysis + logs).
+  `sector` / `industry` must be exact keys from `weather/taxonomy.ts` (GICS).
 - **New holding:** add a `PortfolioHolding` to the relevant `PORTFOLIOS` entry.
 - **New portfolio/watchlist:** add a `Portfolio` to `PORTFOLIOS` (`type:
   "portfolio"` = read-only/live-connected; `type: "watchlist"` = user-editable).
@@ -159,8 +162,9 @@ Module map:
 | `conditions.ts` | The shared 10-condition library (label, colors, icon, copy, `dynamicGraphicKey`). |
 | `scoring.ts` | Pure engine: trend score, weather score, priority classification, confidence (+ session caps), 200-day climate context, "why" copy. |
 | `session.ts` | ET-clock session detection (premarket / live / afterhours), DST-safe via `Intl`. |
-| `mock.ts` | Authored sub-score seeds for `mockDataSource` only (quarantined). |
-| `live.ts` | FreeTier Weather from live `MarketContext`; sector/industry keys from `TICKERS`. |
+| `taxonomy.ts` | Canonical GICS 11 sectors + 74 industries (Weather browse SSOT). |
+| `mock.ts` | Authored sub-score seeds for `mockDataSource` only (quarantined); emits full taxonomy. |
+| `live.ts` | FreeTier Weather from live `MarketContext`; sector/industry keys from `taxonomy.ts`. |
 | `graphics.ts` | Resolves a `dynamicGraphicKey` to a background treatment (gradient fallback now, image/video later). |
 
 Scoring is **provider-agnostic** — `buildReading()` takes normalized 0–100
@@ -171,17 +175,20 @@ sub-scores and climate inputs, so the same engine runs on mock and live data.
 `getMarketWeather(timeframe)` on FreeTier builds from the latest live
 `MarketContext` (Worker: SPY / VIX / FRED) and caches per timeframe until the
 next context refresh clears it. Macro inputs refresh with market context
-(session / daily TTL on the Worker). Filter per user **client-side** by
-mapping watch tickers → `TICKERS[ticker].sector` / `.industry`.
+(session / daily TTL on the Worker). The snapshot always includes **every**
+GICS sector and industry reading (one key → one projection). Filter per user
+**client-side** by mapping watch tickers → `TICKERS[ticker].sector` /
+`.industry` (must equal taxonomy keys).
 
 The widget (`MarketFlowWidget`) is read-only on the home page: it detects the
 session, pulls the snapshot through the `dataSource` seam, and focuses
 sector/industry/stock on the name selected in Current Watch (or the first watch
-name by default). The Sector/Industry droplists span the full universe while the
-Stock layer is scoped to the watch; the three **cascade** (Sector → first
-Industry → first watch stock, with the Stock card disabled when the watch holds
-no name in that slice). All of it is local to the widget — it never writes back
-to the Current Watch selection.
+name by default). Sector/Industry use `SearchableSelect` typeahead over the
+full GICS universe (industry list filtered to the selected sector); the Stock
+layer is scoped to the watch. The three **cascade** (Sector → first Industry →
+first watch stock, with the Stock card disabled when the watch holds no name in
+that slice). All of it is local to the widget — it never writes back to the
+Current Watch selection.
 
 ## 6. Strategy Forge (`src/lib/forge/`)
 
