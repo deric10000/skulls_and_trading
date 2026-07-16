@@ -1009,6 +1009,19 @@ button {
   display: flex;
   flex-direction: column;
   gap: 0.6rem;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.hero-preview-card:hover {
+  border-color: var(--border-strong);
+}
+
+.hero-preview-card:focus-visible {
+  outline: 2px solid var(--accent-strong);
+  outline-offset: 2px;
 }
 
 /* Emblem badge + status chip, stacked above the caption paragraph. */
@@ -1021,6 +1034,13 @@ button {
 .hero-preview-card p {
   font-size: 0.9rem;
   color: var(--text-muted);
+  margin: 0;
+}
+
+.hero-preview-action {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--accent-strong);
 }
 
 /* Panels — the app-wide card. 16px padding on every side so content breathes
@@ -1133,17 +1153,23 @@ button {
   pointer-events: auto;
 }
 
-/* API / provider budget toasts — denser copy + more opaque surface for readability. */
+/* API / provider budget toasts — denser copy; same glass blur, slightly denser ink. */
 .forge-toast--api-budget.forge-toast--warning {
   border: 1px solid rgb(251 191 36 / 0.55);
-  background: rgb(28 22 10 / 0.96);
+  background:
+    linear-gradient(180deg, rgb(255 255 255 / 0.06), rgb(255 255 255 / 0.01)),
+    rgb(251 191 36 / 0.14),
+    rgb(28 22 10 / 0.9);
   box-shadow: 0 10px 28px rgb(0 0 0 / 0.45);
   color: var(--warning);
 }
 
 .forge-toast--api-budget.forge-toast--error {
   border: 1px solid rgb(255 107 107 / 0.5);
-  background: rgb(28 12 14 / 0.96);
+  background:
+    linear-gradient(180deg, rgb(255 255 255 / 0.06), rgb(255 255 255 / 0.01)),
+    rgb(255 107 107 / 0.14),
+    rgb(28 12 14 / 0.9);
   box-shadow: 0 10px 28px rgb(0 0 0 / 0.45);
   color: var(--negative);
 }
@@ -1597,6 +1623,19 @@ select.input:hover:not(:disabled) {
   margin-bottom: var(--space-3);
 }
 
+/* Forge Watch Preview — no edit control; switcher spans the row. */
+.watchlist--preview .portfolio-switcher {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.watchlist-preview-empty {
+  margin: 0;
+  padding: 0.25rem 0;
+  font-size: 0.85rem;
+  line-height: 1.55;
+  color: var(--text-muted);
+}
+
 .portfolio-edit-add {
   margin-bottom: var(--space-3);
 }
@@ -1869,7 +1908,10 @@ select.input:hover:not(:disabled) {
   z-index: 7;
 }
 
-.watch-strategy-check {
+/* App checkbox — 28×28 blue info square; glyph fills most of the box.
+   Use via `Checkbox` (`src/components/Checkbox.tsx`); do not invent parallel
+   native checkboxes or one-off check icons. */
+.checkbox {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1882,19 +1924,30 @@ select.input:hover:not(:disabled) {
   background: rgb(86 182 240 / 0.1);
   color: var(--info);
   cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
 }
 
-.watch-strategy-check svg {
-  width: 18px;
-  height: 18px;
+.checkbox svg {
+  width: 22px;
+  height: 22px;
 }
 
-.watch-strategy-check--on {
+.checkbox.is-checked {
   background: rgb(86 182 240 / 0.22);
 }
 
-.watch-strategy-check:hover {
+button.checkbox:hover:not(:disabled) {
   background: rgb(86 182 240 / 0.28);
+}
+
+button.checkbox:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Decorative mark inside a parent control — no hover chrome of its own. */
+span.checkbox {
+  cursor: inherit;
 }
 
 .watch-remove svg {
@@ -3396,13 +3449,6 @@ select.input:hover:not(:disabled) {
   gap: 0.5rem;
   font-size: 0.88rem;
   color: var(--text-base);
-  cursor: pointer;
-}
-
-.config-toggle input {
-  width: 1.1rem;
-  height: 1.1rem;
-  accent-color: var(--accent);
 }
 
 .config-group {
@@ -3460,6 +3506,59 @@ select.input:hover:not(:disabled) {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.6rem;
+}
+
+/* Description-pane overview of categoryWeights — same values as each
+   category tab's conviction weight editor. */
+.forge-conviction-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem 0.6rem;
+  /* Room for desktop weight :focus-visible inset/outset rings. */
+  padding: 4px 2px;
+}
+
+.forge-conviction-field .forge-weight-edit {
+  width: 100%;
+}
+
+.forge-conviction-toggle {
+  gap: 0.45rem;
+  min-width: 0;
+}
+
+.forge-conviction-toggle .forge-label {
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  font-size: 0.72rem;
+}
+
+.forge-conviction-field.is-off {
+  opacity: 0.55;
+}
+
+.forge-conviction-field .forge-cell-input--weight {
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
+  background: var(--surface-3);
+  border-color: var(--border-strong);
+}
+
+.forge-conviction-field .forge-cell-input--weight:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.forge-conviction-total {
+  margin: 0;
+  font-size: 0.76rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.forge-conviction-total.is-warn {
+  color: var(--warning);
 }
 
 /* Uppercase field labels (per the Configure-card design: 11.5px Plex Sans),
@@ -3702,14 +3801,8 @@ select.input:hover:not(:disabled) {
   color: var(--text-strong);
 }
 
-.multiselect-check {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 16px;
-  height: 16px;
-  flex: 0 0 auto;
-  color: var(--info);
+.multiselect-option .checkbox {
+  margin-right: 0.15rem;
 }
 
 .multiselect-empty {
@@ -4128,13 +4221,38 @@ select.input:hover:not(:disabled) {
   cursor: not-allowed;
 }
 
+/* Configure body: scroll region + overlay toast stack (toasts must not shift
+   the form — they float over the top of the scroll surface). */
+.strategy-config-main {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
 /* Forge toast — reusable in-card notifications (warning / error / success / info).
-   Shape follows the auth error banner: tinted background, border, leading icon,
+   Liquid-glass surface: dark ink base (readability) + tone wash (hue) + blur of
+   content behind. Shape follows the auth error banner: border, leading icon,
    optional dismiss control upper-right. */
 .forge-toast-stack {
   display: flex;
   flex-direction: column;
   gap: 0.45rem;
+}
+
+.forge-toast-stack--overlay {
+  position: absolute;
+  z-index: 20;
+  top: 0;
+  left: 0;
+  right: 0;
+  pointer-events: none;
+}
+
+.forge-toast-stack--overlay .forge-toast {
+  pointer-events: auto;
+  box-shadow: 0 10px 28px rgb(2 6 18 / 0.45);
 }
 
 .forge-toast {
@@ -4146,6 +4264,9 @@ select.input:hover:not(:disabled) {
   border-radius: var(--radius-sm);
   font-size: 0.875rem;
   line-height: 1.45;
+  /* Same glass recipe as mobile nav: blur + slight saturate of what’s behind. */
+  -webkit-backdrop-filter: blur(18px) saturate(150%);
+  backdrop-filter: blur(18px) saturate(150%);
 }
 
 .forge-toast-body {
@@ -4199,9 +4320,14 @@ select.input:hover:not(:disabled) {
   height: 0.85rem;
 }
 
+/* Tone stacks (top → bottom): light sheen, hue wash, dark ink. Ink carries
+   most of the opacity so form fields behind stay muted; hue stays the same. */
 .forge-toast--warning {
-  border: 1px solid rgb(251 191 36 / 0.4);
-  background: rgb(251 191 36 / 0.08);
+  border: 1px solid rgb(251 191 36 / 0.5);
+  background:
+    linear-gradient(180deg, rgb(255 255 255 / 0.08), rgb(255 255 255 / 0.02)),
+    rgb(251 191 36 / 0.16),
+    rgb(5 7 13 / 0.86);
   color: var(--warning);
 }
 
@@ -4210,14 +4336,20 @@ select.input:hover:not(:disabled) {
 }
 
 .forge-toast--error {
-  border: 1px solid rgb(255 107 107 / 0.35);
-  background: rgb(255 107 107 / 0.1);
+  border: 1px solid rgb(255 107 107 / 0.45);
+  background:
+    linear-gradient(180deg, rgb(255 255 255 / 0.08), rgb(255 255 255 / 0.02)),
+    rgb(255 107 107 / 0.16),
+    rgb(5 7 13 / 0.86);
   color: var(--negative);
 }
 
 .forge-toast--success {
-  border: 1px solid rgb(74 222 128 / 0.35);
-  background: rgb(74 222 128 / 0.08);
+  border: 1px solid rgb(74 222 128 / 0.45);
+  background:
+    linear-gradient(180deg, rgb(255 255 255 / 0.08), rgb(255 255 255 / 0.02)),
+    rgb(74 222 128 / 0.16),
+    rgb(5 7 13 / 0.86);
   color: var(--positive);
 }
 
@@ -4226,13 +4358,39 @@ select.input:hover:not(:disabled) {
 }
 
 .forge-toast--info {
-  border: 1px solid rgb(96 165 250 / 0.35);
-  background: rgb(96 165 250 / 0.08);
+  border: 1px solid rgb(96 165 250 / 0.45);
+  background:
+    linear-gradient(180deg, rgb(255 255 255 / 0.08), rgb(255 255 255 / 0.02)),
+    rgb(96 165 250 / 0.16),
+    rgb(5 7 13 / 0.86);
   color: var(--info);
 }
 
 .forge-toast--info .forge-toast-body {
   color: var(--text-base);
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .forge-toast {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+
+  .forge-toast--warning {
+    background: rgb(28 22 10 / 0.96);
+  }
+
+  .forge-toast--error {
+    background: rgb(28 12 14 / 0.96);
+  }
+
+  .forge-toast--success {
+    background: rgb(10 28 18 / 0.96);
+  }
+
+  .forge-toast--info {
+    background: rgb(10 18 28 / 0.96);
+  }
 }
 
 /* Legacy completeness banner — replaced by ForgeToast (kept for reference). */
@@ -4594,6 +4752,17 @@ select.forge-cell-input {
 .forge-cell-input--weight {
   width: 4.2rem;
   color: var(--forge-chip-text);
+}
+
+/* Desktop: Configure / forge-table scrollports use overflow auto/hidden and
+   clip the global :focus-visible outset ring (2px + 2px offset). Keep the gold
+   focus signal with an inset ring so conviction / rule / tag weight fields
+   stay fully visible. Mobile keeps the outset ring (inputs scale on focus). */
+@media (min-width: 768px) {
+  .forge-cell-input--weight:focus-visible {
+    outline: none;
+    box-shadow: inset 0 0 0 2px var(--accent-strong);
+  }
 }
 
 .forge-cell-range {
@@ -5175,7 +5344,8 @@ select.forge-cell-input {
 }
 
 @media (max-width: 540px) {
-  .forge-cadence-row {
+  .forge-cadence-row,
+  .forge-conviction-grid {
     grid-template-columns: minmax(0, 1fr);
   }
 
@@ -5479,10 +5649,10 @@ select.forge-cell-input {
 }
 
 /* Head pill: dark translucent capsule holding the index badge, layer label, and
-   the condition + confidence chips (matches the Figma design). A non-interactive
-   `<div>` (the whole card is the click target) that inherits IBM Plex Sans + the
-   1.55 line-height, so the chips match the design-system chips elsewhere. Wraps
-   gracefully on narrow widths rather than clipping. */
+   the condition chip. A non-interactive `<div>` (the whole card is the click
+   target) that inherits IBM Plex Sans + the 1.55 line-height, so the chips match
+   the design-system chips elsewhere. Wraps gracefully on narrow widths rather
+   than clipping. */
 .weather-headpill {
   display: inline-flex;
   align-items: center;
@@ -5504,13 +5674,8 @@ select.forge-cell-input {
   color: var(--text-strong);
 }
 
-.weather-condition-chip,
-.weather-confidence-chip {
+.weather-condition-chip {
   gap: 0.3rem;
-}
-
-.weather-confidence-chip {
-  font-variant-numeric: tabular-nums;
 }
 
 /* Empty stock card prompt — kept legible over art with its own dark capsule. */
@@ -5590,7 +5755,7 @@ select.forge-cell-input {
 }
 
 /* Detail view (selecting a layer). */
-.weather-confidence-line {
+.weather-score-line {
   margin: 0;
   font-size: 0.78rem;
   color: var(--text-muted);
@@ -5608,6 +5773,13 @@ select.forge-cell-input {
 .weather-why-line strong,
 .weather-climate strong {
   color: var(--text-strong);
+}
+
+.weather-disclaimer {
+  margin: 0;
+  font-size: 0.78rem;
+  line-height: 1.5;
+  color: var(--text-muted);
 }
 
 .weather-scores {
@@ -5743,10 +5915,10 @@ select.forge-cell-input {
   gap: var(--space-5);
 }
 
-/* Coming Soon overlay — Closed Beta unfinished surfaces (Dashboard, Ships).
-   Full-viewport fixed scrim (cannot scroll past). Header stays above
-   (z-index 20) so TopNav remains usable. Panel chrome matches app modal cards
-   (`.modal-card` width/gap + Forge modal title/body type) — no close control. */
+/* Coming Soon overlay — Closed Beta unfinished surfaces (Dashboard, Ships) +
+   legal ack gate (`coming-soon-overlay--gate`). Full-viewport fixed scrim
+   (cannot scroll past). Coming-soon: header stays above (z-index 20). Legal
+   gate: z-index 80 until accepted. Panel chrome matches app modal cards. */
 .coming-soon-shell {
   position: relative;
   min-height: 100%;
@@ -5769,6 +5941,11 @@ select.forge-cell-input {
   pointer-events: auto;
 }
 
+/* Legal ack gate — above sticky header until accepted (coming-soon stays at 15). */
+.coming-soon-overlay--gate {
+  z-index: 80;
+}
+
 .coming-soon-panel {
   /* Mirror `.modal-card` footprint — do not reuse that class (no close/actions). */
   width: min(420px, 100%);
@@ -5777,6 +5954,20 @@ select.forge-cell-input {
   gap: var(--space-2);
   margin: 0;
   text-align: left;
+}
+
+/* Dismissible notice — title row + shared Forge modal close (X). */
+.coming-soon-panel-bar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.coming-soon-panel-bar .coming-soon-head {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .coming-soon-head {
@@ -5817,19 +6008,23 @@ select.forge-cell-input {
    model would otherwise let content move under / past the scrim). More
    specific than the mobile `.app { overflow: visible }` rule. */
 html:has(.coming-soon-shell),
-body:has(.coming-soon-shell) {
+body:has(.coming-soon-shell),
+html:has(.coming-soon-overlay--gate),
+body:has(.coming-soon-overlay--gate) {
   overflow: hidden;
   height: 100%;
   overscroll-behavior: none;
 }
 
-.app:has(.coming-soon-shell) {
+.app:has(.coming-soon-shell),
+.app:has(.coming-soon-overlay--gate) {
   height: 100vh;
   height: 100dvh;
   overflow: hidden;
 }
 
-.app:has(.coming-soon-shell) .app-main {
+.app:has(.coming-soon-shell) .app-main,
+.app:has(.coming-soon-overlay--gate) .app-main {
   overflow: hidden;
 }
 
@@ -8114,31 +8309,6 @@ button.nav-link {
   * {
     transition: none !important;
   }
-}
-
-/* Beta 0 legal disclaimer (once per login) */
-.legal-disclaimer-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 80;
-  display: grid;
-  place-items: center;
-  padding: var(--space-4);
-  background: color-mix(in srgb, var(--color-ink) 55%, transparent);
-}
-
-.legal-disclaimer {
-  max-width: 28rem;
-  width: 100%;
-  display: grid;
-  gap: var(--space-3);
-}
-
-.legal-disclaimer-body {
-  margin: 0;
-  font-size: var(--text-sm);
-  line-height: 1.5;
-  color: var(--color-muted);
 }
 
 .budget-cap-toast {

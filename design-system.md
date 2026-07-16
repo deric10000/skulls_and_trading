@@ -157,6 +157,7 @@ Prefer these tokens (or multiples that stay on the 4pt grid) over ad-hoc pixel v
 - **Card scroll standard** — when a region scrolls *inside* a card it gets an **8px bar parked 4px from the card edge with 4px to content** (4 + 8 + 4 = the card's 16px right inset). Desktop effect only (where the region actually scrolls); mobile/tablet scroll at the page level. Appearance is shared once in the "Card scroll standard" block in `src/index.css` (`.hero-body`, `.flow-steps`, `.watchlist-items`, `.strategy-list`); positioning per scrolling region is `overflow: hidden auto; margin-right: -12px; padding-right: 4px; scrollbar-gutter: stable;`. Never scroll the padded card itself — always an inner region. New scrollable card regions join the same group + inset. See `.cursor/rules/components.mdc` for the full contract.
 - `.btn` — base style is the **blue secondary** action (used bare for supporting actions like Add / New note / Assign). `.btn--primary` (gold gradient CTA), `.btn--ghost` (neutral outline), `.btn--small` (compact size). Variants fully override surface + color so the same button looks identical on desktop and mobile. Focus ring is keyboard-only (no ring on click); mobile tap-highlight is suppressed.
 - `.btn--link` — text-forward link button used for header/account actions like Sign Out. It keeps the same hit area and rounded interaction target as a button, but visually reads as a blue text link with no border or fill.
+- **`Checkbox` / `.checkbox`** — the one on/off checkbox app-wide (`src/components/Checkbox.tsx`). 28×28 blue info square (`--info` fill wash) with Phosphor `Square` / `CheckSquare` (22px glyph). Checked = `.is-checked`. Do **not** use native `<input type="checkbox">` or one-off check icons. For a row that already owns the click (e.g. MultiSelect options), pass `decorative`.
 - `.chip` — **borderless** tinted pill badge; tone is carried by fill + text/icon color, never a border (keeps tags visually distinct from bordered buttons). Status tones: `.status--positive`, `.status--negative`, `.status--warning`, `.status--neutral`. `.chip--soon` for "coming soon". Supports an optional leading status icon (`.chip svg` / `.chip-icon` auto-sizes to `1em`).
 - `.tabs` / `.tab` / `.tab--active` (+ `.tabs--fill` for equal-width segments) — the single shared segmented control. Render via the `Tabs` component (`src/components/Tabs.tsx`); never hand-roll a tab strip. States: unselected (muted), hover (subtle surface tint), selected (`.tab--active`, gold gradient matching `.btn--primary`), disabled (dimmed, non-interactive). Focus is keyboard-only — no second border on selection. Used by the home deck and the auth sign-in/create-account switch.
 - `.input` — shared form field (text inputs **and** selects): `--surface-3` fill, `--border-strong`, `--radius-sm`, `font: inherit`. `flex: 1` so it stretches inside a flex row (wrap in a flex container to make a standalone control full-width).
@@ -301,18 +302,14 @@ This section maps the design system to what is implemented in code.
 - Card content is a dark translucent **head pill** (`.weather-headpill`, the
   click target that opens the detail view) holding: the shared numbered badge
   (`.flow-index` — soft-gold disc + `--accent-strong` number), the layer/entity
-  label (`.weather-layer`, matches
-  `.watch-ticker`), the condition chip (`ConditionChip`), and the confidence chip
-  (`ConfidenceChip` — `SealPercent` icon + `NN%`). The card stays minimal — the
-  full "why"/sub-scores live in the detail view.
-- **Chip coloring (two different rules):**
-  - `ConditionChip` is tone-colored by the condition's severity via
-    `SEVERITY_TONE` (e.g. positive conditions → green `.status--positive`).
-  - `ConfidenceChip` is colored by **range, not condition tone**, via
-    `confidenceTone(value)`: `>= 70` → `.status--positive` (high), `40–69` →
-    `.status--warning` (medium), `< 40` → `.status--negative` (low). Thresholds
-    (`CONFIDENCE_HIGH_MIN` / `CONFIDENCE_MEDIUM_MIN` in `lib/weather`) anchor to
-    the Figma examples (90/60/39) and sit just under the session confidence caps.
+  label (`.weather-layer`, matches `.watch-ticker`), and the condition chip
+  (`ConditionChip`). The card stays minimal — the full "why"/sub-scores live in
+  the detail view. Confidence is not shown on cards or in the detail score line;
+  detail ends with a snapshot disclaimer under Climate.
+- **Chip coloring:** `ConditionChip` is tone-colored by the condition's severity
+  via `SEVERITY_TONE` (e.g. positive conditions → green `.status--positive`).
+  Range-based helpers such as `confidenceTone` remain in `lib/weather` for any
+  future measure chip; they are not used on Market Weather cards.
 - Condition icons live in the shared library (`WEATHER_CONDITIONS[id].defaultIcon`):
   Risk-On Tide → `Waves`, Breakout Wind → `Wind`, Rotation Current → `Hurricane`,
   Headwind → `WindReversed` (the `Wind` glyph mirrored on X, so the gust opposes

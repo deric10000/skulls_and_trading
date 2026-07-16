@@ -329,6 +329,12 @@ export interface Strategy {
   ruleTags?: RuleTag[]; // reusable chip groups ("lenses") per category
   categoryWeights?: CategoryWeights; // each category's share of conviction; sums to 100
   /**
+   * Categories that contribute to conviction. Omitted keys default to enabled.
+   * `false` excludes the category from scoring / enabled weight totals; its
+   * `categoryWeights` entry is parked (kept for restore) until re-enabled.
+   */
+  categoryEnabled?: Partial<Record<RuleCategory, boolean>>;
+  /**
    * Layer 3 zone overlays — independent chip/tag copies. A zone fires when any
    * active chip fails (`evaluateZoneFlags`); never read for conviction math.
    * Trim/Add → ticker labels; Go to Cash → portfolio badge only.

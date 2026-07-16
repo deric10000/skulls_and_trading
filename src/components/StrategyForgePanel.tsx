@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { DEFAULT_CATEGORY_WEIGHTS } from "../data";
 import { dataSource } from "../lib/datasource";
 import {
   CATEGORY_META,
@@ -16,6 +17,11 @@ import {
   isStrategyApplyReady,
 } from "../lib/forge/applyReadiness";
 import {
+  enabledCategories,
+  isCategoryEnabled,
+  patchCategoryEnabled,
+} from "../lib/forge/categoryEnabled";
+import {
   ArrowCounterClockwise,
   FloppyDisk,
   PencilSimple,
@@ -24,6 +30,7 @@ import {
 import { ForgeToast } from "./forge/ForgeToast";
 import { useAppState } from "../state/AppState";
 import { ActionFooter } from "./ActionFooter";
+import { Checkbox } from "./Checkbox";
 import { Dropdown } from "./Dropdown";
 import { ForgePill } from "./ForgePill";
 import { MultiSelect } from "./MultiSelect";
@@ -210,17 +217,26 @@ export function StrategyForgePanel({ strategy }: { strategy: Strategy | undefine
   const [selectedTickerPortfolioId, setSelectedTickerPortfolioId] = useState("");
   const [applyToastDismissed, setApplyToastDismissed] = useState(false);
   const [updateToastVisible, setUpdateToastVisible] = useState(false);
+  const [infoToast, setInfoToast] = useState<string | null>(null);
   const [updatedFlash, setUpdatedFlash] = useState(false);
   const flashTimer = useRef<number | undefined>(undefined);
   const updateToastTimer = useRef<number | undefined>(undefined);
+  const infoToastTimer = useRef<number | undefined>(undefined);
   const previousStrategyIdRef = useRef<string | undefined>(undefined);
   useEffect(
     () => () => {
       window.clearTimeout(flashTimer.current);
       window.clearTimeout(updateToastTimer.current);
+      window.clearTimeout(infoToastTimer.current);
     },
     [],
   );
+
+  function showInfoToast(message: string) {
+    setInfoToast(message);
+    window.clearTimeout(infoToastTimer.current);
+    infoToastTimer.current = window.setTimeout(() => setInfoToast(null), 10000);
+  }
   useEffect(() => {
     setActiveSection("identity");
     setSelectedTickerPortfolioId("");
@@ -424,6 +440,54 @@ export function StrategyForgePanel({ strategy }: { strategy: Strategy | undefine
   const weightFor = (category: RuleCategory): number | undefined =>
     weights?.[category];
 
+  function patchCategoryWeight(category: RuleCategory, value: number) {
+    if (!isCategoryEnabled(strategy, category)) return;
+    updateStrategy(id, {
+      categoryWeights: {
+        ...(weights ?? DEFAULT_CATEGORY_WEIGHTS),
+        [category]: value,
+      },
+    });
+  }
+
+  function toggleCategoryEnabled(category: RuleCategory, enabled: boolean) {
+    if (!enabled && enabledCategories(strategy).length <= 1) {
+      showInfoToast("Keep at least one category on for conviction scoring.");
+      return;
+    }
+    const patch = patchCategoryEnabled(strategy, category, enabled);
+    if (!patch) return;
+    updateStrategy(id, patch);
+    const label = CATEGORY_META[category].stepLabel;
+    if (!enabled) {
+      showInfoToast(
+        `${label} no longer counts toward conviction — its weight stays parked. The other categories were scaled up to fill 100% — adjust them if your plan shifted.`,
+      );
+    } else {
+      showInfoToast(
+        `${label} counts toward conviction again at its parked weight. The other categories were scaled down to make room — adjust them if your plan shifted.`,
+      );
+    }
+  }
+
+  function handleSectionChange(next: string) {
+    setActiveSection(next);
+    if (
+      CATEGORY_ORDER.includes(next as RuleCategory) &&
+      !isCategoryEnabled(strategy, next as RuleCategory)
+    ) {
+      const label = CATEGORY_META[next as RuleCategory].stepLabel;
+      showInfoToast(
+        `${label} is off for conviction scoring. Enable it under Description → Conviction Scores.`,
+      );
+    }
+  }
+
+  const convictionWeightTotal = enabledCategories(strategy).reduce(
+    (sum, category) => sum + (weightFor(category) ?? 0),
+    0,
+  );
+
   // In-card section tabs: Description + Cadence + the six categories.
   const sectionTabs: SectionTab[] = [
     { id: "identity", label: "Description" },
@@ -445,12 +509,25 @@ export function StrategyForgePanel({ strategy }: { strategy: Strategy | undefine
       </div>
 
       {/* In-card section tabs — one Configure pane visible at a time. */}
-      <SectionTabs tabs={sectionTabs} active={activeSection} onChange={setActiveSection} />
+      <SectionTabs
+        tabs={sectionTabs}
+        active={activeSection}
+        onChange={handleSectionChange}
+      />
 
-      {(updateToastVisible || (!applyReady && !applyToastDismissed)) ? (
-        <div className="forge-toast-stack">
+      {/* Toasts overlay the scroll body so they don't shove the form down. */}
+      <div className="strategy-config-main">
+      {(updateToastVisible ||
+        infoToast ||
+        (!applyReady && !applyToastDismissed)) ? (
+        <div className="forge-toast-stack forge-toast-stack--overlay">
           {updateToastVisible ? (
             <ForgeToast tone="success">Strategy updated.</ForgeToast>
+          ) : null}
+          {infoToast ? (
+            <ForgeToast tone="info" onDismiss={() => setInfoToast(null)}>
+              {infoToast}
+            </ForgeToast>
           ) : null}
           {!applyReady && !applyToastDismissed ? (
             <ForgeToast
@@ -516,6 +593,75 @@ export function StrategyForgePanel({ strategy }: { strategy: Strategy | undefine
           onChange={(ids) => updateStrategy(id, { appliedPortfolioIds: ids })}
           placeholder="Select portfolios to apply this strategy to"
         />
+      </div>
+
+      {/* ---- Conviction scores (same categoryWeights as each category tab) ---- */}
+      <div className="config-field">
+        <span className="config-label forge-label">
+          Conviction Scores
+          <InfoTip
+            label="About conviction scores"
+            body="Each category weight is that category's share of a stock's conviction. Rule chips score a category 0–100; those scores are multiplied by these weights and summed. Uncheck a category to park its weight exactly and scale the others up to 100%. Turn it back on to restore that parked weight and scale the others down to make room. Edit weights here or on each category tab; they stay in sync."
+          />
+        </span>
+        <div className="forge-conviction-grid">
+          {CATEGORY_ORDER.map((category) => {
+            const meta = CATEGORY_META[category];
+            const weight = weightFor(category);
+            const categoryOn = isCategoryEnabled(strategy, category);
+            return (
+              <div
+                key={category}
+                className={
+                  categoryOn
+                    ? "config-field forge-conviction-field"
+                    : "config-field forge-conviction-field is-off"
+                }
+              >
+                <div className="config-toggle forge-conviction-toggle">
+                  <Checkbox
+                    checked={categoryOn}
+                    aria-label={`Include ${meta.stepLabel} in conviction scoring`}
+                    onCheckedChange={(next) =>
+                      toggleCategoryEnabled(category, next)
+                    }
+                  />
+                  <span className="config-label forge-label forge-label--muted">
+                    {meta.stepLabel}
+                  </span>
+                </div>
+                <span className="forge-weight-edit">
+                  <input
+                    id={`conviction-weight-${category}`}
+                    className="input forge-cell-input forge-cell-input--num forge-cell-input--weight"
+                    type="number"
+                    min={0}
+                    max={100}
+                    disabled={!categoryOn}
+                    value={weight ?? 0}
+                    aria-label={`${meta.stepLabel} conviction weight percent`}
+                    onChange={(event) =>
+                      patchCategoryWeight(category, Number(event.target.value))
+                    }
+                  />
+                  <span className="forge-cell-unit forge-cell-unit--weight" aria-hidden>
+                    %
+                  </span>
+                </span>
+              </div>
+            );
+          })}
+        </div>
+        <p
+          className={
+            convictionWeightTotal === 100
+              ? "forge-conviction-total"
+              : "forge-conviction-total is-warn"
+          }
+        >
+          Total: {convictionWeightTotal}%
+          {convictionWeightTotal === 100 ? "" : " — must total 100%"}
+        </p>
       </div>
       </div>
 
@@ -626,7 +772,10 @@ export function StrategyForgePanel({ strategy }: { strategy: Strategy | undefine
         <div className="forge-section-head">
           <h3 className="forge-section-title">1. Strategy Cadence</h3>
         </div>
-        <p className="forge-section-q">How often would you like your strategy to update?</p>
+        <p className="forge-section-q">
+          How often should the Forge notify you when your strategy checks pass
+          and rules break?
+        </p>
         <div className="forge-cadence-row">
           <label className="config-field">
             <span className="config-label forge-label forge-label--muted">
@@ -677,7 +826,8 @@ export function StrategyForgePanel({ strategy }: { strategy: Strategy | undefine
         const categoryChips = rules.filter((chip) => chip.category === category);
         const categoryTags = ruleTags.filter((tag) => tag.category === category);
         const weight = weightFor(category);
-        const editingThisWeight = editingWeight === category;
+        const categoryOn = isCategoryEnabled(strategy, category);
+        const editingThisWeight = categoryOn && editingWeight === category;
         return (
           <div
             key={category}
@@ -690,7 +840,11 @@ export function StrategyForgePanel({ strategy }: { strategy: Strategy | undefine
                 <InfoTip label={`About ${meta.label}`} body={meta.info} />
               </h3>
               <div className="forge-section-tools">
-                {editingThisWeight ? (
+                {!categoryOn ? (
+                  <span className="chip forge-weight-chip forge-weight-chip--warn">
+                    Off for conviction
+                  </span>
+                ) : editingThisWeight ? (
                   <span className="forge-weight-edit">
                     <label className="visually-hidden" htmlFor={`weight-${category}`}>
                       {meta.label} conviction weight percent
@@ -704,19 +858,7 @@ export function StrategyForgePanel({ strategy }: { strategy: Strategy | undefine
                       autoFocus
                       value={weight ?? 0}
                       onChange={(event) =>
-                        updateStrategy(id, {
-                          categoryWeights: {
-                            ...(weights ?? {
-                              thesis: 0,
-                              setup: 0,
-                              risk: 0,
-                              position: 0,
-                              trade: 0,
-                              timeframe: 0,
-                            }),
-                            [category]: Number(event.target.value),
-                          },
-                        })
+                        patchCategoryWeight(category, Number(event.target.value))
                       }
                       onBlur={() => setEditingWeight(null)}
                       onKeyDown={(event) => {
@@ -738,14 +880,16 @@ export function StrategyForgePanel({ strategy }: { strategy: Strategy | undefine
                     Conviction Weight Total: {weight == null ? "??" : weight}%
                   </span>
                 )}
-                <button
-                  type="button"
-                  className="icon-btn icon-btn--blue"
-                  aria-label={`Edit ${meta.label} conviction weight`}
-                  onClick={() => setEditingWeight(editingThisWeight ? null : category)}
-                >
-                  <PencilSimple aria-hidden weight="regular" />
-                </button>
+                {categoryOn ? (
+                  <button
+                    type="button"
+                    className="icon-btn icon-btn--blue"
+                    aria-label={`Edit ${meta.label} conviction weight`}
+                    onClick={() => setEditingWeight(editingThisWeight ? null : category)}
+                  >
+                    <PencilSimple aria-hidden weight="regular" />
+                  </button>
+                ) : null}
               </div>
             </div>
 
@@ -893,6 +1037,7 @@ export function StrategyForgePanel({ strategy }: { strategy: Strategy | undefine
         );
       })}
 
+      </div>
       </div>
 
       {/* ---- Actions (pinned card footer; icon-only on mobile) ---- */}

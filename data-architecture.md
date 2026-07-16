@@ -233,7 +233,8 @@ numerator and denominator — see §6 below).
 | File | Role |
 |------|------|
 | `metrics.ts` | The **metric registry** — single source of truth for every data point a chip can test (label + plainLabel, tooltip copy, source snapshot, conditions, date ranges, unit/format). Drives the table-modal dropdowns and tells the engine where to read each value. |
-| `scoring.ts` | Pure functions implementing the algorithm in `docs/strategy-forge.md`: resolve active chips (tag lens union, deduped; default = All Active Chips) → pass/fail per chip → **normalize active rule weights to 100% of the category** → `categoryScore × categoryWeight` → summed conviction. Also `validateStrategy` (completeness checks that gate "Apply to Portfolio"). No thesis/risk gates or conviction clamps — category weights carry that dominance. |
+| `scoring.ts` | Pure functions implementing the algorithm in `docs/strategy-forge.md`: resolve active chips (tag lens union, deduped; default = All Active Chips) → pass/fail per chip → **normalize active rule weights to 100% of the category** → `categoryScore × categoryWeight` → summed conviction. Categories with `categoryEnabled[cat] === false` are skipped (see `categoryEnabled.ts`). Also `validateStrategy` (completeness checks that gate "Apply to Portfolio"). No thesis/risk gates or conviction clamps — category weights carry that dominance. |
+| `categoryEnabled.ts` | Helpers for which Forge categories contribute to conviction: `isCategoryEnabled`, renormalize weights on disable, `patchCategoryEnabled`. |
 | `status.ts` | **Unified status resolver** — Layer 1 conviction band + Layer 2 per-category diagnostic ladders + Layer 3 zone flags (`zoneFlags` / `zoneSurface`) → `ResolvedStatus`. Zone overlays are authored on the strategy and evaluated by `evaluateZoneFlags` (fail → fire); Trim/Add on tickers, Go to Cash on portfolio. Portfolio aggregation MV-weights category scores before resolving. Compass variant (bull/bear/placeholder) derived from primary only. |
 | `alignment.ts` | The **bridge**: pulls snapshots through `dataSource`, scores each holding in each bucket (including `holdingDays` from the bucket `entryDate`), and aggregates **market-value-weighted** conviction + resolved status `byTicker` (best-aligned bucket = headline), `byBucket`, and `portfolio`. |
 | `scheduler.ts` | Stubbed per-bucket refresh scheduler. No-op against mock; establishes the gated (market-hours / tab-visible / cache-stale) contract for live data. |
@@ -254,6 +255,15 @@ snapshots (`data.ts`), and register it in `metrics.ts`. Nothing else changes.
   edited through the table modals on the Configure card. Duplicating a strategy
   deep-copies both; new blank strategies seed empty categories with default
   category weights and the system tags.
+- `strategy.categoryWeights` + optional `strategy.categoryEnabled` set each
+  category's share of conviction and whether it contributes at all. Edited on
+  Description → Conviction Scores (and per-category weight chips). Disabling a
+  category parks its weight exactly (still shown, disabled) and scales the
+  other enabled categories up to 100%; turning it back on restores that parked
+  weight and scales the others down to `(100 − parked)`. Omitted
+  `categoryEnabled` keys default to on. For `isDefault` strategies these two
+  fields are apply-overlay prefs (like `tickerExclusions`) — seed still owns
+  rules/tags.
 - **Layer 3 zone overlays** (`trimZoneRules`/`trimZoneTags`,
   `addZoneRules`/`addZoneTags`, `goToCashRules`/`goToCashTags`) are authored
   under Trade Management → Trim Zone / Add Zone / Go to Cash - SICADFU. These are

@@ -23,16 +23,15 @@ import {
 } from "../lib/forge/tickerStrategy";
 import { STATUS_TONE } from "../lib/status";
 import { StatusStack, WatchAlignLabel, WatchConvictionHead } from "./StatusBadge";
+import { Checkbox } from "./Checkbox";
 import { ForgePill } from "./ForgePill";
 import { PortfolioCompass } from "./PortfolioCompass";
 import {
   CaretDown,
   CaretLeft,
-  CheckSquare,
   MagnifyingGlass,
   PencilSimple,
   Plus,
-  Square,
   Trash,
   X,
 } from "../lib/icons";
@@ -712,7 +711,7 @@ function WatchSummary({
 
 const DEFAULT_SOURCE_ID = dataSource.getPortfolios()[0]?.id ?? "";
 
-/** Current Watch source switcher — multiselect-style list + create row. */
+/** Current Watch / Watch Preview source switcher — optional create row. */
 function PortfolioSourceSwitcher({
   id,
   sources,
@@ -724,8 +723,8 @@ function PortfolioSourceSwitcher({
   sources: Portfolio[];
   value: string;
   onChange: (id: string) => void;
-  /** Opens the Watchlist vs Portfolio modal with the typed name. */
-  onCreateRequest: (label: string) => void;
+  /** Opens the Watchlist vs Portfolio modal with the typed name. Omit in preview. */
+  onCreateRequest?: (label: string) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [createDraft, setCreateDraft] = useState("");
@@ -753,7 +752,7 @@ function PortfolioSourceSwitcher({
 
   function requestCreate() {
     const label = createDraft.trim();
-    if (!label) return;
+    if (!label || !onCreateRequest) return;
     onCreateRequest(label);
     setCreateDraft("");
     setOpen(false);
@@ -787,34 +786,36 @@ function PortfolioSourceSwitcher({
           role="listbox"
           aria-label="Portfolios and watchlists"
         >
-          <li className="portfolio-ticker-suggestion portfolio-source-add-row">
-            <input
-              className="input portfolio-source-add-input"
-              placeholder="New name…"
-              value={createDraft}
-              maxLength={48}
-              autoComplete="off"
-              aria-label="Name for a new portfolio or watchlist"
-              onChange={(event) => setCreateDraft(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") {
-                  event.preventDefault();
-                  requestCreate();
-                }
-                event.stopPropagation();
-              }}
-              onClick={(event) => event.stopPropagation()}
-            />
-            <button
-              type="button"
-              className="icon-btn"
-              aria-label="Add portfolio or watchlist"
-              disabled={!createDraft.trim()}
-              onClick={requestCreate}
-            >
-              <Plus aria-hidden weight="regular" />
-            </button>
-          </li>
+          {onCreateRequest ? (
+            <li className="portfolio-ticker-suggestion portfolio-source-add-row">
+              <input
+                className="input portfolio-source-add-input"
+                placeholder="New name…"
+                value={createDraft}
+                maxLength={48}
+                autoComplete="off"
+                aria-label="Name for a new portfolio or watchlist"
+                onChange={(event) => setCreateDraft(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    requestCreate();
+                  }
+                  event.stopPropagation();
+                }}
+                onClick={(event) => event.stopPropagation()}
+              />
+              <button
+                type="button"
+                className="icon-btn"
+                aria-label="Add portfolio or watchlist"
+                disabled={!createDraft.trim()}
+                onClick={requestCreate}
+              >
+                <Plus aria-hidden weight="regular" />
+              </button>
+            </li>
+          ) : null}
           {sources.map((source) => {
             const isSelected = source.id === value;
             return (
@@ -1141,27 +1142,15 @@ function WatchStrategyEditPicker({
                 >
                   <span className="portfolio-ticker-symbol">{strategy.name}</span>
                 </button>
-                <button
-                  type="button"
-                  className={
-                    on
-                      ? "watch-strategy-check watch-strategy-check--on"
-                      : "watch-strategy-check"
-                  }
+                <Checkbox
+                  checked={on}
                   aria-label={
                     on
                       ? `Remove ${strategy.name} from ${ticker}`
                       : `Add ${strategy.name} to ${ticker}`
                   }
-                  aria-pressed={on}
-                  onClick={() => onToggle(strategy.id, !on)}
-                >
-                  {on ? (
-                    <CheckSquare aria-hidden weight="fill" />
-                  ) : (
-                    <Square aria-hidden weight="regular" />
-                  )}
-                </button>
+                  onCheckedChange={(next) => onToggle(strategy.id, next)}
+                />
               </li>
             );
           })}
@@ -1178,9 +1167,17 @@ function WatchStrategyEditPicker({
 
 export function WatchlistWidget({
   readOnly = false,
+  previewStrategyId,
   onSelectTicker,
 }: {
   readOnly?: boolean;
+  /**
+   * Strategy Forge column: Watch Preview for this strategy. Limits the source
+   * switcher to its applied portfolios, hides edit/create, and shows an empty
+   * state when none are applied. Multi-strategy conviction on tickers stays
+   * intact so other assigned strategies remain visible.
+   */
+  previewStrategyId?: string;
   /**
    * Optional: called when a name is selected in the read-only (home) widget so a
    * sibling (e.g. Market Weather) can focus that ticker's sector/industry. Does
@@ -1208,6 +1205,17 @@ export function WatchlistWidget({
     getWatchPullStamp,
     lastDataPullAtByStrategyId,
   } = useAppState();
+  const isPreview = Boolean(previewStrategyId);
+  const panelTitle = isPreview ? "Watch Preview" : "Current Watch";
+  const previewStrategy = previewStrategyId
+    ? strategies.find((strategy) => strategy.id === previewStrategyId)
+    : undefined;
+  const previewSources = useMemo(() => {
+    if (!previewStrategy) return [];
+    const applied = new Set(previewStrategy.appliedPortfolioIds ?? []);
+    return portfolios.filter((source) => applied.has(source.id));
+  }, [previewStrategy, portfolios]);
+  const availableSources = isPreview ? previewSources : portfolios;
   const [editMode, setEditMode] = useState(false);
   const [editDraft, setEditDraft] = useState("");
   const [editToast, setEditToast] = useState<string | null>(null);
@@ -1242,13 +1250,24 @@ export function WatchlistWidget({
   // global selected ticker that drives the dashboard. Defaults to none selected.
   const [localSelected, setLocalSelected] = useState<string | null>(null);
   // Which portfolio/watchlist is shown. Portfolios (live-connected accounts) are
-  // read-only; only a watchlist can add/remove tickers.
-  const [portfolio, setPortfolio] = useState(DEFAULT_SOURCE_ID);
+  // read-only; only a watchlist can add/remove tickers. Preview mode is scoped
+  // to the forge strategy's applied sources.
+  const [portfolio, setPortfolio] = useState(
+    () => availableSources[0]?.id ?? DEFAULT_SOURCE_ID,
+  );
   // 0 = All (merged); 1..n = appliedStrategies[n-1]. Only used when ≥2 applied.
   const [strategyViewIndex, setStrategyViewIndex] = useState(0);
+
+  useEffect(() => {
+    if (availableSources.length === 0) return;
+    if (!availableSources.some((source) => source.id === portfolio)) {
+      setPortfolio(availableSources[0].id);
+    }
+  }, [availableSources, portfolio]);
+
   const selectedSource =
-    portfolios.find((option) => option.id === portfolio) ??
-    portfolios[0] ?? {
+    availableSources.find((option) => option.id === portfolio) ??
+    availableSources[0] ?? {
       id: DEFAULT_SOURCE_ID,
       label: "Portfolio",
       type: "portfolio" as const,
@@ -1644,11 +1663,33 @@ export function WatchlistWidget({
       ? `${displayItems.length} stocks`
       : `${displayItems.length} stocks, ${pullStamp}`;
 
+  if (isPreview && previewSources.length === 0) {
+    return (
+      <section
+        className="panel watchlist watchlist--preview"
+        aria-labelledby="watchlist-title"
+      >
+        <div className="panel-head">
+          <h2 id="watchlist-title">{panelTitle}</h2>
+        </div>
+        <p className="watchlist-preview-empty">
+          No portfolios applied yet. Apply a portfolio on the Description tab to
+          preview this strategy's watch.
+        </p>
+      </section>
+    );
+  }
+
   if (summaryItem) {
     return (
-      <section className="panel watchlist" aria-labelledby="watchlist-title">
+      <section
+        className={
+          isPreview ? "panel watchlist watchlist--preview" : "panel watchlist"
+        }
+        aria-labelledby="watchlist-title"
+      >
         <div className="panel-head">
-          <h2 id="watchlist-title">Current Watch</h2>
+          <h2 id="watchlist-title">{panelTitle}</h2>
           <span className="panel-tag">{summaryItem.ticker}</span>
         </div>
         <button
@@ -1657,7 +1698,7 @@ export function WatchlistWidget({
           onClick={() => setLocalSelected(null)}
         >
           <CaretLeft aria-hidden />
-          Current Watch
+          {panelTitle}
         </button>
         <WatchSummary
           item={summaryItem}
@@ -1670,55 +1711,66 @@ export function WatchlistWidget({
 
   return (
     <section
-      className={
-        editMode ? "panel watchlist watchlist--editing" : "panel watchlist"
-      }
+      className={[
+        "panel",
+        "watchlist",
+        editMode ? "watchlist--editing" : "",
+        isPreview ? "watchlist--preview" : "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
       aria-labelledby="watchlist-title"
     >
       <div className="panel-head">
-        <h2 id="watchlist-title">Current Watch</h2>
+        <h2 id="watchlist-title">{panelTitle}</h2>
         <span className="panel-tag watchlist-tag">{stocksTag}</span>
       </div>
       <div className="portfolio-switcher">
         <div className="portfolio-field">
           <PortfolioSourceSwitcher
             id="portfolio-select"
-            sources={portfolios}
+            sources={availableSources}
             value={portfolio}
             onChange={setPortfolio}
-            onCreateRequest={(label) => {
-              setPendingSourceName(label);
-              setPendingSourceType("watchlist");
-            }}
+            onCreateRequest={
+              isPreview
+                ? undefined
+                : (label) => {
+                    setPendingSourceName(label);
+                    setPendingSourceType("watchlist");
+                  }
+            }
           />
         </div>
-        <button
-          type="button"
-          className={editMode ? "icon-btn icon-btn--active" : "icon-btn"}
-          aria-label={
-            editMode
-              ? editIsDirty
-                ? "Editing — use Cancel or Update below"
-                : "Done editing portfolio or watchlist"
-              : "Edit portfolio or watchlist"
-          }
-          aria-pressed={editMode}
-          disabled={editMode && editIsDirty}
-          onClick={() => {
-            if (editMode) {
-              if (editIsDirty) return;
-              cancelEditMode();
-              return;
+        {isPreview ? null : (
+          <button
+            type="button"
+            className={editMode ? "icon-btn icon-btn--active" : "icon-btn"}
+            aria-label={
+              editMode
+                ? editIsDirty
+                  ? "Editing — use Cancel or Update below"
+                  : "Done editing portfolio or watchlist"
+                : "Edit portfolio or watchlist"
             }
-            enterEditMode();
-            setEditDraft("");
-            setEditToast(null);
-            setTickerSuggestionsOpen(false);
-            setAddPreview(null);
-          }}
-        >
-          <PencilSimple aria-hidden weight="regular" />
-        </button>
+            aria-pressed={editMode}
+            disabled={editMode && editIsDirty}
+            onClick={() => {
+              if (editMode) {
+                if (editIsDirty) return;
+                cancelEditMode();
+                return;
+              }
+              enterEditMode();
+              setEditDraft("");
+              setEditToast(null);
+              setTickerSuggestionsOpen(false);
+              setAddPreview(null);
+            }}
+          >
+            <PencilSimple aria-hidden weight="regular" />
+          </button>
+        )}
       </div>
       {pendingSourceName ? (
         <ForgeTableModal

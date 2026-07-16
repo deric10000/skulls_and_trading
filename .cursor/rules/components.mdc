@@ -20,10 +20,11 @@ specific thing they ask for — never bundle in extra tweaks.
 | Nav links | `.nav-link`, `.nav-link--active` | Padding, color, active state. |
 | Account | `.site-account`, `.chip--soon` | Demo / Beta chip (Closed Beta tooltip) + `LinkButton` "Sign Out" (link-button, **never** a filled button). |
 | `LinkButton` | `src/components/LinkButton.tsx` | Renders `.btn.btn--link`. |
+| `Checkbox` | `src/components/Checkbox.tsx` | The one on/off checkbox: `.checkbox` / `.is-checked`, 28×28 blue info square + Phosphor Square/CheckSquare (22px). No native `<input type="checkbox">` or parallel check icons. `decorative` for marks inside a parent control. |
 | `SiteFooter` | `src/components/SiteFooter.tsx` | Single shared footer in `AppShell`; content + behavior. Never add a second footer. |
 | Home widgets | `HeroCard`, `MarketFlowWidget`, `WatchlistWidget`, `Tabs` | Internal markup, content, and visual styling. |
-| `Tooltip` / `InfoTip` | `src/components/Tooltip.tsx` | Desktop hover/focus-within reveal; mobile tap-to-toggle bottom sheet + close button (see "Tooltip standard" below). |
-| `ComingSoonOverlay` | `src/components/ComingSoonOverlay.tsx` | Full-viewport fixed scrim portaled to `document.body` (scroll locked; header stays above for TopNav) + non-dismissible panel matching `.modal-card` / Forge title+body type. Filled HardHat (`--warning`) inline left of headline; copy from `src/lib/closedBeta.ts`. No close/actions. Desktop/tablet: centered. Mobile: panel under `--app-header-h`. Adopters: Dashboard, Ships, Captain Profile. Do not one-off per page. |
+| `Tooltip` / `InfoTip` | `src/components/Tooltip.tsx` | Desktop hover/focus reveal (portaled; stock `.tooltip*` only); mobile tap-to-toggle bottom sheet + close button (see "Tooltip standard" below). |
+| `ComingSoonOverlay` | `src/components/ComingSoonOverlay.tsx` | Full-viewport fixed scrim portaled to `document.body` (scroll locked) + panel matching `.modal-card` / Forge title+body type. **States:** (1) `coming-soon` (default) — filled HardHat (`--warning`) + Closed Beta trust copy; no close/actions; header stays above for TopNav; wraps page children as inert; adopters Dashboard, Ships, Captain Profile. (2) `legal` — filled Warning + disclaimer + primary “Accept and Continue”; `coming-soon-overlay--gate` until acknowledged. (3) `dismissible` — same Coming Soon panel + Forge close (X); optional `autoDismissMs` (default 8s); portal-only; click scrim or X to dismiss; adopter Hero preview cards. Desktop/tablet: centered. Mobile: panel under `--app-header-h`. Do not one-off a parallel scrim/panel. |
 | `ActionFooter` | `src/components/ActionFooter.tsx` | Reports its own height as `--sticky-footer-h` (see App shell below) — don't remove without checking consumers. |
 
 When the user references the Figma wireframes, treat them as **structure only**
@@ -75,9 +76,12 @@ inline style.
 
 ## Conviction chip breakdown standard (`.watch-summary-chips`)
 
-The read-only Watch summary (`WatchSummary` in `WatchlistWidget.tsx` — used by
-both the Home "Current Watch" widget and the Forge page's read-only preview
-column) shows, per ticker, **one block per assigned strategy** (default
+The Watch summary (`WatchSummary` in `WatchlistWidget.tsx`) is used by Home
+**Current Watch** (`readOnly`) and Forge **Watch Preview**
+(`readOnly` + `previewStrategyId`). Preview renames the panel, hides edit/create,
+limits the source switcher to that strategy's `appliedPortfolioIds`, and shows an
+empty state when none are applied — multi-strategy conviction on tickers is
+unchanged. Per ticker it shows **one block per assigned strategy** (default
 strategies via `holdings[].strategyIds`; custom copies via applied portfolio —
 `AppState.getAppliedStrategiesForTicker` / `strategiesForTicker`), each with its
 own rule-chip breakdown:
@@ -354,12 +358,14 @@ info-icon trigger, used beside Configure-card section labels). Always reach
 for `Tooltip`/`InfoTip` for hover/tap explanatory content — never hand-roll a
 one-off popover.
 
-- **Desktop/tablet (`≥ 768px`)** — reveals on `:hover` / `:focus-within`,
-  `pointer-events: none` (decorative, dismisses on mouse-out/blur). No open
-  state / close button on desktop. After reveal, `Tooltip.tsx` clamps the
-  popover into the viewport (shift X; flip above only when there is room;
-  otherwise fixed-pin inside the viewport) so edge / header triggers are not
-  cut off. Do not invent a second tooltip component for edge placement.
+- **Desktop/tablet (`≥ 768px`)** — reveals on hover / focus (React `open`
+  state). Portaled to `document.body` using stock `.tooltip` / `.tooltip--wide`
+  only; layout is `position: fixed` via inline styles (no new `.tooltip*` CSS)
+  so card / panel `overflow: hidden` cannot clip it. `pointer-events: none`
+  (decorative, dismisses on mouse-out/blur). No close button on desktop.
+  After reveal, clamps into the viewport (prefer below; flip above when there
+  is room; otherwise pin). Do not invent a second tooltip component or novel
+  tooltip CSS for edge placement.
 - **Mobile (`< 768px`)** — touch has no hover, so behavior switches to
   **tap-to-toggle**: tapping the trigger sets `.tooltip-wrap.is-open`, and the
   tooltip renders as a **sheet fixed to the bottom-center of the viewport**
@@ -413,11 +419,12 @@ rules in play (don't conflate them):
   tone via `SEVERITY_TONE`. A positive condition is always green regardless of
   any number.
 - **Measure / range chips** color by **where a value lands in a range**, not by
-  the surrounding item's tone. The weather `ConfidenceChip` is the reference:
-  `confidenceTone(value)` → `>= 70` positive, `40–69` warning, `< 40` negative
-  (thresholds `CONFIDENCE_HIGH_MIN` / `CONFIDENCE_MEDIUM_MIN` in `lib/weather`).
-  A new "how good is this number" chip (score, fill %, etc.) follows this band
-  pattern with its own named thresholds — never reuse the parent's tone.
+  the surrounding item's tone. Use a small `*Tone(value)` helper with named
+  thresholds (e.g. `confidenceTone` in `lib/weather` when a confidence % is
+  shown elsewhere): `>= 70` positive, `40–69` warning, `< 40` negative. A new
+  "how good is this number" chip (score, fill %, etc.) follows this band
+  pattern — never reuse the parent's tone. Market Weather layer cards show
+  condition only (no confidence chip).
 
 When adding a chip, decide which rule applies first, then reuse the matching
 helper (or add a small `*Tone(value)` helper next to its data) so the mapping is

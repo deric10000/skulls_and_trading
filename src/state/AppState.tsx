@@ -1006,6 +1006,9 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         categoryWeights: source.categoryWeights
           ? { ...source.categoryWeights }
           : { ...DEFAULT_CATEGORY_WEIGHTS },
+        categoryEnabled: source.categoryEnabled
+          ? { ...source.categoryEnabled }
+          : undefined,
         // A fresh copy starts unapplied — the user applies it explicitly.
         appliedPortfolioIds: [],
       };

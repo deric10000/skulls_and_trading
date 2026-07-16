@@ -129,7 +129,10 @@ export function StrategyForgePage() {
               </div>
             ) : (
               <div className="forge-watch">
-                <WatchlistWidget readOnly />
+                <WatchlistWidget
+                  readOnly
+                  previewStrategyId={selectedStrategy.id}
+                />
               </div>
             )}
           </div>
@@ -188,10 +191,13 @@ export function StrategyForgePage() {
           <StrategyForgePanel strategy={selectedStrategy} />
         </div>
 
-        {/* Read-only portfolio view: watch conviction/status shift here as the
-            selected strategy is edited (plumbed through AppState). */}
+        {/* Watch Preview: applied portfolios for the selected strategy; conviction
+            still reflects every strategy assigned to each ticker. */}
         <div className="forge-watch">
-          <WatchlistWidget readOnly />
+          <WatchlistWidget
+            readOnly
+            previewStrategyId={selectedStrategy?.id}
+          />
         </div>
       </div>
     </div>
