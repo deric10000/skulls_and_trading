@@ -34,19 +34,31 @@ import {
 import { withPortfolioApplied } from "../lib/forge/appliedPortfolios";
 import { createRefreshScheduler } from "../lib/forge/scheduler";
 import { strategiesForHolding, isDefaultStrategyId } from "../lib/forge/tickerStrategy";
-import {
-  debounce,
-  loadPersistedChipLibrary,
-  loadPersistedStrategies,
-  persistChipLibrary,
-  persistStrategies,
-} from "../lib/forge/persistence";
+import { canAddChips, canAddTicker, getBudgetUsage } from "../lib/forge/budgets";
+import { debounce } from "../lib/forge/persistence";
 import { resolveStatus } from "../lib/forge/status";
 import {
   scoreStock,
   type MetricContext,
   type StockAlignment,
 } from "../lib/forge/scoring";
+import {
+  fetchProfile,
+  redeemInviteCode,
+  signOutSupabase,
+  takePendingInvite,
+} from "../lib/auth/session";
+import { getSupabase, isSupabaseConfigured } from "../lib/auth/supabaseClient";
+import type { UserProfile } from "../lib/auth/types";
+import { isAdmin } from "../lib/auth/types";
+import {
+  appendConvictionSnapshots,
+  emptyWorkspace,
+  loadUserWorkspace,
+  saveUserWorkspace,
+  type UserWorkspace,
+} from "../lib/userStore";
+import { sanitizeStrategyPatch } from "../lib/userStore/strategyMerge";
 import type {
   Bucket,
   CaptainProfile,
@@ -92,23 +104,27 @@ export type WatchEditSnapshot = {
   tickerExclusionsByStrategy: Record<string, string[]>;
 };
 
-// The default portfolio (whose holdings seed the editable watchlist + dashboard).
-const DEFAULT_PORTFOLIO_ID = dataSource.getPortfolios()[0]?.id ?? "";
-
 type LogDraft = Pick<LogEntry, "title" | "note" | "strategy">;
 
 interface AppStateValue {
-  // Mock auth (no real backend/provider). Designed to later swap for a real
-  // auth/session layer without changing consumers.
   isAuthenticated: boolean;
   demoMode: boolean;
   needsOnboarding: boolean;
   captainName: string;
+  userProfile: UserProfile | null;
+  needsLegalAck: boolean;
+  acknowledgeLegal: () => void;
+  completeBetaSignIn: () => Promise<void>;
+  /** @deprecated Mock-only; Beta uses completeBetaSignIn */
   signIn: (name?: string) => void;
+  /** @deprecated Mock-only; Beta uses SignUpForm + completeBetaSignIn */
   signUp: (name: string) => void;
+  /** Demo Captain retired for Beta persist — no-op / blocked */
   continueAsDemo: () => void;
   completeOnboarding: () => void;
   signOut: () => void;
+  budgetToast: string | null;
+  clearBudgetToast: () => void;
 
   captain: CaptainProfile;
   updateCaptain: (patch: Partial<CaptainProfile>) => void;
@@ -131,7 +147,7 @@ interface AppStateValue {
   duplicateStrategy: (id: string) => string | undefined;
   resetStrategy: (id: string) => void;
 
-  /** Live portfolio holdings (session overlay on mock seed data). */
+  /** Live portfolio holdings (persisted per Beta user). */
   portfolios: Portfolio[];
   setTickerEnabledForStrategy: (
     portfolioId: string,
@@ -140,14 +156,14 @@ interface AppStateValue {
     enabled: boolean,
   ) => void;
   /**
-   * Session-only add (not persisted across refresh/logout yet). Requires a
-   * `TICKERS` / getTickerInfo hit — otherwise returns `no-data`.
+   * Add ticker to a portfolio. Requires a `TICKERS` / getTickerInfo hit —
+   * otherwise returns `no-data`. Soft-capped for free-tier Yahoo budgets.
    */
   addTickerToPortfolio: (
     portfolioId: string,
     ticker: string,
-  ) => "added" | "exists" | "no-data";
-  /** Session-only: set share count on a holding (portfolios; watchlists ignore in UI). */
+  ) => "added" | "exists" | "no-data" | "budget";
+  /** Set share count on a holding (portfolios; watchlists ignore in UI). */
   updateHoldingShares: (
     portfolioId: string,
     ticker: string,
@@ -242,47 +258,141 @@ function currentTimestamp(): string {
   return logTimestamp(time);
 }
 
-const persistStrategiesDebounced = debounce(persistStrategies, 300);
-const persistChipLibraryDebounced = debounce(persistChipLibrary, 300);
+const persistWorkspaceDebounced = debounce((workspace: UserWorkspace) => {
+  void saveUserWorkspace(workspace).catch((err) => {
+    console.warn("user_state save failed", err);
+  });
+}, 500);
+
+function applyWorkspaceToSetters(
+  workspace: UserWorkspace,
+  setters: {
+    setPortfolios: (p: Portfolio[]) => void;
+    setStrategies: (s: Strategy[]) => void;
+    setChipLibrary: (c: RuleChip[]) => void;
+    setWatchlist: (w: WatchlistItem[]) => void;
+    setLogsByTicker: (l: Record<string, LogEntry[]>) => void;
+    setCaptain: (c: CaptainProfile) => void;
+    setShareFills: (f: ShareFillEvent[]) => void;
+    setSelectedTicker: (t: string) => void;
+    setCaptainName: (n: string) => void;
+  },
+) {
+  setters.setPortfolios(clonePortfolios(workspace.portfolios));
+  setters.setStrategies(workspace.strategies);
+  setters.setChipLibrary(workspace.chipLibrary);
+  setters.setWatchlist(workspace.watchlist);
+  setters.setLogsByTicker(workspace.logsByTicker);
+  setters.setCaptain(workspace.captain);
+  setters.setShareFills(workspace.shareFills);
+    setters.setCaptainName(workspace.captain.handle);
+  setters.setSelectedTicker(workspace.watchlist[0]?.ticker ?? "");
+}
 
 export function AppStateProvider({ children }: { children: ReactNode }) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [demoMode, setDemoMode] = useState(false);
   const [needsOnboarding, setNeedsOnboarding] = useState(false);
   const [captainName, setCaptainName] = useState("");
-  const [captain, setCaptain] = useState<CaptainProfile>(DEFAULT_CAPTAIN);
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [needsLegalAck, setNeedsLegalAck] = useState(false);
+  const [budgetToast, setBudgetToast] = useState<string | null>(null);
+  const [authReady, setAuthReady] = useState(!isSupabaseConfigured());
+  const [captain, setCaptain] = useState<CaptainProfile>({
+    ...DEFAULT_CAPTAIN,
+    handle: "Captain",
+  });
   const [activePage, setActivePage] = useState<PageId>("home");
 
   const updateCaptain = useCallback((patch: Partial<CaptainProfile>) => {
     setCaptain((current) => ({ ...current, ...patch }));
   }, []);
-  const [watchlist, setWatchlist] = useState<WatchlistItem[]>(() =>
-    dataSource.getInitialWatchlist(),
-  );
-  const [selectedTicker, setSelectedTicker] = useState<string>(
-    () => dataSource.getInitialWatchlist()[0]?.ticker ?? "",
-  );
+  const [watchlist, setWatchlist] = useState<WatchlistItem[]>([]);
+  const [selectedTicker, setSelectedTicker] = useState("");
   const [strategies, setStrategies] = useState<Strategy[]>(() =>
-    loadPersistedStrategies(),
+    emptyWorkspace().strategies,
   );
   const [buckets] = useState<Bucket[]>(() => dataSource.getBuckets());
   const [chipLibrary, setChipLibrary] = useState<RuleChip[]>(() =>
-    loadPersistedChipLibrary(),
+    emptyWorkspace().chipLibrary,
   );
-  const [portfolios, setPortfolios] = useState<Portfolio[]>(() =>
-    clonePortfolios(dataSource.getPortfolios()),
-  );
+  const [portfolios, setPortfolios] = useState<Portfolio[]>([]);
   const [shareFills, setShareFills] = useState<ShareFillEvent[]>([]);
   const [logsByTicker, setLogsByTicker] = useState<Record<string, LogEntry[]>>(
-    () => dataSource.getLogs(),
+    {},
   );
   const [marketGeneration, setMarketGeneration] = useState(0);
   const [marketLoading, setMarketLoading] = useState(false);
   const [marketError, setMarketError] = useState<string | null>(null);
+  const persistEnabled = useRef(false);
 
   useEffect(() => {
     return subscribeLiveCache(() => setMarketGeneration(getLiveCacheGeneration()));
   }, []);
+
+  const hydrateFromSession = useCallback(async () => {
+    const profile = await fetchProfile();
+    if (!profile) return;
+    const pending = takePendingInvite();
+    if (pending) {
+      await redeemInviteCode(pending).catch(() => false);
+    }
+    const workspace = await loadUserWorkspace(profile.captainName);
+    applyWorkspaceToSetters(workspace, {
+      setPortfolios,
+      setStrategies,
+      setChipLibrary,
+      setWatchlist,
+      setLogsByTicker,
+      setCaptain,
+      setShareFills,
+      setSelectedTicker,
+      setCaptainName,
+    });
+    setUserProfile(profile);
+    setDemoMode(false);
+    setNeedsOnboarding(false);
+    setNeedsLegalAck(true);
+    setIsAuthenticated(true);
+    setActivePage("home");
+    persistEnabled.current = true;
+  }, []);
+
+  const completeBetaSignIn = useCallback(async () => {
+    await hydrateFromSession();
+  }, [hydrateFromSession]);
+
+  useEffect(() => {
+    if (!isSupabaseConfigured()) {
+      setAuthReady(true);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const { data } = await getSupabase().auth.getSession();
+        if (!cancelled && data.session) {
+          await hydrateFromSession();
+        }
+      } catch (err) {
+        console.warn("session restore failed", err);
+      } finally {
+        if (!cancelled) setAuthReady(true);
+      }
+    })();
+    const { data: sub } = getSupabase().auth.onAuthStateChange((event) => {
+      if (event === "SIGNED_OUT") {
+        persistEnabled.current = false;
+        setIsAuthenticated(false);
+        setUserProfile(null);
+        setNeedsLegalAck(false);
+      }
+    });
+    return () => {
+      cancelled = true;
+      sub.subscription.unsubscribe();
+    };
+  }, [hydrateFromSession]);
 
   const refreshLiveMarket = useCallback(async () => {
     const tickers = [
@@ -308,6 +418,35 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     }
   }, [portfolios, strategies]);
 
+  const refreshStrategyTickers = useCallback(
+    async (strategyId: string, tickers: string[]) => {
+      const applied = strategies.filter((s) => s.id === strategyId);
+      setMarketLoading(true);
+      try {
+        await refreshLiveMarketForPortfolios(tickers, applied);
+        // Snapshots after pull — alignment scored from live cache on next render;
+        // record last known decorated conviction asynchronously via portfolios.
+        const asOf = new Date().toISOString().slice(0, 10);
+        const rows = tickers.map((ticker) => {
+          const holding = portfolios
+            .flatMap((p) => p.holdings)
+            .find((h) => h.ticker.toUpperCase() === ticker.toUpperCase());
+          return {
+            strategyId,
+            ticker: ticker.toUpperCase(),
+            asOf,
+            conviction: holding?.conviction ?? 0,
+            status: holding?.status,
+          };
+        });
+        void appendConvictionSnapshots(rows);
+      } finally {
+        setMarketLoading(false);
+      }
+    },
+    [strategies, portfolios],
+  );
+
   useEffect(() => {
     if (!isAuthenticated) return;
     void refreshLiveMarket();
@@ -315,20 +454,39 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!isAuthenticated) return;
-    const scheduler = createRefreshScheduler(buckets, strategies, () => {
-      void refreshLiveMarket();
-    });
+    const scheduler = createRefreshScheduler(
+      portfolios,
+      strategies,
+      (strategyId, tickers) => {
+        void refreshStrategyTickers(strategyId, tickers);
+      },
+    );
     scheduler.start();
     return () => scheduler.stop();
-  }, [isAuthenticated, buckets, strategies, refreshLiveMarket]);
+  }, [isAuthenticated, portfolios, strategies, refreshStrategyTickers]);
 
   useEffect(() => {
-    persistStrategiesDebounced(strategies);
-  }, [strategies]);
-
-  useEffect(() => {
-    persistChipLibraryDebounced(chipLibrary);
-  }, [chipLibrary]);
+    if (!persistEnabled.current || !isAuthenticated || demoMode) return;
+    persistWorkspaceDebounced({
+      portfolios,
+      strategies,
+      chipLibrary,
+      watchlist,
+      logsByTicker,
+      captain,
+      shareFills,
+    });
+  }, [
+    portfolios,
+    strategies,
+    chipLibrary,
+    watchlist,
+    logsByTicker,
+    captain,
+    shareFills,
+    isAuthenticated,
+    demoMode,
+  ]);
 
   const idCounter = useRef(0);
   const nextId = useCallback((prefix: string) => {
@@ -336,27 +494,47 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     return `${prefix}-${Date.now()}-${idCounter.current}`;
   }, []);
 
+  const acknowledgeLegal = useCallback(() => {
+    setNeedsLegalAck(false);
+  }, []);
+
+  const clearBudgetToast = useCallback(() => setBudgetToast(null), []);
+
+  const adminBypass = isAdmin(userProfile);
+
   const signIn = useCallback((name?: string) => {
+    // Legacy mock path — only when Supabase is not configured (local UI shell).
+    if (isSupabaseConfigured()) return;
     setCaptainName(name?.trim() || "Captain");
     setDemoMode(false);
     setNeedsOnboarding(false);
+    setNeedsLegalAck(true);
     setIsAuthenticated(true);
     setActivePage("home");
+    const empty = emptyWorkspace(name?.trim() || "Captain");
+    applyWorkspaceToSetters(empty, {
+      setPortfolios,
+      setStrategies,
+      setChipLibrary,
+      setWatchlist,
+      setLogsByTicker,
+      setCaptain,
+      setShareFills,
+      setSelectedTicker,
+      setCaptainName,
+    });
   }, []);
 
   const signUp = useCallback((name: string) => {
-    setCaptainName(name.trim() || "Captain");
-    setDemoMode(false);
+    if (isSupabaseConfigured()) return;
+    signIn(name);
     setNeedsOnboarding(true);
-    setIsAuthenticated(true);
-  }, []);
+  }, [signIn]);
 
   const continueAsDemo = useCallback(() => {
-    setCaptainName("Demo Captain");
-    setDemoMode(true);
-    setNeedsOnboarding(false);
-    setIsAuthenticated(true);
-    setActivePage("home");
+    setBudgetToast(
+      "Demo Captain is retired for Beta. Use an invite code to create an account.",
+    );
   }, []);
 
   const completeOnboarding = useCallback(() => {
@@ -365,11 +543,27 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signOut = useCallback(() => {
+    persistEnabled.current = false;
+    void signOutSupabase();
     setIsAuthenticated(false);
     setDemoMode(false);
     setNeedsOnboarding(false);
+    setNeedsLegalAck(false);
     setCaptainName("");
+    setUserProfile(null);
     setActivePage("home");
+    const empty = emptyWorkspace();
+    applyWorkspaceToSetters(empty, {
+      setPortfolios,
+      setStrategies,
+      setChipLibrary,
+      setWatchlist,
+      setLogsByTicker,
+      setCaptain,
+      setShareFills,
+      setSelectedTicker,
+      setCaptainName,
+    });
   }, []);
 
   const addTicker = useCallback((rawTicker: string) => {
@@ -419,10 +613,12 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     [selectedTicker],
   );
 
-  // Session-only: mutates AppState.portfolios (+ default watchlist mirror).
-  // Not written to localStorage / Demo Captain persistence yet.
+  // Mutates AppState.portfolios (+ watchlist mirror). Persisted via user_state.
   const addTickerToPortfolio = useCallback(
-    (portfolioId: string, rawTicker: string): "added" | "exists" | "no-data" => {
+    (
+      portfolioId: string,
+      rawTicker: string,
+    ): "added" | "exists" | "no-data" | "budget" => {
       const ticker = rawTicker.trim().toUpperCase();
       if (!ticker) return "no-data";
       const info = dataSource.getTickerInfo(ticker);
@@ -432,6 +628,12 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       if (!portfolio) return "no-data";
       if (portfolio.holdings.some((holding) => holding.ticker === ticker)) {
         return "exists";
+      }
+      if (!canAddTicker(portfolios, strategies, { adminBypass })) {
+        setBudgetToast(
+          `Ticker cap reached (${getBudgetUsage(portfolios, strategies).tickersMax}). Remove a name or ask Admin to raise the free-tier limit.`,
+        );
+        return "budget";
       }
 
       setPortfolios((current) =>
@@ -458,29 +660,27 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         ),
       );
 
-      if (portfolioId === DEFAULT_PORTFOLIO_ID) {
-        setWatchlist((current) => {
-          if (current.some((item) => item.ticker === ticker)) return current;
-          return [
-            {
-              ticker,
-              name: `${info.company} · ${info.category}`,
-              price: info.lastPrice,
-              changePct: 0,
-              status: "No Strategy",
-              conviction: 0,
-              shares: 0,
-              avgPrice: 0,
-              reason:
-                "Pending research — assign a strategy and log your thesis.",
-            },
-            ...current,
-          ];
-        });
-      }
+      setWatchlist((current) => {
+        if (current.some((item) => item.ticker === ticker)) return current;
+        return [
+          {
+            ticker,
+            name: `${info.company} · ${info.category}`,
+            price: info.lastPrice,
+            changePct: 0,
+            status: "No Strategy",
+            conviction: 0,
+            shares: 0,
+            avgPrice: 0,
+            reason:
+              "Pending research — assign a strategy and log your thesis.",
+          },
+          ...current,
+        ];
+      });
       return "added";
     },
-    [portfolios],
+    [portfolios, strategies, adminBypass],
   );
 
   const updateHoldingShares = useCallback(
@@ -500,13 +700,11 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
               },
         ),
       );
-      if (portfolioId === DEFAULT_PORTFOLIO_ID) {
-        setWatchlist((current) =>
-          current.map((item) =>
-            item.ticker !== ticker ? item : { ...item, shares: nextShares },
-          ),
-        );
-      }
+      setWatchlist((current) =>
+        current.map((item) =>
+          item.ticker !== ticker ? item : { ...item, shares: nextShares },
+        ),
+      );
     },
     [],
   );
@@ -558,7 +756,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         }),
       );
 
-      if (portfolioId === DEFAULT_PORTFOLIO_ID) {
+      if (true) {  // mirror watchlist for all Beta portfolios
         setWatchlist((current) => {
           let next = current;
           for (const order of orders) {
@@ -607,7 +805,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
               },
         ),
       );
-      if (portfolioId === DEFAULT_PORTFOLIO_ID) {
+      if (true) {  // mirror watchlist for all Beta portfolios
         setWatchlist((current) => {
           const next = current.filter((item) => item.ticker !== ticker);
           if (ticker === selectedTicker) {
@@ -680,7 +878,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         }),
       );
 
-      if (portfolioId === DEFAULT_PORTFOLIO_ID) {
+      if (true) {  // mirror watchlist for all Beta portfolios
         setWatchlist((current) => {
           const byTicker = new Map(current.map((row) => [row.ticker, row]));
           return nextHoldings.map((holding) => {
@@ -746,14 +944,24 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 
   const updateStrategy = useCallback((id: string, patch: Partial<Strategy>) => {
     setStrategies((current) =>
-      current.map((strategy) =>
-        strategy.id === id ? { ...strategy, ...patch } : strategy,
-      ),
+      current.map((strategy) => {
+        if (strategy.id !== id) return strategy;
+        const safe = sanitizeStrategyPatch(strategy, patch);
+        if (strategy.isDefault && Object.keys(safe).length === 0) {
+          return strategy;
+        }
+        return { ...strategy, ...safe };
+      }),
     );
   }, []);
 
   const deleteStrategy = useCallback((id: string) => {
-    setStrategies((current) => current.filter((strategy) => strategy.id !== id));
+    setStrategies((current) =>
+      current.filter((strategy) => {
+        if (strategy.id !== id) return true;
+        return Boolean(strategy.isDefault); // never delete defaults
+      }),
+    );
   }, []);
 
   const duplicateStrategy = useCallback(
@@ -802,24 +1010,34 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const resetStrategy = useCallback((id: string) => {
     const original = DEFAULT_STRATEGIES.find((strategy) => strategy.id === id);
     if (!original) return;
-    setStrategies((current) => {
-      const next = current.map((strategy) =>
-        strategy.id === id ? { ...original } : strategy,
-      );
-      persistStrategies(next);
-      return next;
-    });
+    setStrategies((current) =>
+      current.map((strategy) => {
+        if (strategy.id !== id) return strategy;
+        // Defaults: re-seed body but keep apply prefs.
+        return {
+          ...original,
+          appliedPortfolioIds: strategy.appliedPortfolioIds ?? [],
+          tickerExclusions: strategy.tickerExclusions ?? {},
+        };
+      }),
+    );
   }, []);
 
   const saveChipToLibrary = useCallback(
     (chip: RuleChip) => {
+      if (!canAddChips(portfolios, strategies, 1, { adminBypass })) {
+        setBudgetToast(
+          `Chip budget reached (${getBudgetUsage(portfolios, strategies).chipsMax} active chips across strategies).`,
+        );
+        return;
+      }
       const libraryChip: RuleChip = {
         ...chip,
         id: nextId("lib"),
       };
       setChipLibrary((current) => [...current, libraryChip]);
     },
-    [nextId],
+    [nextId, portfolios, strategies, adminBypass],
   );
 
   const removeChipFromLibrary = useCallback((chipId: string) => {
@@ -994,7 +1212,10 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   // Overlay computed conviction/status onto the default portfolio's watchlist so
   // the Home/dashboard surfaces reflect the Forge engine (not the seed numbers).
   const decoratedWatchlist = useMemo<WatchlistItem[]>(() => {
-    const byTicker = alignmentByPortfolio[DEFAULT_PORTFOLIO_ID]?.byTicker ?? {};
+    const byTicker: Record<string, TickerAlignment> = {};
+    for (const alignment of Object.values(alignmentByPortfolio)) {
+      Object.assign(byTicker, alignment.byTicker);
+    }
     return watchlist.map((item) => {
       const aligned = byTicker[item.ticker];
       const livePrice = dataSource.getTickerInfo(item.ticker)?.lastPrice ?? 0;
@@ -1065,11 +1286,17 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       demoMode,
       needsOnboarding,
       captainName,
+      userProfile,
+      needsLegalAck,
+      acknowledgeLegal,
+      completeBetaSignIn,
       signIn,
       signUp,
       continueAsDemo,
       completeOnboarding,
       signOut,
+      budgetToast,
+      clearBudgetToast,
       captain,
       updateCaptain,
       activePage,
@@ -1120,11 +1347,17 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       demoMode,
       needsOnboarding,
       captainName,
+      userProfile,
+      needsLegalAck,
+      acknowledgeLegal,
+      completeBetaSignIn,
       signIn,
       signUp,
       continueAsDemo,
       completeOnboarding,
       signOut,
+      budgetToast,
+      clearBudgetToast,
       captain,
       updateCaptain,
       activePage,
@@ -1169,6 +1402,10 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       deleteLog,
     ],
   );
+
+  if (!authReady) {
+    return null;
+  }
 
   return (
     <AppStateContext.Provider value={value}>{children}</AppStateContext.Provider>

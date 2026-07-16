@@ -29,8 +29,13 @@ const NAV_ITEMS: { id: PageId; label: string; icon: Icon }[] = [
 ];
 
 export function TopNav() {
-  const { activePage, setActivePage, demoMode, signOut } = useAppState();
-  const chipLabel = demoMode ? "Demo" : "Beta";
+  const { activePage, setActivePage, demoMode, userProfile, signOut } =
+    useAppState();
+  const chipLabel = demoMode
+    ? "Demo"
+    : userProfile?.role === "admin"
+      ? "Admin"
+      : "Beta";
 
   return (
     <header className="site-header">

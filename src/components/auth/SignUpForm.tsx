@@ -1,17 +1,31 @@
 import { useState } from "react";
+import { isSupabaseConfigured } from "../../lib/auth/supabaseClient";
+import {
+  stashPendingInvite,
+  signUpWithInvite,
+} from "../../lib/auth/session";
 import { useAppState } from "../../state/AppState";
 import { AuthButton } from "./AuthButton";
 import { AuthErrorState } from "./AuthErrorState";
 
 export function SignUpForm() {
-  const { signUp } = useAppState();
+  const { completeBetaSignIn } = useAppState();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [inviteCode, setInviteCode] = useState("");
   const [error, setError] = useState("");
+  const [info, setInfo] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
-  function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!isSupabaseConfigured()) {
+      setError(
+        "Beta sign-up is not configured yet. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.",
+      );
+      return;
+    }
     if (!name.trim()) {
       setError("Choose a captain name to sail under.");
       return;
@@ -24,9 +38,35 @@ export function SignUpForm() {
       setError("Use at least 6 characters for your password.");
       return;
     }
+    if (!inviteCode.trim()) {
+      setError("Enter the one-time invite code from the Admin Captain.");
+      return;
+    }
     setError("");
-    // Mock only: no account is actually created.
-    signUp(name);
+    setInfo("");
+    setSubmitting(true);
+    try {
+      const result = await signUpWithInvite({
+        email,
+        password,
+        captainName: name,
+        inviteCode,
+      });
+      if (result.needsEmailConfirm) {
+        stashPendingInvite(inviteCode);
+        setInfo(
+          "Account created. If login says email not confirmed, ask Admin to confirm you in Supabase (or turn off Confirm email under Authentication → Providers → Email). Then sign in — your invite will redeem on first login.",
+        );
+        return;
+      }
+      await completeBetaSignIn();
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Could not create your account.",
+      );
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   return (
@@ -39,6 +79,16 @@ export function SignUpForm() {
           onChange={(event) => setName(event.target.value)}
           placeholder="e.g. Captain Vega"
           autoComplete="nickname"
+        />
+      </label>
+      <label className="auth-field">
+        <span>Invite code</span>
+        <input
+          className="input"
+          value={inviteCode}
+          onChange={(event) => setInviteCode(event.target.value)}
+          placeholder="One-time Beta invite"
+          autoComplete="off"
         />
       </label>
       <label className="auth-field">
@@ -64,7 +114,10 @@ export function SignUpForm() {
         />
       </label>
       <AuthErrorState message={error} />
-      <AuthButton type="submit">Create account &amp; set sail</AuthButton>
+      {info ? <p className="auth-safety">{info}</p> : null}
+      <AuthButton type="submit" disabled={submitting}>
+        {submitting ? "Creating account\u2026" : "Create account & set sail"}
+      </AuthButton>
     </form>
   );
 }

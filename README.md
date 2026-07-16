@@ -1,114 +1,73 @@
 # Skulls and Trading
 
-Modern React starter built with Vite and TypeScript.
+Modern React app (Vite + TypeScript) with a Cloudflare Worker for FreeTier
+market proxies and invite-only Beta accounts on Supabase.
 
 ## Run locally
 
 ```bash
 npm install
+cp .env.example .env.local   # fill VITE_SUPABASE_* 
 npm run dev
 ```
 
-For **live market data** (quotes / search / fundies / Weather inputs), also run
-the Worker so Vite can proxy `/api/market/*`:
+For **live market data**, also run the Worker (Vite proxies `/api` → `:8787`):
 
 ```bash
 # Terminal 1 — SPA
 npm run dev
 
-# Terminal 2 — Worker (default port 8787; vite.config.ts proxies /api here)
+# Terminal 2 — Worker
 npx wrangler dev --config wrangler.jsonc --port 8787
 ```
 
-Optional `.dev.vars` (git-ignored) for local Worker secrets:
+Worker `.dev.vars` (git-ignored):
 
 ```bash
-DEMO_PASSWORD=...
-AUTH_SECRET=...
-# Optional free-tier provider keys (Yahoo works without keys; FRED/Finnhub optional)
-FINNHUB_API_KEY=...
-FRED_API_KEY=...
+SUPABASE_URL=https://YOUR_PROJECT.supabase.co
+SUPABASE_ANON_KEY=...
+MARKET_AUTH_REQUIRED=false   # open market proxy while iterating locally
+# Optional: FINNHUB_API_KEY, FRED_API_KEY
 ```
 
-Without wrangler, `npm run dev` still runs the UI; market pulls fail softly
-(null / Needs Data Review) until `/api` is available.
+### Supabase (required for Beta sign-in / saves)
+
+1. Create a free Supabase project.
+2. Run [`supabase/schema.sql`](supabase/schema.sql) in the SQL editor.
+3. Insert invite codes, e.g.  
+   `insert into public.invite_codes (code, note) values ('BETA-YOURCODE', 'pilot');`
+4. After your first signup, promote Admin:  
+   `update public.profiles set role = 'admin' where email = 'you@example.com';`
+5. Put URL + anon key in `.env.local` and Worker secrets/vars.
+
+Local and Cloudflare should use the **same** Supabase project so saves appear in both.
 
 ## Deploy to Cloudflare
 
-This repo is a Cloudflare Worker (`worker/index.ts`) that serves the built SPA
-from `dist` and handles the `/api/demo-login` gate (see "Demo Captain gate"
-below).
-
 ```bash
 npm run build
+npx wrangler secret put SUPABASE_URL
+npx wrangler secret put SUPABASE_ANON_KEY
+# Do not set ENABLE_DEMO_GATE unless you intentionally re-open Demo Captain
 npx wrangler deploy --config wrangler.jsonc
 ```
 
-## Demo Captain gate (B1)
+Build the SPA with production `VITE_SUPABASE_*` env so the client can auth.
 
-"Continue as Demo Captain" asks for a shared password that is validated
-**server-side** in the Worker, so it never ships in the client bundle. Set the
-secrets once per environment:
+## Beta accounts (not Demo Captain)
 
-```bash
-npx wrangler secret put DEMO_PASSWORD   # the shared demo password
-npx wrangler secret put AUTH_SECRET     # any long random string (cookie signing)
-```
+- **Invite-only** signup (one-time code) → email/password login.
+- Home + Strategy Forge edits persist per user (Postgres RLS).
+- Default strategies stay; bodies locked (duplicate/create to edit).
+- Demo seed portfolios are **not** loaded for Beta users.
+- Legal disclaimer acknowledgment once per login.
+- Market Weather Market/Sector/Industry works with an empty watch.
 
-To exercise the real gate **locally**, build and run the Worker (not the Vite
-dev server) with a `.dev.vars` file (git-ignored) holding the same keys:
-
-```bash
-# .dev.vars
-DEMO_PASSWORD=...
-AUTH_SECRET=...
-```
-
-```bash
-npm run build
-npx wrangler dev --config wrangler.jsonc
-```
-
-> Under plain `npm run dev` (Vite) there is no Worker, so the gate is skipped
-> and "Continue as Demo Captain" enters demo mode directly — that's expected for
-> day-to-day UI work.
-
-> ⚠️ This is a cosmetic gate, not a security boundary: the SPA bundle is public
-> and demo data is fake. See `.cursor/rules/security-hardening.mdc` before
-> wiring up any real or realistic personal/financial data.
+See `data-architecture.md` and `.cursor/rules/security-hardening.mdc`.
 
 ## Project rules & docs
 
-We are standardizing how this app is built so the experience stays
-**consistent across every feature**. Before writing or changing UI, **always
-read the relevant rule/doc files first** and follow them:
-
-- **`.cursor/rules/components.mdc`** — reusable component contracts (what is
-  locked and must not be restyled), the app-shell scroll model, header
-  responsive behavior, and per-viewport card scrolling rules.
-- **`design-system.md`** — design tokens, color, spacing, and styling rules.
-- **`product-voice.md`** — copy, tone, and content rules.
-- **`data-architecture.md`** (+ **`.cursor/rules/data-architecture.mdc`**) — the
-  mock-data model (`TICKERS`/`PORTFOLIOS` single source of truth), the
-  `DataSource` seam, and how mock data gets swapped for real-time market and
-  brokerage data later.
-- **`.cursor/rules/git-workflow.mdc`** — branch-per-change git workflow
-  (`feature/*`, `bug/*`, `chore/*`; never commit straight to `main`).
-- **`.cursor/rules/*.mdc`** — any other scoped rule docs that apply to the
-  files you're touching.
-
-Working agreement:
-
-1. **Check the rules before you build.** Read the component rules and design
-   system docs (and any other rule docs that match the files in scope) before
-   creating a feature or editing a component.
-2. **Reuse, don't re-style.** Shared components are stable. Don't restructure
-   or restyle them as a side effect of an unrelated task — only change what is
-   explicitly requested.
-3. **When you establish a new pattern, write it down.** New features that
-   introduce reusable behavior should add or update a rule doc (a new
-   `.cursor/rules/*.mdc` or a section in the docs above) so it becomes the
-   standard going forward.
-4. **Keep docs and code in sync.** If a change alters documented behavior
-   (e.g. a breakpoint, a scroll model, a component contract), update the rule
-   doc in the same change.
+- **`.cursor/rules/components.mdc`** — reusable component contracts
+- **`design-system.md`** / **`product-voice.md`**
+- **`data-architecture.md`** (+ **`.cursor/rules/data-architecture.mdc`**)
+- **`.cursor/rules/git-workflow.mdc`**

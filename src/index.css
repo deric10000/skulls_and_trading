@@ -8115,3 +8115,46 @@ button.nav-link {
     transition: none !important;
   }
 }
+
+/* Beta 0 legal disclaimer (once per login) */
+.legal-disclaimer-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: var(--space-4);
+  background: color-mix(in srgb, var(--color-ink) 55%, transparent);
+}
+
+.legal-disclaimer {
+  max-width: 28rem;
+  width: 100%;
+  display: grid;
+  gap: var(--space-3);
+}
+
+.legal-disclaimer-body {
+  margin: 0;
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  color: var(--color-muted);
+}
+
+.budget-cap-toast {
+  position: fixed;
+  top: var(--space-4);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 70;
+  max-width: 28rem;
+  width: calc(100% - 2rem);
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+}
