@@ -4616,6 +4616,17 @@ select.forge-cell-input {
   color: var(--forge-chip-text);
 }
 
+/* Desktop: Configure / forge-table scrollports use overflow auto/hidden and
+   clip the global :focus-visible outset ring (2px + 2px offset). Keep the gold
+   focus signal with an inset ring so conviction / rule / tag weight fields
+   stay fully visible. Mobile keeps the outset ring (inputs scale on focus). */
+@media (min-width: 768px) {
+  .forge-cell-input--weight:focus-visible {
+    outline: none;
+    box-shadow: inset 0 0 0 2px var(--accent-strong);
+  }
+}
+
 .forge-cell-range {
   display: flex;
   align-items: center;
