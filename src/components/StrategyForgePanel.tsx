@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { DEFAULT_CATEGORY_WEIGHTS } from "../data";
 import { dataSource } from "../lib/datasource";
 import {
   CATEGORY_META,
@@ -424,6 +425,20 @@ export function StrategyForgePanel({ strategy }: { strategy: Strategy | undefine
   const weightFor = (category: RuleCategory): number | undefined =>
     weights?.[category];
 
+  function patchCategoryWeight(category: RuleCategory, value: number) {
+    updateStrategy(id, {
+      categoryWeights: {
+        ...(weights ?? DEFAULT_CATEGORY_WEIGHTS),
+        [category]: value,
+      },
+    });
+  }
+
+  const convictionWeightTotal = CATEGORY_ORDER.reduce(
+    (sum, category) => sum + (weightFor(category) ?? 0),
+    0,
+  );
+
   // In-card section tabs: Description + Cadence + the six categories.
   const sectionTabs: SectionTab[] = [
     { id: "identity", label: "Description" },
@@ -516,6 +531,61 @@ export function StrategyForgePanel({ strategy }: { strategy: Strategy | undefine
           onChange={(ids) => updateStrategy(id, { appliedPortfolioIds: ids })}
           placeholder="Select portfolios to apply this strategy to"
         />
+      </div>
+
+      {/* ---- Conviction scores (same categoryWeights as each category tab) ---- */}
+      <div className="config-field">
+        <span className="config-label forge-label">
+          Conviction Scores
+          <InfoTip
+            label="About conviction scores"
+            body="Each category weight is that category's share of a stock's conviction. Rule chips score a category 0–100; those scores are multiplied by these weights and summed. All six must total 100%. Edit here or on each category tab — they stay in sync."
+          />
+        </span>
+        <div className="forge-conviction-grid">
+          {CATEGORY_ORDER.map((category) => {
+            const meta = CATEGORY_META[category];
+            const weight = weightFor(category);
+            return (
+              <label
+                key={category}
+                className="config-field forge-conviction-field"
+                htmlFor={`conviction-weight-${category}`}
+              >
+                <span className="config-label forge-label forge-label--muted">
+                  {meta.stepLabel}
+                </span>
+                <span className="forge-weight-edit">
+                  <input
+                    id={`conviction-weight-${category}`}
+                    className="input forge-cell-input forge-cell-input--num forge-cell-input--weight"
+                    type="number"
+                    min={0}
+                    max={100}
+                    value={weight ?? 0}
+                    aria-label={`${meta.stepLabel} conviction weight percent`}
+                    onChange={(event) =>
+                      patchCategoryWeight(category, Number(event.target.value))
+                    }
+                  />
+                  <span className="forge-cell-unit forge-cell-unit--weight" aria-hidden>
+                    %
+                  </span>
+                </span>
+              </label>
+            );
+          })}
+        </div>
+        <p
+          className={
+            convictionWeightTotal === 100
+              ? "forge-conviction-total"
+              : "forge-conviction-total is-warn"
+          }
+        >
+          Total: {convictionWeightTotal}%
+          {convictionWeightTotal === 100 ? "" : " — must total 100%"}
+        </p>
       </div>
       </div>
 
@@ -626,7 +696,10 @@ export function StrategyForgePanel({ strategy }: { strategy: Strategy | undefine
         <div className="forge-section-head">
           <h3 className="forge-section-title">1. Strategy Cadence</h3>
         </div>
-        <p className="forge-section-q">How often would you like your strategy to update?</p>
+        <p className="forge-section-q">
+          How often should the Forge notify you when your strategy checks pass
+          and rules break?
+        </p>
         <div className="forge-cadence-row">
           <label className="config-field">
             <span className="config-label forge-label forge-label--muted">
@@ -704,19 +777,7 @@ export function StrategyForgePanel({ strategy }: { strategy: Strategy | undefine
                       autoFocus
                       value={weight ?? 0}
                       onChange={(event) =>
-                        updateStrategy(id, {
-                          categoryWeights: {
-                            ...(weights ?? {
-                              thesis: 0,
-                              setup: 0,
-                              risk: 0,
-                              position: 0,
-                              trade: 0,
-                              timeframe: 0,
-                            }),
-                            [category]: Number(event.target.value),
-                          },
-                        })
+                        patchCategoryWeight(category, Number(event.target.value))
                       }
                       onBlur={() => setEditingWeight(null)}
                       onKeyDown={(event) => {

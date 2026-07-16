@@ -3482,6 +3482,37 @@ select.input:hover:not(:disabled) {
   gap: 0.6rem;
 }
 
+/* Description-pane overview of categoryWeights — same values as each
+   category tab's conviction weight editor. */
+.forge-conviction-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.6rem;
+}
+
+.forge-conviction-field .forge-weight-edit {
+  width: 100%;
+}
+
+.forge-conviction-field .forge-cell-input--weight {
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
+  background: var(--surface-3);
+  border-color: var(--border-strong);
+}
+
+.forge-conviction-total {
+  margin: 0;
+  font-size: 0.76rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.forge-conviction-total.is-warn {
+  color: var(--warning);
+}
+
 /* Uppercase field labels (per the Configure-card design: 11.5px Plex Sans),
    with room for an inline info-icon tooltip trigger. Field labels are Medium
    --text-base; box/secondary labels use the muted modifier. */
@@ -5206,7 +5237,8 @@ select.forge-cell-input {
 }
 
 @media (max-width: 540px) {
-  .forge-cadence-row {
+  .forge-cadence-row,
+  .forge-conviction-grid {
     grid-template-columns: minmax(0, 1fr);
   }
 
