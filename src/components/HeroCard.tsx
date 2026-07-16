@@ -1,10 +1,33 @@
+import { useState } from "react";
 import bullCompass from "../assets/bull-skull-compass.png";
 import bearCompass from "../assets/bear-skull-compass.png";
 import { Skull, TrendUp } from "../lib/icons";
 import { useAppState } from "../state/AppState";
+import { ComingSoonOverlay } from "./ComingSoonOverlay";
 
-export function HeroCard({ variant = "full" }: { variant?: "full" | "center" }) {
-  const { setActivePage } = useAppState();
+type HeroCardProps = {
+  variant?: "full" | "center";
+  /** Jump to Home Current Watch (About tab primary/secondary CTAs). */
+  onReviewWatch?: () => void;
+};
+
+export function HeroCard({
+  variant = "full",
+  onReviewWatch,
+}: HeroCardProps) {
+  const { setActivePage, portfolios } = useAppState();
+  const [comingSoonOpen, setComingSoonOpen] = useState(false);
+  const hasHoldings = portfolios.some(
+    (portfolio) => portfolio.holdings.length > 0,
+  );
+
+  function goToWatch() {
+    if (onReviewWatch) {
+      onReviewWatch();
+      return;
+    }
+    setActivePage("home");
+  }
 
   return (
     <section
@@ -14,42 +37,70 @@ export function HeroCard({ variant = "full" }: { variant?: "full" | "center" }) 
       <div className="hero-grid" aria-hidden="true" />
       <div className="hero-body">
         <div className="hero-content">
-          <p className="eyebrow">Discipline Command Center</p>
+          <p className="eyebrow">Your Investing Discipline Engine</p>
           <h1 id="hero-title">
-            Trade your plan. Track your discipline. Level up your strategy.
+            Build your strategy.
+            <br />
+            Follow your plan.
+            <br />
+            Improve with evidence.
           </h1>
           <p className="lede">
-            Skulls and Trading is an AI-powered investing journal that helps users
-            trade their plan instead of chasing the market.
+            Skulls and Trading turns your investing rules into a strategy you can
+            apply across your portfolios and watchlists.
           </p>
           <p className="lede">
-            It tracks portfolios, strategies, risk rules, and Captain’s Log entries,
-            then uses AI to show where users are aligned, drifting, or breaking their
-            own rules.
+            Track conviction, identify risk drift, and understand when your
+            holdings are aligned with—or breaking—your plan.
           </p>
           <p className="lede">
-            It’s not a stock-picking app. It’s a discipline engine for serious retail
-            investors.
+            It doesn&rsquo;t pick stocks for you. It helps you make more
+            disciplined decisions using your own strategy.
           </p>
           <div className="hero-actions">
-            <button
-              type="button"
-              className="btn btn--primary"
-              onClick={() => setActivePage("dashboard")}
-            >
-              Open Dashboard
-            </button>
-            <button
-              type="button"
-              className="btn btn--ghost"
-              onClick={() => setActivePage("strategy-forge")}
-            >
-              Forge a Strategy
-            </button>
+            {hasHoldings ? (
+              <>
+                <button
+                  type="button"
+                  className="btn btn--primary"
+                  onClick={() => setComingSoonOpen(true)}
+                >
+                  Review Watch in Dashboard
+                </button>
+                <button
+                  type="button"
+                  className="btn btn--ghost"
+                  onClick={() => setActivePage("strategy-forge")}
+                >
+                  Forge a Strategy
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  className="btn btn--primary"
+                  onClick={() => setActivePage("strategy-forge")}
+                >
+                  Create Your First Strategy
+                </button>
+                <button
+                  type="button"
+                  className="btn btn--ghost"
+                  onClick={goToWatch}
+                >
+                  Set Up Current Watch
+                </button>
+              </>
+            )}
           </div>
         </div>
-        <aside className="hero-preview" aria-hidden="true">
-          <div className="hero-preview-card">
+        <aside className="hero-preview">
+          <button
+            type="button"
+            className="hero-preview-card"
+            onClick={() => setComingSoonOpen(true)}
+          >
             <div className="hero-preview-card-head">
               <div className="compass">
                 <img className="compass-img" src={bullCompass} alt="" />
@@ -59,9 +110,17 @@ export function HeroCard({ variant = "full" }: { variant?: "full" | "center" }) 
                 Strategy Check
               </span>
             </div>
-            <p>Your rules, your thesis, your invalidation — checked before you act.</p>
-          </div>
-          <div className="hero-preview-card">
+            <p>
+              See which holdings align with your thesis, rules, and
+              strategy—and which need attention.
+            </p>
+            <span className="hero-preview-action">Review alignment →</span>
+          </button>
+          <button
+            type="button"
+            className="hero-preview-card"
+            onClick={() => setComingSoonOpen(true)}
+          >
             <div className="hero-preview-card-head">
               <div className="compass compass--risk">
                 <img className="compass-img" src={bearCompass} alt="" />
@@ -72,13 +131,19 @@ export function HeroCard({ variant = "full" }: { variant?: "full" | "center" }) 
               </span>
             </div>
             <p>
-              When the market turns against your plan, see what changed before
-              emotion takes the helm — thesis, position size, cash, exposure, or
-              invalidation.
+              Catch changes in position size, exposure, cash, thesis, or
+              invalidation before emotion takes over.
             </p>
-          </div>
+            <span className="hero-preview-action">Review risk →</span>
+          </button>
         </aside>
       </div>
+      {comingSoonOpen ? (
+        <ComingSoonOverlay
+          variant="dismissible"
+          onDismiss={() => setComingSoonOpen(false)}
+        />
+      ) : null}
     </section>
   );
 }

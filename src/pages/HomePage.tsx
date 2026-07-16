@@ -114,7 +114,10 @@ export function HomePage() {
             <MarketFlowWidget focusTicker={weatherFocusTicker} />
           </section>
           <section className="home-slide home-slide--about" data-home-tab="about">
-            <HeroCard variant="center" />
+            <HeroCard
+              variant="center"
+              onReviewWatch={() => scrollToTab("current-watch")}
+            />
           </section>
         </div>
       </div>

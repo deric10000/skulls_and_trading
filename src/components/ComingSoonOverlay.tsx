@@ -1,10 +1,10 @@
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import {
   CLOSED_BETA_TRUST,
   COMING_SOON_HEADLINE,
 } from "../lib/closedBeta";
-import { HardHat, Warning } from "../lib/icons";
+import { HardHat, Warning, X } from "../lib/icons";
 import {
   LEGAL_DISCLAIMER_BODY,
   LEGAL_DISCLAIMER_TITLE,
@@ -14,6 +14,8 @@ type ComingSoonProps = {
   variant?: "coming-soon";
   children: ReactNode;
   onAcknowledge?: never;
+  onDismiss?: never;
+  autoDismissMs?: never;
 };
 
 type LegalAckProps = {
@@ -21,13 +23,33 @@ type LegalAckProps = {
   variant: "legal";
   children?: never;
   onAcknowledge: () => void;
+  onDismiss?: never;
+  autoDismissMs?: never;
 };
 
-export type ComingSoonOverlayProps = ComingSoonProps | LegalAckProps;
+type DismissibleProps = {
+  /**
+   * Ephemeral Coming Soon notice (same HardHat + trust copy). Portal-only;
+   * dismiss via X or `autoDismissMs` (default 8000).
+   */
+  variant: "dismissible";
+  children?: never;
+  onAcknowledge?: never;
+  onDismiss: () => void;
+  autoDismissMs?: number;
+};
+
+export type ComingSoonOverlayProps =
+  | ComingSoonProps
+  | LegalAckProps
+  | DismissibleProps;
+
+const DEFAULT_AUTO_DISMISS_MS = 8000;
 
 /**
  * Full-viewport overlay for Closed Beta unfinished surfaces (Dashboard,
- * Ships, Captain Profile) and the once-per-login legal acknowledgment.
+ * Ships, Captain Profile), the once-per-login legal acknowledgment, and
+ * ephemeral Coming Soon notices.
  * Content stays visible underneath; the fixed scrim blocks interaction and
  * page scroll.
  *
@@ -40,6 +62,8 @@ export type ComingSoonOverlayProps = ComingSoonProps | LegalAckProps;
  *   stays above so TopNav remains usable. Wraps page children as inert.
  * - `legal`: Warning + disclaimer copy + primary "Accept and Continue".
  *   Blocks the full viewport (including header) until acknowledged.
+ * - `dismissible`: same Coming Soon panel as default, with close (X) and
+ *   optional auto-dismiss. Portal-only; does not wrap page children.
  *
  * Mobile: panel parks under the sticky header via overlay padding.
  * Desktop/tablet: panel stays centered in the viewport.
@@ -47,6 +71,13 @@ export type ComingSoonOverlayProps = ComingSoonProps | LegalAckProps;
 export function ComingSoonOverlay(props: ComingSoonOverlayProps) {
   const variant = props.variant ?? "coming-soon";
   const isLegal = variant === "legal";
+  const isDismissible = variant === "dismissible";
+  const onDismiss = isDismissible ? props.onDismiss : undefined;
+  const autoDismissMs = isDismissible
+    ? (props.autoDismissMs ?? DEFAULT_AUTO_DISMISS_MS)
+    : undefined;
+  const onDismissRef = useRef(onDismiss);
+  onDismissRef.current = onDismiss;
 
   // Belt-and-suspenders with the CSS `:has(.coming-soon-shell)` scroll lock —
   // also set overflow on mount in case older browsers miss `:has`.
@@ -62,6 +93,35 @@ export function ComingSoonOverlay(props: ComingSoonOverlayProps) {
       body.style.overflow = prevBody;
     };
   }, []);
+
+  useEffect(() => {
+    if (!isDismissible || !autoDismissMs || autoDismissMs <= 0) {
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      onDismissRef.current?.();
+    }, autoDismissMs);
+    return () => window.clearTimeout(timer);
+  }, [isDismissible, autoDismissMs]);
+
+  const comingSoonBody = (
+    <>
+      <div className="coming-soon-head">
+        <HardHat
+          className="coming-soon-icon"
+          aria-hidden
+          weight="fill"
+        />
+        <h2
+          id={isDismissible ? "coming-soon-notice-title" : undefined}
+          className="coming-soon-title"
+        >
+          {COMING_SOON_HEADLINE}
+        </h2>
+      </div>
+      <p className="coming-soon-trust">{CLOSED_BETA_TRUST}</p>
+    </>
+  );
 
   const panel = isLegal ? (
     <div
@@ -89,41 +149,62 @@ export function ComingSoonOverlay(props: ComingSoonOverlayProps) {
         Accept and Continue
       </button>
     </div>
-  ) : (
-    <div className="coming-soon-panel panel">
-      <div className="coming-soon-head">
-        <HardHat
-          className="coming-soon-icon"
-          aria-hidden
-          weight="fill"
-        />
-        <h2 className="coming-soon-title">{COMING_SOON_HEADLINE}</h2>
+  ) : isDismissible ? (
+    <div
+      className="coming-soon-panel panel"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="coming-soon-notice-title"
+      onClick={(event) => event.stopPropagation()}
+    >
+      <div className="coming-soon-panel-bar">
+        <div className="coming-soon-head">
+          <HardHat
+            className="coming-soon-icon"
+            aria-hidden
+            weight="fill"
+          />
+          <h2 id="coming-soon-notice-title" className="coming-soon-title">
+            {COMING_SOON_HEADLINE}
+          </h2>
+        </div>
+        <button
+          type="button"
+          className="forge-table-close"
+          onClick={onDismiss}
+          aria-label="Close"
+        >
+          <X aria-hidden weight="bold" />
+        </button>
       </div>
       <p className="coming-soon-trust">{CLOSED_BETA_TRUST}</p>
     </div>
+  ) : (
+    <div className="coming-soon-panel panel">{comingSoonBody}</div>
   );
 
   const overlay =
     typeof document !== "undefined" ? (
       <div
         className={
-          isLegal
+          isLegal || isDismissible
             ? "coming-soon-overlay coming-soon-overlay--gate"
             : "coming-soon-overlay"
         }
-        role={isLegal ? "presentation" : "status"}
-        aria-live={isLegal ? undefined : "polite"}
+        role={isLegal || isDismissible ? "presentation" : "status"}
+        aria-live={isLegal || isDismissible ? undefined : "polite"}
         aria-label={
-          isLegal
+          isLegal || isDismissible
             ? undefined
             : `${COMING_SOON_HEADLINE}. ${CLOSED_BETA_TRUST}`
         }
+        onClick={isDismissible ? onDismiss : undefined}
       >
         {panel}
       </div>
     ) : null;
 
-  if (isLegal) {
+  if (isLegal || isDismissible) {
     return overlay ? createPortal(overlay, document.body) : null;
   }
 

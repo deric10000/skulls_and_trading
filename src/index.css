@@ -1009,6 +1009,19 @@ button {
   display: flex;
   flex-direction: column;
   gap: 0.6rem;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.hero-preview-card:hover {
+  border-color: var(--border-strong);
+}
+
+.hero-preview-card:focus-visible {
+  outline: 2px solid var(--accent-strong);
+  outline-offset: 2px;
 }
 
 /* Emblem badge + status chip, stacked above the caption paragraph. */
@@ -1021,6 +1034,13 @@ button {
 .hero-preview-card p {
   font-size: 0.9rem;
   color: var(--text-muted);
+  margin: 0;
+}
+
+.hero-preview-action {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--accent-strong);
 }
 
 /* Panels — the app-wide card. 16px padding on every side so content breathes
@@ -5784,6 +5804,20 @@ select.forge-cell-input {
   gap: var(--space-2);
   margin: 0;
   text-align: left;
+}
+
+/* Dismissible notice — title row + shared Forge modal close (X). */
+.coming-soon-panel-bar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.coming-soon-panel-bar .coming-soon-head {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .coming-soon-head {
