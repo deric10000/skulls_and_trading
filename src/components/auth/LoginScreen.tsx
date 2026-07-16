@@ -37,8 +37,6 @@ const BRAND_FEATURES = [
 export function LoginScreen() {
   const { completeBetaSignIn } = useAppState();
   const [mode, setMode] = useState<Mode>("sign-in");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -50,14 +48,19 @@ export function LoginScreen() {
       );
       return;
     }
-    if (!email.includes("@") || password.length < 1) {
+    // Uncontrolled fields + FormData: iOS Keychain can fill the DOM without
+    // React onChange, and controlled value="" would fight autofill.
+    const formData = new FormData(event.currentTarget);
+    const emailValue = String(formData.get("email") ?? "").trim();
+    const passwordValue = String(formData.get("password") ?? "");
+    if (!emailValue.includes("@") || passwordValue.length < 1) {
       setError("Check your email and password, Captain.");
       return;
     }
     setError("");
     setSubmitting(true);
     try {
-      await signInWithPassword(email, password);
+      await signInWithPassword(emailValue, passwordValue);
       await completeBetaSignIn();
     } catch (err) {
       const message =
@@ -146,22 +149,26 @@ export function LoginScreen() {
                   <span>Email</span>
                   <input
                     className="input"
+                    name="email"
                     type="email"
-                    value={email}
-                    onChange={(event) => setEmail(event.target.value)}
                     placeholder="you@example.com"
-                    autoComplete="email"
+                    autoComplete="username"
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    spellCheck={false}
+                    inputMode="email"
+                    required
                   />
                 </label>
                 <label className="auth-field">
                   <span>Password</span>
                   <input
                     className="input"
+                    name="password"
                     type="password"
-                    value={password}
-                    onChange={(event) => setPassword(event.target.value)}
                     placeholder="Your password"
                     autoComplete="current-password"
+                    required
                   />
                 </label>
                 <AuthErrorState message={error} />

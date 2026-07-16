@@ -10,10 +10,6 @@ import { AuthErrorState } from "./AuthErrorState";
 
 export function SignUpForm() {
   const { completeBetaSignIn } = useAppState();
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [inviteCode, setInviteCode] = useState("");
   const [error, setError] = useState("");
   const [info, setInfo] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -26,19 +22,26 @@ export function SignUpForm() {
       );
       return;
     }
-    if (!name.trim()) {
+    // Uncontrolled fields + FormData: iOS Keychain can fill the DOM without
+    // React onChange, and controlled value="" would fight autofill.
+    const formData = new FormData(event.currentTarget);
+    const nameValue = String(formData.get("captainName") ?? "").trim();
+    const inviteValue = String(formData.get("inviteCode") ?? "").trim();
+    const emailValue = String(formData.get("email") ?? "").trim();
+    const passwordValue = String(formData.get("password") ?? "");
+    if (!nameValue) {
       setError("Choose a captain name to sail under.");
       return;
     }
-    if (!email.includes("@")) {
+    if (!emailValue.includes("@")) {
       setError("Enter a valid email so we can save your charts.");
       return;
     }
-    if (password.length < 6) {
+    if (passwordValue.length < 6) {
       setError("Use at least 6 characters for your password.");
       return;
     }
-    if (!inviteCode.trim()) {
+    if (!inviteValue) {
       setError("Enter the one-time invite code from the Admin Captain.");
       return;
     }
@@ -47,13 +50,13 @@ export function SignUpForm() {
     setSubmitting(true);
     try {
       const result = await signUpWithInvite({
-        email,
-        password,
-        captainName: name,
-        inviteCode,
+        email: emailValue,
+        password: passwordValue,
+        captainName: nameValue,
+        inviteCode: inviteValue,
       });
       if (result.needsEmailConfirm) {
-        stashPendingInvite(inviteCode);
+        stashPendingInvite(inviteValue);
         setInfo(
           "Account created. If login says email not confirmed, ask Admin to confirm you in Supabase (or turn off Confirm email under Authentication → Providers → Email). Then sign in — your invite will redeem on first login.",
         );
@@ -75,42 +78,48 @@ export function SignUpForm() {
         <span>Captain name</span>
         <input
           className="input"
-          value={name}
-          onChange={(event) => setName(event.target.value)}
+          name="captainName"
           placeholder="e.g. Captain Vega"
           autoComplete="nickname"
+          required
         />
       </label>
       <label className="auth-field">
         <span>Invite code</span>
         <input
           className="input"
-          value={inviteCode}
-          onChange={(event) => setInviteCode(event.target.value)}
+          name="inviteCode"
           placeholder="One-time Beta invite"
           autoComplete="off"
+          autoCapitalize="characters"
+          spellCheck={false}
+          required
         />
       </label>
       <label className="auth-field">
         <span>Email</span>
         <input
           className="input"
+          name="email"
           type="email"
-          value={email}
-          onChange={(event) => setEmail(event.target.value)}
           placeholder="you@example.com"
-          autoComplete="email"
+          autoComplete="username"
+          autoCapitalize="none"
+          autoCorrect="off"
+          spellCheck={false}
+          inputMode="email"
+          required
         />
       </label>
       <label className="auth-field">
         <span>Password</span>
         <input
           className="input"
+          name="password"
           type="password"
-          value={password}
-          onChange={(event) => setPassword(event.target.value)}
           placeholder="At least 6 characters"
           autoComplete="new-password"
+          required
         />
       </label>
       <AuthErrorState message={error} />
