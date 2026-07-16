@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { CaretDown, CheckCircle } from "../lib/icons";
+import { CaretDown } from "../lib/icons";
+import { Checkbox } from "./Checkbox";
 
 export interface MultiSelectOption {
   value: string;
@@ -8,9 +9,9 @@ export interface MultiSelectOption {
 
 /**
  * A compact multi-select droplist: a trigger (styled like the app's select
- * input) that shows the chosen options as chips, opening a checkbox-style
- * popover. Closes on outside click or Escape. Used for "Applied Portfolios" on
- * the Configure card, but generic enough to reuse.
+ * input) that shows the chosen options as chips, opening a checkbox popover
+ * (`Checkbox`). Closes on outside click or Escape. Used for "Applied
+ * Portfolios" on the Configure card, but generic enough to reuse.
  */
 export function MultiSelect({
   id,
@@ -104,9 +105,7 @@ export function MultiSelect({
                   }
                   onClick={() => toggle(option.value)}
                 >
-                  <span className="multiselect-check" aria-hidden>
-                    {on ? <CheckCircle weight="fill" /> : null}
-                  </span>
+                  <Checkbox checked={on} decorative />
                   {option.label}
                 </button>
               </li>

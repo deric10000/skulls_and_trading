@@ -14,6 +14,7 @@ import type {
   TechnicalSnapshot,
 } from "../../types";
 import { DEFAULT_CATEGORY_WEIGHTS } from "../../data";
+import { isCategoryEnabled } from "./categoryEnabled";
 import { CATEGORY_ORDER, METRICS } from "./metrics";
 import {
   LAYER3_ZONE_ORDER,
@@ -327,10 +328,14 @@ export function scoreStock(
 
   // Default lens per category = All Active Chips (per-stock tag application is
   // a later authoring pass; the engine supports it via resolveActiveChips).
-  const results = CATEGORY_ORDER.flatMap((category) =>
+  // Categories toggled off under Conviction Scores are skipped entirely.
+  const activeCategories = CATEGORY_ORDER.filter((category) =>
+    isCategoryEnabled(strategy, category),
+  );
+  const results = activeCategories.flatMap((category) =>
     resolveActiveChips(strategy, category).map((chip) => evaluateChip(chip, ctx)),
   );
-  const categories = CATEGORY_ORDER.map((category) =>
+  const categories = activeCategories.map((category) =>
     scoreCategory(category, results),
   );
 
@@ -384,11 +389,17 @@ export function validateStrategy(strategy: Strategy): StrategyValidation {
 
   const weights: CategoryWeights =
     strategy.categoryWeights ?? DEFAULT_CATEGORY_WEIGHTS;
-  const weightTotal = CATEGORY_ORDER.reduce(
+  const scoringCategories = CATEGORY_ORDER.filter((category) =>
+    isCategoryEnabled(strategy, category),
+  );
+  if (scoringCategories.length === 0) {
+    issues.push("Enable at least one category under Conviction Scores.");
+  }
+  const weightTotal = scoringCategories.reduce(
     (sum, category) => sum + (weights[category] ?? 0),
     0,
   );
-  if (weightTotal !== 100) {
+  if (scoringCategories.length > 0 && weightTotal !== 100) {
     issues.push(`Category conviction weights total ${weightTotal}% — they must total 100%.`);
   }
 
@@ -401,7 +412,7 @@ export function validateStrategy(strategy: Strategy): StrategyValidation {
     timeframe: "Hold Timeframe",
   };
 
-  for (const category of CATEGORY_ORDER) {
+  for (const category of scoringCategories) {
     const chips = rules.filter(
       (chip) => chip.category === category && chip.enabled,
     );

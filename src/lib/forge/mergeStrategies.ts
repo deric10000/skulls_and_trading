@@ -1,5 +1,6 @@
 import { DEFAULT_CATEGORY_WEIGHTS } from "../../data";
 import type { CategoryWeights, RuleCategory, RuleChip, Strategy } from "../../types";
+import { isCategoryEnabled } from "./categoryEnabled";
 import { CATEGORY_ORDER } from "./metrics";
 
 /**
@@ -21,10 +22,13 @@ export function mergeStrategiesForScoring(strategies: Strategy[]): Strategy {
   for (const strategy of ordered) {
     const weights = strategy.categoryWeights ?? DEFAULT_CATEGORY_WEIGHTS;
     for (const category of CATEGORY_ORDER) {
-      categoryWeightRaw[category] =
-        (categoryWeightRaw[category] ?? 0) + (weights[category] ?? 0);
+      const weight = isCategoryEnabled(strategy, category)
+        ? (weights[category] ?? 0)
+        : 0;
+      categoryWeightRaw[category] = (categoryWeightRaw[category] ?? 0) + weight;
     }
     for (const chip of (strategy.rules ?? []).filter((item) => item.enabled)) {
+      if (!isCategoryEnabled(strategy, chip.category)) continue;
       const categoryWeight = weights[chip.category] ?? 0;
       const scaled: RuleChip = {
         ...chip,

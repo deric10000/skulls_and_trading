@@ -9,6 +9,10 @@ import type { MetricKey, RuleChip, RuleTag } from "../../types";
 const APPLY_ONLY_KEYS = new Set([
   "appliedPortfolioIds",
   "tickerExclusions",
+  // Conviction mix is editable on defaults from Description → Conviction Scores
+  // (weights + which categories contribute). Seed body still wins for rules/tags.
+  "categoryWeights",
+  "categoryEnabled",
 ]);
 
 /** Fields allowed when patching an isDefault strategy. */
@@ -62,6 +66,8 @@ export function mergeStrategiesForHydrate(
       ...seed,
       appliedPortfolioIds: overlay?.appliedPortfolioIds ?? [],
       tickerExclusions: overlay?.tickerExclusions ?? {},
+      categoryWeights: overlay?.categoryWeights ?? seed.categoryWeights,
+      categoryEnabled: overlay?.categoryEnabled,
     });
   });
   const defaultIds = new Set(defaults.map((s) => s.id));
@@ -83,6 +89,12 @@ export function sanitizeStrategyPatch(
   }
   if ("tickerExclusions" in patch) {
     next.tickerExclusions = patch.tickerExclusions;
+  }
+  if ("categoryWeights" in patch) {
+    next.categoryWeights = patch.categoryWeights;
+  }
+  if ("categoryEnabled" in patch) {
+    next.categoryEnabled = patch.categoryEnabled;
   }
   return next;
 }

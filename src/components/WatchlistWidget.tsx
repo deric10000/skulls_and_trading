@@ -23,16 +23,15 @@ import {
 } from "../lib/forge/tickerStrategy";
 import { STATUS_TONE } from "../lib/status";
 import { StatusStack, WatchAlignLabel, WatchConvictionHead } from "./StatusBadge";
+import { Checkbox } from "./Checkbox";
 import { ForgePill } from "./ForgePill";
 import { PortfolioCompass } from "./PortfolioCompass";
 import {
   CaretDown,
   CaretLeft,
-  CheckSquare,
   MagnifyingGlass,
   PencilSimple,
   Plus,
-  Square,
   Trash,
   X,
 } from "../lib/icons";
@@ -1141,27 +1140,15 @@ function WatchStrategyEditPicker({
                 >
                   <span className="portfolio-ticker-symbol">{strategy.name}</span>
                 </button>
-                <button
-                  type="button"
-                  className={
-                    on
-                      ? "watch-strategy-check watch-strategy-check--on"
-                      : "watch-strategy-check"
-                  }
+                <Checkbox
+                  checked={on}
                   aria-label={
                     on
                       ? `Remove ${strategy.name} from ${ticker}`
                       : `Add ${strategy.name} to ${ticker}`
                   }
-                  aria-pressed={on}
-                  onClick={() => onToggle(strategy.id, !on)}
-                >
-                  {on ? (
-                    <CheckSquare aria-hidden weight="fill" />
-                  ) : (
-                    <Square aria-hidden weight="regular" />
-                  )}
-                </button>
+                  onCheckedChange={(next) => onToggle(strategy.id, next)}
+                />
               </li>
             );
           })}

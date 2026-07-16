@@ -20,9 +20,10 @@ specific thing they ask for — never bundle in extra tweaks.
 | Nav links | `.nav-link`, `.nav-link--active` | Padding, color, active state. |
 | Account | `.site-account`, `.chip--soon` | Demo / Beta chip (Closed Beta tooltip) + `LinkButton` "Sign Out" (link-button, **never** a filled button). |
 | `LinkButton` | `src/components/LinkButton.tsx` | Renders `.btn.btn--link`. |
+| `Checkbox` | `src/components/Checkbox.tsx` | The one on/off checkbox: `.checkbox` / `.is-checked`, 28×28 blue info square + Phosphor Square/CheckSquare (22px). No native `<input type="checkbox">` or parallel check icons. `decorative` for marks inside a parent control. |
 | `SiteFooter` | `src/components/SiteFooter.tsx` | Single shared footer in `AppShell`; content + behavior. Never add a second footer. |
 | Home widgets | `HeroCard`, `MarketFlowWidget`, `WatchlistWidget`, `Tabs` | Internal markup, content, and visual styling. |
-| `Tooltip` / `InfoTip` | `src/components/Tooltip.tsx` | Desktop hover/focus-within reveal; mobile tap-to-toggle bottom sheet + close button (see "Tooltip standard" below). |
+| `Tooltip` / `InfoTip` | `src/components/Tooltip.tsx` | Desktop hover/focus reveal (portaled; stock `.tooltip*` only); mobile tap-to-toggle bottom sheet + close button (see "Tooltip standard" below). |
 | `ComingSoonOverlay` | `src/components/ComingSoonOverlay.tsx` | Full-viewport fixed scrim portaled to `document.body` (scroll locked) + panel matching `.modal-card` / Forge title+body type. **States:** (1) `coming-soon` (default) — filled HardHat (`--warning`) + Closed Beta trust copy; no close/actions; header stays above for TopNav; wraps page children as inert; adopters Dashboard, Ships, Captain Profile. (2) `legal` — filled Warning + disclaimer + primary “Accept and Continue”; `coming-soon-overlay--gate` until acknowledged. (3) `dismissible` — same Coming Soon panel + Forge close (X); optional `autoDismissMs` (default 8s); portal-only; click scrim or X to dismiss; adopter Hero preview cards. Desktop/tablet: centered. Mobile: panel under `--app-header-h`. Do not one-off a parallel scrim/panel. |
 | `ActionFooter` | `src/components/ActionFooter.tsx` | Reports its own height as `--sticky-footer-h` (see App shell below) — don't remove without checking consumers. |
 
@@ -354,12 +355,14 @@ info-icon trigger, used beside Configure-card section labels). Always reach
 for `Tooltip`/`InfoTip` for hover/tap explanatory content — never hand-roll a
 one-off popover.
 
-- **Desktop/tablet (`≥ 768px`)** — reveals on `:hover` / `:focus-within`,
-  `pointer-events: none` (decorative, dismisses on mouse-out/blur). No open
-  state / close button on desktop. After reveal, `Tooltip.tsx` clamps the
-  popover into the viewport (shift X; flip above only when there is room;
-  otherwise fixed-pin inside the viewport) so edge / header triggers are not
-  cut off. Do not invent a second tooltip component for edge placement.
+- **Desktop/tablet (`≥ 768px`)** — reveals on hover / focus (React `open`
+  state). Portaled to `document.body` using stock `.tooltip` / `.tooltip--wide`
+  only; layout is `position: fixed` via inline styles (no new `.tooltip*` CSS)
+  so card / panel `overflow: hidden` cannot clip it. `pointer-events: none`
+  (decorative, dismisses on mouse-out/blur). No close button on desktop.
+  After reveal, clamps into the viewport (prefer below; flip above when there
+  is room; otherwise pin). Do not invent a second tooltip component or novel
+  tooltip CSS for edge placement.
 - **Mobile (`< 768px`)** — touch has no hover, so behavior switches to
   **tap-to-toggle**: tapping the trigger sets `.tooltip-wrap.is-open`, and the
   tooltip renders as a **sheet fixed to the bottom-center of the viewport**
