@@ -458,9 +458,14 @@ export function StrategyForgePanel({ strategy }: { strategy: Strategy | undefine
     const patch = patchCategoryEnabled(strategy, category, enabled);
     if (!patch) return;
     updateStrategy(id, patch);
+    const label = CATEGORY_META[category].stepLabel;
     if (!enabled) {
       showInfoToast(
-        `${CATEGORY_META[category].stepLabel} no longer counts toward conviction. Remaining category weights were renormalized to 100% — adjust them if your plan shifted.`,
+        `${label} no longer counts toward conviction — its weight stays parked. The other categories were scaled up to fill 100% — adjust them if your plan shifted.`,
+      );
+    } else {
+      showInfoToast(
+        `${label} counts toward conviction again at its parked weight. The other categories were scaled down to make room — adjust them if your plan shifted.`,
       );
     }
   }
@@ -596,7 +601,7 @@ export function StrategyForgePanel({ strategy }: { strategy: Strategy | undefine
           Conviction Scores
           <InfoTip
             label="About conviction scores"
-            body="Each category weight is that category's share of a stock's conviction. Rule chips score a category 0–100; those scores are multiplied by these weights and summed. Uncheck a category to drop it from conviction — remaining weights renormalize to 100%. Edit weights here or on each category tab; they stay in sync."
+            body="Each category weight is that category's share of a stock's conviction. Rule chips score a category 0–100; those scores are multiplied by these weights and summed. Uncheck a category to park its weight exactly and scale the others up to 100%. Turn it back on to restore that parked weight and scale the others down to make room. Edit weights here or on each category tab; they stay in sync."
           />
         </span>
         <div className="forge-conviction-grid">

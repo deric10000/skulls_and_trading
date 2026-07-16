@@ -16,21 +16,24 @@ export function enabledCategories(strategy: Strategy): RuleCategory[] {
   );
 }
 
-/** Redistribute weights across `targets` so they sum to 100 (proportional). */
-export function renormalizeCategoryWeights(
+/**
+ * Scale `targets` proportionally so they sum to `total`. Categories outside
+ * `targets` are left unchanged (parked weights stay put).
+ */
+export function scaleCategoryWeightsToTotal(
   weights: CategoryWeights,
   targets: RuleCategory[],
+  total: number,
 ): CategoryWeights {
   const next: CategoryWeights = { ...weights };
-  for (const category of CATEGORY_ORDER) {
-    if (!targets.includes(category)) next[category] = 0;
-  }
   if (targets.length === 0) return next;
 
-  const sum = targets.reduce((total, category) => total + (next[category] ?? 0), 0);
+  const goal = Math.max(0, Math.min(100, Math.round(total)));
+  const sum = targets.reduce((acc, category) => acc + (next[category] ?? 0), 0);
+
   if (sum <= 0) {
-    const each = Math.floor(100 / targets.length);
-    let remainder = 100 - each * targets.length;
+    const each = Math.floor(goal / targets.length);
+    let remainder = goal - each * targets.length;
     for (const category of targets) {
       next[category] = each + (remainder > 0 ? 1 : 0);
       if (remainder > 0) remainder -= 1;
@@ -41,20 +44,32 @@ export function renormalizeCategoryWeights(
   let allocated = 0;
   targets.forEach((category, index) => {
     if (index === targets.length - 1) {
-      next[category] = 100 - allocated;
+      next[category] = goal - allocated;
       return;
     }
-    const share = Math.round(((next[category] ?? 0) / sum) * 100);
+    const share = Math.round(((next[category] ?? 0) / sum) * goal);
     next[category] = share;
     allocated += share;
   });
   return next;
 }
 
+/** @deprecated Prefer scaleCategoryWeightsToTotal — kept as a 100% shorthand. */
+export function renormalizeCategoryWeights(
+  weights: CategoryWeights,
+  targets: RuleCategory[],
+): CategoryWeights {
+  return scaleCategoryWeightsToTotal(weights, targets, 100);
+}
+
 /**
- * Toggle a category's contribution to conviction. Disabling zeros its weight
- * and renormalizes the remaining enabled categories to 100%. Enabling leaves
- * weights unchanged (the category stays at 0%) so the captain can reallocate.
+ * Toggle a category's contribution to conviction.
+ *
+ * Off: park its weight exactly (still shown); scale the other enabled
+ * categories from their current sum (e.g. 45%) up to 100%.
+ *
+ * On: restore the parked weight exactly; scale the other enabled categories
+ * from 100% down to (100 − parked), e.g. Thesis 55% back → others 45%.
  */
 export function patchCategoryEnabled(
   strategy: Strategy,
@@ -75,12 +90,20 @@ export function patchCategoryEnabled(
     const remaining = enabledCategories(strategy).filter((item) => item !== category);
     if (remaining.length === 0) return null;
     categoryEnabled[category] = false;
+    // Park weights[category] as-is; stretch the rest to fill 100%.
     return {
       categoryEnabled,
-      categoryWeights: renormalizeCategoryWeights(weights, remaining),
+      categoryWeights: scaleCategoryWeightsToTotal(weights, remaining, 100),
     };
   }
 
   categoryEnabled[category] = true;
-  return { categoryEnabled, categoryWeights: weights };
+  const parked = Math.max(0, Math.min(100, weights[category] ?? 0));
+  weights[category] = parked;
+  const others = enabledCategories(strategy); // still excludes `category`
+  // Restore parked exactly; shrink the others to the leftover share.
+  return {
+    categoryEnabled,
+    categoryWeights: scaleCategoryWeightsToTotal(weights, others, 100 - parked),
+  };
 }

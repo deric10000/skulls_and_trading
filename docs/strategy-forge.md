@@ -39,7 +39,7 @@ Domain tables and pickers go in slots (`children` / `alternateView` /
 
 | Level | What the weight means |
 |-------|----------------------|
-| **Category Weight** | The category's share of the total conviction score. **Enabled** categories sum to **100**. Example: Technical Setup = 12% of total conviction. A category can be toggled off under Description → Conviction Scores (`categoryEnabled`); it drops out of scoring and its weight is redistributed. |
+| **Category Weight** | The category's share of the total conviction score. **Enabled** categories sum to **100**. Example: Technical Setup = 12% of total conviction. A category can be toggled off under Description → Conviction Scores (`categoryEnabled`); it parks its weight exactly (still shown) and drops out of scoring while the other enabled weights scale from their subtotal up to 100%. Turning it back on restores that parked weight exactly and scales the others down to fill the remainder (e.g. Thesis 55% off → others 45%→100%; on → Thesis 55% again, others 100%→45%). |
 | **Rule Weight** | Inside a category, how much each chip matters. The category's enabled chips should total **100%**. |
 | **Tag Weight** | If multiple tags are applied to a stock, how much each tag matters relative to the others. A category's tags total **100%**. |
 | **Normalized Score** | Active tags/rules always **rescale to fill 100%** of their category for that stock. |

@@ -330,7 +330,8 @@ export interface Strategy {
   categoryWeights?: CategoryWeights; // each category's share of conviction; sums to 100
   /**
    * Categories that contribute to conviction. Omitted keys default to enabled.
-   * `false` excludes the category from scoring / weight totals (weight forced to 0).
+   * `false` excludes the category from scoring / enabled weight totals; its
+   * `categoryWeights` entry is parked (kept for restore) until re-enabled.
    */
   categoryEnabled?: Partial<Record<RuleCategory, boolean>>;
   /**

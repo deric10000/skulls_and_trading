@@ -258,7 +258,9 @@ snapshots (`data.ts`), and register it in `metrics.ts`. Nothing else changes.
 - `strategy.categoryWeights` + optional `strategy.categoryEnabled` set each
   category's share of conviction and whether it contributes at all. Edited on
   Description → Conviction Scores (and per-category weight chips). Disabling a
-  category zeros its weight and renormalizes the rest to 100%. Omitted
+  category parks its weight exactly (still shown, disabled) and scales the
+  other enabled categories up to 100%; turning it back on restores that parked
+  weight and scales the others down to `(100 − parked)`. Omitted
   `categoryEnabled` keys default to on. For `isDefault` strategies these two
   fields are apply-overlay prefs (like `tickerExclusions`) — seed still owns
   rules/tags.
