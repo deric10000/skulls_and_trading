@@ -12,11 +12,15 @@ RLS** (`supabase/schema.sql`). Sign-up requires a **one-time invite code**.
 Admin Captain (`profiles.role = admin`) vs beta. Local and Cloudflare share the
 same Supabase project when env vars match.
 
-- SPA: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`
-- Worker: `SUPABASE_URL`, `SUPABASE_ANON_KEY` (JWT check on `/api/market/*` when
-  configured; set `MARKET_AUTH_REQUIRED=false` for open local market proxy)
+- SPA: prefers Worker `GET /api/auth/config` (from `SUPABASE_URL` /
+  `SUPABASE_ANON_KEY` secrets). Optional local bake: `VITE_SUPABASE_*`
+- Worker: `SUPABASE_URL`, `SUPABASE_ANON_KEY` (auth config + JWT check on
+  `/api/market/*` when configured; set `MARKET_AUTH_REQUIRED=false` for open
+  local market proxy)
 - Demo Captain (`ENABLE_DEMO_GATE=true`) is **legacy only** — not a save path
   for personal holdings
+- Anon key is public by design (RLS enforces access); do not ship service-role
+  keys to the client
 
 ## STOP and remind before
 

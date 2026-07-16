@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { isSupabaseConfigured } from "../../lib/auth/supabaseClient";
+import { ensureSupabaseReady } from "../../lib/auth/supabaseClient";
 import {
   stashPendingInvite,
   signUpWithInvite,
@@ -16,19 +16,27 @@ export function SignUpForm() {
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!isSupabaseConfigured()) {
+    const configured = await ensureSupabaseReady();
+    if (!configured) {
       setError(
-        "Beta sign-up is not configured yet. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.",
+        "Beta sign-up is not available yet. Ask the Admin Captain — Worker auth config is missing.",
       );
       return;
     }
     // Uncontrolled fields + FormData: iOS Keychain can fill the DOM without
     // React onChange, and controlled value="" would fight autofill.
-    const formData = new FormData(event.currentTarget);
+    const form = event.currentTarget;
+    const formData = new FormData(form);
     const nameValue = String(formData.get("captainName") ?? "").trim();
     const inviteValue = String(formData.get("inviteCode") ?? "").trim();
-    const emailValue = String(formData.get("email") ?? "").trim();
-    const passwordValue = String(formData.get("password") ?? "");
+    let emailValue = String(formData.get("email") ?? "").trim();
+    let passwordValue = String(formData.get("password") ?? "");
+    if (!emailValue.includes("@") || passwordValue.length < 6) {
+      await new Promise((r) => window.setTimeout(r, 100));
+      const again = new FormData(form);
+      emailValue = String(again.get("email") ?? "").trim();
+      passwordValue = String(again.get("password") ?? "");
+    }
     if (!nameValue) {
       setError("Choose a captain name to sail under.");
       return;

@@ -107,6 +107,18 @@ export default {
       });
     }
 
+    if (url.pathname === "/api/auth/config" && request.method === "GET") {
+      // Anon key is public by design (RLS enforces access). Serving it from
+      // Worker secrets means SPA builds do not need VITE_SUPABASE_* baked in.
+      if (!env.SUPABASE_URL || !env.SUPABASE_ANON_KEY) {
+        return jsonResponse({ url: null, anonKey: null }, 200);
+      }
+      return jsonResponse(
+        { url: env.SUPABASE_URL, anonKey: env.SUPABASE_ANON_KEY },
+        200,
+      );
+    }
+
     if (url.pathname.startsWith("/api/market/")) {
       if (marketAuthRequired(env)) {
         const user = await verifySupabaseAccessToken(request, env);

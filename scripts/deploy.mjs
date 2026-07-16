@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 /**
- * Build + deploy to Cloudflare only when VITE_SUPABASE_* are present.
- * Prevents the flip-flop where a code-only deploy ships a login screen
- * that says "not configured" after a good local env deploy.
+ * Build + deploy to Cloudflare.
+ * Auth config comes from Worker secrets at runtime (/api/auth/config), so a
+ * CI build without VITE_SUPABASE_* still signs in. VITE_* remains optional for
+ * local-only SPA baking.
  */
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
@@ -32,17 +33,10 @@ loadEnvFile(resolve(root, ".env.local"));
 loadEnvFile(resolve(root, ".env.production"));
 loadEnvFile(resolve(root, ".env"));
 
-const url = process.env.VITE_SUPABASE_URL?.trim();
-const anon = process.env.VITE_SUPABASE_ANON_KEY?.trim();
-if (!url || !anon) {
-  console.error(
-    [
-      "Refusing to deploy: VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY must be set.",
-      "Put them in .env.local (local) or Workers Builds → Build variables (CI).",
-      "Worker secrets SUPABASE_* are runtime-only and do NOT bake into the SPA.",
-    ].join("\n"),
+if (!process.env.VITE_SUPABASE_URL || !process.env.VITE_SUPABASE_ANON_KEY) {
+  console.warn(
+    "Note: VITE_SUPABASE_* not set — SPA will load auth config from Worker /api/auth/config (requires SUPABASE_URL + SUPABASE_ANON_KEY secrets).",
   );
-  process.exit(1);
 }
 
 function run(cmd, args) {
