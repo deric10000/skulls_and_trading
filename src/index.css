@@ -1623,6 +1623,19 @@ select.input:hover:not(:disabled) {
   margin-bottom: var(--space-3);
 }
 
+/* Forge Watch Preview — no edit control; switcher spans the row. */
+.watchlist--preview .portfolio-switcher {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.watchlist-preview-empty {
+  margin: 0;
+  padding: 0.25rem 0;
+  font-size: 0.85rem;
+  line-height: 1.55;
+  color: var(--text-muted);
+}
+
 .portfolio-edit-add {
   margin-bottom: var(--space-3);
 }

@@ -76,9 +76,12 @@ inline style.
 
 ## Conviction chip breakdown standard (`.watch-summary-chips`)
 
-The read-only Watch summary (`WatchSummary` in `WatchlistWidget.tsx` — used by
-both the Home "Current Watch" widget and the Forge page's read-only preview
-column) shows, per ticker, **one block per assigned strategy** (default
+The Watch summary (`WatchSummary` in `WatchlistWidget.tsx`) is used by Home
+**Current Watch** (`readOnly`) and Forge **Watch Preview**
+(`readOnly` + `previewStrategyId`). Preview renames the panel, hides edit/create,
+limits the source switcher to that strategy's `appliedPortfolioIds`, and shows an
+empty state when none are applied — multi-strategy conviction on tickers is
+unchanged. Per ticker it shows **one block per assigned strategy** (default
 strategies via `holdings[].strategyIds`; custom copies via applied portfolio —
 `AppState.getAppliedStrategiesForTicker` / `strategiesForTicker`), each with its
 own rule-chip breakdown:

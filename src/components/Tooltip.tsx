@@ -16,9 +16,11 @@ const VIEWPORT_PAD = 8;
  * popover with an optional bold title and body copy. The content is wired via
  * `aria-describedby` so screen readers announce it too.
  *
- * Desktop/tablet: shows on hover and on keyboard focus. Position is clamped so
- * the popover stays inside the viewport (shift X; flip above only when there
- * is room; otherwise pin within the viewport).
+ * Desktop/tablet: shows on hover and on keyboard focus. Portaled to
+ * `document.body` with stock `.tooltip` styles + inline fixed position so card
+ * / panel `overflow: hidden` cannot clip it (e.g. Forge Configure InfoTips).
+ * Position is clamped inside the viewport (prefer below; flip above when there
+ * is room; otherwise pin).
  * Mobile (< 768px): tap-to-toggle sheet fixed to the bottom-center of the
  * viewport. The sheet is portaled to `document.body` so sticky header
  * `backdrop-filter` / containing blocks cannot clip it (e.g. TopNav Demo chip).
@@ -45,10 +47,11 @@ export function Tooltip({
   const wrapRef = useRef<HTMLSpanElement>(null);
   const tipRef = useRef<HTMLSpanElement>(null);
 
-  function clearDesktopClamp() {
+  function clearDesktopInlineStyles() {
     const tip = tipRef.current;
     if (!tip) return;
     tip.style.position = "";
+    tip.style.display = "";
     tip.style.left = "";
     tip.style.right = "";
     tip.style.top = "";
@@ -56,117 +59,94 @@ export function Tooltip({
     tip.style.transform = "";
     tip.style.maxHeight = "";
     tip.style.overflowY = "";
+    tip.style.zIndex = "";
   }
 
   /**
-   * Desktop/tablet only — keep `.tooltip` inside the viewport.
-   * Prefer below the trigger; flip above only when there is enough room;
-   * otherwise pin with `position: fixed` inside the viewport bounds.
+   * Desktop/tablet only — fixed-position the portaled tip relative to the
+   * trigger, clamped inside the viewport. Uses stock `.tooltip` look; only
+   * layout is set inline (same approach as the pre-portal fixed-pin path).
    */
-  function clampDesktopTooltip() {
+  function positionDesktopTooltip() {
     if (isMobile) return;
     const tip = tipRef.current;
     const wrap = wrapRef.current;
     if (!tip || !wrap) return;
 
-    // Reset to CSS defaults before measuring.
-    tip.style.position = "";
-    tip.style.left = "0";
-    tip.style.right = "auto";
-    tip.style.top = "calc(100% + 8px)";
-    tip.style.bottom = "auto";
-    tip.style.transform = "none";
+    tip.style.position = "fixed";
+    tip.style.display = "flex";
+    tip.style.zIndex = "60";
     tip.style.maxHeight = "";
     tip.style.overflowY = "";
-
-    const rect = tip.getBoundingClientRect();
-    if (rect.width === 0 && rect.height === 0) return;
+    tip.style.transform = "none";
+    tip.style.right = "auto";
+    tip.style.bottom = "auto";
 
     const trigger = wrap.getBoundingClientRect();
     const vw = window.innerWidth;
     const vh = window.innerHeight;
-    const tipHeight = rect.height;
-    const tipWidth = rect.width;
+    const tipWidth = tip.offsetWidth;
+    const tipHeight = tip.offsetHeight;
 
-    let shiftX = 0;
-    if (rect.right > vw - VIEWPORT_PAD) {
-      shiftX = vw - VIEWPORT_PAD - rect.right;
+    let left = trigger.left;
+    if (left + tipWidth > vw - VIEWPORT_PAD) {
+      left = vw - VIEWPORT_PAD - tipWidth;
     }
-    if (rect.left + shiftX < VIEWPORT_PAD) {
-      shiftX = VIEWPORT_PAD - rect.left;
-    }
-    tip.style.transform =
-      shiftX !== 0 ? `translateX(${shiftX}px)` : "none";
+    if (left < VIEWPORT_PAD) left = VIEWPORT_PAD;
 
-    const afterX = tip.getBoundingClientRect();
-    const overflowsBottom = afterX.bottom > vh - VIEWPORT_PAD;
-    const spaceAbove = trigger.top - VIEWPORT_PAD;
     const spaceBelow = vh - trigger.bottom - VIEWPORT_PAD;
+    const spaceAbove = trigger.top - VIEWPORT_PAD;
+    let top: number;
 
-    if (overflowsBottom) {
-      if (spaceAbove >= tipHeight + 8) {
-        // Room above — flip.
-        tip.style.top = "auto";
-        tip.style.bottom = "calc(100% + 8px)";
-        tip.style.transform =
-          shiftX !== 0 ? `translateX(${shiftX}px)` : "none";
-      } else {
-        // No room to flip (header / top-of-viewport triggers) — fixed pin.
-        const left = Math.min(
-          Math.max(VIEWPORT_PAD, trigger.left + shiftX),
-          vw - VIEWPORT_PAD - tipWidth,
-        );
-        const maxH = Math.max(80, vh - 2 * VIEWPORT_PAD);
-        const top = Math.min(
-          Math.max(VIEWPORT_PAD, trigger.bottom + 8),
-          vh - VIEWPORT_PAD - Math.min(tipHeight, maxH),
-        );
-        tip.style.position = "fixed";
-        tip.style.left = `${left}px`;
-        tip.style.top = `${top}px`;
-        tip.style.bottom = "auto";
-        tip.style.right = "auto";
-        tip.style.transform = "none";
-        tip.style.maxHeight = `${maxH}px`;
-        tip.style.overflowY = "auto";
-      }
-    } else if (afterX.top < VIEWPORT_PAD) {
-      // Somehow above the fold — pin below with fixed.
-      const left = Math.min(
-        Math.max(VIEWPORT_PAD, afterX.left),
-        vw - VIEWPORT_PAD - tipWidth,
+    if (tipHeight + 8 <= spaceBelow) {
+      top = trigger.bottom + 8;
+    } else if (tipHeight + 8 <= spaceAbove) {
+      top = trigger.top - tipHeight - 8;
+    } else {
+      const maxH = Math.max(80, vh - 2 * VIEWPORT_PAD);
+      tip.style.maxHeight = `${maxH}px`;
+      tip.style.overflowY = "auto";
+      const measured = Math.min(tipHeight, maxH);
+      top = Math.min(
+        Math.max(VIEWPORT_PAD, trigger.bottom + 8),
+        vh - VIEWPORT_PAD - measured,
       );
-      tip.style.position = "fixed";
-      tip.style.left = `${left}px`;
-      tip.style.top = `${VIEWPORT_PAD}px`;
-      tip.style.bottom = "auto";
-      tip.style.transform = "none";
     }
 
-    // Prefer the side with more room when both overflow (narrow landscape).
-    void spaceBelow;
+    tip.style.left = `${left}px`;
+    tip.style.top = `${top}px`;
   }
 
-  function scheduleDesktopClamp() {
+  function scheduleDesktopPosition() {
     if (isMobile) return;
     requestAnimationFrame(() => {
-      requestAnimationFrame(clampDesktopTooltip);
+      requestAnimationFrame(positionDesktopTooltip);
     });
   }
 
-  // Drop any desktop inline offsets when switching to the mobile sheet.
+  function openDesktop() {
+    if (isMobile) return;
+    setOpen(true);
+  }
+
+  function closeDesktop() {
+    if (isMobile) return;
+    setOpen(false);
+    clearDesktopInlineStyles();
+  }
+
+  // Position after the portaled tip mounts / when open toggles on desktop.
   useEffect(() => {
-    if (isMobile) clearDesktopClamp();
+    if (!open || isMobile) return;
+    scheduleDesktopPosition();
+  }, [open, isMobile, title, body, wide]);
+
+  // Drop desktop inline offsets when switching to the mobile sheet.
+  useEffect(() => {
+    if (isMobile) clearDesktopInlineStyles();
   }, [isMobile]);
 
-  // Mobile: close on any tap outside this tooltip's own wrap. This single
-  // mechanism covers every dismiss case the mobile sheet needs — a genuine
-  // outside tap, switching to a different tab/section (in-app "pages" that
-  // toggle via CSS rather than unmounting, e.g. the Configure card's section
-  // tabs), and navigating to a different app page via the top nav — all of
-  // which begin with a tap on something outside this wrap. (A real page
-  // *unmount* also resets `open` for free, since the whole component tree —
-  // Tooltip included — goes away with it.)
+  // Mobile: close on any tap outside this tooltip's own wrap.
   useEffect(() => {
     if (!isMobile || !open) return;
     function handlePointerDown(event: PointerEvent) {
@@ -179,19 +159,15 @@ export function Tooltip({
     return () => document.removeEventListener("pointerdown", handlePointerDown);
   }, [isMobile, open]);
 
-  // Keep desktop/tablet clamp correct if the viewport resizes while open.
+  // Keep desktop/tablet position correct if the viewport resizes while open.
   useEffect(() => {
-    if (isMobile) return;
+    if (isMobile || !open) return;
     function onResize() {
-      const wrap = wrapRef.current;
-      if (!wrap) return;
-      if (wrap.matches(":hover") || wrap.matches(":focus-within")) {
-        clampDesktopTooltip();
-      }
+      positionDesktopTooltip();
     }
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
-  }, [isMobile]);
+  }, [isMobile, open]);
 
   const tipClassName = [
     "tooltip",
@@ -225,22 +201,27 @@ export function Tooltip({
       ref={wrapRef}
       className={open ? "tooltip-wrap is-open" : "tooltip-wrap"}
       aria-describedby={id}
-      onMouseEnter={scheduleDesktopClamp}
-      onFocus={scheduleDesktopClamp}
-      onMouseLeave={() => {
-        if (!isMobile) clearDesktopClamp();
+      onMouseEnter={openDesktop}
+      onMouseLeave={closeDesktop}
+      onFocus={openDesktop}
+      onBlur={(event) => {
+        if (isMobile) return;
+        const next = event.relatedTarget as Node | null;
+        if (next && wrapRef.current?.contains(next)) return;
+        closeDesktop();
       }}
       onClick={() => {
         if (isMobile) setOpen((prev) => !prev);
       }}
     >
       {children}
-      {/* Mobile open: portal to body so sticky header backdrop-filter cannot
-          trap `position: fixed` (Demo chip). Same bottom-center sheet CSS as
-          Forge chips/tags — placement unchanged. */}
-      {isMobile && open && typeof document !== "undefined"
+      {/* Portal whenever open so overflow:hidden cards (desktop) and sticky
+          header backdrop-filter (mobile) cannot clip the tip. Mobile sheet
+          placement stays `.tooltip--viewport-sheet`; desktop uses stock
+          `.tooltip` + inline fixed pin only. */}
+      {open && typeof document !== "undefined"
         ? createPortal(tip, document.body)
-        : tip}
+        : null}
     </span>
   );
 }
