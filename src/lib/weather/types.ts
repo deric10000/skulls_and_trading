@@ -83,7 +83,7 @@ export interface ClimateContext {
 /** A single resolved reading for one layer. */
 export interface WeatherLayerReading {
   layer: MarketWeatherLayer;
-  /** Display name: "Market", a sector ("Technology"), industry, or ticker. */
+  /** Display name: "Market", a GICS sector/industry, or ticker. */
   label: string;
   score: number; // 0–100 weather score
   confidence: number; // 0–100

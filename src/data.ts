@@ -76,7 +76,7 @@ export const TICKERS: Record<string, TickerInfo> = {
     company: "Archer Aviation",
     category: "eVTOL / Aviation",
     sector: "Industrials",
-    industry: "Aerospace & eVTOL",
+    industry: "Aerospace & Defense",
     lastPrice: 4.93,
     priceAsOf: MARKET_QUOTE_ASOF,
     analysis: {
@@ -143,8 +143,8 @@ export const TICKERS: Record<string, TickerInfo> = {
   CRM: {
     company: "Salesforce",
     category: "Software / AI CRM",
-    sector: "Technology",
-    industry: "Software / Cloud",
+    sector: "Information Technology",
+    industry: "Software",
     lastPrice: 171.22,
     priceAsOf: MARKET_QUOTE_ASOF,
     analysis: {
@@ -177,8 +177,8 @@ export const TICKERS: Record<string, TickerInfo> = {
   CRWV: {
     company: "CoreWeave",
     category: "AI Infrastructure",
-    sector: "Technology",
-    industry: "AI Infrastructure / Cloud",
+    sector: "Information Technology",
+    industry: "IT Services",
     lastPrice: 83.53,
     priceAsOf: MARKET_QUOTE_ASOF,
     analysis: {
@@ -211,8 +211,8 @@ export const TICKERS: Record<string, TickerInfo> = {
   ELF: {
     company: "e.l.f. Beauty",
     category: "Consumer / Beauty",
-    sector: "Consumer Discretionary",
-    industry: "Beauty / Personal Care",
+    sector: "Consumer Staples",
+    industry: "Personal Care Products",
     lastPrice: 75.34,
     priceAsOf: MARKET_QUOTE_ASOF,
     analysis: {
@@ -245,8 +245,8 @@ export const TICKERS: Record<string, TickerInfo> = {
   IONQ: {
     company: "IonQ",
     category: "Quantum Computing",
-    sector: "Technology",
-    industry: "Quantum Computing",
+    sector: "Information Technology",
+    industry: "Semiconductors & Semiconductor Equipment",
     lastPrice: 45.36,
     priceAsOf: MARKET_QUOTE_ASOF,
     analysis: {
@@ -279,8 +279,8 @@ export const TICKERS: Record<string, TickerInfo> = {
   MSFT: {
     company: "Microsoft",
     category: "Mega-Cap AI / Cloud",
-    sector: "Technology",
-    industry: "Software / Cloud",
+    sector: "Information Technology",
+    industry: "Software",
     lastPrice: 390.99,
     priceAsOf: MARKET_QUOTE_ASOF,
     analysis: {
@@ -313,8 +313,8 @@ export const TICKERS: Record<string, TickerInfo> = {
   NVDA: {
     company: "Nvidia",
     category: "AI Infrastructure",
-    sector: "Technology",
-    industry: "Semiconductors",
+    sector: "Information Technology",
+    industry: "Semiconductors & Semiconductor Equipment",
     lastPrice: 204.37,
     priceAsOf: MARKET_QUOTE_ASOF,
     analysis: {
@@ -354,8 +354,8 @@ export const TICKERS: Record<string, TickerInfo> = {
   RGTI: {
     company: "Rigetti Computing",
     category: "Quantum Computing",
-    sector: "Technology",
-    industry: "Quantum Computing",
+    sector: "Information Technology",
+    industry: "Semiconductors & Semiconductor Equipment",
     lastPrice: 16.55,
     priceAsOf: MARKET_QUOTE_ASOF,
     analysis: {
@@ -389,7 +389,7 @@ export const TICKERS: Record<string, TickerInfo> = {
     company: "SoFi Technologies",
     category: "Fintech",
     sector: "Financials",
-    industry: "Fintech",
+    industry: "Financial Services",
     lastPrice: 18.49,
     priceAsOf: MARKET_QUOTE_ASOF,
     analysis: {

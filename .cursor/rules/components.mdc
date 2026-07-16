@@ -260,45 +260,40 @@ Rules:
   full-card `.weather-hit` button absolutely fills the card and handles the click
   + `aria-pressed`, so the **whole card** opens the detail view. The content
   overlay is click-through (`pointer-events: none`) except the on-card selectors
-  — the Sector/Industry droplist (`.weather-select`, a `Dropdown` `on-graphics`)
-  and the Stock `.weather-prevnext` toggle — which re-enable pointer events above
-  the hit target so changing a layer doesn't navigate).
+  — the Sector/Industry typeahead (`.weather-select`, a `SearchableSelect`
+  `on-graphics`) and the Stock `.weather-prevnext` toggle — which re-enable
+  pointer events above the hit target so changing a layer doesn't navigate).
 
-## Select / dropdown standard (`select.input`)
+## Select / dropdown standard (`select.input` + `SearchableSelect`)
 
-There is **one** dropdown/droplist affordance app-wide: a native `<select>`
-reusing the `.input` field styling, defined once in the **"Select / dropdown
-standard"** block in `index.css`. Render it through the shared **`Dropdown`**
-component (`src/components/Dropdown.tsx`) — don't re-inline `<label>` + `<select>`.
+**Short catalogs** use a native `<select>` via **`Dropdown`**
+(`src/components/Dropdown.tsx`) — `select.input` styling in `index.css`. Don't
+re-inline `<label>` + `<select>`.
 
-- **Always use the `Dropdown` component (`select.input`).** Never hand-roll a
-  custom popover/menu for a pick-one control. Native `<select>` gives us free
-  accessibility, keyboard support, and mobile-native pickers.
-- **Two style variants, one component.** `variant="default"` is the standard
-  surface look (e.g. the portfolio switcher). `variant="on-graphics"` adds
-  `.input--on-graphics` (dark translucent fill + borderless edge) and is used
-  **ONLY when the control sits on top of imagery** (e.g. the Market Weather
-  condition art). Pick `on-graphics` for legibility over busy backgrounds;
-  otherwise use `default`. The `on-graphics` skin overrides `background-color`
-  (not the `background` shorthand) so the CaretDown SVG survives.
-- **The caret is part of the standard.** `appearance: none` strips the
-  inconsistent native chevron; an inline **CaretDown** SVG background (filled
-  `--text-muted`) replaces it so the affordance looks the same everywhere. Don't
-  add a separate caret element or a different glyph.
-- **Width:** the shared `.input` is `flex: 1`. For a standalone full-width
-  control, wrap it in a flex container (e.g. `.portfolio-switcher`,
-  `.weather-select`) rather than overriding the field width.
-- **Label it.** `Dropdown` already renders a `.visually-hidden` `<label htmlFor>`
-  from its `label` prop — always pass a meaningful label.
-- **Current adopters:** portfolio/watchlist switcher (`.portfolio-switcher`,
-  `default`, on both the home and dashboard watchlists), Market Weather
-  Sector/Industry selectors (`on-graphics`), Strategy Assignment (`#assign-select`),
-  Create Ship privacy. Any new dropdown joins this list.
+**Long catalogs** (GICS Sector / Industry) use **`SearchableSelect`**
+(`src/components/SearchableSelect.tsx`): closed trigger matches `input` (+
+optional `input--on-graphics`) with a CaretDown; expanded panel is a portaled
+typeahead (`.chip-search-field` + `.multiselect-menu` / `.multiselect-option`)
+matching Current Watch ticker suggestions — portaled so Weather card
+`overflow: hidden` cannot clip it. Do not invent a third pick-one menu look.
 
-> A **pick-one** control is a dropdown. A **step-through next/previous** control
-> (e.g. the Market Weather Stock card's `.weather-prevnext`) is a distinct
-> two-button toggle, not a `select` — it's appropriate when cycling a short
-> ordered set in place without opening a menu.
+- **`Dropdown`:** short lists where native picker UX is enough (portfolio
+  switcher, Strategy Assignment, Create Ship privacy). Never hand-roll a
+  parallel native select.
+- **`SearchableSelect`:** long searchable single-select. Trigger variants:
+  `default` (surface) and `on-graphics` (Weather art only — dark translucent
+  fill). Reuse existing menu/option classes; don't fork row hover/radius.
+- **Width:** wrap in a flex container (e.g. `.portfolio-switcher`,
+  `.weather-select`) rather than overriding field width.
+- **Label it.** Both components take a meaningful `label` (visually hidden).
+- **Current `Dropdown` adopters:** portfolio/watchlist switcher, Strategy
+  Assignment (`#assign-select`), Create Ship privacy.
+- **Current `SearchableSelect` adopters:** Market Weather Sector + Industry
+  (`on-graphics`).
+
+> A **step-through next/previous** control (e.g. the Market Weather Stock
+> card's `.weather-prevnext`) is a distinct two-button toggle — appropriate
+> when cycling a short ordered set in place without opening a menu.
 
 ## Action menu standard (`ActionMenu`)
 

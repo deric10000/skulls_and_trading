@@ -99,8 +99,8 @@ function bootstrapTickerInfo(ticker: string): TickerInfo | undefined {
   return {
     company: name,
     category: "Pending research",
-    sector: "Technology",
-    industry: "Software / Cloud",
+    sector: "Information Technology",
+    industry: "Software",
     lastPrice: live?.lastPrice ?? 0,
     priceAsOf: live?.asOf ?? EMPTY_LIVE_CONTEXT.asOf,
     analysis: {

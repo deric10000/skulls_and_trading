@@ -229,8 +229,8 @@ export interface LogEntry {
 export interface TickerInfo {
   company: string; // "Nvidia"
   category: string; // "AI Infrastructure"
-  sector: string; // Market Weather parent sector, e.g. "Technology"
-  industry: string; // Market Weather peer group, e.g. "Semiconductors"
+  sector: string; // GICS sector key, e.g. "Information Technology"
+  industry: string; // GICS industry key, e.g. "Semiconductors & Semiconductor Equipment"
   lastPrice: number;
   /**
    * When `lastPrice` was captured (ISO). MOCK: one-time seed (e.g. 2026-07-14).
