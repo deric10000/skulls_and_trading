@@ -48,13 +48,23 @@ export function LoginScreen() {
       );
       return;
     }
-    // Uncontrolled fields + FormData: iOS Keychain can fill the DOM without
-    // React onChange, and controlled value="" would fight autofill.
-    const formData = new FormData(event.currentTarget);
-    const emailValue = String(formData.get("email") ?? "").trim();
-    const passwordValue = String(formData.get("password") ?? "");
-    if (!emailValue.includes("@") || passwordValue.length < 1) {
-      setError("Check your email and password, Captain.");
+    // Prefer live input.value over FormData — iOS Keychain sometimes paints
+    // dots while FormData still sees an empty password until the field is tapped.
+    const form = event.currentTarget;
+    const emailInput = form.elements.namedItem("email");
+    const passwordInput = form.elements.namedItem("password");
+    const emailValue =
+      emailInput instanceof HTMLInputElement ? emailInput.value.trim() : "";
+    const passwordValue =
+      passwordInput instanceof HTMLInputElement ? passwordInput.value : "";
+    if (!emailValue.includes("@")) {
+      setError("Enter a valid email, Captain.");
+      return;
+    }
+    if (passwordValue.length < 1) {
+      setError(
+        "Password looks empty. On iPhone, tap the password field after autofill, then sign in again.",
+      );
       return;
     }
     setError("");
