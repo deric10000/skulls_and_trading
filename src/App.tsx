@@ -1,7 +1,7 @@
 import { AppShell } from "./components/AppShell";
 import { LoginScreen } from "./components/auth/LoginScreen";
 import { Onboarding } from "./components/auth/Onboarding";
-import { LegalDisclaimerModal } from "./components/LegalDisclaimerModal";
+import { ComingSoonOverlay } from "./components/ComingSoonOverlay";
 import { MarketBudgetToasts } from "./components/MarketBudgetToasts";
 import { CaptainProfilePage } from "./pages/CaptainProfilePage";
 import { DashboardPage } from "./pages/DashboardPage";
@@ -35,10 +35,9 @@ function AuthGate() {
 
   return (
     <AppShell>
-      <LegalDisclaimerModal
-        open={needsLegalAck}
-        onAcknowledge={acknowledgeLegal}
-      />
+      {needsLegalAck ? (
+        <ComingSoonOverlay variant="legal" onAcknowledge={acknowledgeLegal} />
+      ) : null}
       <MarketBudgetToasts />
       {budgetToast ? (
         <div className="budget-cap-toast" role="status">

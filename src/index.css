@@ -5743,10 +5743,10 @@ select.forge-cell-input {
   gap: var(--space-5);
 }
 
-/* Coming Soon overlay — Closed Beta unfinished surfaces (Dashboard, Ships).
-   Full-viewport fixed scrim (cannot scroll past). Header stays above
-   (z-index 20) so TopNav remains usable. Panel chrome matches app modal cards
-   (`.modal-card` width/gap + Forge modal title/body type) — no close control. */
+/* Coming Soon overlay — Closed Beta unfinished surfaces (Dashboard, Ships) +
+   legal ack gate (`coming-soon-overlay--gate`). Full-viewport fixed scrim
+   (cannot scroll past). Coming-soon: header stays above (z-index 20). Legal
+   gate: z-index 80 until accepted. Panel chrome matches app modal cards. */
 .coming-soon-shell {
   position: relative;
   min-height: 100%;
@@ -5767,6 +5767,11 @@ select.forge-cell-input {
   background: rgb(2 4 10 / 0.7);
   backdrop-filter: blur(4px);
   pointer-events: auto;
+}
+
+/* Legal ack gate — above sticky header until accepted (coming-soon stays at 15). */
+.coming-soon-overlay--gate {
+  z-index: 80;
 }
 
 .coming-soon-panel {
@@ -5817,19 +5822,23 @@ select.forge-cell-input {
    model would otherwise let content move under / past the scrim). More
    specific than the mobile `.app { overflow: visible }` rule. */
 html:has(.coming-soon-shell),
-body:has(.coming-soon-shell) {
+body:has(.coming-soon-shell),
+html:has(.coming-soon-overlay--gate),
+body:has(.coming-soon-overlay--gate) {
   overflow: hidden;
   height: 100%;
   overscroll-behavior: none;
 }
 
-.app:has(.coming-soon-shell) {
+.app:has(.coming-soon-shell),
+.app:has(.coming-soon-overlay--gate) {
   height: 100vh;
   height: 100dvh;
   overflow: hidden;
 }
 
-.app:has(.coming-soon-shell) .app-main {
+.app:has(.coming-soon-shell) .app-main,
+.app:has(.coming-soon-overlay--gate) .app-main {
   overflow: hidden;
 }
 
@@ -8114,31 +8123,6 @@ button.nav-link {
   * {
     transition: none !important;
   }
-}
-
-/* Beta 0 legal disclaimer (once per login) */
-.legal-disclaimer-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 80;
-  display: grid;
-  place-items: center;
-  padding: var(--space-4);
-  background: color-mix(in srgb, var(--color-ink) 55%, transparent);
-}
-
-.legal-disclaimer {
-  max-width: 28rem;
-  width: 100%;
-  display: grid;
-  gap: var(--space-3);
-}
-
-.legal-disclaimer-body {
-  margin: 0;
-  font-size: var(--text-sm);
-  line-height: 1.5;
-  color: var(--color-muted);
 }
 
 .budget-cap-toast {
