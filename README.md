@@ -44,15 +44,13 @@ Local and Cloudflare should use the **same** Supabase project so saves appear in
 
 ## Deploy to Cloudflare
 
-`VITE_SUPABASE_*` is baked into the SPA at **build** time. Worker secrets
-`SUPABASE_*` are runtime-only for `/api/market/*` — they do **not** fix the
-login screen. Always deploy through:
-
 ```bash
-npm run deploy   # loads .env.local, refuses if VITE_SUPABASE_* missing
+npm run deploy
 ```
 
-One-time Worker secrets (runtime):
+Production auth no longer depends on baking `VITE_SUPABASE_*` into the SPA.
+The Worker serves public Supabase config from secrets at `/api/auth/config`
+(`SUPABASE_URL` + `SUPABASE_ANON_KEY`). Keep those Worker secrets set:
 
 ```bash
 npx wrangler secret put SUPABASE_URL
@@ -60,11 +58,13 @@ npx wrangler secret put SUPABASE_ANON_KEY
 # Do not set ENABLE_DEMO_GATE unless you intentionally re-open Demo Captain
 ```
 
-If **Workers Builds** (Git auto-deploy on push to `main`) is enabled, add
-`VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` under **Build variables and
-secrets** in the Cloudflare dashboard. A push-triggered build without those
-vars will overwrite a good local deploy and show “Beta sign-in is not
-configured.”
+Local `npm run dev` still uses `.env.local` `VITE_SUPABASE_*` (and/or the
+local Worker + `.dev.vars`). Optional: set the same `VITE_*` for offline
+builds without a Worker.
+
+If **Workers Builds** auto-deploys on git push, that is fine for auth after
+this change — do **not** rely on Build variables for Vite. Worker secrets are
+enough.
 
 ## Beta accounts (not Demo Captain)
 

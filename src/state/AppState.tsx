@@ -48,7 +48,11 @@ import {
   signOutSupabase,
   takePendingInvite,
 } from "../lib/auth/session";
-import { getSupabase, isSupabaseConfigured } from "../lib/auth/supabaseClient";
+import {
+  getSupabase,
+  ensureSupabaseReady,
+  isSupabaseConfigured,
+} from "../lib/auth/supabaseClient";
 import type { UserProfile } from "../lib/auth/types";
 import { isAdmin } from "../lib/auth/types";
 import {
@@ -297,7 +301,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [needsLegalAck, setNeedsLegalAck] = useState(false);
   const [budgetToast, setBudgetToast] = useState<string | null>(null);
-  const [authReady, setAuthReady] = useState(!isSupabaseConfigured());
+  const [authReady, setAuthReady] = useState(false);
   const [captain, setCaptain] = useState<CaptainProfile>({
     ...DEFAULT_CAPTAIN,
     handle: "Captain",
@@ -363,12 +367,15 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   }, [hydrateFromSession]);
 
   useEffect(() => {
-    if (!isSupabaseConfigured()) {
-      setAuthReady(true);
-      return;
-    }
     let cancelled = false;
+    let unsubscribe: (() => void) | undefined;
     void (async () => {
+      const configured = await ensureSupabaseReady();
+      if (cancelled) return;
+      if (!configured) {
+        setAuthReady(true);
+        return;
+      }
       try {
         const { data } = await getSupabase().auth.getSession();
         if (!cancelled && data.session) {
@@ -379,18 +386,19 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       } finally {
         if (!cancelled) setAuthReady(true);
       }
+      const { data: sub } = getSupabase().auth.onAuthStateChange((event) => {
+        if (event === "SIGNED_OUT") {
+          persistEnabled.current = false;
+          setIsAuthenticated(false);
+          setUserProfile(null);
+          setNeedsLegalAck(false);
+        }
+      });
+      unsubscribe = () => sub.subscription.unsubscribe();
     })();
-    const { data: sub } = getSupabase().auth.onAuthStateChange((event) => {
-      if (event === "SIGNED_OUT") {
-        persistEnabled.current = false;
-        setIsAuthenticated(false);
-        setUserProfile(null);
-        setNeedsLegalAck(false);
-      }
-    });
     return () => {
       cancelled = true;
-      sub.subscription.unsubscribe();
+      unsubscribe?.();
     };
   }, [hydrateFromSession]);
 

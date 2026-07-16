@@ -3,7 +3,7 @@ import brandLogo from "../../assets/st-logo.png";
 import brandWordmark from "../../assets/st-wordmark.svg";
 import loginBackground from "../../assets/skulls-and-trading-login-background-2.webp";
 import loginBackgroundMobile from "../../assets/skulls-and-trading-login-background-mobile.webp";
-import { isSupabaseConfigured } from "../../lib/auth/supabaseClient";
+import { ensureSupabaseReady } from "../../lib/auth/supabaseClient";
 import { signInWithPassword } from "../../lib/auth/session";
 import { useAppState } from "../../state/AppState";
 import { Tabs, type TabItem } from "../Tabs";
@@ -34,6 +34,19 @@ const BRAND_FEATURES = [
   },
 ];
 
+function readCredentials(form: HTMLFormElement): {
+  email: string;
+  password: string;
+} {
+  const emailInput = form.elements.namedItem("email");
+  const passwordInput = form.elements.namedItem("password");
+  const email =
+    emailInput instanceof HTMLInputElement ? emailInput.value.trim() : "";
+  const password =
+    passwordInput instanceof HTMLInputElement ? passwordInput.value : "";
+  return { email, password };
+}
+
 export function LoginScreen() {
   const { completeBetaSignIn } = useAppState();
   const [mode, setMode] = useState<Mode>("sign-in");
@@ -42,28 +55,31 @@ export function LoginScreen() {
 
   async function handleSignIn(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!isSupabaseConfigured()) {
+    const form = event.currentTarget;
+
+    const configured = await ensureSupabaseReady();
+    if (!configured) {
       setError(
-        "Beta sign-in is not configured yet. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.",
+        "Beta sign-in is not available yet. Ask the Admin Captain — Worker auth config is missing.",
       );
       return;
     }
-    // Prefer live input.value over FormData — iOS Keychain sometimes paints
-    // dots while FormData still sees an empty password until the field is tapped.
-    const form = event.currentTarget;
-    const emailInput = form.elements.namedItem("email");
-    const passwordInput = form.elements.namedItem("password");
-    const emailValue =
-      emailInput instanceof HTMLInputElement ? emailInput.value.trim() : "";
-    const passwordValue =
-      passwordInput instanceof HTMLInputElement ? passwordInput.value : "";
+
+    // iOS Keychain often paints autofill while .value is still empty for a beat.
+    let { email: emailValue, password: passwordValue } = readCredentials(form);
+    if (!emailValue.includes("@") || passwordValue.length < 1) {
+      await new Promise((r) => window.setTimeout(r, 100));
+      ({ email: emailValue, password: passwordValue } = readCredentials(form));
+    }
     if (!emailValue.includes("@")) {
-      setError("Enter a valid email, Captain.");
+      setError(
+        "Email looks empty or incomplete. Tap the email field after autofill, then try again.",
+      );
       return;
     }
     if (passwordValue.length < 1) {
       setError(
-        "Password looks empty. On iPhone, tap the password field after autofill, then sign in again.",
+        "Password looks empty. Tap the password field after autofill, then try again.",
       );
       return;
     }
