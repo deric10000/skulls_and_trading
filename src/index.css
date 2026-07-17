@@ -333,10 +333,18 @@ button {
 
 /* Header */
 .site-header {
+  --header-pad-top: 1rem;
+  --header-pad-bottom: 0.5rem;
+  /* Brand row content height — matches .nav-link min-height so the logomark
+     tracks the bar as the header grows/shrinks. */
+  --header-brand-row: 2.375rem;
+  --header-brand-band: calc(
+    var(--header-pad-top) + var(--header-brand-row) + var(--header-pad-bottom)
+  );
   position: sticky;
   top: 0;
   z-index: 20;
-  padding: 1rem 0 0.5rem;
+  padding: var(--header-pad-top) 0 var(--header-pad-bottom);
   background: rgb(5 7 13 / 0.78);
   backdrop-filter: blur(14px);
   border-bottom: 1px solid var(--border-soft);
@@ -364,25 +372,31 @@ button {
   grid-area: brand;
   display: inline-flex;
   align-items: center;
-  gap: clamp(0.6rem, 1.1vw, 0.95rem);
+  gap: 8px;
   min-width: 0;
   font-weight: 700;
   letter-spacing: 0.02em;
   color: var(--text-strong);
+  /* Flush left (cancel content pad) and span the full header brand band so
+     wordmark centers on the logomark — not on the padded content row alone. */
+  margin-left: calc(var(--content-pad) * -1);
+  margin-top: calc(var(--header-pad-top) * -1);
+  margin-bottom: calc(var(--header-pad-bottom) * -1);
+  min-height: var(--header-brand-band);
 }
 
-/* Logomark sized ~1.5x the wordmark height so the square mark (which carries
-   internal padding) reads as an equal partner to the wordmark, not a stamp.
-   Scales across all viewports and stays within the header's vertical rhythm. */
+/* Full-height logomark: square, proportional to the header brand band.
+   Wordmark keeps 8px gap and shares the band’s vertical center. */
 .brand-logo {
-  width: 24px;
-  height: 24px;
+  height: var(--header-brand-band);
+  width: auto;
+  aspect-ratio: 1;
   flex: 0 0 auto;
   object-fit: contain;
 }
 
 .brand-wordmark {
-  height: 22px;
+  height: 25px;
   width: auto;
   max-width: min(100%, 340px);
   flex: 0 1 auto;
@@ -855,9 +869,8 @@ button {
   padding: 1rem;
   border: 1px solid var(--border-soft);
   border-radius: var(--radius-lg);
-  background:
-    radial-gradient(circle at 80% 10%, rgb(86 182 240 / 0.12), transparent 50%),
-    var(--surface-2);
+  /* Artwork lives on `.hero-backdrop`; keep the shell clear so cover shows. */
+  background: transparent;
   box-shadow: var(--shadow-card);
 }
 
@@ -866,21 +879,42 @@ button {
    card edge. */
 .hero-body {
   position: relative;
+  z-index: 1;
   display: grid;
   grid-template-columns: 1.4fr 0.9fr;
   gap: var(--space-5);
   align-items: center;
 }
 
-.hero-grid {
+/* Login artwork clipped to the hero card. Same assets + readability scrim as
+   `.auth-backdrop` (LoginScreen). `cover` + `center` scales to the card on
+   every viewport; mobile swaps to the portrait crop at ≤767px. */
+.hero-backdrop {
   position: absolute;
   inset: 0;
-  background-image:
-    linear-gradient(rgb(148 163 184 / 0.06) 1px, transparent 1px),
-    linear-gradient(90deg, rgb(148 163 184 / 0.06) 1px, transparent 1px);
-  background-size: 38px 38px;
-  mask-image: radial-gradient(circle at 30% 30%, black, transparent 75%);
+  z-index: 0;
+  background-color: var(--bg-deep);
+  background-image: var(--auth-bg);
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
   pointer-events: none;
+}
+
+.hero-backdrop::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(0deg, rgb(5 7 13 / 0.62), rgb(5 7 13 / 0.62)),
+    radial-gradient(95% 85% at 50% 42%, transparent 0%, rgb(5 7 13 / 0.55) 100%),
+    linear-gradient(180deg, rgb(5 7 13 / 0.55) 0%, rgb(5 7 13 / 0.8) 100%);
+}
+
+@media (max-width: 767px) {
+  .hero-backdrop {
+    background-image: var(--auth-bg-mobile);
+  }
 }
 
 .hero-content {
@@ -6944,32 +6978,23 @@ button.nav-link {
     align-self: center;
   }
 
-  /* Mobile only: center the "Skulls & Trading" wordmark horizontally on the
-     screen (iOS-style centered title). The skull logo stays left and the DEMO
-     chip stays right — both keep their normal flow. The wordmark is lifted out
-     of the brand's inline flow and pinned to viewport-center: `.brand` is its
-     positioning context (so it centers vertically on the logo's line), and its
-     left edge sits at `--content-pad` from the viewport, so
-     `50vw - --content-pad` lands the center exactly mid-screen. Sizing stays
-     responsive via `vw` and the natural aspect ratio (the absolute element's
-     `100%` would resolve against the tiny logo-width brand box, so cap with
-     `vw` instead). */
+  /* Mobile: keep the logo + wordmark lockup (8px gap) — wordmark stays left
+     with the logomark instead of the old viewport-centered title. */
   .brand {
-    position: relative;
+    /* Brand band stops above the nav pill — don’t pull into the pill row. */
+    margin-bottom: 0;
+    min-height: var(--header-brand-band);
   }
 
-  .brand-wordmark {
-    position: absolute;
-    top: 50%;
-    left: calc(50vw - var(--content-pad));
-    transform: translate(-50%, -50%);
-    max-width: min(70vw, 340px);
+  .site-account {
+    margin-bottom: 0;
+    min-height: var(--header-brand-band);
   }
 
-  /* Mobile header: a touch more transparent than desktop (base 0.78) so a little
-     more of the scrolling content reads through, and the glass pill below reads
-     more like glass. Blur is unchanged. */
+  /* Brand band + top pad only (no bleed into the nav pill). Slightly more
+     transparent than desktop so content reads through under the glass pill. */
   .site-header {
+    --header-brand-band: calc(var(--header-pad-top) + var(--header-brand-row));
     background: rgb(5 7 13 / 0.68);
   }
 
@@ -7003,24 +7028,13 @@ button.nav-link {
   }
 }
 
-/* Very small phones (<=380px): below ~370px the screen-centered wordmark starts
-   to collide with the right-side DEMO chip, and the nav pill's icons + Sign Out
-   stop fitting. Two fixes, both scoped here so larger phones keep the centered
-   title + roomy pill:
-   1. Return the wordmark to the in-flow brand lockup (left, next to the logo —
-      same as desktop/laptop) so the DEMO chip can't overlap it.
-   2. Keep Sign Out pinned to the pill's right edge (space-between unchanged) but
-      shrink the inter-icon gap so the 5 fixed 36px icons + Sign Out fit inside.
-      The pill is full-width minus 16px page padding and 12px pill padding per
-      side, so the space available for the 4 gaps is ~(100vw - 304px); dividing
-      by 4 gives the max gap, tracked fluidly with a small safety margin. */
+/* Very small phones (<=380px): the nav pill's icons + Sign Out stop fitting.
+   Keep Sign Out pinned to the pill's right edge (space-between unchanged) but
+   shrink the inter-icon gap so the 5 fixed 36px icons + Sign Out fit inside.
+   The pill is full-width minus 16px page padding and 12px pill padding per
+   side, so the space available for the 4 gaps is ~(100vw - 304px); dividing
+   by 4 gives the max gap, tracked fluidly with a small safety margin. */
 @media (max-width: 380px) {
-  .brand-wordmark {
-    position: static;
-    transform: none;
-    max-width: min(100%, 340px);
-  }
-
   .mobile-nav-icons {
     gap: clamp(4px, calc(25vw - 78px), 20px);
   }
@@ -7042,6 +7056,10 @@ button.nav-link {
   justify-content: flex-end;
   gap: 0.45rem;
   flex-wrap: nowrap;
+  /* Same brand-band box as `.brand` so the chip centers on the logomark. */
+  margin-top: calc(var(--header-pad-top) * -1);
+  margin-bottom: calc(var(--header-pad-bottom) * -1);
+  min-height: var(--header-brand-band);
 }
 
 .site-account-name {
