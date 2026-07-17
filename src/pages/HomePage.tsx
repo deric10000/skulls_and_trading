@@ -108,7 +108,11 @@ export function HomePage() {
       <div className="home-grid" ref={emblaRef}>
         <div className="home-grid__track">
           <section className="home-slide home-slide--watch" data-home-tab="current-watch">
-            <WatchlistWidget readOnly onSelectTicker={setWeatherFocusTicker} />
+            <WatchlistWidget
+              readOnly
+              onSelectTicker={setWeatherFocusTicker}
+              mobileTotalsDock={activeTab === "current-watch"}
+            />
           </section>
           <section className="home-slide home-slide--market" data-home-tab="market-weather">
             <MarketFlowWidget focusTicker={weatherFocusTicker} />

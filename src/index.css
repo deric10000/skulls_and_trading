@@ -1979,6 +1979,133 @@ span.checkbox {
   background: var(--surface-1);
 }
 
+/* Current Watch running-totals bar — shared ActionFooter chrome (divider +
+   pin via .strategy-footer). Desktop/tablet: in-card. Mobile: portaled
+   `.strategy-dock` sticky (same ≤767px dock as My Strategies). Type reuses
+   watch-field-label / watch-figure / watch-pnl.
+
+   Default: Total | Open P&L (centered) | Cash on one row. Progressive wrap
+   classes (applied only when content actually collides — see
+   useWatchTotalsWrap) left-align Open P&L / Cash when they stack. */
+.watch-totals-footer {
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--space-2) var(--space-3);
+  flex-wrap: nowrap;
+  background: var(--surface-1);
+}
+
+.watch-totals-stat {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+/* Equal side rails so Open P&L sits in the true center. */
+.watch-totals-stat:first-child {
+  flex: 1 1 0;
+  text-align: left;
+}
+
+.watch-totals-stat:nth-child(2) {
+  flex: 0 1 auto;
+  text-align: center;
+  align-items: center;
+}
+
+.watch-totals-stat:nth-child(2) .watch-field-label {
+  white-space: nowrap;
+}
+
+.watch-totals-stat:nth-child(2) .watch-pnl {
+  justify-content: center;
+}
+
+.watch-totals-stat:last-child {
+  flex: 1 1 0;
+  text-align: right;
+  align-items: flex-end;
+}
+
+/* Collision stage 1 — Open P&L under Total (left); Cash stays top-right.
+   Pack Total → Cash → Open P&L so Cash lands on row 1 (flex never
+   backfills). */
+.watch-totals-footer.is-wrap-pnl {
+  flex-wrap: wrap;
+}
+
+.watch-totals-footer.is-wrap-pnl .watch-totals-stat:first-child {
+  flex: 0 1 auto;
+  order: 1;
+}
+
+.watch-totals-footer.is-wrap-pnl .watch-totals-stat:last-child {
+  flex: 0 1 auto;
+  order: 2;
+  margin-left: auto;
+}
+
+.watch-totals-footer.is-wrap-pnl .watch-totals-stat:nth-child(2) {
+  flex: 0 0 100%;
+  order: 3;
+  text-align: left;
+  align-items: flex-start;
+}
+
+.watch-totals-footer.is-wrap-pnl .watch-totals-stat:nth-child(2) .watch-pnl {
+  justify-content: flex-start;
+}
+
+/* Collision stage 2 — Cash under Open P&L (left). */
+.watch-totals-footer.is-wrap-cash .watch-totals-stat:nth-child(2) {
+  order: 2;
+}
+
+.watch-totals-footer.is-wrap-cash .watch-totals-stat:last-child {
+  flex: 0 0 100%;
+  order: 3;
+  margin-left: 0;
+  text-align: left;
+  align-items: flex-start;
+}
+
+@media (max-width: 767px) {
+  /* Override shared button-footer column stack — keep a horizontal row. */
+  .watch-totals-footer.strategy-footer:not(.strategy-footer--icons) {
+    flex-direction: row;
+    flex-wrap: nowrap;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--space-1) var(--space-2);
+  }
+
+  .watch-totals-footer.is-wrap-pnl.strategy-footer:not(.strategy-footer--icons),
+  .watch-totals-footer.is-wrap-cash.strategy-footer:not(.strategy-footer--icons) {
+    flex-wrap: wrap;
+  }
+
+  .watch-totals-footer .watch-totals-stat:nth-child(2) .watch-pnl {
+    gap: 0.35rem;
+  }
+
+  /* Portaled onto .app-main (out of Embla), then rides .strategy-dock sticky —
+     same pattern as My Strategies + watch edit Cancel/Update. */
+  .app-main:has(.watch-totals-footer.strategy-dock) {
+    min-height: calc(100svh - var(--app-header-h, 96px));
+    padding-bottom: 0;
+  }
+
+  .strategy-dock.watch-totals-footer {
+    padding-top: var(--space-2);
+    padding-inline: var(--space-2);
+    border-top: 1px solid var(--border-soft);
+    background: var(--bg-base);
+  }
+
+  .app-main:has(.watch-totals-footer.strategy-dock) .home-slide--watch .watchlist {
+    padding-bottom: calc(var(--sticky-footer-h, 4.5rem) + var(--space-3));
+  }
+}
+
 /* Mobile icon dock: Cancel left, Update right — same split as Delete/Add. */
 .watch-edit-actions.strategy-footer--icons > .btn:first-child {
   margin-right: auto;
@@ -3300,9 +3427,10 @@ span.checkbox {
 
 /* Shared card action footer (`ActionFooter`) — a divider + button row pinned to
    the bottom of a card's flex column. Reused by My Strategies, the Configure
-   card, and the Apply-to-Portfolio bar; drop any buttons inside. When the
-   buttons can't share a row (measured in JS via useStackedRow) it gets
-   .is-stacked and the actions stretch full-width. */
+   card, the Apply-to-Portfolio bar, and Current Watch running totals; drop any
+   buttons (or metric placeholders) inside. When the buttons can't share a row
+   (measured in JS via useStackedRow) it gets .is-stacked and the actions
+   stretch full-width. */
 .strategy-footer {
   display: flex;
   align-items: center;

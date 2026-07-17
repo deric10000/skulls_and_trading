@@ -552,6 +552,7 @@ export const PORTFOLIOS: Portfolio[] = [
     label: "Deric\u2019s Webull Portfolio",
     type: "portfolio",
     strategyId: "aggressive-ai-high-beta",
+    cashAvailable: 2500,
     // Display order: strongest strategy alignment first.
     holdings: [
       {
@@ -670,6 +671,7 @@ export const PORTFOLIOS: Portfolio[] = [
     label: "Jeff\u2019s Webull Portfolio",
     type: "portfolio",
     strategyId: "value-growth-dividend",
+    cashAvailable: 4200,
     holdings: [
       {
         ticker: "MSFT",
@@ -732,6 +734,7 @@ export const PORTFOLIOS: Portfolio[] = [
     id: "watchlist-one",
     label: "Watchlist One",
     type: "watchlist",
+    cashAvailable: 0,
     // User-curated watch-only list (no shares held yet — stalking entries).
     holdings: [
       {

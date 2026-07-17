@@ -27,7 +27,8 @@ holding-shaped is **derived** from them, so one edit updates every surface.
   `status`, `reason`, `strategyIds`. Open P&L display should prefer
   recomputing from `lastPrice` vs `avgPrice` (average-cost method). Confirmed
   qty edits append session `ShareFillEvent`s in AppState (live: brokerage fill
-  ledger later).
+  ledger later). Optional `Portfolio.cashAvailable` is settled cash for running
+  totals (not a holding row).
 
 ## 1a. All seeded sources unless the user scopes
 
@@ -60,9 +61,13 @@ it — never duplicate the fact in a second constant where it can drift.
 
 `ALLOCATIONS`, `RISK_RULES`, and `PORTFOLIO_METRICS` are still **hand-authored
 literals**, not derived. Deriving allocations accurately would require a
-sector→bucket mapping and a portfolio cash balance (not modeled yet) and would
-change the displayed numbers, so it was deliberately left as-is. They are still
-served through the data source (below), so they stay swappable later.
+sector→bucket mapping (and would change displayed numbers), so it was
+deliberately left as-is. They are still served through the data source (below),
+so they stay swappable later.
+
+`Portfolio.cashAvailable` is the settled cash balance for Current Watch running
+totals (holdings market value + cash). Seeded on demo portfolios; watchlists and
+new sources default to `0`. Not yet used to re-derive `ALLOCATIONS`.
 
 ## 2. The `DataSource` seam (`src/lib/datasource/`)
 
