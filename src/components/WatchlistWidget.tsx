@@ -2305,12 +2305,13 @@ export function WatchlistWidget({
           </li>
         ) : null}
       </ul>
-      {!editMode && !isPreview
+      {!editMode && !isPreview && !isWatchlistSource
         ? (() => {
             // Desktop/tablet: footer stays in the card (My Strategies in-card pattern).
             // Mobile: lift into .strategy-dock sticky on .app-main (same as My
             // Strategies list dock / watch edit Cancel+Update) so Embla cannot
             // clip it. Home gates via mobileTotalsDock while Current Watch is active.
+            // Watchlists have no paper Total / Open P&L / Cash — hide the bar.
             if (isMobile && !mobileTotalsDock) return null;
             const footer = (
               <ActionFooter
