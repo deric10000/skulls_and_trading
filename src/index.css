@@ -869,9 +869,8 @@ button {
   padding: 1rem;
   border: 1px solid var(--border-soft);
   border-radius: var(--radius-lg);
-  background:
-    radial-gradient(circle at 80% 10%, rgb(86 182 240 / 0.12), transparent 50%),
-    var(--surface-2);
+  /* Artwork lives on `.hero-backdrop`; keep the shell clear so cover shows. */
+  background: transparent;
   box-shadow: var(--shadow-card);
 }
 
@@ -880,21 +879,42 @@ button {
    card edge. */
 .hero-body {
   position: relative;
+  z-index: 1;
   display: grid;
   grid-template-columns: 1.4fr 0.9fr;
   gap: var(--space-5);
   align-items: center;
 }
 
-.hero-grid {
+/* Login artwork clipped to the hero card. Same assets + readability scrim as
+   `.auth-backdrop` (LoginScreen). `cover` + `center` scales to the card on
+   every viewport; mobile swaps to the portrait crop at ≤767px. */
+.hero-backdrop {
   position: absolute;
   inset: 0;
-  background-image:
-    linear-gradient(rgb(148 163 184 / 0.06) 1px, transparent 1px),
-    linear-gradient(90deg, rgb(148 163 184 / 0.06) 1px, transparent 1px);
-  background-size: 38px 38px;
-  mask-image: radial-gradient(circle at 30% 30%, black, transparent 75%);
+  z-index: 0;
+  background-color: var(--bg-deep);
+  background-image: var(--auth-bg);
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
   pointer-events: none;
+}
+
+.hero-backdrop::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(0deg, rgb(5 7 13 / 0.62), rgb(5 7 13 / 0.62)),
+    radial-gradient(95% 85% at 50% 42%, transparent 0%, rgb(5 7 13 / 0.55) 100%),
+    linear-gradient(180deg, rgb(5 7 13 / 0.55) 0%, rgb(5 7 13 / 0.8) 100%);
+}
+
+@media (max-width: 767px) {
+  .hero-backdrop {
+    background-image: var(--auth-bg-mobile);
+  }
 }
 
 .hero-content {

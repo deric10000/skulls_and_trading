@@ -1,6 +1,8 @@
-import { useState } from "react";
+import { useState, type CSSProperties } from "react";
 import bullCompass from "../assets/bull-skull-compass.png";
 import bearCompass from "../assets/bear-skull-compass.png";
+import loginBackground from "../assets/skulls-and-trading-login-background-2.webp";
+import loginBackgroundMobile from "../assets/skulls-and-trading-login-background-mobile.webp";
 import { Skull, TrendUp } from "../lib/icons";
 import { useAppState } from "../state/AppState";
 import { ComingSoonOverlay } from "./ComingSoonOverlay";
@@ -34,7 +36,16 @@ export function HeroCard({
       className={variant === "center" ? "hero hero--center" : "hero"}
       aria-labelledby="hero-title"
     >
-      <div className="hero-grid" aria-hidden="true" />
+      <div
+        className="hero-backdrop"
+        style={
+          {
+            "--auth-bg": `url(${loginBackground})`,
+            "--auth-bg-mobile": `url(${loginBackgroundMobile})`,
+          } as CSSProperties
+        }
+        aria-hidden="true"
+      />
       <div className="hero-body">
         <div className="hero-content">
           <p className="eyebrow">Your Investing Discipline Engine</p>
