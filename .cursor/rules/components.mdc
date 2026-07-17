@@ -81,7 +81,14 @@ The Watch summary (`WatchSummary` in `WatchlistWidget.tsx`) is used by Home
 (`readOnly` + `previewStrategyId`). Preview renames the panel, hides edit/create,
 limits the source switcher to that strategy's `appliedPortfolioIds`, and shows an
 empty state when none are applied — multi-strategy conviction on tickers is
-unchanged. Per ticker it shows **one block per assigned strategy** (default
+unchanged.
+
+**Empty-source guide** (blank portfolio / watchlist only): stock `ForgeToast`
+(`tone="info"`, dismiss stays until closed; `sessionStorage` per source id).
+Portfolio copy = paper book + forge/apply/edit steps; watchlist copy = track
+without size yet. Do not invent a parallel empty-state banner.
+
+Per ticker it shows **one block per assigned strategy** (default
 strategies via `holdings[].strategyIds`; custom copies via applied portfolio —
 `AppState.getAppliedStrategiesForTicker` / `strategiesForTicker`), each with its
 own rule-chip breakdown:

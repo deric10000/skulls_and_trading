@@ -65,6 +65,28 @@ import { ActionFooter } from "./ActionFooter";
 /** Closed Beta: hide under-conviction Watch Summary detail until Dashboard ships. */
 const SHOW_WATCH_SUMMARY_DETAIL = false;
 
+const EMPTY_GUIDE_STORAGE_PREFIX = "st-empty-watch-guide:";
+
+function emptyGuideStorageKey(sourceId: string) {
+  return `${EMPTY_GUIDE_STORAGE_PREFIX}${sourceId}`;
+}
+
+function readEmptyGuideDismissed(sourceId: string): boolean {
+  try {
+    return sessionStorage.getItem(emptyGuideStorageKey(sourceId)) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function writeEmptyGuideDismissed(sourceId: string) {
+  try {
+    sessionStorage.setItem(emptyGuideStorageKey(sourceId), "1");
+  } catch {
+    /* private mode / blocked storage — dismiss still works in-session via state */
+  }
+}
+
 interface StrategyBreakdown {
   strategy: Strategy;
   alignment: StockAlignment | undefined;
@@ -1228,6 +1250,7 @@ export function WatchlistWidget({
   const [editMode, setEditMode] = useState(false);
   const [editDraft, setEditDraft] = useState("");
   const [editToast, setEditToast] = useState<string | null>(null);
+  const [emptyGuideDismissed, setEmptyGuideDismissed] = useState(false);
   const [tickerSuggestionsOpen, setTickerSuggestionsOpen] = useState(false);
   const [editSuggestions, setEditSuggestions] = useState<
     { symbol: string; name: string }[]
@@ -1333,6 +1356,7 @@ export function WatchlistWidget({
     setEditSnapshot(null);
     setDiscardConfirmOpen(false);
     setPendingSourceName(null);
+    setEmptyGuideDismissed(readEmptyGuideDismissed(selectedSource.id));
   }, [selectedSource.id]);
 
   useEffect(() => {
@@ -1685,6 +1709,14 @@ export function WatchlistWidget({
     [items, selectedSource.cashAvailable],
   );
 
+  const showEmptyGuide =
+    !editMode && !isPreview && items.length === 0 && !emptyGuideDismissed;
+
+  function dismissEmptyGuide() {
+    writeEmptyGuideDismissed(selectedSource.id);
+    setEmptyGuideDismissed(true);
+  }
+
   if (isPreview && previewSources.length === 0) {
     return (
       <section
@@ -1986,6 +2018,48 @@ export function WatchlistWidget({
           </div>
         </div>
       ) : null}
+      {showEmptyGuide ? (
+        <div className="forge-toast-stack watch-empty-guide-toast">
+          <ForgeToast
+            tone="info"
+            onDismiss={dismissEmptyGuide}
+            dismissLabel="Dismiss empty book guide"
+          >
+            {isWatchlistSource ? (
+              <>
+                <p className="watch-empty-guide-lead">Watchlist — track the plan</p>
+                <p>
+                  This list is for names you want under review without paper size
+                  yet. Add tickers to check conviction and Market Weather against
+                  strategies applied here.
+                </p>
+                <p>
+                  When you&rsquo;re ready to size a name against your rules, move
+                  it into a portfolio and set qty in Edit.
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="watch-empty-guide-lead">
+                  Paper portfolio — practice the plan
+                </p>
+                <p>
+                  You&rsquo;re looking at a paper book: fake cash and size so you
+                  can run your strategy without a live brokerage link. Forge a
+                  strategy, apply it to this portfolio, then add names and set
+                  qty in Edit.
+                </p>
+                <p>
+                  Conviction and Open P&amp;L show how the book lines up with{" "}
+                  <em>your</em> rules — not what to buy or sell. Later, the same
+                  scoring will track live portfolios once accounts can link —
+                  practice the plan here first.
+                </p>
+              </>
+            )}
+          </ForgeToast>
+        </div>
+      ) : null}
       <ul className="watchlist-items">
         {displayItems.map((item) => {
           const isActive = item.ticker === activeTicker;
@@ -2225,16 +2299,19 @@ export function WatchlistWidget({
         })}
         {items.length === 0 ? (
           <li className="watch-empty">
-            No names yet — add a ticker to start this watchlist.
+            {isWatchlistSource
+              ? "No names yet — add a ticker to start this watchlist."
+              : "No names yet — add a ticker to start this paper book."}
           </li>
         ) : null}
       </ul>
-      {!editMode && !isPreview
+      {!editMode && !isPreview && !isWatchlistSource
         ? (() => {
             // Desktop/tablet: footer stays in the card (My Strategies in-card pattern).
             // Mobile: lift into .strategy-dock sticky on .app-main (same as My
             // Strategies list dock / watch edit Cancel+Update) so Embla cannot
             // clip it. Home gates via mobileTotalsDock while Current Watch is active.
+            // Watchlists have no paper Total / Open P&L / Cash — hide the bar.
             if (isMobile && !mobileTotalsDock) return null;
             const footer = (
               <ActionFooter

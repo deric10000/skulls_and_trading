@@ -2192,6 +2192,24 @@ span.checkbox {
   margin-bottom: var(--space-3);
 }
 
+.watch-empty-guide-toast {
+  margin-bottom: var(--space-3);
+}
+
+.watch-empty-guide-lead {
+  margin: 0 0 0.35rem;
+  font-weight: 600;
+  color: var(--text-strong);
+}
+
+.watch-empty-guide-toast .forge-toast-body > p {
+  margin: 0;
+}
+
+.watch-empty-guide-toast .forge-toast-body > p + p {
+  margin-top: 0.45rem;
+}
+
 .watchlist-snapshot {
   display: flex;
   align-items: center;
