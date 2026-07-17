@@ -837,6 +837,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
           id,
           label: trimmed,
           type,
+          cashAvailable: 0,
           holdings: [],
         },
       ]);

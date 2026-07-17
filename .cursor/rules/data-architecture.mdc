@@ -25,7 +25,8 @@ contracts below.
 ## Single source of truth
 
 - `TICKERS` (company facts) and `PORTFOLIOS[].holdings` (holding facts) in
-  `src/data.ts` are authoritative. **Derive, don't duplicate.**
+  `src/data.ts` are authoritative. **Derive, don't duplicate.** Optional
+  `Portfolio.cashAvailable` is settled cash for Current Watch running totals.
 - `INITIAL_WATCHLIST`, `TICKER_ANALYSIS`, `LOG_ENTRIES`, `DEFAULT_ASSIGNMENTS`,
   and `POSITIONS` are **derived** — never hand-edit them; edit the registries.
 - Keep derivation transforms (e.g. `watchlistFromHoldings()`) **pure**.

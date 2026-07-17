@@ -303,6 +303,11 @@ export interface Portfolio {
   type: "portfolio" | "watchlist";
   strategyId?: string; // the strategy this portfolio is run against
   holdings: PortfolioHolding[];
+  /**
+   * Settled cash available to deploy (not invested in holdings). Omitted or 0
+   * on watchlists. Included in Current Watch running Total.
+   */
+  cashAvailable?: number;
 }
 
 export type Timeframe = "Swing" | "Long Term" | "Speculation";

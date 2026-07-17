@@ -41,6 +41,7 @@ import {
   openPnlTotal,
   qtySideFromDelta,
 } from "../lib/finance/averageCost";
+import { portfolioRunningTotals } from "../lib/finance/portfolioTotals";
 import {
   estimateFillTimestamp,
   formatFillTimestampEst,
@@ -1169,6 +1170,7 @@ export function WatchlistWidget({
   readOnly = false,
   previewStrategyId,
   onSelectTicker,
+  mobileTotalsDock = true,
 }: {
   readOnly?: boolean;
   /**
@@ -1184,6 +1186,13 @@ export function WatchlistWidget({
    * not affect the dashboard's global selected ticker.
    */
   onSelectTicker?: (ticker: string) => void;
+  /**
+   * Mobile (≤767px): when true, lift the running-totals ActionFooter into the
+   * shared `.strategy-dock` sticky dock (same as My Strategies). Home passes
+   * this only while the Current Watch tab is active so carousel siblings do not
+   * keep a ghost dock.
+   */
+  mobileTotalsDock?: boolean;
 }) {
   const {
     watchlist,
@@ -1662,6 +1671,19 @@ export function WatchlistWidget({
     appliedStrategies.length === 0 || !pullStamp
       ? `${displayItems.length} stocks`
       : `${displayItems.length} stocks, ${pullStamp}`;
+
+  const runningTotals = useMemo(
+    () =>
+      portfolioRunningTotals(
+        items.map((item) => ({
+          price: item.price,
+          shares: item.shares,
+          avgPrice: item.avgPrice,
+        })),
+        selectedSource.cashAvailable ?? 0,
+      ),
+    [items, selectedSource.cashAvailable],
+  );
 
   if (isPreview && previewSources.length === 0) {
     return (
@@ -2207,6 +2229,77 @@ export function WatchlistWidget({
           </li>
         ) : null}
       </ul>
+      {!editMode && !isPreview
+        ? (() => {
+            // Desktop/tablet: footer stays in the card (My Strategies in-card pattern).
+            // Mobile: lift into .strategy-dock sticky on .app-main (same as My
+            // Strategies list dock / watch edit Cancel+Update) so Embla cannot
+            // clip it. Home gates via mobileTotalsDock while Current Watch is active.
+            if (isMobile && !mobileTotalsDock) return null;
+            const footer = (
+              <ActionFooter
+                className={
+                  isMobile
+                    ? "watch-totals-footer strategy-dock"
+                    : "watch-totals-footer"
+                }
+              >
+                <span className="watch-totals-stat watch-metric">
+                  <span className="watch-field-label">Total</span>
+                  <span className="watch-figure watch-figure--strong">
+                    {formatPrice(runningTotals.totalValue)}
+                  </span>
+                </span>
+                <span className="watch-totals-stat watch-metric">
+                  <span className="watch-field-label">
+                    {"Open P&L% | Total"}
+                  </span>
+                  <span className="watch-pnl">
+                    <span
+                      className={[
+                        "watch-figure",
+                        "watch-figure--medium",
+                        runningTotals.openPnl > 0
+                          ? "watch-change--up"
+                          : runningTotals.openPnl < 0
+                            ? "watch-change--down"
+                            : "",
+                      ]
+                        .filter(Boolean)
+                        .join(" ")}
+                    >
+                      {formatChange(runningTotals.openPnlPct)}
+                    </span>
+                    <span
+                      className={[
+                        "watch-figure",
+                        runningTotals.openPnl > 0
+                          ? "watch-change--up"
+                          : runningTotals.openPnl < 0
+                            ? "watch-change--down"
+                            : "",
+                      ]
+                        .filter(Boolean)
+                        .join(" ")}
+                    >
+                      {formatPrice(runningTotals.openPnl)}
+                    </span>
+                  </span>
+                </span>
+                <span className="watch-totals-stat watch-metric">
+                  <span className="watch-field-label">Cash</span>
+                  <span className="watch-figure watch-figure--strong">
+                    {formatPrice(runningTotals.cashAvailable)}
+                  </span>
+                </span>
+              </ActionFooter>
+            );
+            if (!isMobile || typeof document === "undefined") return footer;
+            const dockHost =
+              document.querySelector("main.app-main") ?? document.body;
+            return createPortal(footer, dockHost);
+          })()
+        : null}
       {editMode
         ? (() => {
             // Desktop: Forge modal Cancel link + solid Update (text + icon).
