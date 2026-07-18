@@ -1,5 +1,5 @@
-import bullCompass from "../assets/bull-skull-compass.png";
-import bearCompass from "../assets/bear-skull-compass.png";
+import bullCompass from "../assets/bull-skull-compass.webp";
+import bearCompass from "../assets/bear-skull-compass.webp";
 import { compassVariant } from "../lib/forge/status";
 import type { StatusType } from "../types";
 

@@ -1,4 +1,4 @@
-import brandLogo from "../assets/st-logo.png";
+import brandLogo from "../assets/st-logo.webp";
 import brandWordmark from "../assets/st-wordmark.svg";
 import {
   ChartBar,
