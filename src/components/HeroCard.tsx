@@ -68,8 +68,14 @@ export function HeroCard({
             holdings are aligned with—or breaking—your plan.
           </p>
           <p className="lede">
-            It doesn&rsquo;t pick stocks for you. It rewards following your own
-            plan — never the gamble.
+            It doesn&rsquo;t pick stocks for you. It keeps you accountable to
+            your own plan — never the gamble.
+          </p>
+          <p className="lede">
+            It&rsquo;s not a brokerage — you won&rsquo;t buy or sell here. Log
+            the trades you make on your own platform, then check them against
+            your plan. Connecting your live accounts for deeper analysis is on
+            the horizon.
           </p>
           <div className="hero-actions">
             {hasHoldings ? (
