@@ -1,0 +1,30 @@
+---
+description: Product vision + core values gate — every feature build ties back to the club vision and values in product-vision.md
+alwaysApply: true
+---
+
+# Product vision & core values gate
+
+Full reference: `product-vision.md`. Read it before designing or building any
+new feature, and cite which core value the work serves.
+
+**Vision (short form):** Skulls and Trading is a **private club** for
+disciplined investors and traders — a crew, not a crowd. The app is the
+club's flagship; the community is the treasure. Beta proves value to members
+first; monetization is an MVP decision made on member evidence, never a launch
+gate.
+
+**Core values:** Discipline over dopamine · Integrity of the deck · Crew before
+crowd · The long voyage · Earn the treasure · Always learning · Craft over
+content.
+
+## When building features
+
+- Answer the **feature gate checklist** at the bottom of `product-vision.md`
+  (which value does this serve; does it keep the club a club; plan not gamble;
+  long voyage; authored craft; monetize only after proof).
+- If a requested feature conflicts with the vision or values (e.g. activity
+  rewards, hype mechanics, audience-style leaderboards, AI-generated member
+  art, unproven monetization), **stop and raise it** before building.
+- Keep this rule and `product-vision.md` in sync with the Vision Board canvas
+  if the user updates vision or values.

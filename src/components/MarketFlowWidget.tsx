@@ -357,7 +357,7 @@ export function MarketFlowWidget({
     <section className="panel market-flow" aria-labelledby="flow-title">
       <div className="panel-head">
         <h2 id="flow-title">Market Weather</h2>
-        <span className="panel-tag">{SESSION_META[session].label}</span>
+        <span className="panel-tag session-tag">{SESSION_META[session].label}</span>
       </div>
       <p className="panel-intro">
         See if your names sail with the weather or fight the wind — Market down
