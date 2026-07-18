@@ -856,7 +856,7 @@ button {
 
 .lede {
   color: var(--text-muted);
-  font-size: clamp(0.95rem, 1.4vw, 1.08rem);
+  font-size: clamp(0.95rem, 1.4vw, 1rem);
   max-width: none;
 }
 
@@ -931,14 +931,37 @@ button {
   letter-spacing: -0.01em;
 }
 
+/* Below desktop the headline stays stacked (one sentence per line). */
+.hero-title-line {
+  display: block;
+}
+
+/* Desktop: fit all three sentences on one line. The headline scales with the
+   hero-content width via a container query (cqi) so it always fits — measured
+   at ~28.15em wide, so max ≈ container/28.15 ≈ 3.55cqi; 3.45cqi leaves margin. */
+@media (min-width: 1024px) {
+  .hero-content {
+    container-type: inline-size;
+  }
+
+  .hero-content h1 {
+    font-size: clamp(0.85rem, 3.45cqi, 2.4rem);
+    white-space: nowrap;
+  }
+
+  .hero-title-line {
+    display: inline;
+  }
+}
+
 /* The crew code — quiet one-line values footer under the hero CTAs. Muted on
    purpose (vision/values frame, not a data surface); label echoes .eyebrow at
    whisper volume. */
 .hero-values {
   margin-top: var(--space-2);
-  font-size: 0.8rem;
+  font-size: 0.9rem;
   line-height: 1.6;
-  color: var(--text-faint);
+  color: var(--text-muted);
 }
 
 .hero-values-label {
@@ -1111,13 +1134,13 @@ button {
 }
 
 .hero-preview-action {
-  font-size: 0.85rem;
+  font: inherit;
+  font-size: 0.75rem;
   font-weight: 600;
   color: var(--accent-strong);
   background: none;
   border: none;
   padding: 0;
-  font-family: inherit;
   cursor: pointer;
 }
 
@@ -1197,9 +1220,11 @@ button {
   color: var(--text-faint);
 }
 
-/* Watchlist count tag — lighter tracking + muted tone to match the design
+/* Muted panel tag — lighter tracking + muted tone. Adopted by the Watchlist
+   count tag and the Market Weather session tag so the two panel heads match
    (scoped so other panels keep the default faint tag). */
-.watchlist-tag {
+.watchlist-tag,
+.session-tag {
   letter-spacing: 0.04em;
   color: var(--text-muted);
 }
@@ -1319,7 +1344,8 @@ button {
 
 .panel-intro {
   color: var(--text-muted);
-  font-size: 0.95rem;
+  font-size: 0.9rem;
+  line-height: 1.6;
   margin-bottom: var(--space-3);
   max-width: 60ch;
 }

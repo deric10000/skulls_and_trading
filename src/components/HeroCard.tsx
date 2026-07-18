@@ -52,11 +52,9 @@ export function HeroCard({
             A private club for disciplined investors &amp; traders
           </p>
           <h1 id="hero-title">
-            Build your strategy.
-            <br />
-            Follow your plan.
-            <br />
-            Improve with evidence.
+            <span className="hero-title-line">Build your strategy.</span>{" "}
+            <span className="hero-title-line">Follow your plan.</span>{" "}
+            <span className="hero-title-line">Improve with evidence.</span>
           </h1>
           <p className="lede">
             Skulls and Trading is the club&rsquo;s flagship — it turns your
