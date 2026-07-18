@@ -931,6 +931,25 @@ button {
   letter-spacing: -0.01em;
 }
 
+/* The crew code — quiet one-line values footer under the hero CTAs. Muted on
+   purpose (vision/values frame, not a data surface); label echoes .eyebrow at
+   whisper volume. */
+.hero-values {
+  margin-top: var(--space-2);
+  font-size: 0.8rem;
+  line-height: 1.6;
+  color: var(--text-faint);
+}
+
+.hero-values-label {
+  display: block;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
 .hero-actions {
   display: flex;
   flex-wrap: wrap;

@@ -48,7 +48,9 @@ export function HeroCard({
       />
       <div className="hero-body">
         <div className="hero-content">
-          <p className="eyebrow">Your Investing Discipline Engine</p>
+          <p className="eyebrow">
+            A private club for disciplined investors &amp; traders
+          </p>
           <h1 id="hero-title">
             Build your strategy.
             <br />
@@ -57,16 +59,17 @@ export function HeroCard({
             Improve with evidence.
           </h1>
           <p className="lede">
-            Skulls and Trading turns your investing rules into a strategy you can
-            apply across your portfolios and watchlists.
+            Skulls and Trading is the club&rsquo;s flagship — it turns your
+            investing rules into a strategy you can apply across your portfolios
+            and watchlists.
           </p>
           <p className="lede">
             Track conviction, identify risk drift, and understand when your
             holdings are aligned with—or breaking—your plan.
           </p>
           <p className="lede">
-            It doesn&rsquo;t pick stocks for you. It helps you make more
-            disciplined decisions using your own strategy.
+            It doesn&rsquo;t pick stocks for you. It rewards following your own
+            plan — never the gamble.
           </p>
           <div className="hero-actions">
             {hasHoldings ? (
@@ -105,6 +108,12 @@ export function HeroCard({
               </>
             )}
           </div>
+          <p className="hero-values">
+            <span className="hero-values-label">The crew code</span>
+            Discipline over dopamine · Integrity of the deck · Crew before
+            audience · The long voyage · Earn the treasure · Always learning ·
+            Craft over content
+          </p>
         </div>
         <aside className="hero-preview">
           <button
