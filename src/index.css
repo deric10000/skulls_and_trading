@@ -7024,7 +7024,13 @@ button.nav-link {
     z-index: 5;
     /* Pin to the bottom of .app-main (so it sits at the viewport bottom until
        the end of the scroll), with a solid backdrop so the scrolling card reads
-       cleanly beneath it. */
+       cleanly beneath it. The dock is portaled into .app-main, and React does
+       not guarantee it lands after the page node across route remounts (Home →
+       Forge → Home could insert it first, dropping it to the top). `order`
+       forces it visually last in the flex column regardless of DOM position, so
+       margin-top:auto always has the free space above it to push the dock to the
+       bottom. */
+    order: 1;
     margin-top: auto;
     background: var(--bg-base);
     padding-bottom: calc(var(--space-3) + env(safe-area-inset-bottom, 0px));
