@@ -115,7 +115,7 @@ export function HeroCard({
           <p className="hero-values">
             <span className="hero-values-label">The crew code</span>
             Discipline over dopamine · Integrity of the deck · Crew before
-            audience · The long voyage · Earn the treasure · Always learning ·
+            crowd · The long voyage · Earn the treasure · Always learning ·
             Craft over content
           </p>
         </div>

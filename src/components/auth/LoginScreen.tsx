@@ -127,12 +127,14 @@ export function LoginScreen() {
           <aside className="auth-brand">
             <h1>Trade your plan. Track your discipline.</h1>
             <p>
-              Skulls and Trading is a gamified command center for investors and traders
-              who want to follow their rules — not chase the market.
+              Skulls and Trading is a private club for disciplined investors and
+              traders — a crew, not a crowd.
             </p>
             <p>
-              Forge your strategy, check each position against your plan, and log the
-              thesis before you act.
+              The app is the club&rsquo;s flagship: forge your strategy, check
+              each position against your plan, and log the thesis before you
+              act. It keeps you accountable to your own rules — it never sells
+              you a trade.
             </p>
             <p className="auth-brand-kicker">Invite-only Closed Beta:</p>
             <ul className="auth-brand-points">

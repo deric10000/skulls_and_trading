@@ -8,7 +8,7 @@ copy, or design decision conflicts with this file, this file wins.
 ## Vision
 
 > **Skulls and Trading is a private club for disciplined investors and traders —
-> a crew, not an audience.**
+> a crew, not a crowd.**
 >
 > Members forge their own strategies, hold themselves to their own plans, and
 > sail with Ships that match how they invest — investors with investors, swing
@@ -53,7 +53,7 @@ into how the club operates.
 2. **Integrity of the deck** *(integrity, value & usefulness)* — Honest data,
    honest states, honest copy. Stale data says stale; missing data says
    missing. Trust is the product; no dark patterns.
-3. **Crew before audience** *(family first, loyalty, kindness)* — Members are
+3. **Crew before crowd** *(family first, loyalty, kindness)* — Members are
    crewmates, not user counts. Privacy defaults to private; sharing is opt-in
    and generous; reviews are kind and useful. Ships group members by style, not
    status.
@@ -87,7 +87,7 @@ gimmicks.
 Before building or materially changing a feature, answer:
 
 - [ ] **Which core value does this serve?** If none, question the feature.
-- [ ] **Does it keep the club a club?** (Members and crews, not an audience or
+- [ ] **Does it keep the club a club?** (Members and crews, not a crowd or
       a leaderboard.)
 - [ ] **Does it reward the plan, not the gamble?** (No advice, no hype, no
       activity rewards — see `product-voice.md` compliance checklist.)
