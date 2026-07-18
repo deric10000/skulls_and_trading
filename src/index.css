@@ -856,7 +856,7 @@ button {
 
 .lede {
   color: var(--text-muted);
-  font-size: clamp(1rem, 1.6vw, 1.18rem);
+  font-size: clamp(0.95rem, 1.4vw, 1.08rem);
   max-width: none;
 }
 
@@ -925,7 +925,7 @@ button {
 }
 
 .hero-content h1 {
-  font-size: clamp(2.1rem, 4.6vw, 3.4rem);
+  font-size: clamp(1.9rem, 4vw, 3rem);
   line-height: 1.05;
   color: var(--text-strong);
   letter-spacing: -0.01em;
@@ -1053,6 +1053,8 @@ button {
   margin-top: 0;
 }
 
+/* Single combined preview card: two sections (Strategy Check / Risk Drift)
+   split by a divider, with one action button in the lower-right. */
 .hero-preview-card {
   width: 100%;
   padding: var(--space-3);
@@ -1061,20 +1063,33 @@ button {
   background: var(--surface-3);
   display: flex;
   flex-direction: column;
-  gap: 0.6rem;
-  font: inherit;
-  color: inherit;
+  gap: var(--space-3);
   text-align: left;
-  cursor: pointer;
 }
 
-.hero-preview-card:hover {
-  border-color: var(--border-strong);
+/* The two sections sit side by side (row) and stack on narrow viewports. */
+.hero-preview-sections {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  gap: var(--space-3);
 }
 
-.hero-preview-card:focus-visible {
-  outline: 2px solid var(--accent-strong);
-  outline-offset: 2px;
+.hero-preview-section {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+/* Design-system hairline between the two sections (vertical when side by side,
+   horizontal when stacked). */
+.hero-preview-divider {
+  flex: 0 0 auto;
+  align-self: stretch;
+  width: 1px;
+  background: var(--border-soft);
 }
 
 /* Emblem badge + status chip, stacked above the caption paragraph. */
@@ -1090,10 +1105,30 @@ button {
   margin: 0;
 }
 
+.hero-preview-footer {
+  display: flex;
+  justify-content: flex-end;
+}
+
 .hero-preview-action {
   font-size: 0.85rem;
   font-weight: 600;
   color: var(--accent-strong);
+  background: none;
+  border: none;
+  padding: 0;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.hero-preview-action:hover {
+  text-decoration: underline;
+}
+
+.hero-preview-action:focus-visible {
+  outline: 2px solid var(--accent-strong);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
 }
 
 /* Panels — the app-wide card. 16px padding on every side so content breathes
@@ -6695,26 +6730,17 @@ button.nav-link {
 
 /* Single column; the content block is vertically centered within the tall
    card. Text stays left-aligned (only the block is centered). */
+/* Content pins to the top and the preview card sticks to the bottom, so any
+   leftover viewport height lands in the gap between the crew code and the card
+   (rather than being centered). The base `.hero-body` row gap stays the minimum
+   separation. */
 .hero--center .hero-body {
   grid-template-columns: 1fr;
-  align-content: safe center;
+  align-content: space-between;
 }
 
 .hero--center .hero-preview {
   order: 0;
-  margin-top: var(--space-2);
-  flex-direction: row;
-  align-items: stretch;
-  justify-content: flex-start;
-  flex-wrap: wrap;
-  gap: var(--space-3);
-}
-
-/* Two caption cards sit side by side and only wrap to a stack once the row can
-   no longer fit them (tablet portrait / mobile), keeping equal heights. */
-.hero--center .hero-preview-card {
-  flex: 1 1 240px;
-  min-width: 0;
 }
 
 .chart-name {
@@ -6796,14 +6822,11 @@ button.nav-link {
 
   .hero-preview {
     order: -1;
-    flex-direction: row;
-    justify-content: space-between;
-    align-items: center;
   }
 
   .hero-preview-card {
     margin-top: 0;
-    max-width: 60%;
+    max-width: 100%;
   }
 }
 
@@ -6836,13 +6859,18 @@ button.nav-link {
     font-size: 0.875rem;
   }
 
-  .hero-preview {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
   .hero-preview-card {
     max-width: 100%;
+  }
+
+  /* Stack the two sections and flip the divider to a horizontal hairline. */
+  .hero-preview-sections {
+    flex-direction: column;
+  }
+
+  .hero-preview-divider {
+    width: 100%;
+    height: 1px;
   }
 
   .analysis-head {

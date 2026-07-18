@@ -116,46 +116,50 @@ export function HeroCard({
           </p>
         </div>
         <aside className="hero-preview">
-          <button
-            type="button"
-            className="hero-preview-card"
-            onClick={() => setComingSoonOpen(true)}
-          >
-            <div className="hero-preview-card-head">
-              <div className="compass">
-                <img className="compass-img" src={bullCompass} alt="" />
+          <div className="hero-preview-card">
+            <div className="hero-preview-sections">
+              <div className="hero-preview-section">
+                <div className="hero-preview-card-head">
+                  <div className="compass">
+                    <img className="compass-img" src={bullCompass} alt="" />
+                  </div>
+                  <span className="chip status--positive">
+                    <TrendUp aria-hidden />
+                    Strategy Check
+                  </span>
+                </div>
+                <p>
+                  See which holdings align with your thesis, rules, and
+                  strategy—and which need attention.
+                </p>
               </div>
-              <span className="chip status--positive">
-                <TrendUp aria-hidden />
-                Strategy Check
-              </span>
-            </div>
-            <p>
-              See which holdings align with your thesis, rules, and
-              strategy—and which need attention.
-            </p>
-            <span className="hero-preview-action">Review alignment →</span>
-          </button>
-          <button
-            type="button"
-            className="hero-preview-card"
-            onClick={() => setComingSoonOpen(true)}
-          >
-            <div className="hero-preview-card-head">
-              <div className="compass compass--risk">
-                <img className="compass-img" src={bearCompass} alt="" />
+              <div className="hero-preview-divider" aria-hidden="true" />
+              <div className="hero-preview-section">
+                <div className="hero-preview-card-head">
+                  <div className="compass compass--risk">
+                    <img className="compass-img" src={bearCompass} alt="" />
+                  </div>
+                  <span className="chip status--negative">
+                    <Skull aria-hidden />
+                    Risk Drift
+                  </span>
+                </div>
+                <p>
+                  Catch changes in position size, exposure, cash, thesis, or
+                  invalidation before emotion takes over.
+                </p>
               </div>
-              <span className="chip status--negative">
-                <Skull aria-hidden />
-                Risk Drift
-              </span>
             </div>
-            <p>
-              Catch changes in position size, exposure, cash, thesis, or
-              invalidation before emotion takes over.
-            </p>
-            <span className="hero-preview-action">Review risk →</span>
-          </button>
+            <div className="hero-preview-footer">
+              <button
+                type="button"
+                className="hero-preview-action"
+                onClick={() => setComingSoonOpen(true)}
+              >
+                Review alignment →
+              </button>
+            </div>
+          </div>
         </aside>
       </div>
       {comingSoonOpen ? (
