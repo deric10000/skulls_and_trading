@@ -16,6 +16,9 @@ export function SignUpForm() {
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    // Capture the form before any await: React nulls event.currentTarget
+    // after the sync phase, which silently broke sign-up (FormData threw).
+    const form = event.currentTarget;
     const configured = await ensureSupabaseReady();
     if (!configured) {
       setError(
@@ -25,7 +28,6 @@ export function SignUpForm() {
     }
     // Uncontrolled fields + FormData: iOS Keychain can fill the DOM without
     // React onChange, and controlled value="" would fight autofill.
-    const form = event.currentTarget;
     const formData = new FormData(form);
     const nameValue = String(formData.get("captainName") ?? "").trim();
     const inviteValue = String(formData.get("inviteCode") ?? "").trim();

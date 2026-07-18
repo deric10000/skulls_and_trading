@@ -1,6 +1,6 @@
 import { useState, type CSSProperties } from "react";
-import bullCompass from "../assets/bull-skull-compass.png";
-import bearCompass from "../assets/bear-skull-compass.png";
+import bullCompass from "../assets/bull-skull-compass.webp";
+import bearCompass from "../assets/bear-skull-compass.webp";
 import loginBackground from "../assets/skulls-and-trading-login-background-2.webp";
 import loginBackgroundMobile from "../assets/skulls-and-trading-login-background-mobile.webp";
 import { Skull, TrendUp } from "../lib/icons";

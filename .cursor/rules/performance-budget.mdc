@@ -1,0 +1,50 @@
+---
+description: Performance budget gate — images go through the pipeline, pages/modals stay lazy, budgets are enforced; see performance-budget.md
+alwaysApply: true
+---
+
+# Performance budget gate
+
+Full reference: `performance-budget.md`. Budgets are enforced by
+`npm run check:budgets` (runs automatically before every deploy). **Fast AND
+visually premium — byte savings never justify degraded imagery.**
+
+## Images — pipeline only, no exceptions
+
+- Never drop a raw export into `src/assets/`. Full-res masters go in
+  `assets-src/`; add a manifest entry in `scripts/optimize-images.mjs`
+  (target width ≈ 2× largest rendered CSS px), then run
+  `npm run optimize:images`.
+- Never import from `assets-src/` in app code.
+- **Visual quality gate is mandatory:** after regenerating, compare the
+  rendered surface before/after at 1× and 2× (alpha edges, gradient banding,
+  fine linework). If it fails, raise the width/quality in the manifest and
+  re-run — do not ship the failure and do not skip the check.
+- Budgets: single image ≤ 200 KB; total `src/assets/` ≤ 1,300 KB.
+
+## JS — keep the split intact
+
+- **Pages are lazy by default.** New pages go in the lazy `ActivePage` switch
+  in `src/AuthedApp.tsx` via `React.lazy`. Home stays eager.
+- **The signed-out path stays light.** Never import the app shell, pages,
+  forge/watchlist/weather modules, or other heavy components from
+  `src/App.tsx`, `LoginScreen`, `Onboarding`, or anything else that runs
+  before sign-in.
+- **Big secondary UI loads on open:** modals/panels over ~300 lines that are
+  not visible on first render load via `React.lazy` (pattern: the forge table
+  modals in `StrategyForgePanel`).
+- New dependencies over ~30 KB gzip need a vendor-group decision in
+  `vite.config.ts` and a budget check before landing.
+- Budgets (gzip): entry chunk ≤ 80 KB; any chunk ≤ 100 KB.
+
+## When a budget fails
+
+Fix the regression (pipeline / splitting) — do not raise the number. If a
+budget genuinely must grow (e.g. approved new artwork), update
+`performance-budget.md` in the same change with the reason.
+
+## QA before claiming done
+
+Any change touching assets or the loading path: `npm run typecheck`,
+`npm run build`, `npm run check:budgets`, plus the functional smoke and
+locked-surface QA (`.cursor/rules/locked-surface-qa.mdc`).

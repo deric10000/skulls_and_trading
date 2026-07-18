@@ -50,4 +50,7 @@ function run(cmd, args) {
 }
 
 run("npm", ["run", "build"]);
+// Performance budget gate (performance-budget.md) — blocks the deploy if an
+// image or JS chunk regressed past its limit.
+run("npm", ["run", "check:budgets"]);
 run("npx", ["wrangler", "deploy", "--config", "wrangler.jsonc"]);

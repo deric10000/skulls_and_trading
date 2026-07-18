@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { DEFAULT_CATEGORY_WEIGHTS } from "../data";
 import { dataSource } from "../lib/datasource";
 import {
@@ -35,9 +35,20 @@ import { Dropdown } from "./Dropdown";
 import { ForgePill } from "./ForgePill";
 import { MultiSelect } from "./MultiSelect";
 import { InfoTip, Tooltip } from "./Tooltip";
-import { RuleChipsTableModal } from "./forge/RuleChipsTableModal";
-import { TagsTableModal } from "./forge/TagsTableModal";
-import { Layer3ZoneTableModal } from "./forge/Layer3ZoneTableModal";
+// Table modals load on open (performance-budget.md: big secondary UI is lazy).
+const RuleChipsTableModal = lazy(() =>
+  import("./forge/RuleChipsTableModal").then((m) => ({
+    default: m.RuleChipsTableModal,
+  })),
+);
+const TagsTableModal = lazy(() =>
+  import("./forge/TagsTableModal").then((m) => ({ default: m.TagsTableModal })),
+);
+const Layer3ZoneTableModal = lazy(() =>
+  import("./forge/Layer3ZoneTableModal").then((m) => ({
+    default: m.Layer3ZoneTableModal,
+  })),
+);
 import {
   LAYER3_ZONE_ORDER,
   LAYER3_ZONES,
@@ -1077,39 +1088,41 @@ export function StrategyForgePanel({ strategy }: { strategy: Strategy | undefine
         </button>
       </ActionFooter>
 
-      {editor?.kind === "chips" && editor.category ? (
-        <RuleChipsTableModal
-          category={editor.category}
-          chips={rules.filter((chip) => chip.category === editor.category)}
-          onDraftChange={(chips) => commitChips(editor.category!, chips)}
-          onCancel={cancelEditor}
-          onDone={dismissEditor}
-        />
-      ) : null}
-      {editor?.kind === "tags" && editor.category ? (
-        <TagsTableModal
-          category={editor.category}
-          tags={ruleTags.filter((tag) => tag.category === editor.category)}
-          chips={rules.filter((chip) => chip.category === editor.category)}
-          onDraftChange={(tags) => commitTags(editor.category!, tags)}
-          onCancel={cancelEditor}
-          onDone={dismissEditor}
-        />
-      ) : null}
-      {editor && editor.kind in LAYER3_ZONES ? (
-        <Layer3ZoneTableModal
-          zone={LAYER3_ZONES[editor.kind as Layer3ZoneId]}
-          rules={layer3ByZone[editor.kind as Layer3ZoneId].rules}
-          tags={layer3ByZone[editor.kind as Layer3ZoneId].tags}
-          sourceChips={rules}
-          sourceTags={ruleTags}
-          onDraftChange={(next) =>
-            commitLayer3Zone(editor.kind as Layer3ZoneId, next)
-          }
-          onCancel={cancelEditor}
-          onDone={dismissEditor}
-        />
-      ) : null}
+      <Suspense fallback={null}>
+        {editor?.kind === "chips" && editor.category ? (
+          <RuleChipsTableModal
+            category={editor.category}
+            chips={rules.filter((chip) => chip.category === editor.category)}
+            onDraftChange={(chips) => commitChips(editor.category!, chips)}
+            onCancel={cancelEditor}
+            onDone={dismissEditor}
+          />
+        ) : null}
+        {editor?.kind === "tags" && editor.category ? (
+          <TagsTableModal
+            category={editor.category}
+            tags={ruleTags.filter((tag) => tag.category === editor.category)}
+            chips={rules.filter((chip) => chip.category === editor.category)}
+            onDraftChange={(tags) => commitTags(editor.category!, tags)}
+            onCancel={cancelEditor}
+            onDone={dismissEditor}
+          />
+        ) : null}
+        {editor && editor.kind in LAYER3_ZONES ? (
+          <Layer3ZoneTableModal
+            zone={LAYER3_ZONES[editor.kind as Layer3ZoneId]}
+            rules={layer3ByZone[editor.kind as Layer3ZoneId].rules}
+            tags={layer3ByZone[editor.kind as Layer3ZoneId].tags}
+            sourceChips={rules}
+            sourceTags={ruleTags}
+            onDraftChange={(next) =>
+              commitLayer3Zone(editor.kind as Layer3ZoneId, next)
+            }
+            onCancel={cancelEditor}
+            onDone={dismissEditor}
+          />
+        ) : null}
+      </Suspense>
     </section>
   );
 }
