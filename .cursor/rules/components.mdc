@@ -20,7 +20,7 @@ specific thing they ask for — never bundle in extra tweaks.
 | Nav links | `.nav-link`, `.nav-link--active` | Padding, color, active state. |
 | Account | `.site-account`, `.chip--soon` | Demo / Beta chip (Closed Beta tooltip) + `LinkButton` "Sign Out" (link-button, **never** a filled button). |
 | `LinkButton` | `src/components/LinkButton.tsx` | Renders `.btn.btn--link`. |
-| `Checkbox` | `src/components/Checkbox.tsx` | The one on/off checkbox: `.checkbox` / `.is-checked`, 28×28 blue info square + Phosphor Square/CheckSquare (22px). No native `<input type="checkbox">` or parallel check icons. `decorative` for marks inside a parent control. |
+| `Checkbox` | `src/components/Checkbox.tsx` | The one on/off checkbox: `.checkbox` / `.is-checked`, 28×28 blue info square + Phosphor Square/CheckSquare (22px). No native `<input type="checkbox">` or parallel check icons. `decorative` for marks inside a parent control. Supports `disabled` (used for the Forge cadence "Future Capability" email/text/browser toggles). Adopters: category conviction toggle, Forge Strategy Cadence (master **Enable cadence** + notification toggles in `.forge-cadence-toggles` / `.forge-cadence-notify`). |
 | `SiteFooter` | `src/components/SiteFooter.tsx` | Single shared footer in `AppShell`; content + behavior. Never add a second footer. |
 | Home widgets | `HeroCard`, `MarketFlowWidget`, `WatchlistWidget`, `Tabs` | Internal markup, content, and visual styling. `HeroCard` seeded-book CTAs are icon `.btn`s (icons default to `fill` via the app `IconContext`, sized by the `.btn svg` standard): **Launch Dashboard** (`ChartBar`, `btn--primary`), **Forge a Strategy** (`Hammer`, `btn--ghost`), **Onboarding** (`MapTrifold`, `btn--ghost` → `openOnboardingModal`) — the `ChartBar`/`Hammer` icons mirror the mobile nav pill so the surfaces read the same. |
 | `Tooltip` / `InfoTip` | `src/components/Tooltip.tsx` | Desktop hover/focus reveal (portaled; stock `.tooltip*` only); mobile tap-to-toggle bottom sheet + close button (see "Tooltip standard" below). |
@@ -288,7 +288,10 @@ matching Current Watch ticker suggestions — portaled so Weather card
 
 - **`Dropdown`:** short lists where native picker UX is enough (portfolio
   switcher, Strategy Assignment, Create Ship privacy). Never hand-roll a
-  parallel native select.
+  parallel native select. `DropdownOption` supports optional `disabled`
+  (renders a greyed non-selectable `<option>`, e.g. 15m "Future Capability")
+  and `group` (consecutive same-`group` options wrap in a native `<optgroup>`,
+  e.g. the Forge cadence "Intraday — session close" / "Candle close" clusters).
 - **`SearchableSelect`:** long searchable single-select. Trigger variants:
   `default` (surface) and `on-graphics` (Weather art only — dark translucent
   fill). Reuse existing menu/option classes; don't fork row hover/radius.
@@ -296,7 +299,8 @@ matching Current Watch ticker suggestions — portaled so Weather card
   `.weather-select`) rather than overriding field width.
 - **Label it.** Both components take a meaningful `label` (visually hidden).
 - **Current `Dropdown` adopters:** portfolio/watchlist switcher, Strategy
-  Assignment (`#assign-select`), Create Ship privacy.
+  Assignment (`#assign-select`), Create Ship privacy, Forge Strategy Cadence
+  (Strategy Check + Technicals, grouped + disabled 15m).
 - **Current `SearchableSelect` adopters:** Market Weather Sector + Industry
   (`on-graphics`).
 

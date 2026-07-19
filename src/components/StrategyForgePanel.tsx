@@ -22,6 +22,14 @@ import {
   patchCategoryEnabled,
 } from "../lib/forge/categoryEnabled";
 import {
+  ENABLED_CADENCE,
+  ENABLED_CANDLE,
+  INTERVAL_LABEL,
+  clampCadenceInterval,
+  clampCandleInterval,
+  isSessionClose,
+} from "../lib/forge/scheduler";
+import {
   ArrowCounterClockwise,
   FloppyDisk,
   PencilSimple,
@@ -74,16 +82,61 @@ import type {
 
 // ---- Cadence helpers -------------------------------------------------------
 
-const BETA0_CADENCE_FLOOR: CheckInterval[] = ["1D", "1W", "1M"];
-const INTERVAL_LABEL: Record<CheckInterval, string> = {
-  "15m": "Every 15 min",
-  "30m": "Every 30 min",
-  "1h": "Hourly",
-  "4h": "Every 4 hours",
-  "1D": "Daily",
-  "1W": "Weekly",
-  "1M": "Monthly",
-};
+// Cadence metadata (labels, enabled sets, clamps) is centralized in
+// scheduler.ts so the UI, scheduler, and persistence share one source of truth.
+// 15m is offered but disabled ("Future Capability").
+const FUTURE_CADENCE: CheckInterval = "15m";
+
+/** Build the Strategy Check dropdown: daily+, an Intraday group, a Candle group. */
+function buildCheckOptions() {
+  const label = (interval: CheckInterval, disabled = false) => ({
+    value: interval,
+    label: disabled
+      ? `${INTERVAL_LABEL[interval]} (Future Capability)`
+      : INTERVAL_LABEL[interval],
+    disabled,
+  });
+  const sessionCloses = ENABLED_CADENCE.filter(isSessionClose).map((interval) => ({
+    ...label(interval),
+    group: "Intraday — session close",
+  }));
+  const candles = (["4h", "1h", "30m"] as CheckInterval[]).map((interval) => ({
+    ...label(interval),
+    group: "Candle close",
+  }));
+  return [
+    label("1D"),
+    label("1W"),
+    label("1M"),
+    ...sessionCloses,
+    ...candles,
+    { ...label(FUTURE_CADENCE, true), group: "Candle close" },
+  ];
+}
+
+/** Build the Technicals dropdown: candle sizes only (no session closes). */
+function buildTechnicalsOptions() {
+  const label = (interval: CheckInterval, disabled = false) => ({
+    value: interval,
+    label: disabled
+      ? `${INTERVAL_LABEL[interval]} (Future Capability)`
+      : INTERVAL_LABEL[interval],
+    disabled,
+  });
+  const candles = (["4h", "1h", "30m"] as CheckInterval[])
+    .filter((interval) => ENABLED_CANDLE.includes(interval as never))
+    .map((interval) => ({ ...label(interval), group: "Candle close" }));
+  return [
+    label("1D"),
+    label("1W"),
+    label("1M"),
+    ...candles,
+    { ...label(FUTURE_CADENCE, true), group: "Candle close" },
+  ];
+}
+
+const CHECK_OPTIONS = buildCheckOptions();
+const TECHNICALS_OPTIONS = buildTechnicalsOptions();
 
 // ---- Steppers -------------------------------------------------------------
 // Active steppers (per the design): the main "Steps To Setup Your Strategy"
@@ -334,34 +387,17 @@ export function StrategyForgePanel({ strategy }: { strategy: Strategy | undefine
 
   const id = strategy.id;
   const weights = strategy.categoryWeights;
-  const checkInterval = strategy.checkInterval ?? "1D";
-  const technicalsInterval = strategy.technicalsInterval ?? checkInterval;
-
-  // Beta 0: only daily+ options. Technicals can't be faster than check.
-  const checkOptions = BETA0_CADENCE_FLOOR.map((interval) => ({
-    value: interval,
-    label: INTERVAL_LABEL[interval],
-  }));
-  const checkIndex = BETA0_CADENCE_FLOOR.indexOf(
-    (BETA0_CADENCE_FLOOR.includes(checkInterval)
-      ? checkInterval
-      : "1D") as (typeof BETA0_CADENCE_FLOOR)[number],
-  );
-  const technicalsOptions = BETA0_CADENCE_FLOOR.slice(Math.max(0, checkIndex)).map(
-    (interval) => ({ value: interval, label: INTERVAL_LABEL[interval] }),
-  );
+  const checkInterval = clampCadenceInterval(strategy.checkInterval);
+  const technicalsInterval = clampCandleInterval(strategy.technicalsInterval);
+  const cadenceEnabled = strategy.cadenceEnabled ?? false;
+  const notify = strategy.cadenceNotify ?? {};
 
   function handleCheckIntervalChange(value: string) {
-    const next = value as CheckInterval;
-    const nextIndex = BETA0_CADENCE_FLOOR.indexOf(
-      next as (typeof BETA0_CADENCE_FLOOR)[number],
-    );
-    const techIndex = BETA0_CADENCE_FLOOR.indexOf(
-      technicalsInterval as (typeof BETA0_CADENCE_FLOOR)[number],
-    );
-    const nextTech =
-      techIndex < nextIndex || techIndex < 0 ? next : technicalsInterval;
-    updateStrategy(id, { checkInterval: next, technicalsInterval: nextTech });
+    updateStrategy(id, { checkInterval: value as CheckInterval });
+  }
+
+  function setNotify(key: keyof NonNullable<Strategy["cadenceNotify"]>, on: boolean) {
+    updateStrategy(id, { cadenceNotify: { ...notify, [key]: on } });
   }
 
   function openEditor(next: TableEditor) {
@@ -784,8 +820,9 @@ export function StrategyForgePanel({ strategy }: { strategy: Strategy | undefine
           <h3 className="forge-section-title">1. Strategy Cadence</h3>
         </div>
         <p className="forge-section-q">
-          How often should the Forge notify you when your strategy checks pass
-          and rules break?
+          How often should the Forge re-score your strategy and refresh its
+          data? Checks always run at login and on manual refresh — cadence is an
+          optional addition on top.
         </p>
         <div className="forge-cadence-row">
           <label className="config-field">
@@ -793,17 +830,15 @@ export function StrategyForgePanel({ strategy }: { strategy: Strategy | undefine
               Strategy Check
               <InfoTip
                 label="About the strategy check cadence"
-                body="How often this strategy re-scores its portfolios and refreshes the chips you see. Fundamentals refresh daily regardless."
+                body="How often this strategy re-scores its portfolios and refreshes the chips you see. Intraday and candle-close options depend on live market hours; fundamentals refresh daily regardless."
               />
             </span>
             <Dropdown
               id="forge-check-interval"
               label="Strategy check interval"
-              value={
-                BETA0_CADENCE_FLOOR.includes(checkInterval) ? checkInterval : "1D"
-              }
+              value={checkInterval}
               onChange={handleCheckIntervalChange}
-              options={checkOptions}
+              options={CHECK_OPTIONS}
             />
           </label>
           <label className="config-field">
@@ -811,23 +846,87 @@ export function StrategyForgePanel({ strategy }: { strategy: Strategy | undefine
               Technical Indicators
               <InfoTip
                 label="About the technicals cadence"
-                body="The candle size technical indicators use. Beta 0 free-tier floor is daily or slower; can't refresh faster than the strategy check."
+                body="The candle size technical indicators use. Smaller candles react faster to price; 15-minute candles are coming soon."
               />
             </span>
             <Dropdown
               id="forge-technicals-interval"
               label="Technicals interval"
-              value={
-                BETA0_CADENCE_FLOOR.includes(technicalsInterval)
-                  ? technicalsInterval
-                  : "1D"
-              }
+              value={technicalsInterval}
               onChange={(value) =>
-                updateStrategy(id, { technicalsInterval: value as CheckInterval })
+                updateStrategy(id, {
+                  technicalsInterval: value as CheckInterval,
+                })
               }
-              options={technicalsOptions}
+              options={TECHNICALS_OPTIONS}
             />
           </label>
+        </div>
+
+        {/* Cadence feature toggles — master switch + per-notification-type.
+            All default off; only auto-refresh is wired today (email/text/browser
+            are Future Capability placeholders). */}
+        <div className="forge-cadence-toggles">
+          <div className="config-toggle">
+            <Checkbox
+              checked={cadenceEnabled}
+              aria-label="Enable cadence for this strategy"
+              onCheckedChange={(next) =>
+                updateStrategy(id, { cadenceEnabled: next })
+              }
+            />
+            <span className="config-label forge-label forge-label--muted">
+              Enable cadence
+              <InfoTip
+                label="About enabling cadence"
+                body="Turn the cadence feature on for this strategy. When on, the notification types below fire on your selected interval. Off by default — checks still run at login and manual refresh either way."
+              />
+            </span>
+          </div>
+          <div className="forge-cadence-notify" aria-disabled={!cadenceEnabled}>
+            <div className="config-toggle">
+              <Checkbox
+                checked={notify.autoRefresh ?? false}
+                disabled={!cadenceEnabled}
+                aria-label="Auto-refresh data on cadence"
+                onCheckedChange={(next) => setNotify("autoRefresh", next)}
+              />
+              <span className="config-label forge-label forge-label--muted">
+                Auto-refresh on cadence
+              </span>
+            </div>
+            <div className="config-toggle">
+              <Checkbox
+                checked={notify.email ?? false}
+                disabled
+                aria-label="Email notifications (Future Capability)"
+              />
+              <span className="config-label forge-label forge-label--muted">
+                Email <span className="forge-future-tag">(Future Capability)</span>
+              </span>
+            </div>
+            <div className="config-toggle">
+              <Checkbox
+                checked={notify.text ?? false}
+                disabled
+                aria-label="Text notifications (Future Capability)"
+              />
+              <span className="config-label forge-label forge-label--muted">
+                Text <span className="forge-future-tag">(Future Capability)</span>
+              </span>
+            </div>
+            <div className="config-toggle">
+              <Checkbox
+                checked={notify.browser ?? false}
+                disabled
+                aria-label="Browser notifications (Future Capability)"
+              />
+              <span className="config-label forge-label forge-label--muted">
+                Browser{" "}
+                <span className="forge-future-tag">(Future Capability)</span>
+              </span>
+            </div>
+          </div>
         </div>
       </div>
 

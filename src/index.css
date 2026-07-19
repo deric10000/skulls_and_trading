@@ -3768,6 +3768,33 @@ span.checkbox {
   gap: 0.6rem;
 }
 
+/* Cadence feature toggles — master switch + per-notification-type row. */
+.forge-cadence-toggles {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin-top: 0.9rem;
+}
+
+.forge-cadence-notify {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.45rem 1rem;
+  padding-left: 1.9rem; /* indent under the master toggle */
+}
+
+/* Whole notify group reads secondary until cadence is enabled. */
+.forge-cadence-notify[aria-disabled="true"] {
+  opacity: 0.55;
+}
+
+.forge-future-tag {
+  color: var(--text-muted);
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
 /* Description-pane overview of categoryWeights — same values as each
    category tab's conviction weight editor. */
 .forge-conviction-grid {
@@ -5792,6 +5819,7 @@ select.forge-cell-input {
 
 @media (max-width: 540px) {
   .forge-cadence-row,
+  .forge-cadence-notify,
   .forge-conviction-grid {
     grid-template-columns: minmax(0, 1fr);
   }

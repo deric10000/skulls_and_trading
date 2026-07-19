@@ -354,7 +354,23 @@ export interface Strategy {
   /** Custom strategies: tickers turned off per portfolio (defaults use strategyIds on holdings). */
   tickerExclusions?: Partial<Record<string, string[]>>;
   checkInterval?: CheckInterval; // re-score + notify cadence; default "1D"
-  technicalsInterval?: CheckInterval; // candle size; >= checkInterval and >= 15m
+  technicalsInterval?: CheckInterval; // candle size (UI: candle-only); >= 30m
+  /**
+   * Cadence feature master switch (default off). When off, checks still run at
+   * login / manual refresh — cadence is an opt-in addition, not the only path.
+   */
+  cadenceEnabled?: boolean;
+  /**
+   * Per-notification-type toggles for the cadence feature (all default off).
+   * Only `autoRefresh` is wired today; email/text/browser are UI placeholders
+   * (Future Capability) with no delivery backend yet.
+   */
+  cadenceNotify?: {
+    autoRefresh?: boolean;
+    email?: boolean;
+    text?: boolean;
+    browser?: boolean;
+  };
 }
 
 export type StrategyAssignments = Record<string, string[]>;
@@ -496,7 +512,20 @@ export type CategoryWeights = Record<RuleCategory, number>;
 
 // Cadence options ("normal trading range"). Fundamentals refresh on a fixed
 // daily cadence and are intentionally NOT selectable here.
-export type CheckInterval = "15m" | "30m" | "1h" | "4h" | "1D" | "1W" | "1M";
+//
+// A candle size (fixed-length bar) — valid for both the check cadence and the
+// technicals candle size.
+export type CandleInterval = "15m" | "30m" | "1h" | "4h" | "1D" | "1W" | "1M";
+// Intraday session-close triggers — fire once at a specific US session boundary
+// (ET), not on a fixed clock interval. Check cadence only (never a candle size).
+export type SessionCloseInterval =
+  | "close-premarket"
+  | "close-regular"
+  | "close-afterhours"
+  | "close-overnight";
+// `checkInterval` may be a candle size OR a session-close event;
+// `technicalsInterval` is candle-only (UI-enforced).
+export type CheckInterval = CandleInterval | SessionCloseInterval;
 
 // ---- Buckets ----
 // A portfolio is split into Buckets; each bucket is governed by one strategy and

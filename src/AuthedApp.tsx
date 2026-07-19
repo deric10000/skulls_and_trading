@@ -54,6 +54,8 @@ export default function AuthedApp() {
     onboardingModalOpen,
     budgetToast,
     clearBudgetToast,
+    cadenceToast,
+    clearCadenceToast,
   } = useAppState();
 
   return (
@@ -79,6 +81,18 @@ export default function AuthedApp() {
             type="button"
             className="btn btn--ghost"
             onClick={clearBudgetToast}
+          >
+            Dismiss
+          </button>
+        </div>
+      ) : null}
+      {cadenceToast ? (
+        <div className="budget-cap-toast" role="status">
+          <p>{cadenceToast}</p>
+          <button
+            type="button"
+            className="btn btn--ghost"
+            onClick={clearCadenceToast}
           >
             Dismiss
           </button>

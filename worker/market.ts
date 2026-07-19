@@ -38,10 +38,36 @@ interface CacheEntry<T> {
 const DAY_MS = 86_400_000;
 const MINUTE_MS = 60_000;
 
-/** Beta 0: quotes/fundies/techs TTL ≥ 1 day. */
-const QUOTE_TTL_MS = DAY_MS;
+/**
+ * Quote TTL is market-hours aware: quotes move during the US regular session so
+ * cache briefly (~5 min) to serve fresher intraday numbers to Forge cadence
+ * auto-refresh; when the market is closed quotes are stable, so hold a full day
+ * to conserve upstream quota. Fundamentals/technicals stay daily.
+ */
+const QUOTE_TTL_MARKET_MS = 5 * MINUTE_MS;
+const QUOTE_TTL_CLOSED_MS = DAY_MS;
 const FUNDY_TTL_MS = DAY_MS;
 const SEARCH_TTL_MS = 10 * MINUTE_MS;
+
+/** True during US regular hours (09:30–16:00 ET, Mon–Fri). */
+function isUsRegularMarketHours(now = new Date()): boolean {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    weekday: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(now);
+  const get = (t: string) => parts.find((p) => p.type === t)?.value ?? "";
+  const weekday = get("weekday");
+  if (weekday === "Sat" || weekday === "Sun") return false;
+  const mins = Number(get("hour")) * 60 + Number(get("minute"));
+  return mins >= 9 * 60 + 30 && mins <= 16 * 60;
+}
+
+function quoteTtlMs(): number {
+  return isUsRegularMarketHours() ? QUOTE_TTL_MARKET_MS : QUOTE_TTL_CLOSED_MS;
+}
 
 const quoteCache = new Map<string, CacheEntry<QuotePayload>>();
 const searchCache = new Map<string, CacheEntry<SearchHit[]>>();
@@ -265,7 +291,7 @@ async function resolveQuote(
     }
     if (!quote) quote = await fetchYahooQuote(key);
     if (!quote) quote = await fetchStooqQuote(key);
-    if (quote) cacheSet(quoteCache, key, quote, QUOTE_TTL_MS);
+    if (quote) cacheSet(quoteCache, key, quote, quoteTtlMs());
     return quote;
   });
 }
