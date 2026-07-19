@@ -346,6 +346,13 @@ change. **Postgres is source of truth** (not `localStorage`).
   `src/data.ts` on hydrate; only `appliedPortfolioIds` / `tickerExclusions`
   merge from storage. Defaults reject body patches in `updateStrategy`.
 - `conviction_snapshots` append on per-strategy cadence refresh (charts later).
+- `user_state.flags` (`UserFlags` in `src/lib/userStore/`) is a small map of
+  **one-shot per-user UI markers** — currently `helmSeen`, set when the
+  first-login Helm modal (`HelmModal`) is dismissed (`AppState.needsHelm` /
+  `dismissHelm`). Flags ride the normal workspace load/save path; they are
+  markers, not workspace data — do not stash content there. QA reset:
+  `update user_state set flags = '{}'::jsonb where user_id = …` re-triggers
+  first-login surfaces for a test account.
 - Soft caps: `src/lib/forge/budgets.ts` (tickers + active chips); Admin bypass.
 - Schema: `supabase/schema.sql`. Auth helpers: `src/lib/auth/`.
 

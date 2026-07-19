@@ -24,6 +24,11 @@ const CaptainProfilePage = lazy(() =>
     default: m.CaptainProfilePage,
   })),
 );
+// First-login-only surface — most sessions never mount it, so it stays lazy
+// (performance-budget.md: big secondary UI loads on demand).
+const HelmModal = lazy(() =>
+  import("./components/HelmModal").then((m) => ({ default: m.HelmModal })),
+);
 
 function ActivePage() {
   const { activePage } = useAppState();
@@ -41,13 +46,25 @@ function ActivePage() {
  * forge/watchlist/weather modules (performance-budget.md).
  */
 export default function AuthedApp() {
-  const { needsLegalAck, acknowledgeLegal, budgetToast, clearBudgetToast } =
-    useAppState();
+  const {
+    needsLegalAck,
+    acknowledgeLegal,
+    needsHelm,
+    budgetToast,
+    clearBudgetToast,
+  } = useAppState();
 
   return (
     <AppShell>
       {needsLegalAck ? (
         <ComingSoonOverlay variant="legal" onAcknowledge={acknowledgeLegal} />
+      ) : null}
+      {/* The Helm (first login) waits behind the legal gate so the two
+          full-viewport surfaces never stack. */}
+      {!needsLegalAck && needsHelm ? (
+        <Suspense fallback={null}>
+          <HelmModal />
+        </Suspense>
       ) : null}
       <MarketBudgetToasts />
       {budgetToast ? (

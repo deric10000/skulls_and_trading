@@ -4796,6 +4796,57 @@ span.checkbox {
   border-bottom: 1px solid var(--border-soft);
 }
 
+/* The Helm — first-login welcome modal (HelmModal.tsx). Forge modal chrome;
+   the body duplicates the Home hero's content over the same backdrop art.
+   Narrower than the 940px table modals — this is reading content, not a
+   table. */
+.modal-card.forge-table-modal.helm-modal {
+  width: min(720px, 100%);
+}
+
+.helm-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-3);
+}
+
+/* The artwork canvas the hero content sits on — same `.hero-backdrop` art,
+   rounded like a sub-card (concentric radius under the modal card). */
+.helm-canvas {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+/* Keep content above the absolute backdrop (mirrors .hero-body's z-index). */
+.helm-canvas > .hero-content,
+.helm-canvas > .hero-preview-card {
+  position: relative;
+  z-index: 1;
+}
+
+/* Helm action bar — shared .strategy-footer chrome (divider + bottom pin in
+   the modal's flex column; the body scrolls above it, so on the mobile
+   full-screen sheet it stays fixed to the viewport bottom like the Current
+   Watch dock). Holds the stock .weather-prevnext toggle, lower right. The
+   modal card has no padding of its own, so the bar carries the same insets as
+   .forge-table-actions. */
+.strategy-footer.helm-actions {
+  justify-content: flex-end;
+  padding: var(--space-2) var(--space-3) var(--space-3);
+}
+
+@media (max-width: 767px) {
+  .strategy-footer.helm-actions {
+    padding-bottom: calc(var(--space-3) + env(safe-area-inset-bottom, 0px));
+  }
+}
+
 /* Modal title: 18.4px Plex Sans SemiBold white (per design) */
 .forge-table-head h2 {
   margin: 0;
