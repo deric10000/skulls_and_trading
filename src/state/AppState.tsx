@@ -121,6 +121,10 @@ interface AppStateValue {
   acknowledgeLegal: () => void;
   /** First-login Onboarding modal: true until the user dismisses it once. */
   needsOnboardingModal: boolean;
+  /** Modal is on screen — first-login gate OR a manual reopen. */
+  onboardingModalOpen: boolean;
+  /** Reopen the Onboarding walkthrough on demand (e.g. Home hero button). */
+  openOnboardingModal: () => void;
   dismissOnboardingModal: () => void;
   completeBetaSignIn: () => Promise<void>;
   /** @deprecated Mock-only; Beta uses completeBetaSignIn */
@@ -307,6 +311,9 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [needsLegalAck, setNeedsLegalAck] = useState(false);
   const [flags, setFlags] = useState<UserFlags>({});
+  // Manual reopen of the Onboarding walkthrough after first login. Separate
+  // from the `onboardingSeen` flag gate so returning users can revisit it.
+  const [onboardingReopened, setOnboardingReopened] = useState(false);
   const [budgetToast, setBudgetToast] = useState<string | null>(null);
   const [authReady, setAuthReady] = useState(false);
   const [captain, setCaptain] = useState<CaptainProfile>({
@@ -516,8 +523,13 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     setNeedsLegalAck(false);
   }, []);
 
+  const openOnboardingModal = useCallback(() => {
+    setOnboardingReopened(true);
+  }, []);
+
   const dismissOnboardingModal = useCallback(() => {
     setFlags((current) => ({ ...current, onboardingSeen: true }));
+    setOnboardingReopened(false);
   }, []);
 
   const clearBudgetToast = useCallback(() => setBudgetToast(null), []);
@@ -1318,6 +1330,9 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       needsLegalAck,
       acknowledgeLegal,
       needsOnboardingModal: isAuthenticated && !flags.onboardingSeen,
+      onboardingModalOpen:
+        (isAuthenticated && !flags.onboardingSeen) || onboardingReopened,
+      openOnboardingModal,
       dismissOnboardingModal,
       completeBetaSignIn,
       signIn,
@@ -1381,6 +1396,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       needsLegalAck,
       acknowledgeLegal,
       flags,
+      onboardingReopened,
+      openOnboardingModal,
       dismissOnboardingModal,
       completeBetaSignIn,
       signIn,

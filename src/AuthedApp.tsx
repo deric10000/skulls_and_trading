@@ -51,7 +51,7 @@ export default function AuthedApp() {
   const {
     needsLegalAck,
     acknowledgeLegal,
-    needsOnboardingModal,
+    onboardingModalOpen,
     budgetToast,
     clearBudgetToast,
   } = useAppState();
@@ -61,8 +61,10 @@ export default function AuthedApp() {
       {/* First login: Onboarding leads and carries the disclaimer as its last
           step (Acknowledge clears the legal gate too). If the user closes it
           early, the standalone legal modal pops next — the disclaimer is
-          never skippable. Returning users get the legal gate as before. */}
-      {needsOnboardingModal ? (
+          never skippable. Returning users get the legal gate as before, and
+          can reopen the walkthrough on demand (Home hero) once legal is
+          cleared, in which case closing just dismisses. */}
+      {onboardingModalOpen ? (
         <Suspense fallback={null}>
           <OnboardingModal />
         </Suspense>
