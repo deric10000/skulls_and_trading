@@ -74,6 +74,15 @@ later pass; today these categories score the per-stock, per-position facts we
 have (portfolio weight, open P&L, holding age). Trade Management also hosts the
 Layer 3 zone authoring boxes.
 
+**Risk / Trade / Layer 3 data-point tabs:** those chip modals expose
+**Thesis · Technical · Market** tabs (`ForgeSectionTabs` — Configure section-tab
+styling, not page-level `Tabs`) so the Data Point
+lists and column formatting match the dedicated Thesis and Technical tables,
+plus a Market tab for macro/stock-risk/position metrics (VIX, SPY*, Beta, ATR %,
+volume, Open P&L %, …). This is **authoring-only** — `RuleChip.category` stays
+the host (`risk` / `trade` / zone); conviction math is unchanged
+(`metricsForLens` / `lensForMetric` in `src/lib/forge/metrics.ts`).
+
 ## 4. The scoring algorithm (per stock, per category)
 
 Rule scoring is **pass/fail for MVP** (partial credit can come later).

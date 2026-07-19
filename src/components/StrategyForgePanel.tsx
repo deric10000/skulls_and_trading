@@ -36,6 +36,10 @@ import {
   Trash,
 } from "../lib/icons";
 import { ForgeToast } from "./forge/ForgeToast";
+import {
+  ForgeSectionTabs,
+  type ForgeSectionTab,
+} from "./forge/ForgeSectionTabs";
 import { useAppState } from "../state/AppState";
 import { ActionFooter } from "./ActionFooter";
 import { Checkbox } from "./Checkbox";
@@ -149,44 +153,7 @@ export interface StepItem {
   complete: boolean;
 }
 
-// ---- In-card section tabs (all viewports) ---------------------------------
-// Horizontal tab strip navigates the Configure card one section at a time.
-// Distinct from the page-level `Tabs` component (Configure / Preview Watchlist).
-
-export interface SectionTab {
-  id: string;
-  label: string;
-}
-
-function SectionTabs({
-  tabs,
-  active,
-  onChange,
-}: {
-  tabs: SectionTab[];
-  active: string;
-  onChange: (id: string) => void;
-}) {
-  return (
-    <div className="forge-section-tabs" role="tablist" aria-label="Configuration sections">
-      {tabs.map((tab) => {
-        const isActive = tab.id === active;
-        return (
-          <button
-            key={tab.id}
-            type="button"
-            role="tab"
-            aria-selected={isActive}
-            className={isActive ? "forge-section-tab is-active" : "forge-section-tab"}
-            onClick={() => onChange(tab.id)}
-          >
-            <span className="forge-section-tab-label">{tab.label}</span>
-          </button>
-        );
-      })}
-    </div>
-  );
-}
+export type SectionTab = ForgeSectionTab;
 
 // ---- Chip / tag pills with tooltips ----------------------------------------
 
@@ -556,10 +523,11 @@ export function StrategyForgePanel({ strategy }: { strategy: Strategy | undefine
       </div>
 
       {/* In-card section tabs — one Configure pane visible at a time. */}
-      <SectionTabs
+      <ForgeSectionTabs
         tabs={sectionTabs}
         active={activeSection}
         onChange={handleSectionChange}
+        ariaLabel="Configuration sections"
       />
 
       {/* Toasts overlay the scroll body so they don't shove the form down. */}

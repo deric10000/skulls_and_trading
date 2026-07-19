@@ -1152,6 +1152,67 @@ export function metricsForCategory(category: RuleCategory): MetricMeta[] {
   );
 }
 
+/**
+ * Authoring lenses for Risk / Trade / Layer 3 chip modals (Thesis · Technical ·
+ * Market tabs). Scoring still uses RuleChip.category (host) — lenses only
+ * control which Data Point list and which rows are shown.
+ */
+export type MetricLens = "thesis" | "technical" | "market";
+
+export const METRIC_LENS_TABS: { id: MetricLens; label: string }[] = [
+  { id: "thesis", label: "Thesis" },
+  { id: "technical", label: "Technical" },
+  { id: "market", label: "Market" },
+];
+
+/** Stock-risk + position metrics that live on the Market lens (not Thesis/Setup). */
+const MARKET_LENS_KEYS = new Set<MetricKey>([
+  "atrPct",
+  "beta1y",
+  "avgDollarVolume20d",
+  "sectorEtf1mChangePct",
+  "vix",
+  "spyRsi",
+  "spyAbove200dSma",
+  "spy5dChangePct",
+  "highYieldSpreadPct",
+  "treasury10y5dChangePct",
+  "openPnlPct",
+  "weightPct",
+  "holdingDays",
+]);
+
+/** Which tab a metric row belongs to in Risk / Trade / Layer 3 modals. */
+export function lensForMetric(key: MetricKey): MetricLens {
+  const meta = METRICS[key];
+  if (!meta) return "market";
+  if (meta.category === "thesis") return "thesis";
+  if (meta.category === "setup") return "technical";
+  if (MARKET_LENS_KEYS.has(key) || meta.source === "market") return "market";
+  // Position/timeframe leftovers and any unknown host-risk keys → Market.
+  return "market";
+}
+
+export function metricsForLens(lens: MetricLens): MetricMeta[] {
+  switch (lens) {
+    case "thesis":
+      return metricsForCategory("thesis");
+    case "technical":
+      return metricsForCategory("setup");
+    case "market":
+      return ALL_METRICS.filter(
+        (metric) =>
+          isLiveSupportedMetric(metric.key) &&
+          (MARKET_LENS_KEYS.has(metric.key) || metric.source === "market"),
+      );
+  }
+}
+
+/** True when the host modal uses Thesis / Technical / Market authoring tabs. */
+export function hostUsesMetricLenses(category: RuleCategory): boolean {
+  return category === "risk" || category === "trade";
+}
+
 // ---- Condition labels ------------------------------------------------------
 // Operators render as plain-English conditions (per the Figma table designs).
 // Currency metrics phrase ">" as "is greater than" (e.g. Net Income is greater

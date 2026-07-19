@@ -130,6 +130,24 @@ default Time from strategy `technicalsInterval` via `resolveChipTime` — do not
 invent a parallel timeframe picker. Data Point dropdowns may use `<optgroup>`
 from `MetricMeta.group` (MACD, Stochastic, etc.).
 
+## Forge Risk / Trade / Layer 3 metric lenses
+
+Risk Rule Chips, Trade Management Rule Chips, and Layer 3 zone chip tables use
+**`ForgeSectionTabs`** (`.forge-section-tabs` / `.forge-section-tab`) with three
+lenses: **Thesis · Technical · Market** — same strip as Configure section tabs,
+not page-level / auth **`Tabs`** (`.tabs` / `.tab`). Do not restyle Home/auth
+`Tabs`. Layout chrome: `.forge-metric-lens` / `.forge-metric-lens-hint`.
+`chip.category` stays the host category (scoring impact: none). Data Point
+options come from `metricsForLens`; row visibility from `lensForMetric`.
+
+**Stable shell while switching lenses (desktop + tablet):** pass
+`stableTabs` + `stableTabsTableMin` on `ForgeTableModal`
+(`.forge-table-modal--stable-tabs`). At `≥ 768px` the card height is
+`min(chrome + tallest-lens table min, 90vh)` so tabs and footer don’t jump
+when switching Thesis / Technical / Market. Mobile (`< 768px`) is already a
+full-screen sheet — leave it alone. Same breakpoint as Onboarding’s
+fixed-height modal.
+
 ## Forge table Actions column standard (`.forge-table-row` / `.forge-table--tags`)
 
 Both Forge table modals (`RuleChipsTableModal`'s rows, `TagsTableModal`'s

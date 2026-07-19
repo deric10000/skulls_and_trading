@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Plus, X } from "../../lib/icons";
 
@@ -23,6 +23,8 @@ export function ForgeTableModal({
   titleId,
   titleAccessory,
   withPlan = false,
+  stableTabs = false,
+  stableTabsTableMin,
   onCancel,
   onDone,
   doneLabel = "Update",
@@ -41,6 +43,17 @@ export function ForgeTableModal({
   titleAccessory?: ReactNode;
   /** Wider card when the table includes a My Plan column. */
   withPlan?: boolean;
+  /**
+   * Desktop/tablet (≥768px): lock card height so in-modal section tabs
+   * (Thesis · Technical · Market) don't resize the shell when switching.
+   * Mobile stays a full-screen sheet (already stable).
+   */
+  stableTabs?: boolean;
+  /**
+   * Pixel min-height for the table body (tallest lens). Used with
+   * `stableTabs` to size the card to that lens, capped at 90vh.
+   */
+  stableTabsTableMin?: number;
   onCancel: () => void;
   onDone: () => void;
   /** Primary footer button label (default: Update). */
@@ -63,14 +76,28 @@ export function ForgeTableModal({
 }) {
   if (typeof document === "undefined") return null;
 
+  const cardClass = [
+    "modal-card",
+    "panel",
+    "forge-table-modal",
+    withPlan ? "forge-table-modal--with-plan" : null,
+    stableTabs ? "forge-table-modal--stable-tabs" : null,
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  const cardStyle: CSSProperties | undefined =
+    stableTabs && stableTabsTableMin != null
+      ? ({
+          ["--forge-lens-table-min"]: `${stableTabsTableMin}px`,
+        } as CSSProperties)
+      : undefined;
+
   return createPortal(
     <div className="modal-backdrop" role="presentation" onClick={onCancel}>
       <div
-        className={
-          withPlan
-            ? "modal-card panel forge-table-modal forge-table-modal--with-plan"
-            : "modal-card panel forge-table-modal"
-        }
+        className={cardClass}
+        style={cardStyle}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
