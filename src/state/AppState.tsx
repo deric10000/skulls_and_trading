@@ -119,9 +119,9 @@ interface AppStateValue {
   userProfile: UserProfile | null;
   needsLegalAck: boolean;
   acknowledgeLegal: () => void;
-  /** First-login Helm modal: true until the user dismisses it once. */
-  needsHelm: boolean;
-  dismissHelm: () => void;
+  /** First-login Onboarding modal: true until the user dismisses it once. */
+  needsOnboardingModal: boolean;
+  dismissOnboardingModal: () => void;
   completeBetaSignIn: () => Promise<void>;
   /** @deprecated Mock-only; Beta uses completeBetaSignIn */
   signIn: (name?: string) => void;
@@ -516,8 +516,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     setNeedsLegalAck(false);
   }, []);
 
-  const dismissHelm = useCallback(() => {
-    setFlags((current) => ({ ...current, helmSeen: true }));
+  const dismissOnboardingModal = useCallback(() => {
+    setFlags((current) => ({ ...current, onboardingSeen: true }));
   }, []);
 
   const clearBudgetToast = useCallback(() => setBudgetToast(null), []);
@@ -1317,8 +1317,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       userProfile,
       needsLegalAck,
       acknowledgeLegal,
-      needsHelm: isAuthenticated && !flags.helmSeen,
-      dismissHelm,
+      needsOnboardingModal: isAuthenticated && !flags.onboardingSeen,
+      dismissOnboardingModal,
       completeBetaSignIn,
       signIn,
       signUp,
@@ -1381,7 +1381,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       needsLegalAck,
       acknowledgeLegal,
       flags,
-      dismissHelm,
+      dismissOnboardingModal,
       completeBetaSignIn,
       signIn,
       signUp,

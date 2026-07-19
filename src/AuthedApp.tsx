@@ -26,8 +26,10 @@ const CaptainProfilePage = lazy(() =>
 );
 // First-login-only surface — most sessions never mount it, so it stays lazy
 // (performance-budget.md: big secondary UI loads on demand).
-const HelmModal = lazy(() =>
-  import("./components/HelmModal").then((m) => ({ default: m.HelmModal })),
+const OnboardingModal = lazy(() =>
+  import("./components/OnboardingModal").then((m) => ({
+    default: m.OnboardingModal,
+  })),
 );
 
 function ActivePage() {
@@ -49,22 +51,23 @@ export default function AuthedApp() {
   const {
     needsLegalAck,
     acknowledgeLegal,
-    needsHelm,
+    needsOnboardingModal,
     budgetToast,
     clearBudgetToast,
   } = useAppState();
 
   return (
     <AppShell>
-      {needsLegalAck ? (
-        <ComingSoonOverlay variant="legal" onAcknowledge={acknowledgeLegal} />
-      ) : null}
-      {/* The Helm (first login) waits behind the legal gate so the two
-          full-viewport surfaces never stack. */}
-      {!needsLegalAck && needsHelm ? (
+      {/* First login: Onboarding leads and carries the disclaimer as its last
+          step (Acknowledge clears the legal gate too). If the user closes it
+          early, the standalone legal modal pops next — the disclaimer is
+          never skippable. Returning users get the legal gate as before. */}
+      {needsOnboardingModal ? (
         <Suspense fallback={null}>
-          <HelmModal />
+          <OnboardingModal />
         </Suspense>
+      ) : needsLegalAck ? (
+        <ComingSoonOverlay variant="legal" onAcknowledge={acknowledgeLegal} />
       ) : null}
       <MarketBudgetToasts />
       {budgetToast ? (

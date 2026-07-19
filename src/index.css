@@ -4303,6 +4303,52 @@ span.checkbox {
   max-width: 32px;
 }
 
+/* Clickable steps (Stepper's onSelectStep) — the button is invisible chrome
+   around the disc + label; the disc/label styling above is unchanged. */
+.forge-step-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  cursor: pointer;
+}
+
+/* The step in view — label reads as the strip's headline. */
+.forge-step--active .forge-step-label {
+  color: #ffffff;
+  font-weight: 600;
+}
+
+/* Mobile: one compact disc row — labels collapse except the active step's,
+   connectors shrink, and nothing wraps to a second line. */
+@media (max-width: 767px) {
+  .forge-stepper {
+    flex-wrap: nowrap;
+  }
+
+  .forge-step-label {
+    display: none;
+  }
+
+  .forge-step--active .forge-step-label {
+    display: inline;
+    white-space: nowrap;
+  }
+
+  .forge-step-line {
+    flex: 1 0 8px;
+    min-width: 8px;
+  }
+
+  .forge-step-line:has(+ .forge-step:last-child) {
+    flex: 0 0 12px;
+    max-width: 12px;
+  }
+}
+
 /* In-card section tabs — Configure card navigation (all viewports). One pane
    visible at a time; tabs wrap on desktop/tablet and scroll horizontally on
    narrow mobile when they don't fit. */
@@ -4796,24 +4842,38 @@ span.checkbox {
   border-bottom: 1px solid var(--border-soft);
 }
 
-/* The Helm — first-login welcome modal (HelmModal.tsx). Forge modal chrome;
-   the body duplicates the Home hero's content over the same backdrop art.
-   Narrower than the 940px table modals — this is reading content, not a
-   table. */
-.modal-card.forge-table-modal.helm-modal {
+/* Onboarding — first-login walkthrough modal (OnboardingModal.tsx). Forge
+   modal chrome; step bodies follow the Welcome blueprint over the hero
+   backdrop art. Narrower than the 940px table modals — this is reading
+   content, not a table. */
+.modal-card.forge-table-modal.onboarding-modal {
   width: min(720px, 100%);
 }
 
-.helm-body {
+/* Desktop/tablet: fixed height so the card doesn't resize per step — a
+   changing height would move the footer toggle's hit area between clicks.
+   (Mobile is already a full-screen sheet, so this is a non-issue there.) */
+@media (min-width: 768px) {
+  .modal-card.forge-table-modal.onboarding-modal {
+    height: min(90vh, 100%);
+  }
+}
+
+/* Shared Stepper strip between the header and the step body. */
+.onboarding-stepper-row {
+  padding: var(--space-2) var(--space-3) 0;
+}
+
+.onboarding-body {
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
   padding: var(--space-3);
 }
 
-/* The artwork canvas the hero content sits on — same `.hero-backdrop` art,
+/* The artwork canvas a step's content sits on — same `.hero-backdrop` art,
    rounded like a sub-card (concentric radius under the modal card). */
-.helm-canvas {
+.onboarding-canvas {
   position: relative;
   overflow: hidden;
   border-radius: var(--radius-md);
@@ -4821,28 +4881,39 @@ span.checkbox {
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
+  /* Guide steps have less copy than Welcome — keep the canvas filling the
+     body so the art stays a full backdrop, not a short strip. */
+  min-height: 100%;
 }
 
 /* Keep content above the absolute backdrop (mirrors .hero-body's z-index). */
-.helm-canvas > .hero-content,
-.helm-canvas > .hero-preview-card {
+.onboarding-canvas > .hero-content,
+.onboarding-canvas > .hero-preview-card {
   position: relative;
   z-index: 1;
 }
 
-/* Helm action bar — shared .strategy-footer chrome (divider + bottom pin in
-   the modal's flex column; the body scrolls above it, so on the mobile
+/* Disclaimer step — same head/title/body classes as the legal panel
+   (ComingSoonOverlay `legal`), flush in the modal body. */
+.onboarding-disclaimer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+/* Onboarding action bar — shared .strategy-footer chrome (divider + bottom
+   pin in the modal's flex column; the body scrolls above it, so on the mobile
    full-screen sheet it stays fixed to the viewport bottom like the Current
-   Watch dock). Holds the stock .weather-prevnext toggle, lower right. The
-   modal card has no padding of its own, so the bar carries the same insets as
-   .forge-table-actions. */
-.strategy-footer.helm-actions {
+   Watch dock). Holds the stock .weather-prevnext toggle (or the Acknowledge
+   button on the last step), lower right. The modal card has no padding of its
+   own, so the bar carries the same insets as .forge-table-actions. */
+.strategy-footer.onboarding-actions {
   justify-content: flex-end;
   padding: var(--space-2) var(--space-3) var(--space-3);
 }
 
 @media (max-width: 767px) {
-  .strategy-footer.helm-actions {
+  .strategy-footer.onboarding-actions {
     padding-bottom: calc(var(--space-3) + env(safe-area-inset-bottom, 0px));
   }
 }
@@ -6108,6 +6179,18 @@ select.forge-cell-input {
 
 .weather-prevnext-btn:hover {
   background: rgb(255 255 255 / 0.08);
+}
+
+/* Disabled step (bounded steppers like the Onboarding modal — Previous on the
+   first step). Market Weather's Stock toggle wraps around and never disables;
+   this state simply doesn't apply there. */
+.weather-prevnext-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.weather-prevnext-btn:disabled:hover {
+  background: none;
 }
 
 .weather-prevnext-btn svg {

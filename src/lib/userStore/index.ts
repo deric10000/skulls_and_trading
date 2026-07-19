@@ -13,8 +13,8 @@ import { mergeStrategiesForHydrate } from "./strategyMerge";
 
 /** One-shot per-user UI markers (persisted in user_state.flags). */
 export interface UserFlags {
-  /** True once the first-login Helm modal has been dismissed. */
-  helmSeen?: boolean;
+  /** True once the first-login Onboarding modal has been dismissed. */
+  onboardingSeen?: boolean;
 }
 
 export interface UserWorkspace {
