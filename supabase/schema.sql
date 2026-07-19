@@ -109,6 +109,9 @@ create table if not exists public.user_state (
   logs_by_ticker jsonb not null default '{}'::jsonb,
   captain jsonb not null default '{}'::jsonb,
   share_fills jsonb not null default '[]'::jsonb,
+  -- One-shot per-user UI flags (e.g. onboardingSeen after the first-login
+  -- Onboarding modal is dismissed). Small marker map, not workspace data.
+  flags jsonb not null default '{}'::jsonb,
   updated_at timestamptz not null default now()
 );
 

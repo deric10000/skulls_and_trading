@@ -60,6 +60,7 @@ import {
   emptyWorkspace,
   loadUserWorkspace,
   saveUserWorkspace,
+  type UserFlags,
   type UserWorkspace,
 } from "../lib/userStore";
 import { sanitizeStrategyPatch } from "../lib/userStore/strategyMerge";
@@ -118,6 +119,9 @@ interface AppStateValue {
   userProfile: UserProfile | null;
   needsLegalAck: boolean;
   acknowledgeLegal: () => void;
+  /** First-login Onboarding modal: true until the user dismisses it once. */
+  needsOnboardingModal: boolean;
+  dismissOnboardingModal: () => void;
   completeBetaSignIn: () => Promise<void>;
   /** @deprecated Mock-only; Beta uses completeBetaSignIn */
   signIn: (name?: string) => void;
@@ -280,6 +284,7 @@ function applyWorkspaceToSetters(
     setShareFills: (f: ShareFillEvent[]) => void;
     setSelectedTicker: (t: string) => void;
     setCaptainName: (n: string) => void;
+    setFlags: (f: UserFlags) => void;
   },
 ) {
   setters.setPortfolios(clonePortfolios(workspace.portfolios));
@@ -291,6 +296,7 @@ function applyWorkspaceToSetters(
   setters.setShareFills(workspace.shareFills);
     setters.setCaptainName(workspace.captain.handle);
   setters.setSelectedTicker(workspace.watchlist[0]?.ticker ?? "");
+  setters.setFlags(workspace.flags);
 }
 
 export function AppStateProvider({ children }: { children: ReactNode }) {
@@ -300,6 +306,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const [captainName, setCaptainName] = useState("");
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [needsLegalAck, setNeedsLegalAck] = useState(false);
+  const [flags, setFlags] = useState<UserFlags>({});
   const [budgetToast, setBudgetToast] = useState<string | null>(null);
   const [authReady, setAuthReady] = useState(false);
   const [captain, setCaptain] = useState<CaptainProfile>({
@@ -352,6 +359,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       setShareFills,
       setSelectedTicker,
       setCaptainName,
+      setFlags,
     });
     setUserProfile(profile);
     setDemoMode(false);
@@ -483,6 +491,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       logsByTicker,
       captain,
       shareFills,
+      flags,
     });
   }, [
     portfolios,
@@ -492,6 +501,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     logsByTicker,
     captain,
     shareFills,
+    flags,
     isAuthenticated,
     demoMode,
   ]);
@@ -504,6 +514,10 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 
   const acknowledgeLegal = useCallback(() => {
     setNeedsLegalAck(false);
+  }, []);
+
+  const dismissOnboardingModal = useCallback(() => {
+    setFlags((current) => ({ ...current, onboardingSeen: true }));
   }, []);
 
   const clearBudgetToast = useCallback(() => setBudgetToast(null), []);
@@ -530,6 +544,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       setShareFills,
       setSelectedTicker,
       setCaptainName,
+      setFlags,
     });
   }, []);
 
@@ -571,6 +586,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       setShareFills,
       setSelectedTicker,
       setCaptainName,
+      setFlags,
     });
   }, []);
 
@@ -1301,6 +1317,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       userProfile,
       needsLegalAck,
       acknowledgeLegal,
+      needsOnboardingModal: isAuthenticated && !flags.onboardingSeen,
+      dismissOnboardingModal,
       completeBetaSignIn,
       signIn,
       signUp,
@@ -1362,6 +1380,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       userProfile,
       needsLegalAck,
       acknowledgeLegal,
+      flags,
+      dismissOnboardingModal,
       completeBetaSignIn,
       signIn,
       signUp,

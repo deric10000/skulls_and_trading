@@ -11,6 +11,12 @@ import { CHIP_LIBRARY_SEED, DEFAULT_CAPTAIN, DEFAULT_STRATEGIES } from "../../da
 import { getSupabase } from "../auth/supabaseClient";
 import { mergeStrategiesForHydrate } from "./strategyMerge";
 
+/** One-shot per-user UI markers (persisted in user_state.flags). */
+export interface UserFlags {
+  /** True once the first-login Onboarding modal has been dismissed. */
+  onboardingSeen?: boolean;
+}
+
 export interface UserWorkspace {
   portfolios: Portfolio[];
   strategies: Strategy[];
@@ -19,6 +25,7 @@ export interface UserWorkspace {
   logsByTicker: Record<string, LogEntry[]>;
   captain: CaptainProfile;
   shareFills: ShareFillEvent[];
+  flags: UserFlags;
 }
 
 /** Empty Beta workspace — no demo PORTFOLIOS seed; defaults available to apply. */
@@ -36,6 +43,7 @@ export function emptyWorkspace(captainName = "Captain"): UserWorkspace {
     logsByTicker: {},
     captain: { ...DEFAULT_CAPTAIN, handle: captainName },
     shareFills: [],
+    flags: {},
   };
 }
 
@@ -91,6 +99,7 @@ export async function loadUserWorkspace(
         fallback.captain.handle,
     },
     shareFills: (data.share_fills as ShareFillEvent[]) ?? [],
+    flags: (data.flags as UserFlags) ?? {},
   };
 }
 
@@ -109,6 +118,7 @@ export async function saveUserWorkspace(workspace: UserWorkspace): Promise<void>
       logs_by_ticker: workspace.logsByTicker,
       captain: workspace.captain,
       share_fills: workspace.shareFills,
+      flags: workspace.flags,
       updated_at: new Date().toISOString(),
     },
     { onConflict: "user_id" },

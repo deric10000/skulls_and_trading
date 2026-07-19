@@ -24,6 +24,13 @@ const CaptainProfilePage = lazy(() =>
     default: m.CaptainProfilePage,
   })),
 );
+// First-login-only surface — most sessions never mount it, so it stays lazy
+// (performance-budget.md: big secondary UI loads on demand).
+const OnboardingModal = lazy(() =>
+  import("./components/OnboardingModal").then((m) => ({
+    default: m.OnboardingModal,
+  })),
+);
 
 function ActivePage() {
   const { activePage } = useAppState();
@@ -41,12 +48,25 @@ function ActivePage() {
  * forge/watchlist/weather modules (performance-budget.md).
  */
 export default function AuthedApp() {
-  const { needsLegalAck, acknowledgeLegal, budgetToast, clearBudgetToast } =
-    useAppState();
+  const {
+    needsLegalAck,
+    acknowledgeLegal,
+    needsOnboardingModal,
+    budgetToast,
+    clearBudgetToast,
+  } = useAppState();
 
   return (
     <AppShell>
-      {needsLegalAck ? (
+      {/* First login: Onboarding leads and carries the disclaimer as its last
+          step (Acknowledge clears the legal gate too). If the user closes it
+          early, the standalone legal modal pops next — the disclaimer is
+          never skippable. Returning users get the legal gate as before. */}
+      {needsOnboardingModal ? (
+        <Suspense fallback={null}>
+          <OnboardingModal />
+        </Suspense>
+      ) : needsLegalAck ? (
         <ComingSoonOverlay variant="legal" onAcknowledge={acknowledgeLegal} />
       ) : null}
       <MarketBudgetToasts />
