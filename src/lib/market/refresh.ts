@@ -3,7 +3,15 @@
  * AppState owns loading; call after auth / when holdings change.
  */
 
-import type { Strategy } from "../../types";
+import type {
+  CandleInterval,
+  FundamentalSnapshot,
+  MarketContext,
+  Strategy,
+  TechnicalSnapshot,
+  TimeframedIndicators,
+} from "../../types";
+import { TICKERS } from "../../data";
 import {
   fetchMarketContext,
   fetchMarketFundamentals,
@@ -17,13 +25,52 @@ import {
   setLiveMarketContext,
   setLiveQuotes,
   setLiveTechnicals,
+  setLiveTechnicalsByTimeframe,
   setProviderBudgets,
 } from "./liveCache";
-import type {
-  FundamentalSnapshot,
-  MarketContext,
-  TechnicalSnapshot,
-} from "../../types";
+import { neededTimeframesForStrategies } from "./neededTimeframes";
+
+/** GICS sector → SPDR sector ETF (taxonomy.ts keys). Powers sectorEtf1mChangePct. */
+const SECTOR_ETF: Record<string, string> = {
+  Energy: "XLE",
+  Materials: "XLB",
+  Industrials: "XLI",
+  "Consumer Discretionary": "XLY",
+  "Consumer Staples": "XLP",
+  "Health Care": "XLV",
+  Financials: "XLF",
+  "Information Technology": "XLK",
+  "Communication Services": "XLC",
+  Utilities: "XLU",
+  "Real Estate": "XLRE",
+};
+
+/**
+ * Sector ETF only for researched tickers (TICKERS registry company facts) —
+ * bootstrap tickers carry a placeholder sector, and scoring a real ETF against
+ * a guessed sector would fabricate data.
+ */
+function sectorEtfFor(ticker: string): string | undefined {
+  const sector = TICKERS[ticker]?.sector;
+  return sector ? SECTOR_ETF[sector] : undefined;
+}
+
+/** Weekdays (Mon–Fri) from today until `isoDate` — trading-day approximation. */
+function weekdaysUntil(isoDate: string): number | null {
+  const target = new Date(`${isoDate}T00:00:00`);
+  if (Number.isNaN(target.getTime())) return null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  if (target <= today) return 0;
+  let count = 0;
+  const cursor = new Date(today);
+  while (cursor < target) {
+    cursor.setDate(cursor.getDate() + 1);
+    const day = cursor.getDay();
+    if (day !== 0 && day !== 6) count += 1;
+  }
+  return count;
+}
 
 export async function refreshLiveMarketForPortfolios(
   tickers: string[],
@@ -49,6 +96,9 @@ export async function refreshLiveMarketForPortfolios(
     setLiveQuotes(mapped);
   }
 
+  // Candle Times needed by enabled timeframed chips on applied strategies.
+  const timeframes = neededTimeframesForStrategies(appliedStrategies);
+
   // Fundamentals + technicals — sequential to respect free-tier budgets.
   for (const ticker of unique.slice(0, 25)) {
     const fundy = await fetchMarketFundamentals(ticker);
@@ -56,10 +106,31 @@ export async function refreshLiveMarketForPortfolios(
     if (fundy?.fundamentals) {
       setLiveFundamentals(ticker, fundy.fundamentals as FundamentalSnapshot);
     }
-    const tech = await fetchMarketTechnicals(ticker);
+    const tech = await fetchMarketTechnicals(ticker, {
+      sectorEtf: sectorEtfFor(ticker),
+      timeframes,
+    });
     if (tech?.budgets) setProviderBudgets(tech.budgets);
     if (tech?.technicals) {
-      setLiveTechnicals(ticker, tech.technicals as TechnicalSnapshot);
+      // daysUntilEarnings derives from the fundamentals pull (calendarEvents
+      // next earnings date) — the chart-only technicals payload can't know it.
+      const nextEarnings = (fundy?.fundamentals as FundamentalSnapshot | null)
+        ?.nextEarningsDate;
+      const technicals = tech.technicals as TechnicalSnapshot;
+      setLiveTechnicals(ticker, {
+        ...technicals,
+        daysUntilEarnings: nextEarnings
+          ? weekdaysUntil(nextEarnings)
+          : technicals.daysUntilEarnings,
+      });
+    }
+    if (tech?.byTimeframe) {
+      setLiveTechnicalsByTimeframe(
+        ticker,
+        tech.byTimeframe as Partial<
+          Record<CandleInterval, TimeframedIndicators>
+        >,
+      );
     }
   }
 

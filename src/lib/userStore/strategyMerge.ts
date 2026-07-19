@@ -5,6 +5,7 @@ import {
   clampCandleInterval,
 } from "../forge/scheduler";
 import { isLiveSupportedMetric } from "../forge/liveCoverage";
+import { migrateStrategyMetrics } from "../forge/metricMigration";
 import type { MetricKey, RuleChip, RuleTag } from "../../types";
 
 const APPLY_ONLY_KEYS = new Set([
@@ -34,7 +35,8 @@ function pruneUnsupportedChips(chips: RuleChip[] | undefined): RuleChip[] {
 }
 
 function pruneStrategyBody(strategy: Strategy): Strategy {
-  const rules = pruneUnsupportedChips(strategy.rules);
+  const migrated = migrateStrategyMetrics(strategy);
+  const rules = pruneUnsupportedChips(migrated.rules);
   const allowedIds = new Set(rules.map((chip) => chip.id));
   const pruneTags = (tags: RuleTag[] | undefined): RuleTag[] | undefined => {
     if (!tags) return tags;
@@ -43,16 +45,16 @@ function pruneStrategyBody(strategy: Strategy): Strategy {
       chipIds: tag.chipIds.filter((id) => allowedIds.has(id) || tag.system),
     }));
   };
-  const checkInterval = clampCadenceInterval(strategy.checkInterval);
+  const checkInterval = clampCadenceInterval(migrated.checkInterval);
   return {
-    ...strategy,
+    ...migrated,
     checkInterval,
-    technicalsInterval: clampCandleInterval(strategy.technicalsInterval),
+    technicalsInterval: clampCandleInterval(migrated.technicalsInterval),
     rules,
-    ruleTags: pruneTags(strategy.ruleTags),
-    trimZoneRules: pruneUnsupportedChips(strategy.trimZoneRules),
-    addZoneRules: pruneUnsupportedChips(strategy.addZoneRules),
-    goToCashRules: pruneUnsupportedChips(strategy.goToCashRules),
+    ruleTags: pruneTags(migrated.ruleTags),
+    trimZoneRules: pruneUnsupportedChips(migrated.trimZoneRules),
+    addZoneRules: pruneUnsupportedChips(migrated.addZoneRules),
+    goToCashRules: pruneUnsupportedChips(migrated.goToCashRules),
   };
 }
 

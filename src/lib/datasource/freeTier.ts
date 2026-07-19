@@ -1,11 +1,13 @@
 import type { DataSource } from "./DataSource";
 import { mockDataSource } from "./mock";
+import { mergeTechnicalsByTimeframe } from "../forge/timeframedFromLegacy";
 import {
   getBootstrapName,
   getLiveFundamentals,
   getLiveMarketContext,
   getLiveQuote,
   getLiveTechnicals,
+  getLiveTechnicalsByTimeframe,
   registerBootstrapTickers,
 } from "../market/liveCache";
 import { fetchMarketSearch } from "../market/client";
@@ -153,6 +155,11 @@ export const freeTierDataSource: DataSource = {
   getFundamentals: (ticker) =>
     getLiveFundamentals(ticker) ?? emptyFundamentalShape(),
   getTechnicals: (ticker) => getLiveTechnicals(ticker) ?? emptyTechnicalShape(),
+  getTechnicalsByTimeframe: (ticker) =>
+    mergeTechnicalsByTimeframe(
+      getLiveTechnicals(ticker) ?? emptyTechnicalShape(),
+      getLiveTechnicalsByTimeframe(ticker),
+    ),
   getMarketContext: () => getLiveMarketContext() ?? EMPTY_LIVE_CONTEXT,
   getBuckets: () => mockDataSource.getBuckets(),
   searchTickers: (query) => {

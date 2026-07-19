@@ -9,6 +9,7 @@ import {
   conditionLabel,
   formatChipCondition,
   metricsForCategory,
+  resolveChipTime,
   type MetricMeta,
 } from "../../lib/forge/metrics";
 import { isExamplePlan, normalizePlanEdit } from "../../lib/forge/myPlan";
@@ -28,12 +29,45 @@ import {
   X,
 } from "../../lib/icons";
 import type {
+  CandleInterval,
   DateRange,
   MetricKey,
   RuleCategory,
   RuleChip,
   RuleOperator,
 } from "../../types";
+
+/** Render metric `<option>`s, grouped when MetricMeta.group is set. */
+function MetricSelectOptions({ options }: { options: MetricMeta[] }) {
+  const groups: { label: string | null; items: MetricMeta[] }[] = [];
+  for (const option of options) {
+    const label = option.group ?? null;
+    const last = groups[groups.length - 1];
+    if (last && last.label === label) last.items.push(option);
+    else groups.push({ label, items: [option] });
+  }
+  return (
+    <>
+      {groups.map((group) =>
+        group.label ? (
+          <optgroup key={group.label} label={group.label}>
+            {group.items.map((option) => (
+              <option key={option.key} value={option.key}>
+                {option.label}
+              </option>
+            ))}
+          </optgroup>
+        ) : (
+          group.items.map((option) => (
+            <option key={option.key} value={option.key}>
+              {option.label}
+            </option>
+          ))
+        ),
+      )}
+    </>
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Rule Chips table modal (per the Figma table designs). One reusable component
@@ -44,9 +78,11 @@ import type {
 // reflect live edits. Chrome (backdrop, title, intro, totals, footer) comes
 // from ForgeTableModal — do not re-implement that shell here.
 //
-// Columns: CHIP LABEL · DATA POINT · DATE RANGE · CONDITION · VALUE ·
+// Columns: CHIP LABEL · DATA POINT · TIME · CONDITION · VALUE ·
 // RULE WEIGHT · [MY PLAN on Risk] · ACTIONS. Rule weights should total 100%.
 // On mobile the rows reflow into stacked cards (index.css).
+// Time = fiscal/range label for fundamentals, or candle size for timeframed
+// technicals (defaults from strategy technicalsInterval when provided).
 //
 // "Add Rule" is a split button (ActionMenu): "Add new blank chip" is the
 // original behavior; "Select chip from system defaults or custom chips" opens
@@ -191,6 +227,7 @@ export function RuleChipsTableModal({
   onDraftChange,
   onCancel,
   onDone,
+  defaultTime,
 }: {
   category: RuleCategory;
   /** The strategy's current chips for this category (draft source). */
@@ -201,6 +238,8 @@ export function RuleChipsTableModal({
   onCancel: () => void;
   /** Close the modal; edits are already committed. */
   onDone: () => void;
+  /** Strategy cadence technicalsInterval — default Time for new technical chips. */
+  defaultTime?: CandleInterval;
 }) {
   const { chipLibrary, saveChipToLibrary, removeChipFromLibrary, updateChipInLibrary } =
     useAppState();
@@ -315,7 +354,7 @@ export function RuleChipsTableModal({
       return {
         ...current,
         metric: metricKey,
-        dateRange: metricMeta.defaultDateRange,
+        dateRange: resolveChipTime(metricKey, defaultTime),
         operator,
         value,
       };
@@ -401,7 +440,7 @@ export function RuleChipsTableModal({
         return {
           ...chip,
           metric: metricKey,
-          dateRange: metricMeta.defaultDateRange,
+          dateRange: resolveChipTime(metricKey, defaultTime),
           operator,
           value,
         };
@@ -416,7 +455,7 @@ export function RuleChipsTableModal({
       label: "New Rule",
       category,
       metric: metricMeta.key,
-      dateRange: metricMeta.defaultDateRange,
+      dateRange: resolveChipTime(metricMeta.key, defaultTime),
       operator: metricMeta.operators[0],
       value:
         metricMeta.format === "boolean"
@@ -445,7 +484,7 @@ export function RuleChipsTableModal({
   const headers: { key: SortKey; label: string }[] = [
     { key: "label", label: "Chip Label" },
     { key: "metric", label: "Data Point" },
-    { key: "dateRange", label: "Date Range" },
+    { key: "dateRange", label: "Time" },
     { key: "operator", label: "Condition" },
     { key: "value", label: "Value" },
     { key: "weightPct", label: "Rule Weight" },
@@ -556,16 +595,12 @@ export function RuleChipsTableModal({
                             handleLibraryMetricChange(event.target.value as MetricKey)
                           }
                         >
-                          {metricOptions.map((option) => (
-                            <option key={option.key} value={option.key}>
-                              {option.label}
-                            </option>
-                          ))}
+                          <MetricSelectOptions options={metricOptions} />
                         </select>
                       </label>
                       <label className="config-field">
                         <span className="config-label forge-label forge-label--muted">
-                          Date Range
+                          Time
                         </span>
                         <select
                           className="input"
@@ -816,18 +851,14 @@ export function RuleChipsTableModal({
                           handleMetricChange(chip.id, event.target.value as MetricKey)
                         }
                       >
-                        {metricOptions.map((option) => (
-                          <option key={option.key} value={option.key}>
-                            {option.label}
-                          </option>
-                        ))}
+                        <MetricSelectOptions options={metricOptions} />
                       </select>
                     </div>
-                    <div className="forge-table-cell" role="cell" data-label="Date Range">
+                    <div className="forge-table-cell" role="cell" data-label="Time">
                       <select
                         className="input forge-cell-input forge-cell-input--mono"
                         value={chip.dateRange}
-                        aria-label="Date range"
+                        aria-label="Time"
                         onChange={(event) =>
                           patchChip(chip.id, { dateRange: event.target.value as DateRange })
                         }

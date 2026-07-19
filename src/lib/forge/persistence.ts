@@ -2,6 +2,7 @@ import type { MetricKey, RuleChip, RuleTag, Strategy } from "../../types";
 import { CHIP_LIBRARY_SEED, DEFAULT_STRATEGIES, PORTFOLIOS } from "../../data";
 import { portfolioIdsReferencingStrategy } from "./appliedPortfolios";
 import { isLiveSupportedMetric } from "./liveCoverage";
+import { migrateChips, migrateStrategyMetrics } from "./metricMigration";
 import { clampCadenceInterval, clampCandleInterval } from "./scheduler";
 
 const STORAGE_VERSION = 1;
@@ -157,10 +158,11 @@ function pruneUnsupportedChips(chips: RuleChip[] | undefined): RuleChip[] {
   );
 }
 
-/** Layer 1 + cadence: drop unsupported metrics; clamp intervals to enabled set. */
+/** Layer 1 + cadence: migrate legacy keys, drop unsupported, clamp intervals. */
 function pruneStrategiesForLive(strategies: Strategy[]): Strategy[] {
   return strategies.map((strategy) => {
-    const rules = pruneUnsupportedChips(strategy.rules);
+    const migrated = migrateStrategyMetrics(strategy);
+    const rules = pruneUnsupportedChips(migrated.rules);
     const allowedIds = new Set(rules.map((chip) => chip.id));
     const pruneTags = (tags: RuleTag[] | undefined): RuleTag[] | undefined => {
       if (!tags) return tags;
@@ -169,16 +171,16 @@ function pruneStrategiesForLive(strategies: Strategy[]): Strategy[] {
         chipIds: tag.chipIds.filter((id) => allowedIds.has(id) || tag.system),
       }));
     };
-    const checkInterval = clampCadenceInterval(strategy.checkInterval);
+    const checkInterval = clampCadenceInterval(migrated.checkInterval);
     return {
-      ...strategy,
+      ...migrated,
       checkInterval,
-      technicalsInterval: clampCandleInterval(strategy.technicalsInterval),
+      technicalsInterval: clampCandleInterval(migrated.technicalsInterval),
       rules,
-      ruleTags: pruneTags(strategy.ruleTags),
-      trimZoneRules: pruneUnsupportedChips(strategy.trimZoneRules),
-      addZoneRules: pruneUnsupportedChips(strategy.addZoneRules),
-      goToCashRules: pruneUnsupportedChips(strategy.goToCashRules),
+      ruleTags: pruneTags(migrated.ruleTags),
+      trimZoneRules: pruneUnsupportedChips(migrated.trimZoneRules),
+      addZoneRules: pruneUnsupportedChips(migrated.addZoneRules),
+      goToCashRules: pruneUnsupportedChips(migrated.goToCashRules),
     };
   });
 }
@@ -215,7 +217,7 @@ export function loadPersistedChipLibrary(): RuleChip[] {
   const base = stored
     ? backfillChipLibraryPlans(stored)
     : CHIP_LIBRARY_SEED;
-  return pruneUnsupportedChips(base);
+  return pruneUnsupportedChips(migrateChips(base));
 }
 
 export function persistStrategies(strategies: Strategy[]): void {

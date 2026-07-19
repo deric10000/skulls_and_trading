@@ -1259,6 +1259,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       const ctx: MetricContext = {
         fundamentals: dataSource.getFundamentals(ticker),
         technicals: dataSource.getTechnicals(ticker),
+        technicalsByTimeframe: dataSource.getTechnicalsByTimeframe(ticker),
         market: dataSource.getMarketContext(),
         openPnlPct: holding?.openPnlPct,
         weightPct,

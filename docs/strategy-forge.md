@@ -169,8 +169,10 @@ until every check passes:
   and offers Daily/Weekly/Monthly (**1D default**), 4 intraday session-closes
   (premarket 09:30 / regular 16:00 / after-hours 20:00 / overnight 04:00 ET),
   and 4h/1h/30m candles; **15m ships disabled ("Future Capability")**.
-  `technicalsInterval` is the technicals candle (candle-only). Fundamentals
-  refresh on a fixed daily cadence.
+  `technicalsInterval` is the **default Time** (candle size) for new technical
+  rule chips; each chip can override Time in the rule table (15m–1M). Cadence
+  (when checks run) is separate from chip Time (which candles an indicator uses).
+  Fundamentals refresh on a fixed daily cadence.
 - **Cadence feature (opt-in, per strategy):** a master **Enable cadence** toggle
   plus notification toggles — **Auto-refresh on cadence** (wired) and
   **Email / Text / Browser** (disabled placeholders, "Future Capability"). All

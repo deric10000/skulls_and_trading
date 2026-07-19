@@ -1,6 +1,7 @@
 import type {
   Allocation,
   Bucket,
+  CandleInterval,
   FundamentalSnapshot,
   LogEntry,
   MarketContext,
@@ -13,6 +14,7 @@ import type {
   TickerAnalysis,
   TickerInfo,
   TickerQuote,
+  TimeframedIndicators,
   WatchlistItem,
 } from "../../types";
 import type { MarketWeatherSnapshot, MarketWeatherTimeframe } from "../weather/types";
@@ -89,6 +91,14 @@ export interface DataSource {
 
   /** Latest technical snapshot for a ticker, or undefined if untracked. */
   getTechnicals(ticker: string): TechnicalSnapshot | undefined;
+
+  /**
+   * Per-candle-Time indicator bundles. Mock adapts 1D/1W from the legacy
+   * snapshot; FreeTier merges live byTimeframe over that adapter.
+   */
+  getTechnicalsByTimeframe(
+    ticker: string,
+  ): Partial<Record<CandleInterval, TimeframedIndicators>>;
 
   /** Plan-safe market mood (VIX, SPY RSI) shared across the scoring engine. */
   getMarketContext(): MarketContext;

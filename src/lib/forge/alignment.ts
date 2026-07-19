@@ -189,6 +189,7 @@ export function computePortfolioAlignment(
       const ctx: MetricContext = {
         fundamentals: dataSource.getFundamentals(ticker),
         technicals: dataSource.getTechnicals(ticker),
+        technicalsByTimeframe: dataSource.getTechnicalsByTimeframe(ticker),
         market,
         weightPct: weightPctFor(ticker),
         openPnlPct: holding.openPnlPct,
@@ -220,6 +221,7 @@ export function computePortfolioAlignment(
       const ctx: MetricContext = {
         fundamentals: dataSource.getFundamentals(ticker),
         technicals: dataSource.getTechnicals(ticker),
+        technicalsByTimeframe: dataSource.getTechnicalsByTimeframe(ticker),
         market,
         weightPct: weightPctFor(ticker),
         openPnlPct: holding.openPnlPct,
@@ -241,6 +243,7 @@ export function computePortfolioAlignment(
     return {
       fundamentals: dataSource.getFundamentals(ticker),
       technicals: dataSource.getTechnicals(ticker),
+      technicalsByTimeframe: dataSource.getTechnicalsByTimeframe(ticker),
       market,
       weightPct: weightPctFor(ticker),
       openPnlPct: holding.openPnlPct,

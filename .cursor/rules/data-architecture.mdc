@@ -76,6 +76,10 @@ covered by that strategy's `appliedPortfolioIds` for the same source.
   Worker quote TTL is market-hours aware (~5 min live, 1 day closed).
 - Layer 1 coverage: `liveCoverage.ts` / Forge dropdowns / default strategies.
   Layer 2: null = no-data. Layer 3: `NeedsDataReviewFlag` for critical gaps.
+  Timeframed technicals: Worker computes comprehensive-core indicators from
+  Yahoo OHLCV per chip Time (`getTechnicalsByTimeframe` / `?timeframes=`).
+  Excluded (no honest free source): `interestCoverage`, `dividendGrowth5yPct`,
+  `buybackYieldPct`. Never fabricate a value to widen coverage.
 
 ## Market Weather (`src/lib/weather/`)
 

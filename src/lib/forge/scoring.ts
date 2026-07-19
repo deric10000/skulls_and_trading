@@ -1,5 +1,7 @@
 import type {
+  CandleInterval,
   CategoryWeights,
+  DateRange,
   FundamentalSnapshot,
   MarketContext,
   MetricKey,
@@ -12,10 +14,12 @@ import type {
   StatusType,
   Strategy,
   TechnicalSnapshot,
+  TimeframedIndicators,
+  TimeframedMetricKey,
 } from "../../types";
 import { DEFAULT_CATEGORY_WEIGHTS } from "../../data";
 import { isCategoryEnabled } from "./categoryEnabled";
-import { CATEGORY_ORDER, METRICS } from "./metrics";
+import { CATEGORY_ORDER, isTimeframedMetric, METRICS } from "./metrics";
 import {
   LAYER3_ZONE_ORDER,
   LAYER3_ZONES,
@@ -43,11 +47,28 @@ import { bandFromConviction, resolveStatus, type ResolveContext } from "./status
 export interface MetricContext {
   fundamentals?: FundamentalSnapshot;
   technicals?: TechnicalSnapshot;
+  /** Per-candle-Time indicators for timeframed MetricKeys. */
+  technicalsByTimeframe?: Partial<Record<CandleInterval, TimeframedIndicators>>;
   market: MarketContext;
   weightPct?: number; // this name's share of the portfolio book
   openPnlPct?: number; // unrealized P&L vs avg cost
   holdingDays?: number; // calendar days since the position was entered
   timeframe?: string; // intended holding horizon (qualitative)
+}
+
+const CANDLE_TIMES = new Set<string>([
+  "15m",
+  "30m",
+  "1h",
+  "4h",
+  "1D",
+  "1W",
+  "1M",
+]);
+
+function resolveChipCandleTime(dateRange: DateRange): CandleInterval {
+  if (CANDLE_TIMES.has(dateRange)) return dateRange as CandleInterval;
+  return "1D";
 }
 
 export type ChipOutcome = "pass" | "fail" | "no-data";
@@ -78,7 +99,11 @@ export interface StockAlignment {
 
 // ---- Metric reads -------------------------------------------------------
 
-export function readMetric(metric: MetricKey, ctx: MetricContext): MetricValue {
+export function readMetric(
+  metric: MetricKey,
+  ctx: MetricContext,
+  chipDateRange?: DateRange,
+): MetricValue {
   const source = METRICS[metric]?.source;
   switch (source) {
     case "fundamental":
@@ -86,6 +111,12 @@ export function readMetric(metric: MetricKey, ctx: MetricContext): MetricValue {
         ? ((ctx.fundamentals[metric as keyof FundamentalSnapshot] as MetricValue) ?? null)
         : null;
     case "technical":
+      if (isTimeframedMetric(metric)) {
+        const tf = resolveChipCandleTime(chipDateRange ?? "1D");
+        const bundle = ctx.technicalsByTimeframe?.[tf];
+        if (!bundle) return null;
+        return (bundle[metric as TimeframedMetricKey] as MetricValue) ?? null;
+      }
       return ctx.technicals
         ? ((ctx.technicals[metric as keyof TechnicalSnapshot] as MetricValue) ?? null)
         : null;
@@ -133,7 +164,7 @@ export function evaluateChip(chip: RuleChip, ctx: MetricContext): ChipResult {
     return { chip, outcome: pass ? "pass" : "fail", value: null };
   }
 
-  const value = readMetric(chip.metric, ctx);
+  const value = readMetric(chip.metric, ctx, chip.dateRange);
   if (value == null) return { chip, outcome: "no-data", value: null };
 
   // Boolean flags are stored as 1/0 and tested with `is TRUE` / `is FALSE`.

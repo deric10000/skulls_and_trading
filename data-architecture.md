@@ -126,7 +126,23 @@ symbol search are filled through Cloudflare Worker routes under `/api/market/*`
    session, 1 day when closed); fundamentals/technicals stay daily. Scheduler in
    `src/lib/forge/scheduler.ts` gates on ET session windows + tab visibility.
 6. **Availability layers:** `liveCoverage.ts` + Forge dropdown prune; null =
-   no-data; critical nulls → `NeedsDataReviewFlag`.
+   no-data; critical nulls → `NeedsDataReviewFlag`. Free-tier coverage is
+   maximal for the current channels: fundamentals map from Yahoo quoteSummary
+   (`financialData` / `defaultKeyStatistics` / `summaryDetail` /
+   `calendarEvents` — module + unit fidelity matters: D/E percent→ratio,
+   cash-flow dollars→$B). **Timeframed technicals:** Yahoo returns raw OHLCV
+   only; the Worker (`worker/indicators.ts` + `?timeframes=`) computes a
+   comprehensive-core TA library (RSI, Stochastic, StochRSI, Williams %R, CCI,
+   MACD line/signal/hist, ROC, SMA/EMA, ADX/+DI/−DI, Aroon, ATR%, Bollinger
+   %B/bandwidth, Donchian, relative volume, session VWAP, MFI, CMF, OBV %chg)
+   per candle Time (15m/30m/1h/4h/1D/1W/1M). Chips store Time in
+   `RuleChip.dateRange`; scoring reads `getTechnicalsByTimeframe`. Refresh
+   fetches only Times needed by enabled chips. Legacy daily snapshot fields
+   remain for non-timeframed reads + mock seeds. Also daily: 1Y beta vs SPY,
+   `daysUntilEarnings`, `sectorEtf1mChangePct` (GICS→SPDR, researched
+   `TICKERS` only). Excluded (no honest free source; never fabricate):
+   `interestCoverage`, `dividendGrowth5yPct`, `buybackYieldPct` — see
+   `liveCoverage.ts`.
 7. **Weather:** FreeTier builds readings from live `MarketContext` via
    `weather/live.ts` (mock seeds quarantined for `mockDataSource` only).
    Sector/industry keys come from `weather/taxonomy.ts` (GICS 11 / 74 SSOT).

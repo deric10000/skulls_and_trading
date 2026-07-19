@@ -10,6 +10,7 @@ import {
   conditionLabel,
   formatChipCondition,
   metricsForCategory,
+  resolveChipTime,
   type MetricMeta,
 } from "../../lib/forge/metrics";
 import { isExamplePlan, normalizePlanEdit } from "../../lib/forge/myPlan";
@@ -22,6 +23,7 @@ import {
   Trash,
 } from "../../lib/icons";
 import type {
+  CandleInterval,
   MetricKey,
   RuleChip,
   RuleOperator,
@@ -202,6 +204,7 @@ export function Layer3ZoneTableModal({
   onDraftChange,
   onCancel,
   onDone,
+  defaultTime,
 }: {
   zone: Layer3ZoneMeta;
   rules: RuleChip[];
@@ -213,6 +216,8 @@ export function Layer3ZoneTableModal({
   onDraftChange: (next: { rules: RuleChip[]; tags: RuleTag[] }) => void;
   onCancel: () => void;
   onDone: () => void;
+  /** Strategy technicalsInterval — default Time for new timeframed chips. */
+  defaultTime?: CandleInterval;
 }) {
   const isMobile = useIsMobile();
   const metricOptions = useMemo(() => allMetricOptions(), []);
@@ -303,7 +308,7 @@ export function Layer3ZoneTableModal({
             : 0;
     patchChip(id, {
       metric: metricKey,
-      dateRange: metricMeta.defaultDateRange,
+      dateRange: resolveChipTime(metricKey, defaultTime),
       operator,
       value,
     });
@@ -316,7 +321,7 @@ export function Layer3ZoneTableModal({
       label: zone.blankChipLabel,
       category: "trade",
       metric: metricMeta.key,
-      dateRange: metricMeta.defaultDateRange,
+      dateRange: resolveChipTime(metricMeta.key, defaultTime),
       operator: metricMeta.operators[0],
       value:
         metricMeta.format === "boolean"
@@ -400,7 +405,7 @@ export function Layer3ZoneTableModal({
   const headers: { key: SortKey; label: string }[] = [
     { key: "label", label: "Chip Label" },
     { key: "metric", label: "Data Point" },
-    { key: "dateRange", label: "Date Range" },
+    { key: "dateRange", label: "Time" },
     { key: "operator", label: "Condition" },
     { key: "value", label: "Value" },
     { key: "weightPct", label: "Rule Weight" },
@@ -640,11 +645,11 @@ export function Layer3ZoneTableModal({
                             ))}
                           </select>
                         </div>
-                        <div className="forge-table-cell" role="cell" data-label="Date Range">
+                        <div className="forge-table-cell" role="cell" data-label="Time">
                           <select
                             className="input forge-cell-input"
                             value={chip.dateRange}
-                            aria-label="Date range"
+                            aria-label="Time"
                             onChange={(event) =>
                               patchChip(chip.id, {
                                 dateRange: event.target.value as RuleChip["dateRange"],

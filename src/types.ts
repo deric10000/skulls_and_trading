@@ -392,8 +392,9 @@ export type RuleCategory =
 
 export type RuleOperator = ">" | ">=" | "<" | "<=" | "between" | "is";
 
-// The date range a chip's data point reflects — display metadata carried on
-// the chip (the mock snapshots already embody these ranges).
+// The date range / Time a chip's data point reflects. Fundamentals use fiscal
+// labels; timeframed technicals use CandleInterval values in this same field
+// (UI column header: "Time").
 export type DateRange =
   | "TTM / Latest FY"
   | "Most Recent Quarter"
@@ -406,7 +407,14 @@ export type DateRange =
   | "200D"
   | "20D"
   | "14D"
-  | "5D";
+  | "5D"
+  // Candle intervals for timeframed technical indicators (chip Time column)
+  | "15m"
+  | "30m"
+  | "1h"
+  | "4h"
+  | "1D"
+  | "1W";
 
 // Keys into the metric registry (src/lib/forge/metrics.ts). Kept as a string
 // union so the registry, the table modals, and the snapshots stay in sync.
@@ -436,22 +444,43 @@ export type MetricKey =
   | "payoutRatioPct"
   | "dividendGrowth5yPct"
   | "buybackYieldPct"
-  // Technicals — trend / momentum / setup
-  | "priceAbove200dSma"
-  | "priceAbove50dSma"
-  | "priceAbove20dSma"
-  | "rsi14"
-  | "weeklyRsi"
-  | "drawdownFrom52wHighPct"
-  | "priceChange3mPct"
+  // Technicals — timeframed (indicator + chip Time = candle size)
+  | "rsi"
+  | "stochK"
+  | "stochD"
+  | "stochRsi"
+  | "williamsR"
+  | "cci"
+  | "macdHistogram"
+  | "macdLine"
+  | "macdSignal"
+  | "roc"
+  | "priceAboveSma20"
+  | "priceAboveSma50"
+  | "priceAboveSma200"
+  | "priceVsEma10Pct"
+  | "priceVsEma20Pct"
+  | "priceVsEma50Pct"
+  | "adx"
+  | "plusDi"
+  | "minusDi"
+  | "aroonUp"
+  | "aroonDown"
+  | "aroonOsc"
+  | "atrPct"
+  | "bollingerPercentB"
+  | "bollingerBandwidth"
+  | "donchianPosition"
   | "relativeVolume"
   | "priceVsVwapPct"
-  | "priceVs10EmaPct"
-  | "priceVs20EmaPct"
-  | "priceVs50EmaPct"
+  | "mfi"
+  | "chaikinMoneyFlow"
+  | "obvChange20"
+  // Technicals — not timeframed (fixed daily / calendar reads)
+  | "drawdownFrom52wHighPct"
+  | "priceChange3mPct"
   | "daysUntilEarnings"
-  // Stock risk
-  | "atrPct14d"
+  // Stock risk (non-timeframed)
   | "beta1y"
   | "avgDollarVolume20d"
   | "sectorEtf1mChangePct"
@@ -469,12 +498,47 @@ export type MetricKey =
   // Qualitative (string "is" match), e.g. intended timeframe
   | "timeframe";
 
+/** Metric keys that are computed per candle Time (see TimeframedIndicators). */
+export type TimeframedMetricKey =
+  | "rsi"
+  | "stochK"
+  | "stochD"
+  | "stochRsi"
+  | "williamsR"
+  | "cci"
+  | "macdHistogram"
+  | "macdLine"
+  | "macdSignal"
+  | "roc"
+  | "priceAboveSma20"
+  | "priceAboveSma50"
+  | "priceAboveSma200"
+  | "priceVsEma10Pct"
+  | "priceVsEma20Pct"
+  | "priceVsEma50Pct"
+  | "adx"
+  | "plusDi"
+  | "minusDi"
+  | "aroonUp"
+  | "aroonDown"
+  | "aroonOsc"
+  | "atrPct"
+  | "bollingerPercentB"
+  | "bollingerBandwidth"
+  | "donchianPosition"
+  | "relativeVolume"
+  | "priceVsVwapPct"
+  | "mfi"
+  | "chaikinMoneyFlow"
+  | "obvChange20";
+
 export interface RuleChip {
   id: string;
   label: string; // user-defined, e.g. "Revenue Growth"
   category: RuleCategory;
   metric: MetricKey; // the data point being tested
-  dateRange: DateRange; // the range the data point reflects
+  /** Fiscal/range label, or candle Time for timeframed technicals. */
+  dateRange: DateRange;
   operator: RuleOperator; // rendered as "is at least", "is below", …
   value: number | [number, number] | string;
   weightPct: number; // Rule Weight — % importance within its category (chips sum to 100)
@@ -581,6 +645,11 @@ export interface FundamentalSnapshot {
   payoutRatioPct: MetricValue;
   dividendGrowth5yPct: MetricValue;
   buybackYieldPct: MetricValue;
+  /**
+   * Next scheduled earnings date (ISO, from Yahoo calendarEvents). Not a chip
+   * metric itself — the live refresh derives technicals.daysUntilEarnings from it.
+   */
+  nextEarningsDate?: string | null;
   asOf: string; // ISO date the snapshot reflects
   source: MarketDataSource;
   // Where this snapshot's figures came from and any per-field caveats (e.g.
@@ -590,6 +659,11 @@ export interface FundamentalSnapshot {
   sourceNotes?: string;
 }
 
+/**
+ * Legacy daily (and weekly RSI) technical snapshot — mock seeds + Worker daily
+ * payload still use these field names. Timeframed chip metrics read from
+ * `TimeframedIndicators` via `getTechnicalsByTimeframe` instead.
+ */
 export interface TechnicalSnapshot {
   // Trend flags (1 = true, 0 = false, null = no data)
   priceAbove200dSma: MetricValue;
@@ -614,6 +688,45 @@ export interface TechnicalSnapshot {
   asOf: string;
   source: MarketDataSource;
   sourceNotes?: string; // see FundamentalSnapshot.sourceNotes
+}
+
+/**
+ * Per-candle-Time indicator bundle. Keys match MetricKey timeframed entries.
+ * Missing lookback → null ("no data"), never fabricated.
+ */
+export interface TimeframedIndicators {
+  rsi: MetricValue;
+  stochK: MetricValue;
+  stochD: MetricValue;
+  stochRsi: MetricValue;
+  williamsR: MetricValue;
+  cci: MetricValue;
+  macdHistogram: MetricValue;
+  macdLine: MetricValue;
+  macdSignal: MetricValue;
+  roc: MetricValue;
+  priceAboveSma20: MetricValue;
+  priceAboveSma50: MetricValue;
+  priceAboveSma200: MetricValue;
+  priceVsEma10Pct: MetricValue;
+  priceVsEma20Pct: MetricValue;
+  priceVsEma50Pct: MetricValue;
+  adx: MetricValue;
+  plusDi: MetricValue;
+  minusDi: MetricValue;
+  aroonUp: MetricValue;
+  aroonDown: MetricValue;
+  aroonOsc: MetricValue;
+  atrPct: MetricValue;
+  bollingerPercentB: MetricValue;
+  bollingerBandwidth: MetricValue;
+  donchianPosition: MetricValue;
+  relativeVolume: MetricValue;
+  priceVsVwapPct: MetricValue;
+  mfi: MetricValue;
+  chaikinMoneyFlow: MetricValue;
+  obvChange20: MetricValue;
+  asOf: string;
 }
 
 export interface MarketContext {

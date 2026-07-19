@@ -3,6 +3,18 @@
  * Yahoo (primary, no key) + optional Finnhub. Secrets stay on the Worker.
  */
 
+import {
+  type CandleTime,
+  type OhlcvBar,
+  type TimeframedIndicatorsPayload,
+  TIMEFRAME_FETCH,
+  INTRADAY_TIMES,
+  candleTtlMs,
+  computeTimeframedIndicators,
+  emptyTimeframedIndicators,
+  resampleTo4h,
+} from "./indicators";
+
 export interface MarketEnv {
   FINNHUB_API_KEY?: string;
   FRED_API_KEY?: string;
@@ -73,6 +85,8 @@ const quoteCache = new Map<string, CacheEntry<QuotePayload>>();
 const searchCache = new Map<string, CacheEntry<SearchHit[]>>();
 const fundyCache = new Map<string, CacheEntry<Record<string, unknown>>>();
 const techCache = new Map<string, CacheEntry<Record<string, unknown>>>();
+/** Per symbol×timeframe indicator bundle (candle TTL during market hours). */
+const tfTechCache = new Map<string, CacheEntry<TimeframedIndicatorsPayload>>();
 const contextCache = new Map<string, CacheEntry<Record<string, unknown>>>();
 
 const budgets: Record<ProviderId, ProviderBudget> = {
@@ -396,10 +410,176 @@ function rsi(values: number[], period = 14): number | null {
   return 100 - 100 / (1 + rs);
 }
 
+function ema(values: number[], period: number): number | null {
+  if (values.length < period) return null;
+  const k = 2 / (period + 1);
+  // Seed with the SMA of the first `period` values, then smooth forward.
+  let value = values.slice(0, period).reduce((a, b) => a + b, 0) / period;
+  for (let i = period; i < values.length; i += 1) {
+    value = values[i] * k + value * (1 - k);
+  }
+  return value;
+}
+
+function extractBars(chart: Record<string, unknown>): OhlcvBar[] {
+  const timestamps = (chart.timestamp ?? []) as Array<number | null>;
+  const indicators = chart.indicators as
+    | {
+        quote?: Array<{
+          open?: Array<number | null>;
+          close?: Array<number | null>;
+          high?: Array<number | null>;
+          low?: Array<number | null>;
+          volume?: Array<number | null>;
+        }>;
+      }
+    | undefined;
+  const quote = indicators?.quote?.[0] ?? {};
+  const opens = quote.open ?? [];
+  const closes = quote.close ?? [];
+  const highs = quote.high ?? [];
+  const lows = quote.low ?? [];
+  const volumes = quote.volume ?? [];
+  const bars: OhlcvBar[] = [];
+  for (let i = 0; i < closes.length; i += 1) {
+    const close = closes[i];
+    const t = timestamps[i];
+    if (typeof close !== "number" || !Number.isFinite(close)) continue;
+    if (typeof t !== "number" || !Number.isFinite(t)) continue;
+    bars.push({
+      t,
+      close,
+      open: typeof opens[i] === "number" && Number.isFinite(opens[i]!) ? opens[i] : null,
+      high: typeof highs[i] === "number" && Number.isFinite(highs[i]!) ? highs[i] : null,
+      low: typeof lows[i] === "number" && Number.isFinite(lows[i]!) ? lows[i] : null,
+      volume:
+        typeof volumes[i] === "number" && Number.isFinite(volumes[i]!)
+          ? volumes[i]
+          : null,
+    });
+  }
+  return bars;
+}
+
+/** Last close of each calendar week (Monday-start), oldest → newest. */
+function weeklyCloses(bars: OhlcvBar[]): number[] {
+  const out: number[] = [];
+  let lastWeek: number | null = null;
+  for (const bar of bars) {
+    // Epoch day 0 (Jan 1 1970) was a Thursday; +3 shifts week starts to Monday.
+    const week = Math.floor((Math.floor(bar.t / 86_400) + 3) / 7);
+    if (week !== lastWeek) {
+      out.push(bar.close);
+      lastWeek = week;
+    } else {
+      out[out.length - 1] = bar.close;
+    }
+  }
+  return out;
+}
+
+/** 14-day ATR as % of the last close (simple TR mean; needs highs/lows). */
+function atrPct(bars: OhlcvBar[], period = 14): number | null {
+  const ranges: number[] = [];
+  for (let i = 1; i < bars.length; i += 1) {
+    const { high, low } = bars[i];
+    const prevClose = bars[i - 1].close;
+    if (high == null || low == null) continue;
+    ranges.push(
+      Math.max(high - low, Math.abs(high - prevClose), Math.abs(low - prevClose)),
+    );
+  }
+  if (ranges.length < period) return null;
+  const atr = ranges.slice(-period).reduce((a, b) => a + b, 0) / period;
+  const last = bars[bars.length - 1]?.close;
+  return last ? (atr / last) * 100 : null;
+}
+
+/** 1Y daily beta vs a benchmark series, aligned on shared timestamps. */
+function betaVsBenchmark(
+  bars: OhlcvBar[],
+  benchmark: { t: number[]; close: number[] } | null,
+): number | null {
+  if (!benchmark) return null;
+  const benchByT = new Map<number, number>();
+  for (let i = 0; i < benchmark.t.length; i += 1) {
+    benchByT.set(benchmark.t[i], benchmark.close[i]);
+  }
+  const stock: number[] = [];
+  const bench: number[] = [];
+  for (const bar of bars) {
+    const b = benchByT.get(bar.t);
+    if (b != null) {
+      stock.push(bar.close);
+      bench.push(b);
+    }
+  }
+  if (stock.length < 61) return null;
+  const rs: number[] = [];
+  const rb: number[] = [];
+  for (let i = 1; i < stock.length; i += 1) {
+    if (stock[i - 1] > 0 && bench[i - 1] > 0) {
+      rs.push(stock[i] / stock[i - 1] - 1);
+      rb.push(bench[i] / bench[i - 1] - 1);
+    }
+  }
+  if (rs.length < 60) return null;
+  const meanS = rs.reduce((a, b) => a + b, 0) / rs.length;
+  const meanB = rb.reduce((a, b) => a + b, 0) / rb.length;
+  let cov = 0;
+  let varB = 0;
+  for (let i = 0; i < rs.length; i += 1) {
+    cov += (rs[i] - meanS) * (rb[i] - meanB);
+    varB += (rb[i] - meanB) ** 2;
+  }
+  if (varB === 0) return null;
+  return cov / varB;
+}
+
+/** Cached 1y daily series (SPY beta benchmark + sector ETF changes). */
+const seriesCache = new Map<string, CacheEntry<{ t: number[]; close: number[] }>>();
+
+async function getDailySeries(
+  symbol: string,
+): Promise<{ t: number[]; close: number[] } | null> {
+  const key = symbol.toUpperCase();
+  const cached = cacheGet(seriesCache, key);
+  if (cached) return cached;
+  const chart = await fetchYahooChart(key, "1y", "1d");
+  if (!chart) return null;
+  const bars = extractBars(chart);
+  if (bars.length === 0) return null;
+  const series = { t: bars.map((b) => b.t), close: bars.map((b) => b.close) };
+  cacheSet(seriesCache, key, series, DAY_MS);
+  return series;
+}
+
+/** GICS sector SPDR ETFs — the only symbols the technicals route will fan out to. */
+const SECTOR_ETFS = new Set([
+  "XLE", "XLB", "XLI", "XLY", "XLP", "XLV", "XLF", "XLK", "XLC", "XLU", "XLRE",
+]);
+
+/** 1-month (21 trading days) % change of a sector ETF, from the cached series. */
+async function sectorEtf1mChange(etf: string): Promise<number | null> {
+  const series = await getDailySeries(etf);
+  if (!series || series.close.length < 22) return null;
+  const last = series.close[series.close.length - 1];
+  const prior = series.close[series.close.length - 22];
+  if (!prior) return null;
+  return (last / prior - 1) * 100;
+}
+
 function mapFundamentals(
   symbol: string,
   summary: Record<string, unknown>,
 ): Record<string, unknown> {
+  // Module layout (Yahoo v10 quoteSummary):
+  //   financialData        — margins, growth, ROE, cash flows, D/E (as PERCENT),
+  //                          currentRatio, totalRevenue
+  //   defaultKeyStatistics — EV/EBITDA, trailingEps, netIncomeToCommon
+  //   summaryDetail        — trailingPE/forwardPE, P/S TTM, dividendYield,
+  //                          payoutRatio (fractions)
+  //   calendarEvents       — next earnings date (drives daysUntilEarnings)
   const financial = (summary.financialData ?? {}) as Record<string, { raw?: number }>;
   const keyStats = (summary.defaultKeyStatistics ?? {}) as Record<string, { raw?: number }>;
   const detail = (summary.summaryDetail ?? {}) as Record<string, { raw?: number }>;
@@ -407,68 +587,144 @@ function mapFundamentals(
     const v = obj[key]?.raw;
     return typeof v === "number" && Number.isFinite(v) ? v : null;
   };
+  // Yahoo fractions (0.045) → percent (4.5) to match snapshot units.
+  const pct = (v: number | null): number | null => (v != null ? v * 100 : null);
+  // Raw dollars → $B to match the registry/snapshot "$B" unit.
+  const toBillions = (v: number | null): number | null =>
+    v != null ? v / 1_000_000_000 : null;
+
+  const freeCashflow = raw(financial, "freeCashflow");
+  const totalRevenue = raw(financial, "totalRevenue");
+
+  // Next earnings date from calendarEvents (epoch seconds, may be a range —
+  // take the first). Consumed client-side to compute daysUntilEarnings.
+  const calendar = (summary.calendarEvents ?? {}) as {
+    earnings?: { earningsDate?: Array<{ raw?: number }> };
+  };
+  const earningsRaw = calendar.earnings?.earningsDate?.[0]?.raw;
+  const nextEarningsDate =
+    typeof earningsRaw === "number" && Number.isFinite(earningsRaw)
+      ? new Date(earningsRaw * 1000).toISOString().slice(0, 10)
+      : null;
 
   return {
     ticker: symbol,
-    revenueGrowthPct: raw(financial, "revenueGrowth") != null
-      ? (raw(financial, "revenueGrowth") as number) * 100
-      : null,
-    epsGrowthPct: raw(financial, "earningsGrowth") != null
-      ? (raw(financial, "earningsGrowth") as number) * 100
-      : null,
-    grossMarginPct: raw(financial, "grossMargins") != null
-      ? (raw(financial, "grossMargins") as number) * 100
-      : null,
-    operatingMarginPct: raw(financial, "operatingMargins") != null
-      ? (raw(financial, "operatingMargins") as number) * 100
-      : null,
-    netMarginPct: raw(financial, "profitMargins") != null
-      ? (raw(financial, "profitMargins") as number) * 100
-      : null,
-    returnOnEquityPct: raw(financial, "returnOnEquity") != null
-      ? (raw(financial, "returnOnEquity") as number) * 100
-      : null,
-    operatingCashFlow: raw(financial, "operatingCashflow"),
+    revenueGrowthPct: pct(raw(financial, "revenueGrowth")),
+    epsGrowthPct: pct(raw(financial, "earningsGrowth")),
+    grossMarginPct: pct(raw(financial, "grossMargins")),
+    operatingMarginPct: pct(raw(financial, "operatingMargins")),
+    netMarginPct: pct(raw(financial, "profitMargins")),
+    fcfMarginPct:
+      freeCashflow != null && totalRevenue != null && totalRevenue > 0
+        ? (freeCashflow / totalRevenue) * 100
+        : null,
+    returnOnEquityPct: pct(raw(financial, "returnOnEquity")),
+    operatingCashFlow: toBillions(raw(financial, "operatingCashflow")),
+    netIncome: toBillions(raw(keyStats, "netIncomeToCommon")),
+    epsTtm: raw(keyStats, "trailingEps"),
     peRatio: raw(detail, "trailingPE") ?? raw(keyStats, "trailingPE"),
     forwardPE: raw(detail, "forwardPE") ?? raw(keyStats, "forwardPE"),
-    priceToSales: raw(keyStats, "priceToSalesTrailing12Months"),
+    priceToSales:
+      raw(detail, "priceToSalesTrailing12Months") ??
+      raw(keyStats, "priceToSalesTrailing12Months"),
     evToEbitda: raw(keyStats, "enterpriseToEbitda"),
-    debtToEquity: raw(keyStats, "debtToEquity"),
-    currentRatio: raw(keyStats, "currentRatio"),
-    dividendYieldPct: raw(detail, "dividendYield") != null
-      ? (raw(detail, "dividendYield") as number) * 100
-      : null,
-    payoutRatioPct: raw(keyStats, "payoutRatio") != null
-      ? (raw(keyStats, "payoutRatio") as number) * 100
-      : null,
-    beta1y: raw(keyStats, "beta"),
+    // financialData.debtToEquity is a PERCENT (e.g. 41.5) — snapshot scale is a
+    // ratio (0.415), matching the mock seeds and default chip thresholds.
+    debtToEquity:
+      raw(financial, "debtToEquity") != null
+        ? (raw(financial, "debtToEquity") as number) / 100
+        : null,
+    currentRatio: raw(financial, "currentRatio") ?? raw(keyStats, "currentRatio"),
+    dividendYieldPct: pct(raw(detail, "dividendYield")),
+    payoutRatioPct: pct(raw(detail, "payoutRatio") ?? raw(keyStats, "payoutRatio")),
+    // Not available on free Yahoo/Finnhub/FRED paths — explicit null, never fabricated:
+    // interest expense (interestCoverage), 5Y dividend history (dividendGrowth5yPct),
+    // YoY share-count change (buybackYieldPct).
+    interestCoverage: null,
+    dividendGrowth5yPct: null,
+    buybackYieldPct: null,
+    nextEarningsDate,
     asOf: new Date().toISOString().slice(0, 10),
     source: "live",
   };
 }
 
+const VALID_CANDLE_TIMES = new Set<CandleTime>([
+  "15m",
+  "30m",
+  "1h",
+  "4h",
+  "1D",
+  "1W",
+  "1M",
+]);
+
+function parseTimeframesParam(raw: string | null): CandleTime[] {
+  if (!raw?.trim()) return [];
+  const out: CandleTime[] = [];
+  for (const part of raw.split(",")) {
+    const tf = part.trim() as CandleTime;
+    if (VALID_CANDLE_TIMES.has(tf) && !out.includes(tf)) out.push(tf);
+  }
+  return out.slice(0, 7);
+}
+
+async function resolveTimeframedIndicators(
+  symbol: string,
+  tf: CandleTime,
+): Promise<TimeframedIndicatorsPayload> {
+  const cacheKey = `${symbol}:${tf}`;
+  const cached = cacheGet(tfTechCache, cacheKey);
+  if (cached) return cached;
+
+  const asOf = new Date().toISOString().slice(0, 10);
+  const fetchSpec = TIMEFRAME_FETCH[tf];
+  const chart = await fetchYahooChart(symbol, fetchSpec.range, fetchSpec.interval);
+  if (!chart) {
+    const empty = emptyTimeframedIndicators(asOf);
+    cacheSet(tfTechCache, cacheKey, empty, candleTtlMs(tf, isUsRegularMarketHours()));
+    return empty;
+  }
+  let bars = extractBars(chart);
+  if (fetchSpec.resample4h) bars = resampleTo4h(bars);
+  const payload = computeTimeframedIndicators(bars, {
+    includeVwap: INTRADAY_TIMES.has(tf),
+  });
+  cacheSet(
+    tfTechCache,
+    cacheKey,
+    payload,
+    candleTtlMs(tf, isUsRegularMarketHours()),
+  );
+  return payload;
+}
+
 function mapTechnicals(
   symbol: string,
   chart: Record<string, unknown>,
+  spy: { t: number[]; close: number[] } | null,
 ): Record<string, unknown> {
-  const indicators = chart.indicators as
-    | { quote?: Array<{ close?: Array<number | null>; volume?: Array<number | null> }> }
-    | undefined;
-  const closes = (indicators?.quote?.[0]?.close ?? []).filter(
-    (v): v is number => typeof v === "number" && Number.isFinite(v),
-  );
-  const volumes = (indicators?.quote?.[0]?.volume ?? []).filter(
-    (v): v is number => typeof v === "number" && Number.isFinite(v),
-  );
+  const bars = extractBars(chart);
+  const closes = bars.map((b) => b.close);
+  const volumes = bars
+    .map((b) => b.volume)
+    .filter((v): v is number => v != null);
   const last = closes[closes.length - 1];
   const sma20 = sma(closes, 20);
   const sma50 = sma(closes, 50);
   const sma200 = sma(closes, 200);
+  const ema10 = ema(closes, 10);
+  const ema20 = ema(closes, 20);
+  const ema50 = ema(closes, 50);
   const high52 = closes.length ? Math.max(...closes.slice(-252)) : null;
   const price3mAgo = closes.length >= 63 ? closes[closes.length - 63] : null;
   const avgVol20 =
     volumes.length >= 20
       ? volumes.slice(-20).reduce((a, b) => a + b, 0) / 20
+      : null;
+  const vsEmaPct = (emaValue: number | null): number | null =>
+    last != null && emaValue != null && emaValue > 0
+      ? (last / emaValue - 1) * 100
       : null;
 
   return {
@@ -477,7 +733,7 @@ function mapTechnicals(
     priceAbove50dSma: last != null && sma50 != null ? (last > sma50 ? 1 : 0) : null,
     priceAbove20dSma: last != null && sma20 != null ? (last > sma20 ? 1 : 0) : null,
     rsi14: rsi(closes, 14),
-    weeklyRsi: null,
+    weeklyRsi: rsi(weeklyCloses(bars), 14),
     drawdownFrom52wHighPct:
       last != null && high52 != null && high52 > 0
         ? ((high52 - last) / high52) * 100
@@ -490,15 +746,19 @@ function mapTechnicals(
       avgVol20 != null && volumes.length
         ? volumes[volumes.length - 1] / avgVol20
         : null,
+    // True VWAP needs intraday prints — daily bars can't produce an honest
+    // value, so it stays null (excluded from live coverage) rather than faked.
     priceVsVwapPct: null,
-    priceVs10EmaPct: null,
-    priceVs20EmaPct: null,
-    priceVs50EmaPct: null,
+    priceVs10EmaPct: vsEmaPct(ema10),
+    priceVs20EmaPct: vsEmaPct(ema20),
+    priceVs50EmaPct: vsEmaPct(ema50),
+    // Filled client-side from fundamentals.nextEarningsDate (calendarEvents).
     daysUntilEarnings: null,
-    atrPct14d: null,
-    beta1y: null,
+    atrPct14d: atrPct(bars, 14),
+    beta1y: betaVsBenchmark(bars, spy),
     avgDollarVolume20d:
       avgVol20 != null && last != null ? (avgVol20 * last) / 1_000_000 : null,
+    // Attached per-request in the route from the ?sectorEtf= param.
     sectorEtf1mChangePct: null,
     asOf: new Date().toISOString().slice(0, 10),
     source: "live",
@@ -511,7 +771,8 @@ async function buildMarketContext(env: MarketEnv): Promise<Record<string, unknow
 
   const spyQuote = await resolveQuote("SPY", env);
   const chart = await fetchYahooChart("SPY", "1y", "1d");
-  const tech = chart ? mapTechnicals("SPY", chart) : null;
+  // No beta benchmark needed — context only reads SPY RSI + 200D SMA flag.
+  const tech = chart ? mapTechnicals("SPY", chart, null) : null;
   let vix: number | null = null;
   const vixQuote = await resolveQuote("^VIX", env);
   if (vixQuote) vix = vixQuote.lastPrice;
@@ -649,13 +910,35 @@ export async function handleMarketApi(
     const url = new URL(request.url);
     const symbol = (url.searchParams.get("symbol") ?? "").trim().toUpperCase();
     if (!symbol) return json({ error: "symbol required" }, 400);
-    const cached = cacheGet(techCache, symbol);
-    if (cached) return json({ technicals: cached, budgets: Object.values(budgets) });
-    const chart = await fetchYahooChart(symbol);
-    if (!chart) return json({ technicals: null, budgets: Object.values(budgets) }, 404);
-    const technicals = mapTechnicals(symbol, chart);
-    cacheSet(techCache, symbol, technicals, FUNDY_TTL_MS);
-    return json({ technicals, budgets: Object.values(budgets) });
+    const sectorEtfParam = (url.searchParams.get("sectorEtf") ?? "")
+      .trim()
+      .toUpperCase();
+    const sectorEtf = SECTOR_ETFS.has(sectorEtfParam) ? sectorEtfParam : null;
+    const timeframes = parseTimeframesParam(url.searchParams.get("timeframes"));
+
+    let technicals = cacheGet(techCache, symbol);
+    if (!technicals) {
+      const chart = await fetchYahooChart(symbol);
+      if (!chart) return json({ technicals: null, budgets: Object.values(budgets) }, 404);
+      const spy = await getDailySeries("SPY");
+      technicals = mapTechnicals(symbol, chart, spy);
+      cacheSet(techCache, symbol, technicals, FUNDY_TTL_MS);
+    }
+    // Sector ETF change is attached per request (cached per ETF) so the base
+    // technicals cache stays keyed by symbol only.
+    const sectorEtf1mChangePct = sectorEtf ? await sectorEtf1mChange(sectorEtf) : null;
+
+    const byTimeframe: Partial<Record<CandleTime, TimeframedIndicatorsPayload>> =
+      {};
+    for (const tf of timeframes) {
+      byTimeframe[tf] = await resolveTimeframedIndicators(symbol, tf);
+    }
+
+    return json({
+      technicals: { ...technicals, sectorEtf1mChangePct },
+      byTimeframe: timeframes.length ? byTimeframe : undefined,
+      budgets: Object.values(budgets),
+    });
   }
 
   if (pathname === "/api/market/context" && request.method === "GET") {

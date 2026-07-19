@@ -4,10 +4,12 @@
  */
 
 import type {
+  CandleInterval,
   FundamentalSnapshot,
   MarketContext,
   TechnicalSnapshot,
   TickerQuote,
+  TimeframedIndicators,
 } from "../../types";
 import { getAccessToken } from "../auth/session";
 import type { ProviderBudget } from "./liveCache";
@@ -78,10 +80,22 @@ export async function fetchMarketFundamentals(
 
 export async function fetchMarketTechnicals(
   symbol: string,
-): Promise<{ technicals: TechnicalSnapshot | null; budgets?: ProviderBudget[] } | null> {
+  opts?: { sectorEtf?: string; timeframes?: CandleInterval[] },
+): Promise<{
+  technicals: TechnicalSnapshot | null;
+  byTimeframe?: Partial<Record<CandleInterval, TimeframedIndicators>>;
+  budgets?: ProviderBudget[];
+} | null> {
   try {
+    const etfQ = opts?.sectorEtf
+      ? `&sectorEtf=${encodeURIComponent(opts.sectorEtf)}`
+      : "";
+    const tfQ =
+      opts?.timeframes && opts.timeframes.length > 0
+        ? `&timeframes=${encodeURIComponent(opts.timeframes.join(","))}`
+        : "";
     const res = await fetch(
-      `/api/market/technicals?symbol=${encodeURIComponent(symbol)}`,
+      `/api/market/technicals?symbol=${encodeURIComponent(symbol)}${etfQ}${tfQ}`,
       { headers: await authHeaders() },
     );
     return readJson(res);

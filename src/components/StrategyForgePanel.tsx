@@ -846,7 +846,7 @@ export function StrategyForgePanel({ strategy }: { strategy: Strategy | undefine
               Technical Indicators
               <InfoTip
                 label="About the technicals cadence"
-                body="The candle size technical indicators use. Smaller candles react faster to price; 15-minute candles are coming soon."
+                body="Default Time (candle size) for new technical rule chips. Each chip can still pick its own Time in the rule table — 15m through 1M."
               />
             </span>
             <Dropdown
@@ -1195,6 +1195,7 @@ export function StrategyForgePanel({ strategy }: { strategy: Strategy | undefine
             onDraftChange={(chips) => commitChips(editor.category!, chips)}
             onCancel={cancelEditor}
             onDone={dismissEditor}
+            defaultTime={technicalsInterval}
           />
         ) : null}
         {editor?.kind === "tags" && editor.category ? (
@@ -1219,6 +1220,7 @@ export function StrategyForgePanel({ strategy }: { strategy: Strategy | undefine
             }
             onCancel={cancelEditor}
             onDone={dismissEditor}
+            defaultTime={technicalsInterval}
           />
         ) : null}
       </Suspense>
