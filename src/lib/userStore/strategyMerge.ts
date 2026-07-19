@@ -2,8 +2,10 @@ import type { Portfolio, Strategy } from "../../types";
 import { DEFAULT_STRATEGIES } from "../../data";
 import {
   clampCadenceInterval,
+  clampCandleInterval,
 } from "../forge/scheduler";
 import { isLiveSupportedMetric } from "../forge/liveCoverage";
+import { migrateStrategyMetrics } from "../forge/metricMigration";
 import type { MetricKey, RuleChip, RuleTag } from "../../types";
 
 const APPLY_ONLY_KEYS = new Set([
@@ -13,6 +15,12 @@ const APPLY_ONLY_KEYS = new Set([
   // (weights + which categories contribute). Seed body still wins for rules/tags.
   "categoryWeights",
   "categoryEnabled",
+  // Cadence is a per-user pref (like categoryWeights), not a locked body field —
+  // editable + persisted even on default strategies.
+  "checkInterval",
+  "technicalsInterval",
+  "cadenceEnabled",
+  "cadenceNotify",
 ]);
 
 /** Fields allowed when patching an isDefault strategy. */
@@ -27,7 +35,8 @@ function pruneUnsupportedChips(chips: RuleChip[] | undefined): RuleChip[] {
 }
 
 function pruneStrategyBody(strategy: Strategy): Strategy {
-  const rules = pruneUnsupportedChips(strategy.rules);
+  const migrated = migrateStrategyMetrics(strategy);
+  const rules = pruneUnsupportedChips(migrated.rules);
   const allowedIds = new Set(rules.map((chip) => chip.id));
   const pruneTags = (tags: RuleTag[] | undefined): RuleTag[] | undefined => {
     if (!tags) return tags;
@@ -36,18 +45,16 @@ function pruneStrategyBody(strategy: Strategy): Strategy {
       chipIds: tag.chipIds.filter((id) => allowedIds.has(id) || tag.system),
     }));
   };
-  const checkInterval = clampCadenceInterval(strategy.checkInterval);
+  const checkInterval = clampCadenceInterval(migrated.checkInterval);
   return {
-    ...strategy,
+    ...migrated,
     checkInterval,
-    technicalsInterval: clampCadenceInterval(
-      strategy.technicalsInterval ?? checkInterval,
-    ),
+    technicalsInterval: clampCandleInterval(migrated.technicalsInterval),
     rules,
-    ruleTags: pruneTags(strategy.ruleTags),
-    trimZoneRules: pruneUnsupportedChips(strategy.trimZoneRules),
-    addZoneRules: pruneUnsupportedChips(strategy.addZoneRules),
-    goToCashRules: pruneUnsupportedChips(strategy.goToCashRules),
+    ruleTags: pruneTags(migrated.ruleTags),
+    trimZoneRules: pruneUnsupportedChips(migrated.trimZoneRules),
+    addZoneRules: pruneUnsupportedChips(migrated.addZoneRules),
+    goToCashRules: pruneUnsupportedChips(migrated.goToCashRules),
   };
 }
 
@@ -68,6 +75,12 @@ export function mergeStrategiesForHydrate(
       tickerExclusions: overlay?.tickerExclusions ?? {},
       categoryWeights: overlay?.categoryWeights ?? seed.categoryWeights,
       categoryEnabled: overlay?.categoryEnabled,
+      // Cadence prefs are user-owned even on defaults (see APPLY_ONLY_KEYS).
+      checkInterval: overlay?.checkInterval ?? seed.checkInterval,
+      technicalsInterval:
+        overlay?.technicalsInterval ?? seed.technicalsInterval,
+      cadenceEnabled: overlay?.cadenceEnabled ?? seed.cadenceEnabled,
+      cadenceNotify: overlay?.cadenceNotify ?? seed.cadenceNotify,
     });
   });
   const defaultIds = new Set(defaults.map((s) => s.id));
@@ -95,6 +108,18 @@ export function sanitizeStrategyPatch(
   }
   if ("categoryEnabled" in patch) {
     next.categoryEnabled = patch.categoryEnabled;
+  }
+  if ("checkInterval" in patch) {
+    next.checkInterval = patch.checkInterval;
+  }
+  if ("technicalsInterval" in patch) {
+    next.technicalsInterval = patch.technicalsInterval;
+  }
+  if ("cadenceEnabled" in patch) {
+    next.cadenceEnabled = patch.cadenceEnabled;
+  }
+  if ("cadenceNotify" in patch) {
+    next.cadenceNotify = patch.cadenceNotify;
   }
   return next;
 }

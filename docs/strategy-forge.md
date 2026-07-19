@@ -74,6 +74,15 @@ later pass; today these categories score the per-stock, per-position facts we
 have (portfolio weight, open P&L, holding age). Trade Management also hosts the
 Layer 3 zone authoring boxes.
 
+**Risk / Trade / Layer 3 data-point tabs:** those chip modals expose
+**Thesis · Technical · Market** tabs (`ForgeSectionTabs` — Configure section-tab
+styling, not page-level `Tabs`) so the Data Point
+lists and column formatting match the dedicated Thesis and Technical tables,
+plus a Market tab for macro/stock-risk/position metrics (VIX, SPY*, Beta, ATR %,
+volume, Open P&L %, …). This is **authoring-only** — `RuleChip.category` stays
+the host (`risk` / `trade` / zone); conviction math is unchanged
+(`metricsForLens` / `lensForMetric` in `src/lib/forge/metrics.ts`).
+
 ## 4. The scoring algorithm (per stock, per category)
 
 Rule scoring is **pass/fail for MVP** (partial credit can come later).
@@ -163,14 +172,28 @@ until every check passes:
 - Each enabled category's enabled chip weights total 100%.
 - Each enabled category's tag weights total 100%.
 
-## 7. Buckets & check cadence (unchanged)
+## 7. Buckets & check cadence
 
-- Each strategy carries its own cadence: `checkInterval` (15m → 1M, **1D
-  default**) re-scores the bucket; `technicalsInterval` is the technicals
-  candle, clamped **≥ `checkInterval`** and **≥ 15m**. Fundamentals refresh on
-  a fixed daily cadence.
+- Each strategy carries its own cadence. `checkInterval` re-scores the bucket
+  and offers Daily/Weekly/Monthly (**1D default**), 4 intraday session-closes
+  (premarket 09:30 / regular 16:00 / after-hours 20:00 / overnight 04:00 ET),
+  and 4h/1h/30m candles; **15m ships disabled ("Future Capability")**.
+  `technicalsInterval` is the **default Time** (candle size) for new technical
+  rule chips; each chip can override Time in the rule table (15m–1M). Cadence
+  (when checks run) is separate from chip Time (which candles an indicator uses).
+  Fundamentals refresh on a fixed daily cadence.
+- **Cadence feature (opt-in, per strategy):** a master **Enable cadence** toggle
+  plus notification toggles — **Auto-refresh on cadence** (wired) and
+  **Email / Text / Browser** (disabled placeholders, "Future Capability"). All
+  default **off**. When cadence + auto-refresh are on, the scheduler
+  (`src/lib/forge/scheduler.ts`) refreshes that strategy's tickers on the chosen
+  interval and pops an info `cadenceToast`. Checks still run at login / manual
+  refresh regardless.
+- Worker quote TTL is market-hours aware (~5 min during the regular session,
+  1 day when closed) so intraday auto-refresh returns fresher numbers.
 - "Notify" (MVP) = the chips/tags on Home and Dashboard re-rendering at the
-  check cadence. No push/notification system is built.
+  check cadence. No push/notification (email/text/browser) delivery is built —
+  those toggles are placeholders only.
 
 ## 8. Deferred (later passes)
 

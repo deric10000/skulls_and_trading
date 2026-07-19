@@ -1,4 +1,5 @@
 import type {
+  CandleInterval,
   DateRange,
   MetricKey,
   RuleCategory,
@@ -6,6 +7,20 @@ import type {
   RuleOperator,
 } from "../../types";
 import { isLiveSupportedMetric } from "./liveCoverage";
+
+/** Candle Times selectable on timeframed technical chips. */
+export const CANDLE_TIME_RANGES: CandleInterval[] = [
+  "15m",
+  "30m",
+  "1h",
+  "4h",
+  "1D",
+  "1W",
+  "1M",
+];
+
+/** VWAP needs a real session — intraday Times only. */
+export const VWAP_TIME_RANGES: CandleInterval[] = ["15m", "30m", "1h", "4h"];
 
 // ---------------------------------------------------------------------------
 // Metric registry — the single source of truth for every data point a rule chip
@@ -48,6 +63,13 @@ export interface MetricMeta {
   // Whether a higher value is "better" — drives sensible operator defaults.
   // Left undefined for band metrics like RSI where the middle is best.
   higherIsBetter?: boolean;
+  /**
+   * When true, `RuleChip.dateRange` is the candle Time (15m…1M) and scoring
+   * reads `technicalsByTimeframe[time][key]`.
+   */
+  timeframed?: boolean;
+  /** Optional optgroup label in the Data Point dropdown. */
+  group?: string;
 }
 
 const NUMERIC_OPS: RuleOperator[] = [">", ">=", "<", "<=", "between"];
@@ -370,80 +392,485 @@ export const METRICS: Record<MetricKey, MetricMeta> = {
     higherIsBetter: true,
   },
 
-  // ---- Technicals — trend / momentum / setup -------------------------------
-  priceAbove200dSma: {
-    key: "priceAbove200dSma",
-    label: "Price Above 200D SMA",
-    plainLabel: "Long-term uptrend",
-    whatItIs: "Whether price is trading above its 200-day moving average.",
-    whyMatters: "The simplest long-term health check — most damage happens below this line.",
+  // ---- Technicals — timeframed (Time column = candle size) -----------------
+  rsi: {
+    key: "rsi",
+    label: "RSI (14)",
+    plainLabel: "Momentum gauge",
+    whatItIs:
+      "0–100 momentum gauge over 14 bars on the selected Time; ~30 is oversold, ~70 overbought.",
+    whyMatters: "Keeps you from buying names that are already stretched on that timeframe.",
     category: "setup",
     source: "technical",
-    format: "boolean",
-    operators: BOOL_OPS,
-    dateRanges: ["Current"],
-    defaultDateRange: "Current",
-    higherIsBetter: true,
+    format: "number",
+    operators: NUMERIC_OPS,
+    dateRanges: CANDLE_TIME_RANGES,
+    defaultDateRange: "1D",
+    timeframed: true,
+    group: "Momentum",
   },
-  priceAbove50dSma: {
-    key: "priceAbove50dSma",
-    label: "Price Above 50D SMA",
-    plainLabel: "Intermediate uptrend",
-    whatItIs: "Whether price is trading above its 50-day moving average.",
-    whyMatters: "Confirms the medium-term trend supports adding or holding.",
+  stochK: {
+    key: "stochK",
+    label: "Stochastic %K (14,3)",
+    plainLabel: "Stochastic fast line",
+    whatItIs: "Fast stochastic line — where close sits in the 14-bar high/low range, smoothed.",
+    whyMatters: "Highlights overbought/oversold turns on the selected Time.",
     category: "setup",
     source: "technical",
-    format: "boolean",
-    operators: BOOL_OPS,
-    dateRanges: ["Current"],
-    defaultDateRange: "Current",
+    format: "number",
+    operators: NUMERIC_OPS,
+    dateRanges: CANDLE_TIME_RANGES,
+    defaultDateRange: "1D",
+    timeframed: true,
+    group: "Stochastic",
+  },
+  stochD: {
+    key: "stochD",
+    label: "Stochastic %D (3)",
+    plainLabel: "Stochastic slow line",
+    whatItIs: "3-period SMA of Stochastic %K — the slower confirmation line.",
+    whyMatters: "%K crossing %D is a classic timing signal on the selected Time.",
+    category: "setup",
+    source: "technical",
+    format: "number",
+    operators: NUMERIC_OPS,
+    dateRanges: CANDLE_TIME_RANGES,
+    defaultDateRange: "1D",
+    timeframed: true,
+    group: "Stochastic",
+  },
+  stochRsi: {
+    key: "stochRsi",
+    label: "Stochastic RSI (14)",
+    plainLabel: "RSI of RSI",
+    whatItIs: "Stochastic applied to RSI (14) — a faster momentum oscillator (0–100).",
+    whyMatters: "More sensitive than RSI alone for short-Time entries.",
+    category: "setup",
+    source: "technical",
+    format: "number",
+    operators: NUMERIC_OPS,
+    dateRanges: CANDLE_TIME_RANGES,
+    defaultDateRange: "1D",
+    timeframed: true,
+    group: "Momentum",
+  },
+  williamsR: {
+    key: "williamsR",
+    label: "Williams %R (14)",
+    plainLabel: "Williams overbought/oversold",
+    whatItIs: "−100 to 0 oscillator; near 0 = overbought, near −100 = oversold.",
+    whyMatters: "A fast alternative to Stochastic for timing on the selected Time.",
+    category: "setup",
+    source: "technical",
+    format: "number",
+    operators: NUMERIC_OPS,
+    dateRanges: CANDLE_TIME_RANGES,
+    defaultDateRange: "1D",
+    timeframed: true,
+    group: "Momentum",
+  },
+  cci: {
+    key: "cci",
+    label: "CCI (20)",
+    plainLabel: "Commodity Channel Index",
+    whatItIs: "Typical-price deviation from its 20-bar mean, scaled. Outside ±100 is extreme.",
+    whyMatters: "Flags when price has run far from its recent average on that Time.",
+    category: "setup",
+    source: "technical",
+    format: "number",
+    operators: NUMERIC_OPS,
+    dateRanges: CANDLE_TIME_RANGES,
+    defaultDateRange: "1D",
+    timeframed: true,
+    group: "Momentum",
+  },
+  macdHistogram: {
+    key: "macdHistogram",
+    label: "MACD Histogram (12/26/9)",
+    plainLabel: "MACD momentum bars",
+    whatItIs: "MACD line minus signal line — rising/falling bars show momentum shifts.",
+    whyMatters: "Histogram flips often lead trend turns on the selected Time.",
+    category: "setup",
+    source: "technical",
+    format: "number",
+    operators: NUMERIC_OPS,
+    dateRanges: CANDLE_TIME_RANGES,
+    defaultDateRange: "1D",
+    timeframed: true,
+    group: "MACD",
+  },
+  macdLine: {
+    key: "macdLine",
+    label: "MACD Line (12/26)",
+    plainLabel: "MACD fast-slow spread",
+    whatItIs: "12-period EMA minus 26-period EMA of close on the selected Time.",
+    whyMatters: "Above zero = short-term trend stronger than longer; below = weaker.",
+    category: "setup",
+    source: "technical",
+    format: "number",
+    operators: NUMERIC_OPS,
+    dateRanges: CANDLE_TIME_RANGES,
+    defaultDateRange: "1D",
+    timeframed: true,
+    group: "MACD",
+  },
+  macdSignal: {
+    key: "macdSignal",
+    label: "MACD Signal (9)",
+    plainLabel: "MACD signal line",
+    whatItIs: "9-period EMA of the MACD line.",
+    whyMatters: "MACD crossing its signal is a classic entry/exit cue on that Time.",
+    category: "setup",
+    source: "technical",
+    format: "number",
+    operators: NUMERIC_OPS,
+    dateRanges: CANDLE_TIME_RANGES,
+    defaultDateRange: "1D",
+    timeframed: true,
+    group: "MACD",
+  },
+  roc: {
+    key: "roc",
+    label: "Rate of Change (12) %",
+    plainLabel: "12-bar price change",
+    whatItIs: "Percent change of close versus 12 bars ago on the selected Time.",
+    whyMatters: "Simple momentum — positive ROC favors strength on that timeframe.",
+    category: "setup",
+    source: "technical",
+    format: "percent",
+    unit: "%",
+    operators: NUMERIC_OPS,
+    dateRanges: CANDLE_TIME_RANGES,
+    defaultDateRange: "1D",
+    timeframed: true,
+    group: "Momentum",
     higherIsBetter: true,
   },
-  priceAbove20dSma: {
-    key: "priceAbove20dSma",
-    label: "Price Above 20D SMA",
+  priceAboveSma20: {
+    key: "priceAboveSma20",
+    label: "Price Above SMA 20",
     plainLabel: "Short-term uptrend",
-    whatItIs: "Whether price is trading above its 20-day moving average.",
+    whatItIs: "Whether price is trading above its 20-bar simple moving average (selected Time).",
     whyMatters: "A short-term timing check for entries and rebounds.",
     category: "setup",
     source: "technical",
     format: "boolean",
     operators: BOOL_OPS,
-    dateRanges: ["Current"],
-    defaultDateRange: "Current",
+    dateRanges: CANDLE_TIME_RANGES,
+    defaultDateRange: "1D",
+    timeframed: true,
+    group: "Moving averages",
     higherIsBetter: true,
   },
-  rsi14: {
-    key: "rsi14",
-    label: "RSI 14D",
-    plainLabel: "Momentum gauge",
-    whatItIs: "0–100 momentum gauge over 14 days; ~30 is oversold, ~70 overbought.",
-    whyMatters: "Keeps you from buying names that are already stretched.",
+  priceAboveSma50: {
+    key: "priceAboveSma50",
+    label: "Price Above SMA 50",
+    plainLabel: "Intermediate uptrend",
+    whatItIs: "Whether price is trading above its 50-bar simple moving average (selected Time).",
+    whyMatters: "Confirms the medium-term trend supports adding or holding.",
     category: "setup",
     source: "technical",
-    format: "number",
-    operators: NUMERIC_OPS,
-    dateRanges: ["14D", "Current"],
-    defaultDateRange: "Current",
+    format: "boolean",
+    operators: BOOL_OPS,
+    dateRanges: CANDLE_TIME_RANGES,
+    defaultDateRange: "1D",
+    timeframed: true,
+    group: "Moving averages",
+    higherIsBetter: true,
   },
-  weeklyRsi: {
-    key: "weeklyRsi",
-    label: "RSI (Weekly)",
-    plainLabel: "Big-picture momentum",
-    whatItIs: "Momentum gauge computed on weekly candles.",
-    whyMatters: "Filters day-to-day noise; the middle band is healthiest for holds.",
+  priceAboveSma200: {
+    key: "priceAboveSma200",
+    label: "Price Above SMA 200",
+    plainLabel: "Long-term uptrend",
+    whatItIs: "Whether price is trading above its 200-bar simple moving average (selected Time).",
+    whyMatters: "The simplest long-term health check — most damage happens below this line.",
+    category: "setup",
+    source: "technical",
+    format: "boolean",
+    operators: BOOL_OPS,
+    dateRanges: CANDLE_TIME_RANGES,
+    defaultDateRange: "1D",
+    timeframed: true,
+    group: "Moving averages",
+    higherIsBetter: true,
+  },
+  priceVsEma10Pct: {
+    key: "priceVsEma10Pct",
+    label: "Price vs EMA 10",
+    plainLabel: "Above short-term trend",
+    whatItIs: "How far price is above/below the 10-bar EMA on the selected Time (%).",
+    whyMatters: "A fast read on the immediate trend.",
+    category: "setup",
+    source: "technical",
+    format: "percent",
+    unit: "%",
+    operators: NUMERIC_OPS,
+    dateRanges: CANDLE_TIME_RANGES,
+    defaultDateRange: "1D",
+    timeframed: true,
+    group: "Moving averages",
+    higherIsBetter: true,
+  },
+  priceVsEma20Pct: {
+    key: "priceVsEma20Pct",
+    label: "Price vs EMA 20",
+    plainLabel: "Above mid-term trend",
+    whatItIs: "How far price is above/below the 20-bar EMA on the selected Time (%).",
+    whyMatters: "Confirms the swing trend supports the position.",
+    category: "setup",
+    source: "technical",
+    format: "percent",
+    unit: "%",
+    operators: NUMERIC_OPS,
+    dateRanges: CANDLE_TIME_RANGES,
+    defaultDateRange: "1D",
+    timeframed: true,
+    group: "Moving averages",
+    higherIsBetter: true,
+  },
+  priceVsEma50Pct: {
+    key: "priceVsEma50Pct",
+    label: "Price vs EMA 50",
+    plainLabel: "Above longer trend",
+    whatItIs: "How far price is above/below the 50-bar EMA on the selected Time (%).",
+    whyMatters: "The classic dividing line between healthy and broken trends.",
+    category: "setup",
+    source: "technical",
+    format: "percent",
+    unit: "%",
+    operators: NUMERIC_OPS,
+    dateRanges: CANDLE_TIME_RANGES,
+    defaultDateRange: "1D",
+    timeframed: true,
+    group: "Moving averages",
+    higherIsBetter: true,
+  },
+  adx: {
+    key: "adx",
+    label: "ADX (14)",
+    plainLabel: "Trend strength",
+    whatItIs: "Average Directional Index (14) — trend strength, not direction (0–100).",
+    whyMatters: "Above ~25 suggests a usable trend on the selected Time; below is chop.",
     category: "setup",
     source: "technical",
     format: "number",
     operators: NUMERIC_OPS,
-    dateRanges: ["Current"],
-    defaultDateRange: "Current",
+    dateRanges: CANDLE_TIME_RANGES,
+    defaultDateRange: "1D",
+    timeframed: true,
+    group: "ADX / DI",
+    higherIsBetter: true,
+  },
+  plusDi: {
+    key: "plusDi",
+    label: "+DI (14)",
+    plainLabel: "Upside directional",
+    whatItIs: "Positive Directional Indicator — strength of upside moves (14).",
+    whyMatters: "+DI above −DI favors bulls on the selected Time.",
+    category: "setup",
+    source: "technical",
+    format: "number",
+    operators: NUMERIC_OPS,
+    dateRanges: CANDLE_TIME_RANGES,
+    defaultDateRange: "1D",
+    timeframed: true,
+    group: "ADX / DI",
+  },
+  minusDi: {
+    key: "minusDi",
+    label: "−DI (14)",
+    plainLabel: "Downside directional",
+    whatItIs: "Negative Directional Indicator — strength of downside moves (14).",
+    whyMatters: "−DI above +DI favors bears on the selected Time.",
+    category: "setup",
+    source: "technical",
+    format: "number",
+    operators: NUMERIC_OPS,
+    dateRanges: CANDLE_TIME_RANGES,
+    defaultDateRange: "1D",
+    timeframed: true,
+    group: "ADX / DI",
+  },
+  aroonUp: {
+    key: "aroonUp",
+    label: "Aroon Up (25)",
+    plainLabel: "Time since high",
+    whatItIs: "How recently the 25-bar high occurred (100 = high on latest bar).",
+    whyMatters: "High Aroon Up = fresh upside strength on the selected Time.",
+    category: "setup",
+    source: "technical",
+    format: "number",
+    operators: NUMERIC_OPS,
+    dateRanges: CANDLE_TIME_RANGES,
+    defaultDateRange: "1D",
+    timeframed: true,
+    group: "Aroon",
+  },
+  aroonDown: {
+    key: "aroonDown",
+    label: "Aroon Down (25)",
+    plainLabel: "Time since low",
+    whatItIs: "How recently the 25-bar low occurred (100 = low on latest bar).",
+    whyMatters: "High Aroon Down = fresh downside pressure on the selected Time.",
+    category: "setup",
+    source: "technical",
+    format: "number",
+    operators: NUMERIC_OPS,
+    dateRanges: CANDLE_TIME_RANGES,
+    defaultDateRange: "1D",
+    timeframed: true,
+    group: "Aroon",
+  },
+  aroonOsc: {
+    key: "aroonOsc",
+    label: "Aroon Oscillator (25)",
+    plainLabel: "Aroon Up minus Down",
+    whatItIs: "Aroon Up − Aroon Down (−100 to +100).",
+    whyMatters: "Positive favors uptrends; negative favors downtrends on that Time.",
+    category: "setup",
+    source: "technical",
+    format: "number",
+    operators: NUMERIC_OPS,
+    dateRanges: CANDLE_TIME_RANGES,
+    defaultDateRange: "1D",
+    timeframed: true,
+    group: "Aroon",
+  },
+  bollingerPercentB: {
+    key: "bollingerPercentB",
+    label: "Bollinger %B (20,2)",
+    plainLabel: "Position in Bollinger band",
+    whatItIs: "Where close sits in the Bollinger Band (0 = lower, 1 = upper) on selected Time.",
+    whyMatters: "Below 0 / above 1 = outside the bands — stretch or breakout.",
+    category: "setup",
+    source: "technical",
+    format: "number",
+    operators: NUMERIC_OPS,
+    dateRanges: CANDLE_TIME_RANGES,
+    defaultDateRange: "1D",
+    timeframed: true,
+    group: "Bollinger / channels",
+  },
+  bollingerBandwidth: {
+    key: "bollingerBandwidth",
+    label: "Bollinger Bandwidth (20,2) %",
+    plainLabel: "Band width",
+    whatItIs: "(Upper − lower) / middle × 100 — volatility of the Bollinger envelope.",
+    whyMatters: "Squeeze (low bandwidth) often precedes large moves on that Time.",
+    category: "setup",
+    source: "technical",
+    format: "percent",
+    unit: "%",
+    operators: NUMERIC_OPS,
+    dateRanges: CANDLE_TIME_RANGES,
+    defaultDateRange: "1D",
+    timeframed: true,
+    group: "Bollinger / channels",
+  },
+  donchianPosition: {
+    key: "donchianPosition",
+    label: "Donchian Position (20) %",
+    plainLabel: "Place in Donchian channel",
+    whatItIs: "Where close sits in the 20-bar high/low range (0–100%) on selected Time.",
+    whyMatters: "Near 100% = pressing highs; near 0% = pressing lows.",
+    category: "setup",
+    source: "technical",
+    format: "percent",
+    unit: "%",
+    operators: NUMERIC_OPS,
+    dateRanges: CANDLE_TIME_RANGES,
+    defaultDateRange: "1D",
+    timeframed: true,
+    group: "Bollinger / channels",
+  },
+  relativeVolume: {
+    key: "relativeVolume",
+    label: "Relative Volume",
+    plainLabel: "Buyers showing up",
+    whatItIs: "Latest bar volume versus the 20-bar average on the selected Time.",
+    whyMatters: "Moves with participation carry more weight than thin drifts.",
+    category: "setup",
+    source: "technical",
+    format: "ratio",
+    unit: "x",
+    operators: NUMERIC_OPS,
+    dateRanges: CANDLE_TIME_RANGES,
+    defaultDateRange: "1D",
+    timeframed: true,
+    group: "Volume",
+    higherIsBetter: true,
+  },
+  priceVsVwapPct: {
+    key: "priceVsVwapPct",
+    label: "Price vs VWAP",
+    plainLabel: "Above session average price",
+    whatItIs:
+      "How far price is above/below session VWAP (volume-weighted). Intraday Times only.",
+    whyMatters: "Gauges session strength against real traded prices.",
+    category: "setup",
+    source: "technical",
+    format: "percent",
+    unit: "%",
+    operators: NUMERIC_OPS,
+    dateRanges: VWAP_TIME_RANGES,
+    defaultDateRange: "15m",
+    timeframed: true,
+    group: "Volume",
+    higherIsBetter: true,
+  },
+  mfi: {
+    key: "mfi",
+    label: "Money Flow Index (14)",
+    plainLabel: "Volume-weighted RSI",
+    whatItIs: "0–100 volume-weighted momentum (14) on the selected Time.",
+    whyMatters: "Confirms RSI-style signals with volume participation.",
+    category: "setup",
+    source: "technical",
+    format: "number",
+    operators: NUMERIC_OPS,
+    dateRanges: CANDLE_TIME_RANGES,
+    defaultDateRange: "1D",
+    timeframed: true,
+    group: "Volume",
+  },
+  chaikinMoneyFlow: {
+    key: "chaikinMoneyFlow",
+    label: "Chaikin Money Flow (20)",
+    plainLabel: "Buying/selling pressure",
+    whatItIs: "20-bar accumulation/distribution pressure (−1 to +1) on selected Time.",
+    whyMatters: "Positive CMF = net buying into the move; negative = distribution.",
+    category: "setup",
+    source: "technical",
+    format: "number",
+    operators: NUMERIC_OPS,
+    dateRanges: CANDLE_TIME_RANGES,
+    defaultDateRange: "1D",
+    timeframed: true,
+    group: "Volume",
+  },
+  obvChange20: {
+    key: "obvChange20",
+    label: "OBV 20-bar % change",
+    plainLabel: "On-balance volume trend",
+    whatItIs:
+      "Percent change in On-Balance Volume over the last 20 bars (normalized; raw OBV is not comparable across tickers).",
+    whyMatters: "Rising OBV with price confirms accumulation on the selected Time.",
+    category: "setup",
+    source: "technical",
+    format: "percent",
+    unit: "%",
+    operators: NUMERIC_OPS,
+    dateRanges: CANDLE_TIME_RANGES,
+    defaultDateRange: "1D",
+    timeframed: true,
+    group: "Volume",
+    higherIsBetter: true,
   },
   drawdownFrom52wHighPct: {
     key: "drawdownFrom52wHighPct",
     label: "Drawdown from 52W High",
     plainLabel: "How far off the high",
-    whatItIs: "How far price has fallen from its 52-week high.",
+    whatItIs: "How far price has fallen from its 52-week high (daily closes).",
     whyMatters: "Separates a controlled pullback from a broken chart.",
     category: "setup",
     source: "technical",
@@ -458,7 +885,7 @@ export const METRICS: Record<MetricKey, MetricMeta> = {
     key: "priceChange3mPct",
     label: "3-Month Price Change",
     plainLabel: "Recent price strength",
-    whatItIs: "Price performance over the last three months.",
+    whatItIs: "Price performance over the last three months (daily).",
     whyMatters: "Positive relative strength shows the market agrees with your thesis.",
     category: "setup",
     source: "technical",
@@ -467,81 +894,6 @@ export const METRICS: Record<MetricKey, MetricMeta> = {
     operators: NUMERIC_OPS,
     dateRanges: ["3M"],
     defaultDateRange: "3M",
-    higherIsBetter: true,
-  },
-  relativeVolume: {
-    key: "relativeVolume",
-    label: "Relative Volume",
-    plainLabel: "Buyers showing up",
-    whatItIs: "Today's volume versus the 20-day average.",
-    whyMatters: "Moves with participation carry more weight than thin drifts.",
-    category: "setup",
-    source: "technical",
-    format: "ratio",
-    unit: "x",
-    operators: NUMERIC_OPS,
-    dateRanges: ["Current"],
-    defaultDateRange: "Current",
-    higherIsBetter: true,
-  },
-  priceVsVwapPct: {
-    key: "priceVsVwapPct",
-    label: "Price vs VWAP",
-    plainLabel: "Above average price",
-    whatItIs: "How far price is above/below the volume-weighted average price.",
-    whyMatters: "Gauges intraday strength or weakness against real traded prices.",
-    category: "setup",
-    source: "technical",
-    format: "percent",
-    unit: "%",
-    operators: NUMERIC_OPS,
-    dateRanges: ["Current"],
-    defaultDateRange: "Current",
-    higherIsBetter: true,
-  },
-  priceVs10EmaPct: {
-    key: "priceVs10EmaPct",
-    label: "Price vs 10 EMA",
-    plainLabel: "Above short-term trend",
-    whatItIs: "How far price is above/below the 10-period moving average.",
-    whyMatters: "A fast read on the immediate trend.",
-    category: "setup",
-    source: "technical",
-    format: "percent",
-    unit: "%",
-    operators: NUMERIC_OPS,
-    dateRanges: ["Current"],
-    defaultDateRange: "Current",
-    higherIsBetter: true,
-  },
-  priceVs20EmaPct: {
-    key: "priceVs20EmaPct",
-    label: "Price vs 20 EMA",
-    plainLabel: "Above mid-term trend",
-    whatItIs: "How far price is above/below the 20-period moving average.",
-    whyMatters: "Confirms the swing trend supports the position.",
-    category: "setup",
-    source: "technical",
-    format: "percent",
-    unit: "%",
-    operators: NUMERIC_OPS,
-    dateRanges: ["Current"],
-    defaultDateRange: "Current",
-    higherIsBetter: true,
-  },
-  priceVs50EmaPct: {
-    key: "priceVs50EmaPct",
-    label: "Price vs 50 EMA",
-    plainLabel: "Above long-term trend",
-    whatItIs: "How far price is above/below the 50-period moving average.",
-    whyMatters: "The classic dividing line between healthy and broken trends.",
-    category: "setup",
-    source: "technical",
-    format: "percent",
-    unit: "%",
-    operators: NUMERIC_OPS,
-    dateRanges: ["Current"],
-    defaultDateRange: "Current",
     higherIsBetter: true,
   },
   daysUntilEarnings: {
@@ -561,19 +913,22 @@ export const METRICS: Record<MetricKey, MetricMeta> = {
   },
 
   // ---- Stock risk ----------------------------------------------------------
-  atrPct14d: {
-    key: "atrPct14d",
-    label: "ATR % of Price",
-    plainLabel: "Daily swing size",
-    whatItIs: "Average daily trading range as a percentage of price (14 days).",
+  atrPct: {
+    key: "atrPct",
+    label: "ATR % (14)",
+    plainLabel: "Bar swing size",
+    whatItIs:
+      "Average True Range as a percentage of price (14 bars) on the selected Time.",
     whyMatters: "Extreme volatility forces smaller sizing and shakes out conviction.",
     category: "risk",
     source: "technical",
     format: "percent",
     unit: "%",
     operators: NUMERIC_OPS,
-    dateRanges: ["14D"],
-    defaultDateRange: "14D",
+    dateRanges: CANDLE_TIME_RANGES,
+    defaultDateRange: "1D",
+    timeframed: true,
+    group: "Volatility",
     higherIsBetter: false,
   },
   beta1y: {
@@ -773,11 +1128,89 @@ export const METRICS: Record<MetricKey, MetricMeta> = {
 
 export const ALL_METRICS: MetricMeta[] = Object.values(METRICS);
 
+export function isTimeframedMetric(key: MetricKey): boolean {
+  return METRICS[key]?.timeframed === true;
+}
+
+/** Clamp a strategy candle default into a metric's allowed Time options. */
+export function resolveChipTime(
+  metricKey: MetricKey,
+  preferred?: DateRange | CandleInterval | null,
+): DateRange {
+  const meta = METRICS[metricKey];
+  if (!meta) return "1D";
+  if (preferred && meta.dateRanges.includes(preferred as DateRange)) {
+    return preferred as DateRange;
+  }
+  return meta.defaultDateRange;
+}
+
 export function metricsForCategory(category: RuleCategory): MetricMeta[] {
   return ALL_METRICS.filter(
     (metric) =>
       metric.category === category && isLiveSupportedMetric(metric.key),
   );
+}
+
+/**
+ * Authoring lenses for Risk / Trade / Layer 3 chip modals (Thesis · Technical ·
+ * Market tabs). Scoring still uses RuleChip.category (host) — lenses only
+ * control which Data Point list and which rows are shown.
+ */
+export type MetricLens = "thesis" | "technical" | "market";
+
+export const METRIC_LENS_TABS: { id: MetricLens; label: string }[] = [
+  { id: "thesis", label: "Thesis" },
+  { id: "technical", label: "Technical" },
+  { id: "market", label: "Market" },
+];
+
+/** Stock-risk + position metrics that live on the Market lens (not Thesis/Setup). */
+const MARKET_LENS_KEYS = new Set<MetricKey>([
+  "atrPct",
+  "beta1y",
+  "avgDollarVolume20d",
+  "sectorEtf1mChangePct",
+  "vix",
+  "spyRsi",
+  "spyAbove200dSma",
+  "spy5dChangePct",
+  "highYieldSpreadPct",
+  "treasury10y5dChangePct",
+  "openPnlPct",
+  "weightPct",
+  "holdingDays",
+]);
+
+/** Which tab a metric row belongs to in Risk / Trade / Layer 3 modals. */
+export function lensForMetric(key: MetricKey): MetricLens {
+  const meta = METRICS[key];
+  if (!meta) return "market";
+  if (meta.category === "thesis") return "thesis";
+  if (meta.category === "setup") return "technical";
+  if (MARKET_LENS_KEYS.has(key) || meta.source === "market") return "market";
+  // Position/timeframe leftovers and any unknown host-risk keys → Market.
+  return "market";
+}
+
+export function metricsForLens(lens: MetricLens): MetricMeta[] {
+  switch (lens) {
+    case "thesis":
+      return metricsForCategory("thesis");
+    case "technical":
+      return metricsForCategory("setup");
+    case "market":
+      return ALL_METRICS.filter(
+        (metric) =>
+          isLiveSupportedMetric(metric.key) &&
+          (MARKET_LENS_KEYS.has(metric.key) || metric.source === "market"),
+      );
+  }
+}
+
+/** True when the host modal uses Thesis / Technical / Market authoring tabs. */
+export function hostUsesMetricLenses(category: RuleCategory): boolean {
+  return category === "risk" || category === "trade";
 }
 
 // ---- Condition labels ------------------------------------------------------

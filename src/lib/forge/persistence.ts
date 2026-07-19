@@ -1,12 +1,13 @@
-import type { CheckInterval, MetricKey, RuleChip, RuleTag, Strategy } from "../../types";
+import type { MetricKey, RuleChip, RuleTag, Strategy } from "../../types";
 import { CHIP_LIBRARY_SEED, DEFAULT_STRATEGIES, PORTFOLIOS } from "../../data";
 import { portfolioIdsReferencingStrategy } from "./appliedPortfolios";
 import { isLiveSupportedMetric } from "./liveCoverage";
+import { migrateChips, migrateStrategyMetrics } from "./metricMigration";
+import { clampCadenceInterval, clampCandleInterval } from "./scheduler";
 
 const STORAGE_VERSION = 1;
 const STRATEGIES_KEY = "forge:strategies";
 const CHIP_LIBRARY_KEY = "forge:chipLibrary";
-const BETA0_FLOOR: CheckInterval[] = ["1D", "1W", "1M"];
 
 interface StoredPayload<T> {
   version: number;
@@ -151,21 +152,17 @@ function backfillAppliedPortfolios(strategies: Strategy[]): Strategy[] {
   });
 }
 
-function clampCadence(interval?: CheckInterval): CheckInterval {
-  if (interval && BETA0_FLOOR.includes(interval)) return interval;
-  return "1D";
-}
-
 function pruneUnsupportedChips(chips: RuleChip[] | undefined): RuleChip[] {
   return (chips ?? []).filter((chip) =>
     isLiveSupportedMetric(chip.metric as MetricKey),
   );
 }
 
-/** Layer 1 + Beta 0 cadence: drop unsupported metrics; floor intervals to daily+. */
+/** Layer 1 + cadence: migrate legacy keys, drop unsupported, clamp intervals. */
 function pruneStrategiesForLive(strategies: Strategy[]): Strategy[] {
   return strategies.map((strategy) => {
-    const rules = pruneUnsupportedChips(strategy.rules);
+    const migrated = migrateStrategyMetrics(strategy);
+    const rules = pruneUnsupportedChips(migrated.rules);
     const allowedIds = new Set(rules.map((chip) => chip.id));
     const pruneTags = (tags: RuleTag[] | undefined): RuleTag[] | undefined => {
       if (!tags) return tags;
@@ -174,18 +171,16 @@ function pruneStrategiesForLive(strategies: Strategy[]): Strategy[] {
         chipIds: tag.chipIds.filter((id) => allowedIds.has(id) || tag.system),
       }));
     };
-    const checkInterval = clampCadence(strategy.checkInterval);
+    const checkInterval = clampCadenceInterval(migrated.checkInterval);
     return {
-      ...strategy,
+      ...migrated,
       checkInterval,
-      technicalsInterval: clampCadence(
-        strategy.technicalsInterval ?? checkInterval,
-      ),
+      technicalsInterval: clampCandleInterval(migrated.technicalsInterval),
       rules,
-      ruleTags: pruneTags(strategy.ruleTags),
-      trimZoneRules: pruneUnsupportedChips(strategy.trimZoneRules),
-      addZoneRules: pruneUnsupportedChips(strategy.addZoneRules),
-      goToCashRules: pruneUnsupportedChips(strategy.goToCashRules),
+      ruleTags: pruneTags(migrated.ruleTags),
+      trimZoneRules: pruneUnsupportedChips(migrated.trimZoneRules),
+      addZoneRules: pruneUnsupportedChips(migrated.addZoneRules),
+      goToCashRules: pruneUnsupportedChips(migrated.goToCashRules),
     };
   });
 }
@@ -222,7 +217,7 @@ export function loadPersistedChipLibrary(): RuleChip[] {
   const base = stored
     ? backfillChipLibraryPlans(stored)
     : CHIP_LIBRARY_SEED;
-  return pruneUnsupportedChips(base);
+  return pruneUnsupportedChips(migrateChips(base));
 }
 
 export function persistStrategies(strategies: Strategy[]): void {

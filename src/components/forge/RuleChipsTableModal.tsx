@@ -5,15 +5,22 @@ import { InfoTip } from "../Tooltip";
 import { ForgeTableModal } from "./ForgeTableModal";
 import {
   CATEGORY_META,
+  METRIC_LENS_TABS,
   METRICS,
   conditionLabel,
   formatChipCondition,
+  hostUsesMetricLenses,
+  lensForMetric,
   metricsForCategory,
+  metricsForLens,
+  resolveChipTime,
+  type MetricLens,
   type MetricMeta,
 } from "../../lib/forge/metrics";
 import { isExamplePlan, normalizePlanEdit } from "../../lib/forge/myPlan";
 import { systemChipsForCategory } from "../../lib/forge/chipSources";
 import { ForgeToast } from "./ForgeToast";
+import { ForgeSectionTabs } from "./ForgeSectionTabs";
 import { useAppState } from "../../state/AppState";
 import { useIsMobile } from "../../lib/useIsMobile";
 import {
@@ -28,12 +35,45 @@ import {
   X,
 } from "../../lib/icons";
 import type {
+  CandleInterval,
   DateRange,
   MetricKey,
   RuleCategory,
   RuleChip,
   RuleOperator,
 } from "../../types";
+
+/** Render metric `<option>`s, grouped when MetricMeta.group is set. */
+function MetricSelectOptions({ options }: { options: MetricMeta[] }) {
+  const groups: { label: string | null; items: MetricMeta[] }[] = [];
+  for (const option of options) {
+    const label = option.group ?? null;
+    const last = groups[groups.length - 1];
+    if (last && last.label === label) last.items.push(option);
+    else groups.push({ label, items: [option] });
+  }
+  return (
+    <>
+      {groups.map((group) =>
+        group.label ? (
+          <optgroup key={group.label} label={group.label}>
+            {group.items.map((option) => (
+              <option key={option.key} value={option.key}>
+                {option.label}
+              </option>
+            ))}
+          </optgroup>
+        ) : (
+          group.items.map((option) => (
+            <option key={option.key} value={option.key}>
+              {option.label}
+            </option>
+          ))
+        ),
+      )}
+    </>
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Rule Chips table modal (per the Figma table designs). One reusable component
@@ -44,9 +84,11 @@ import type {
 // reflect live edits. Chrome (backdrop, title, intro, totals, footer) comes
 // from ForgeTableModal — do not re-implement that shell here.
 //
-// Columns: CHIP LABEL · DATA POINT · DATE RANGE · CONDITION · VALUE ·
+// Columns: CHIP LABEL · DATA POINT · TIME · CONDITION · VALUE ·
 // RULE WEIGHT · [MY PLAN on Risk] · ACTIONS. Rule weights should total 100%.
 // On mobile the rows reflow into stacked cards (index.css).
+// Time = fiscal/range label for fundamentals, or candle size for timeframed
+// technicals (defaults from strategy technicalsInterval when provided).
 //
 // "Add Rule" is a split button (ActionMenu): "Add new blank chip" is the
 // original behavior; "Select chip from system defaults or custom chips" opens
@@ -92,13 +134,13 @@ function valueUnitSuffix(metric: MetricKey): string {
   }
 }
 
-/** Groups chip entries by their underlying data point, in metricsForCategory
-    order (matches the Data Point dropdown), dropping metrics with no matches. */
+/** Groups chip entries by data point, in the given metric list order (matches
+    the Data Point dropdown), dropping metrics with no matches. */
 function groupChipsByMetric(
-  category: RuleCategory,
+  metricList: MetricMeta[],
   entries: { chip: RuleChip; meta?: string }[],
 ): ChipSearchGroup[] {
-  return metricsForCategory(category)
+  return metricList
     .map((metricMeta) => ({
       heading: metricMeta.label,
       options: entries
@@ -191,6 +233,7 @@ export function RuleChipsTableModal({
   onDraftChange,
   onCancel,
   onDone,
+  defaultTime,
 }: {
   category: RuleCategory;
   /** The strategy's current chips for this category (draft source). */
@@ -201,6 +244,8 @@ export function RuleChipsTableModal({
   onCancel: () => void;
   /** Close the modal; edits are already committed. */
   onDone: () => void;
+  /** Strategy cadence technicalsInterval — default Time for new technical chips. */
+  defaultTime?: CandleInterval;
 }) {
   const { chipLibrary, saveChipToLibrary, removeChipFromLibrary, updateChipInLibrary } =
     useAppState();
@@ -209,7 +254,17 @@ export function RuleChipsTableModal({
   // My Plan is available on every category — Watch Summary surfaces failing
   // chips from any status-driving category (thesis, setup, risk, …).
   const showMyPlan = true;
-  const metricOptions = useMemo(() => metricsForCategory(category), [category]);
+  const usesLenses = hostUsesMetricLenses(category);
+  const [activeLens, setActiveLens] = useState<MetricLens>(() => {
+    if (!hostUsesMetricLenses(category)) return "market";
+    const first = chips[0];
+    return first ? lensForMetric(first.metric) : "market";
+  });
+  const metricOptions = useMemo(
+    () =>
+      usesLenses ? metricsForLens(activeLens) : metricsForCategory(category),
+    [usesLenses, activeLens, category],
+  );
   const [draft, setDraft] = useState<RuleChip[]>(() =>
     chips.map((chip) => ({ ...chip })),
   );
@@ -247,24 +302,33 @@ export function RuleChipsTableModal({
   const savedRowFlashTimer = useRef<number | undefined>(undefined);
   useEffect(() => () => window.clearTimeout(savedRowFlashTimer.current), []);
 
-  const systemGroups = useMemo(
-    () =>
-      groupChipsByMetric(
-        category,
-        systemChipsForCategory(category).map(({ chip, sourceStrategyName }) => ({
-          chip,
-          meta: sourceStrategyName,
-        })),
-      ),
-    [category],
-  );
+  const systemGroups = useMemo(() => {
+    const entries = systemChipsForCategory(category)
+      .filter(
+        ({ chip }) => !usesLenses || lensForMetric(chip.metric) === activeLens,
+      )
+      .map(({ chip, sourceStrategyName }) => ({
+        chip,
+        meta: sourceStrategyName,
+      }));
+    return groupChipsByMetric(metricOptions, entries);
+  }, [category, usesLenses, activeLens, metricOptions]);
   const customChipsForCategory = useMemo(
-    () => chipLibrary.filter((chip) => chip.category === category),
-    [chipLibrary, category],
+    () =>
+      chipLibrary.filter(
+        (chip) =>
+          chip.category === category &&
+          (!usesLenses || lensForMetric(chip.metric) === activeLens),
+      ),
+    [chipLibrary, category, usesLenses, activeLens],
   );
   const customGroups = useMemo(
-    () => groupChipsByMetric(category, customChipsForCategory.map((chip) => ({ chip }))),
-    [category, customChipsForCategory],
+    () =>
+      groupChipsByMetric(
+        metricOptions,
+        customChipsForCategory.map((chip) => ({ chip })),
+      ),
+    [metricOptions, customChipsForCategory],
   );
 
   function closePicker() {
@@ -274,7 +338,13 @@ export function RuleChipsTableModal({
   }
 
   function addChipFromSource(source: RuleChip, libraryChipId?: string) {
-    const newChip: RuleChip = { ...source, id: nextChipId(), libraryChipId };
+    const newChip: RuleChip = {
+      ...source,
+      id: nextChipId(),
+      category,
+      libraryChipId,
+    };
+    if (usesLenses) setActiveLens(lensForMetric(newChip.metric));
     setDraft((current) => [newChip, ...current]);
     closePicker();
   }
@@ -315,7 +385,7 @@ export function RuleChipsTableModal({
       return {
         ...current,
         metric: metricKey,
-        dateRange: metricMeta.defaultDateRange,
+        dateRange: resolveChipTime(metricKey, defaultTime),
         operator,
         value,
       };
@@ -329,12 +399,35 @@ export function RuleChipsTableModal({
     cancelEditingLibraryChip();
   }
 
+  // Category-wide total (all lenses) so the 100% gate stays honest across tabs.
   const totalWeight = Math.round(
     draft.filter((chip) => chip.enabled).reduce((sum, chip) => sum + (chip.weightPct || 0), 0),
   );
+  const otherLensChipCount = usesLenses
+    ? draft.filter((chip) => lensForMetric(chip.metric) !== activeLens).length
+    : 0;
+
+  // Desktop/tablet: size the table to the tallest lens so switching tabs
+  // doesn't shrink the shell (My Plan rows ≈ 88px; plain rows ≈ 44px).
+  const stableTableMinHeight = useMemo(() => {
+    if (!usesLenses || isMobile) return undefined;
+    const rowPx = showMyPlan ? 88 : 44;
+    const headPx = 40;
+    const maxRows = Math.max(
+      0,
+      ...METRIC_LENS_TABS.map(
+        (tab) =>
+          draft.filter((chip) => lensForMetric(chip.metric) === tab.id).length,
+      ),
+    );
+    return headPx + maxRows * rowPx;
+  }, [usesLenses, isMobile, showMyPlan, draft]);
 
   const sorted = useMemo(() => {
-    if (!sort) return draft;
+    const scoped = usesLenses
+      ? draft.filter((chip) => lensForMetric(chip.metric) === activeLens)
+      : draft;
+    if (!sort) return scoped;
     const value = (chip: RuleChip): string | number => {
       switch (sort.key) {
         case "metric":
@@ -357,7 +450,7 @@ export function RuleChipsTableModal({
           return chip.label.toLowerCase();
       }
     };
-    return [...draft].sort((a, b) => {
+    return [...scoped].sort((a, b) => {
       const av = value(a);
       const bv = value(b);
       if (typeof av === "number" && typeof bv === "number") {
@@ -365,7 +458,7 @@ export function RuleChipsTableModal({
       }
       return String(av).localeCompare(String(bv)) * sort.dir;
     });
-  }, [draft, sort]);
+  }, [draft, sort, usesLenses, activeLens]);
 
   function toggleSort(key: SortKey) {
     setSort((current) =>
@@ -384,6 +477,7 @@ export function RuleChipsTableModal({
   function handleMetricChange(id: string, metricKey: MetricKey) {
     const metricMeta = METRICS[metricKey];
     const operatorOk = (op: RuleOperator) => metricMeta.operators.includes(op);
+    if (usesLenses) setActiveLens(lensForMetric(metricKey));
     setDraft((current) =>
       current.map((chip) => {
         if (chip.id !== id) return chip;
@@ -400,8 +494,9 @@ export function RuleChipsTableModal({
                 : 0;
         return {
           ...chip,
+          category,
           metric: metricKey,
-          dateRange: metricMeta.defaultDateRange,
+          dateRange: resolveChipTime(metricKey, defaultTime),
           operator,
           value,
         };
@@ -416,7 +511,7 @@ export function RuleChipsTableModal({
       label: "New Rule",
       category,
       metric: metricMeta.key,
-      dateRange: metricMeta.defaultDateRange,
+      dateRange: resolveChipTime(metricMeta.key, defaultTime),
       operator: metricMeta.operators[0],
       value:
         metricMeta.format === "boolean"
@@ -445,7 +540,7 @@ export function RuleChipsTableModal({
   const headers: { key: SortKey; label: string }[] = [
     { key: "label", label: "Chip Label" },
     { key: "metric", label: "Data Point" },
-    { key: "dateRange", label: "Date Range" },
+    { key: "dateRange", label: "Time" },
     { key: "operator", label: "Condition" },
     { key: "value", label: "Value" },
     { key: "weightPct", label: "Rule Weight" },
@@ -556,16 +651,12 @@ export function RuleChipsTableModal({
                             handleLibraryMetricChange(event.target.value as MetricKey)
                           }
                         >
-                          {metricOptions.map((option) => (
-                            <option key={option.key} value={option.key}>
-                              {option.label}
-                            </option>
-                          ))}
+                          <MetricSelectOptions options={metricOptions} />
                         </select>
                       </label>
                       <label className="config-field">
                         <span className="config-label forge-label forge-label--muted">
-                          Date Range
+                          Time
                         </span>
                         <select
                           className="input"
@@ -696,6 +787,8 @@ export function RuleChipsTableModal({
       title={meta.chipModalTitle}
       titleId="chip-table-title"
       withPlan={showMyPlan}
+      stableTabs={usesLenses}
+      stableTabsTableMin={stableTableMinHeight}
       onCancel={onCancel}
       onDone={onDone}
       intro={meta.chipModalIntro}
@@ -712,6 +805,23 @@ export function RuleChipsTableModal({
       }
       alternateView={pickerOpen ? pickerView : null}
     >
+          {usesLenses ? (
+            <div className="forge-metric-lens">
+              <ForgeSectionTabs
+                tabs={METRIC_LENS_TABS}
+                active={activeLens}
+                onChange={(id) => setActiveLens(id as MetricLens)}
+                ariaLabel="Data point type"
+              />
+              <p className="forge-metric-lens-hint">
+                {otherLensChipCount > 0
+                  ? `${otherLensChipCount} chip${
+                      otherLensChipCount === 1 ? "" : "s"
+                    } on other tabs — total rule weight below includes every tab.`
+                  : null}
+              </p>
+            </div>
+          ) : null}
 
           <div
             className={
@@ -816,18 +926,14 @@ export function RuleChipsTableModal({
                           handleMetricChange(chip.id, event.target.value as MetricKey)
                         }
                       >
-                        {metricOptions.map((option) => (
-                          <option key={option.key} value={option.key}>
-                            {option.label}
-                          </option>
-                        ))}
+                        <MetricSelectOptions options={metricOptions} />
                       </select>
                     </div>
-                    <div className="forge-table-cell" role="cell" data-label="Date Range">
+                    <div className="forge-table-cell" role="cell" data-label="Time">
                       <select
                         className="input forge-cell-input forge-cell-input--mono"
                         value={chip.dateRange}
-                        aria-label="Date range"
+                        aria-label="Time"
                         onChange={(event) =>
                           patchChip(chip.id, { dateRange: event.target.value as DateRange })
                         }

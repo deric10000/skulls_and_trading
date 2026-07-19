@@ -4,10 +4,12 @@
  */
 
 import type {
+  CandleInterval,
   FundamentalSnapshot,
   MarketContext,
   TechnicalSnapshot,
   TickerQuote,
+  TimeframedIndicators,
 } from "../../types";
 
 export type ProviderId = "yahoo" | "finnhub" | "fred" | "stooq";
@@ -22,6 +24,10 @@ export interface ProviderBudget {
 const quotes = new Map<string, TickerQuote>();
 const fundamentals = new Map<string, FundamentalSnapshot>();
 const technicals = new Map<string, TechnicalSnapshot>();
+const technicalsByTimeframe = new Map<
+  string,
+  Partial<Record<CandleInterval, TimeframedIndicators>>
+>();
 let marketContext: MarketContext | null = null;
 /** ISO timestamps keyed by strategy id — last successful portfolio refresh. */
 const lastPullByStrategy = new Map<string, string>();
@@ -83,6 +89,22 @@ export function getLiveTechnicals(
   ticker: string,
 ): TechnicalSnapshot | undefined {
   return technicals.get(ticker.toUpperCase());
+}
+
+export function setLiveTechnicalsByTimeframe(
+  ticker: string,
+  byTimeframe: Partial<Record<CandleInterval, TimeframedIndicators>>,
+): void {
+  const key = ticker.toUpperCase();
+  const prev = technicalsByTimeframe.get(key) ?? {};
+  technicalsByTimeframe.set(key, { ...prev, ...byTimeframe });
+  bump();
+}
+
+export function getLiveTechnicalsByTimeframe(
+  ticker: string,
+): Partial<Record<CandleInterval, TimeframedIndicators>> | undefined {
+  return technicalsByTimeframe.get(ticker.toUpperCase());
 }
 
 export function setLiveMarketContext(context: MarketContext): void {

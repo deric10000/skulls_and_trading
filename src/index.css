@@ -3768,6 +3768,33 @@ span.checkbox {
   gap: 0.6rem;
 }
 
+/* Cadence feature toggles — master switch + per-notification-type row. */
+.forge-cadence-toggles {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin-top: 0.9rem;
+}
+
+.forge-cadence-notify {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.45rem 1rem;
+  padding-left: 1.9rem; /* indent under the master toggle */
+}
+
+/* Whole notify group reads secondary until cadence is enabled. */
+.forge-cadence-notify[aria-disabled="true"] {
+  opacity: 0.55;
+}
+
+.forge-future-tag {
+  color: var(--text-muted);
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
 /* Description-pane overview of categoryWeights — same values as each
    category tab's conviction weight editor. */
 .forge-conviction-grid {
@@ -4857,6 +4884,18 @@ span.checkbox {
   .modal-card.forge-table-modal.onboarding-modal {
     height: min(90vh, 100%);
   }
+
+  /* Risk / Trade / Layer 3 — Thesis · Technical · Market. Keep the shell
+     height stable while switching lenses (tabs + footer don't jump). Height
+     tracks the tallest lens (`--forge-lens-table-min` + chrome) and caps at
+     90vh so the table scrolls inside. Mobile is already a full-screen sheet. */
+  .modal-card.forge-table-modal--stable-tabs {
+    height: min(
+      calc(240px + var(--forge-lens-table-min, 200px)),
+      90vh,
+      100%
+    );
+  }
 }
 
 /* Shared Stepper strip between the header and the step body. */
@@ -4956,6 +4995,33 @@ span.checkbox {
 
 .forge-table-close:hover {
   background: rgb(241 178 74 / 0.28);
+}
+
+/* Risk / Trade / Layer 3 — Thesis · Technical · Market authoring tabs.
+   Uses Forge `.forge-section-tabs` (not page-level `.tabs` / auth age Tabs). */
+.forge-metric-lens {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: 0;
+  flex: 0 0 auto;
+}
+
+.forge-metric-lens .forge-section-tabs {
+  border-radius: 0;
+}
+
+.forge-metric-lens-hint {
+  margin: 0;
+  padding: 0 var(--space-3);
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  /* Always reserve one line so show/hide doesn't resize the shell. */
+  min-height: 1.25em;
+}
+
+.forge-metric-lens-hint:empty::before {
+  content: "\00a0";
 }
 
 .forge-table-intro {
@@ -5792,6 +5858,7 @@ select.forge-cell-input {
 
 @media (max-width: 540px) {
   .forge-cadence-row,
+  .forge-cadence-notify,
   .forge-conviction-grid {
     grid-template-columns: minmax(0, 1fr);
   }

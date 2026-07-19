@@ -117,11 +117,32 @@ symbol search are filled through Cloudflare Worker routes under `/api/market/*`
    `strategyIds`) — a quote tick never wipes Forge overlay.
 4. **Ticker search:** `asyncSearchTickers` → Worker Yahoo search. Never merge
    with quarantined `TOP_SEARCH_TICKERS` (mock-only).
-5. **Cadence (Beta 0):** Check / Technicals UI floors to `1D` / `1W` / `1M`;
-   load-time clamp + Worker TTL ≥ 1 day. Scheduler in
-   `src/lib/forge/scheduler.ts` gates on market hours + tab visibility.
+5. **Cadence:** Check cadence offers Daily/Weekly/Monthly, 4 intraday
+   session-closes (premarket/regular/after-hours/overnight ET), and 4h/1h/30m
+   candles; **15m ships disabled ("Future Capability")**. Technicals is
+   candle-only. Auto-refresh is **opt-in per strategy** (`cadenceEnabled` +
+   `cadenceNotify.autoRefresh`); checks still run at login / manual refresh
+   regardless. Worker quote TTL is market-hours aware (~5 min during the regular
+   session, 1 day when closed); fundamentals/technicals stay daily. Scheduler in
+   `src/lib/forge/scheduler.ts` gates on ET session windows + tab visibility.
 6. **Availability layers:** `liveCoverage.ts` + Forge dropdown prune; null =
-   no-data; critical nulls → `NeedsDataReviewFlag`.
+   no-data; critical nulls → `NeedsDataReviewFlag`. Free-tier coverage is
+   maximal for the current channels: fundamentals map from Yahoo quoteSummary
+   (`financialData` / `defaultKeyStatistics` / `summaryDetail` /
+   `calendarEvents` — module + unit fidelity matters: D/E percent→ratio,
+   cash-flow dollars→$B). **Timeframed technicals:** Yahoo returns raw OHLCV
+   only; the Worker (`worker/indicators.ts` + `?timeframes=`) computes a
+   comprehensive-core TA library (RSI, Stochastic, StochRSI, Williams %R, CCI,
+   MACD line/signal/hist, ROC, SMA/EMA, ADX/+DI/−DI, Aroon, ATR%, Bollinger
+   %B/bandwidth, Donchian, relative volume, session VWAP, MFI, CMF, OBV %chg)
+   per candle Time (15m/30m/1h/4h/1D/1W/1M). Chips store Time in
+   `RuleChip.dateRange`; scoring reads `getTechnicalsByTimeframe`. Refresh
+   fetches only Times needed by enabled chips. Legacy daily snapshot fields
+   remain for non-timeframed reads + mock seeds. Also daily: 1Y beta vs SPY,
+   `daysUntilEarnings`, `sectorEtf1mChangePct` (GICS→SPDR, researched
+   `TICKERS` only). Excluded (no honest free source; never fabricate):
+   `interestCoverage`, `dividendGrowth5yPct`, `buybackYieldPct` — see
+   `liveCoverage.ts`.
 7. **Weather:** FreeTier builds readings from live `MarketContext` via
    `weather/live.ts` (mock seeds quarantined for `mockDataSource` only).
    Sector/industry keys come from `weather/taxonomy.ts` (GICS 11 / 74 SSOT).
@@ -362,13 +383,26 @@ change. **Postgres is source of truth** (not `localStorage`).
 Legacy `src/lib/forge/persistence.ts` localStorage helpers remain for fixtures /
 offline only — do not use as SoT for Beta accounts.
 
-### Cadence rules (Beta 0)
+### Cadence rules
 
 - Scheduler: `src/lib/forge/scheduler.ts` — **per-strategy** dues for assigned
-  tickers; Beta 0 floor `1D` / `1W` / `1M`; daily uses ET regular-session due
-  semantics (not a rolling “refresh everything on login” only).
+  tickers, scheduled **only when `cadenceEnabled && cadenceNotify.autoRefresh`**.
+  Checks still run at login / manual refresh regardless of these toggles.
+- Enabled cadences: Daily/Weekly/Monthly, 4 intraday session-closes
+  (`close-premarket` 09:30 / `close-regular` 16:00 / `close-afterhours` 20:00 /
+  `close-overnight` 04:00 ET), and 4h/1h/30m candles. **15m is disabled**
+  ("Future Capability"). `clampCadenceInterval` maps 15m/unknown → nearest
+  enabled; `clampCandleInterval` keeps Technicals candle-only.
+- Session-closes fire once per weekday after the ET boundary; fixed candles fire
+  on elapsed interval during the regular session; daily/weekly/monthly gate on
+  the regular session. All gate on tab visibility.
+- Cadence prefs (`checkInterval`, `technicalsInterval`, `cadenceEnabled`,
+  `cadenceNotify`) are **apply-level user prefs** — editable + persisted even on
+  default strategies (see `strategyMerge` `APPLY_ONLY_KEYS`), unlike locked
+  bodies (rules/tags/thesis).
 - Same ticker under two strategies → two dues / independent pulls for scoring.
-- Sub-daily intervals remain UI-clamped / not enabled for free-tier Beta 0.
+- Notification types email/text/browser are **UI placeholders** (no delivery
+  backend yet); only auto-refresh (+ in-app `cadenceToast`) is wired.
 
 ### Chip library — "Add Rule" (System Defaults / My Chips)
 

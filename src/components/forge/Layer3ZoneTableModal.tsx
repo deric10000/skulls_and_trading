@@ -6,13 +6,18 @@ import { ForgeTableModal } from "./ForgeTableModal";
 import {
   CATEGORY_META,
   CATEGORY_ORDER,
+  METRIC_LENS_TABS,
   METRICS,
   conditionLabel,
   formatChipCondition,
-  metricsForCategory,
+  lensForMetric,
+  metricsForLens,
+  resolveChipTime,
+  type MetricLens,
   type MetricMeta,
 } from "../../lib/forge/metrics";
 import { isExamplePlan, normalizePlanEdit } from "../../lib/forge/myPlan";
+import { ForgeSectionTabs } from "./ForgeSectionTabs";
 import { useIsMobile } from "../../lib/useIsMobile";
 import {
   CaretDown,
@@ -22,6 +27,7 @@ import {
   Trash,
 } from "../../lib/icons";
 import type {
+  CandleInterval,
   MetricKey,
   RuleChip,
   RuleOperator,
@@ -70,27 +76,57 @@ function valueUnitSuffix(metric: MetricKey): string {
   }
 }
 
-function allMetricOptions(): MetricMeta[] {
-  return CATEGORY_ORDER.flatMap((category) => metricsForCategory(category));
+/** Render metric options with optional optgroups from MetricMeta.group. */
+function MetricSelectOptions({ options }: { options: MetricMeta[] }) {
+  const groups: { label: string | null; items: MetricMeta[] }[] = [];
+  for (const option of options) {
+    const label = option.group ?? null;
+    const last = groups[groups.length - 1];
+    if (last && last.label === label) last.items.push(option);
+    else groups.push({ label, items: [option] });
+  }
+  return (
+    <>
+      {groups.map((group) =>
+        group.label ? (
+          <optgroup key={group.label} label={group.label}>
+            {group.items.map((option) => (
+              <option key={option.key} value={option.key}>
+                {option.label}
+              </option>
+            ))}
+          </optgroup>
+        ) : (
+          group.items.map((option) => (
+            <option key={option.key} value={option.key}>
+              {option.label}
+            </option>
+          ))
+        ),
+      )}
+    </>
+  );
 }
 
-function groupSourceChips(chips: RuleChip[]): ChipSearchGroup[] {
-  return CATEGORY_ORDER.flatMap((category) => {
-    const meta = CATEGORY_META[category];
-    const inCategory = chips.filter((chip) => chip.category === category);
-    if (inCategory.length === 0) return [];
-    return [
-      {
-        heading: meta.label,
-        options: inCategory.map((chip) => ({
-          id: chip.id,
-          chip,
-          description: formatChipCondition(chip),
-          meta: meta.stepLabel,
-        })),
-      },
-    ];
-  });
+function groupSourceChips(
+  chips: RuleChip[],
+  lens: MetricLens,
+): ChipSearchGroup[] {
+  const lensLabel =
+    METRIC_LENS_TABS.find((tab) => tab.id === lens)?.label ?? lens;
+  const inLens = chips.filter((chip) => lensForMetric(chip.metric) === lens);
+  if (inLens.length === 0) return [];
+  return [
+    {
+      heading: lensLabel,
+      options: inLens.map((chip) => ({
+        id: chip.id,
+        chip,
+        description: formatChipCondition(chip),
+        meta: CATEGORY_META[chip.category]?.stepLabel,
+      })),
+    },
+  ];
 }
 
 function groupSourceTags(tags: RuleTag[]): ChipSearchGroup[] {
@@ -202,6 +238,7 @@ export function Layer3ZoneTableModal({
   onDraftChange,
   onCancel,
   onDone,
+  defaultTime,
 }: {
   zone: Layer3ZoneMeta;
   rules: RuleChip[];
@@ -213,9 +250,15 @@ export function Layer3ZoneTableModal({
   onDraftChange: (next: { rules: RuleChip[]; tags: RuleTag[] }) => void;
   onCancel: () => void;
   onDone: () => void;
+  /** Strategy technicalsInterval — default Time for new timeframed chips. */
+  defaultTime?: CandleInterval;
 }) {
   const isMobile = useIsMobile();
-  const metricOptions = useMemo(() => allMetricOptions(), []);
+  const [activeLens, setActiveLens] = useState<MetricLens>(() => {
+    const first = rules[0];
+    return first ? lensForMetric(first.metric) : "market";
+  });
+  const metricOptions = useMemo(() => metricsForLens(activeLens), [activeLens]);
   const [draftRules, setDraftRules] = useState<RuleChip[]>(() =>
     rules.map((chip) => ({ ...chip })),
   );
@@ -238,16 +281,43 @@ export function Layer3ZoneTableModal({
     onDraftChange({ rules: draftRules, tags: draftTags });
   }, [draftRules, draftTags, onDraftChange]);
 
-  const chipGroups = useMemo(() => groupSourceChips(sourceChips), [sourceChips]);
+  const chipGroups = useMemo(
+    () => groupSourceChips(sourceChips, activeLens),
+    [sourceChips, activeLens],
+  );
   const tagGroups = useMemo(() => groupSourceTags(sourceTags), [sourceTags]);
 
+  // Zone-wide total (all lenses) — weights do not affect conviction.
   const totalWeight = useMemo(
     () => draftRules.reduce((sum, chip) => sum + Math.max(0, chip.weightPct), 0),
     [draftRules],
   );
+  const otherLensChipCount = draftRules.filter(
+    (chip) => lensForMetric(chip.metric) !== activeLens,
+  ).length;
+
+  // Desktop/tablet: size the table to the tallest lens so switching tabs
+  // doesn't shrink the shell (My Plan rows ≈ 88px). Empty lenses still show
+  // one empty-state row.
+  const stableTableMinHeight = useMemo(() => {
+    if (isMobile) return undefined;
+    const rowPx = 88;
+    const headPx = 40;
+    const maxRows = Math.max(
+      1,
+      ...METRIC_LENS_TABS.map(
+        (tab) =>
+          draftRules.filter((chip) => lensForMetric(chip.metric) === tab.id)
+            .length || 1,
+      ),
+    );
+    return headPx + maxRows * rowPx;
+  }, [isMobile, draftRules]);
 
   const sorted = useMemo(() => {
-    const rows = [...draftRules];
+    const rows = draftRules.filter(
+      (chip) => lensForMetric(chip.metric) === activeLens,
+    );
     const dir = sort.dir === "asc" ? 1 : -1;
     rows.sort((a, b) => {
       const av =
@@ -274,7 +344,7 @@ export function Layer3ZoneTableModal({
       return String(av).localeCompare(String(bv)) * dir;
     });
     return rows;
-  }, [draftRules, sort]);
+  }, [draftRules, sort, activeLens]);
 
   function toggleSort(key: SortKey) {
     setSort((current) =>
@@ -301,9 +371,11 @@ export function Layer3ZoneTableModal({
           : operator === "between"
             ? ([0, 0] as [number, number])
             : 0;
+    setActiveLens(lensForMetric(metricKey));
     patchChip(id, {
+      category: "trade",
       metric: metricKey,
-      dateRange: metricMeta.defaultDateRange,
+      dateRange: resolveChipTime(metricKey, defaultTime),
       operator,
       value,
     });
@@ -316,7 +388,7 @@ export function Layer3ZoneTableModal({
       label: zone.blankChipLabel,
       category: "trade",
       metric: metricMeta.key,
-      dateRange: metricMeta.defaultDateRange,
+      dateRange: resolveChipTime(metricMeta.key, defaultTime),
       operator: metricMeta.operators[0],
       value:
         metricMeta.format === "boolean"
@@ -334,8 +406,10 @@ export function Layer3ZoneTableModal({
     const copy: RuleChip = {
       ...source,
       id: nextZoneId(zone.idPrefix, "chip"),
+      category: "trade",
       label: source.label,
     };
+    setActiveLens(lensForMetric(copy.metric));
     setDraftRules((current) => [copy, ...current]);
     setPickerMode(null);
   }
@@ -400,7 +474,7 @@ export function Layer3ZoneTableModal({
   const headers: { key: SortKey; label: string }[] = [
     { key: "label", label: "Chip Label" },
     { key: "metric", label: "Data Point" },
-    { key: "dateRange", label: "Date Range" },
+    { key: "dateRange", label: "Time" },
     { key: "operator", label: "Condition" },
     { key: "value", label: "Value" },
     { key: "weightPct", label: "Rule Weight" },
@@ -503,6 +577,8 @@ export function Layer3ZoneTableModal({
         />
       }
       withPlan
+      stableTabs
+      stableTabsTableMin={stableTableMinHeight}
       onCancel={onCancel}
       onDone={onDone}
       intro={zone.intro}
@@ -520,6 +596,21 @@ export function Layer3ZoneTableModal({
       }
       alternateView={pickerMode ? pickerView : null}
     >
+            <div className="forge-metric-lens">
+              <ForgeSectionTabs
+                tabs={METRIC_LENS_TABS}
+                active={activeLens}
+                onChange={(id) => setActiveLens(id as MetricLens)}
+                ariaLabel="Data point type"
+              />
+              <p className="forge-metric-lens-hint">
+                {otherLensChipCount > 0
+                  ? `${otherLensChipCount} chip${
+                      otherLensChipCount === 1 ? "" : "s"
+                    } on other tabs — total rule weight below includes every tab.`
+                  : null}
+              </p>
+            </div>
             <div
               className="forge-table forge-table--chips forge-table--chips-plan"
               role="table"
@@ -626,25 +717,14 @@ export function Layer3ZoneTableModal({
                               handleMetricChange(chip.id, event.target.value as MetricKey)
                             }
                           >
-                            {CATEGORY_ORDER.map((category) => (
-                              <optgroup
-                                key={category}
-                                label={CATEGORY_META[category].stepLabel}
-                              >
-                                {metricsForCategory(category).map((option) => (
-                                  <option key={option.key} value={option.key}>
-                                    {option.label}
-                                  </option>
-                                ))}
-                              </optgroup>
-                            ))}
+                            <MetricSelectOptions options={metricOptions} />
                           </select>
                         </div>
-                        <div className="forge-table-cell" role="cell" data-label="Date Range">
+                        <div className="forge-table-cell" role="cell" data-label="Time">
                           <select
                             className="input forge-cell-input"
                             value={chip.dateRange}
-                            aria-label="Date range"
+                            aria-label="Time"
                             onChange={(event) =>
                               patchChip(chip.id, {
                                 dateRange: event.target.value as RuleChip["dateRange"],

@@ -1,6 +1,49 @@
+import type { ReactNode } from "react";
+
 export interface DropdownOption {
   value: string;
   label: string;
+  /** Renders the native option as disabled (non-selectable, greyed). */
+  disabled?: boolean;
+  /**
+   * Optional group label. Consecutive options sharing a group render inside a
+   * single native `<optgroup>` (e.g. an "Intraday" cluster).
+   */
+  group?: string;
+}
+
+/** Walk options in order, wrapping consecutive same-group runs in <optgroup>. */
+function renderOptions(options: DropdownOption[]): ReactNode[] {
+  const nodes: ReactNode[] = [];
+  let i = 0;
+  while (i < options.length) {
+    const option = options[i];
+    if (option.group) {
+      const group = option.group;
+      const grouped: DropdownOption[] = [];
+      while (i < options.length && options[i].group === group) {
+        grouped.push(options[i]);
+        i += 1;
+      }
+      nodes.push(
+        <optgroup key={`group-${group}`} label={group}>
+          {grouped.map((o) => (
+            <option key={o.value} value={o.value} disabled={o.disabled}>
+              {o.label}
+            </option>
+          ))}
+        </optgroup>,
+      );
+    } else {
+      nodes.push(
+        <option key={option.value} value={option.value} disabled={option.disabled}>
+          {option.label}
+        </option>,
+      );
+      i += 1;
+    }
+  }
+  return nodes;
 }
 
 /**
@@ -50,11 +93,7 @@ export function Dropdown({
         value={value}
         onChange={(event) => onChange(event.target.value)}
       >
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
+        {renderOptions(options)}
       </select>
     </>
   );

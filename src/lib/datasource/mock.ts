@@ -17,6 +17,7 @@ import {
   watchlistFromHoldings,
 } from "../../data";
 import { getMarketWeatherSnapshot } from "../weather/mock";
+import { mergeTechnicalsByTimeframe } from "../forge/timeframedFromLegacy";
 import type { DataSource } from "./DataSource";
 
 // Static mock implementation: returns the existing `src/data.ts` values exactly
@@ -50,6 +51,8 @@ export const mockDataSource: DataSource = {
   getMarketWeather: (timeframe) => getMarketWeatherSnapshot(timeframe),
   getFundamentals: (ticker) => FUNDAMENTAL_SNAPSHOTS[ticker],
   getTechnicals: (ticker) => TECHNICAL_SNAPSHOTS[ticker],
+  getTechnicalsByTimeframe: (ticker) =>
+    mergeTechnicalsByTimeframe(TECHNICAL_SNAPSHOTS[ticker], undefined),
   getMarketContext: () => MARKET_CONTEXT,
   getBuckets: () => DEFAULT_BUCKETS,
   // MOCK-ONLY typeahead — delete this body when ApiDataSource.searchTickers

@@ -32,7 +32,10 @@ import {
   type TickerAlignment,
 } from "../lib/forge/alignment";
 import { withPortfolioApplied } from "../lib/forge/appliedPortfolios";
-import { createRefreshScheduler } from "../lib/forge/scheduler";
+import {
+  INTERVAL_LABEL,
+  createRefreshScheduler,
+} from "../lib/forge/scheduler";
 import { strategiesForHolding, isDefaultStrategyId } from "../lib/forge/tickerStrategy";
 import { canAddChips, canAddTicker, getBudgetUsage } from "../lib/forge/budgets";
 import { debounce } from "../lib/forge/persistence";
@@ -137,6 +140,9 @@ interface AppStateValue {
   signOut: () => void;
   budgetToast: string | null;
   clearBudgetToast: () => void;
+  /** Info toast when a strategy's cadence auto-refresh fires (null when idle). */
+  cadenceToast: string | null;
+  clearCadenceToast: () => void;
 
   captain: CaptainProfile;
   updateCaptain: (patch: Partial<CaptainProfile>) => void;
@@ -315,6 +321,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   // from the `onboardingSeen` flag gate so returning users can revisit it.
   const [onboardingReopened, setOnboardingReopened] = useState(false);
   const [budgetToast, setBudgetToast] = useState<string | null>(null);
+  // Info toast popped when a strategy's cadence auto-refresh fires.
+  const [cadenceToast, setCadenceToast] = useState<string | null>(null);
   const [authReady, setAuthReady] = useState(false);
   const [captain, setCaptain] = useState<CaptainProfile>({
     ...DEFAULT_CAPTAIN,
@@ -480,13 +488,23 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     const scheduler = createRefreshScheduler(
       portfolios,
       strategies,
-      (strategyId, tickers) => {
+      (strategyId, tickers, interval) => {
         void refreshStrategyTickers(strategyId, tickers);
+        setCadenceToast(
+          `Cadence check complete — conviction refreshed on your ${INTERVAL_LABEL[interval]} cadence. Turn cadence off anytime in Strategy Forge → Strategy Cadence.`,
+        );
       },
     );
     scheduler.start();
     return () => scheduler.stop();
   }, [isAuthenticated, portfolios, strategies, refreshStrategyTickers]);
+
+  // Auto-dismiss the cadence info toast after a short read window.
+  useEffect(() => {
+    if (!cadenceToast) return;
+    const timer = window.setTimeout(() => setCadenceToast(null), 12000);
+    return () => window.clearTimeout(timer);
+  }, [cadenceToast]);
 
   useEffect(() => {
     if (!persistEnabled.current || !isAuthenticated || demoMode) return;
@@ -533,6 +551,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const clearBudgetToast = useCallback(() => setBudgetToast(null), []);
+  const clearCadenceToast = useCallback(() => setCadenceToast(null), []);
 
   const adminBypass = isAdmin(userProfile);
 
@@ -1240,6 +1259,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       const ctx: MetricContext = {
         fundamentals: dataSource.getFundamentals(ticker),
         technicals: dataSource.getTechnicals(ticker),
+        technicalsByTimeframe: dataSource.getTechnicalsByTimeframe(ticker),
         market: dataSource.getMarketContext(),
         openPnlPct: holding?.openPnlPct,
         weightPct,
@@ -1342,6 +1362,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       signOut,
       budgetToast,
       clearBudgetToast,
+      cadenceToast,
+      clearCadenceToast,
       captain,
       updateCaptain,
       activePage,
@@ -1407,6 +1429,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       signOut,
       budgetToast,
       clearBudgetToast,
+      cadenceToast,
+      clearCadenceToast,
       captain,
       updateCaptain,
       activePage,

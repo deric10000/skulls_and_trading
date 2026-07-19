@@ -70,10 +70,16 @@ covered by that strategy's `appliedPortfolioIds` for the same source.
   in `AppState` only. Never dual-read mock seeds for a field once it's live.
 - Quarantined: `TOP_SEARCH_TICKERS`, static `MARKET_CONTEXT`, `weather/mock` —
   mockDataSource / fixtures only. Live search = `asyncSearchTickers`.
-- Beta 0 cadence floor: hide/clamp Check+Technicals faster than `1D`; scheduler
-  + Worker TTL respect daily+.
+- Cadence: Check offers Daily/Weekly/Monthly + 4 intraday session-closes +
+  4h/1h/30m; **15m disabled** ("Future Capability"). Technicals candle-only.
+  Auto-refresh is opt-in per strategy (`cadenceEnabled` + `cadenceNotify`);
+  Worker quote TTL is market-hours aware (~5 min live, 1 day closed).
 - Layer 1 coverage: `liveCoverage.ts` / Forge dropdowns / default strategies.
   Layer 2: null = no-data. Layer 3: `NeedsDataReviewFlag` for critical gaps.
+  Timeframed technicals: Worker computes comprehensive-core indicators from
+  Yahoo OHLCV per chip Time (`getTechnicalsByTimeframe` / `?timeframes=`).
+  Excluded (no honest free source): `interestCoverage`, `dividendGrowth5yPct`,
+  `buybackYieldPct`. Never fabricate a value to widen coverage.
 
 ## Market Weather (`src/lib/weather/`)
 
@@ -123,8 +129,10 @@ covered by that strategy's `appliedPortfolioIds` for the same source.
   conviction/status/resolved onto the watchlist — downstream chips (`StatusStack`,
   `PortfolioCompass`) reflect it. "Notify" = in-app chips updating; **no**
   push-notification system.
-- Cadence: Beta 0 floors Check/Technicals to **`1D`/`1W`/`1M`** (sub-daily hidden);
-  `technicalsInterval` ≥ `checkInterval`; fundamentals refresh daily. See
+- Cadence: Check = Daily/Weekly/Monthly + 4 intraday session-closes + 4h/1h/30m
+  (**15m disabled** "Future Capability"); Technicals candle-only; fundamentals
+  refresh daily. Auto-refresh opt-in per strategy (`cadenceEnabled` +
+  `cadenceNotify.autoRefresh`); email/text/browser are placeholders. See
   `data-architecture.md` §6.
 
 ## Safety
