@@ -3,7 +3,7 @@ import bullCompass from "../assets/bull-skull-compass.webp";
 import bearCompass from "../assets/bear-skull-compass.webp";
 import loginBackground from "../assets/skulls-and-trading-login-background-2.webp";
 import loginBackgroundMobile from "../assets/skulls-and-trading-login-background-mobile.webp";
-import { Skull, TrendUp } from "../lib/icons";
+import { ChartBar, Hammer, MapTrifold, Skull, TrendUp } from "../lib/icons";
 import { useAppState } from "../state/AppState";
 import { ComingSoonOverlay } from "./ComingSoonOverlay";
 
@@ -17,7 +17,7 @@ export function HeroCard({
   variant = "full",
   onReviewWatch,
 }: HeroCardProps) {
-  const { setActivePage, portfolios } = useAppState();
+  const { setActivePage, portfolios, openOnboardingModal } = useAppState();
   const [comingSoonOpen, setComingSoonOpen] = useState(false);
   const hasHoldings = portfolios.some(
     (portfolio) => portfolio.holdings.length > 0,
@@ -83,14 +83,24 @@ export function HeroCard({
                   className="btn btn--primary"
                   onClick={() => setComingSoonOpen(true)}
                 >
-                  Review Watch in Dashboard
+                  <ChartBar aria-hidden />
+                  Launch Dashboard
                 </button>
                 <button
                   type="button"
                   className="btn btn--ghost"
                   onClick={() => setActivePage("strategy-forge")}
                 >
+                  <Hammer aria-hidden />
                   Forge a Strategy
+                </button>
+                <button
+                  type="button"
+                  className="btn btn--ghost"
+                  onClick={openOnboardingModal}
+                >
+                  <MapTrifold aria-hidden />
+                  Onboarding
                 </button>
               </>
             ) : (
