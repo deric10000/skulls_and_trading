@@ -8,6 +8,7 @@ import {
 import { useAppState } from "../../state/AppState";
 import { OnboardingBadge } from "../badges/OnboardingBadge";
 import { ForgeToast } from "../forge/ForgeToast";
+import { HelmMetrics } from "./HelmMetrics";
 
 const TOAST_MS = 6000;
 
@@ -22,8 +23,12 @@ export function HelmBadgesSection() {
   const prevEarnedRef = useRef<Set<string> | null>(null);
 
   const ctx = useMemo(
-    () => ({ portfolios, strategies }),
-    [portfolios, strategies],
+    () => ({
+      portfolios,
+      strategies,
+      weatherReaderLayers: flags.weatherReaderLayers,
+    }),
+    [portfolios, strategies, flags.weatherReaderLayers],
   );
   const badges = useMemo(() => visibleOnboardingBadges(), []);
   const earnedList = useMemo(
@@ -101,8 +106,9 @@ export function HelmBadgesSection() {
           ))}
         </div>
       </section>
-      {/* Reserved for strategy/progress metrics — leave empty for now. */}
-      <div className="helm-metrics-slot" aria-hidden="true" />
+      <div className="helm-metrics-slot">
+        <HelmMetrics />
+      </div>
     </div>
   );
 }

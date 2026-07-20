@@ -883,6 +883,26 @@ button {
   margin-bottom: var(--space-3);
 }
 
+/* Title + captain-name chip stay grouped on the left; icon-btn stays right. */
+.helm-title-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.helm-title-row h2 {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.helm-title-row .chip {
+  flex: 0 0 auto;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* Eyebrow + Previous/Next on one row (desktop/tablet). Mobile hides the
    inline toggle and uses the sticky `.helm-nav-footer` dock instead. */
 .hero-eyebrow-row {
@@ -940,10 +960,154 @@ button {
   gap: var(--space-3);
 }
 
-/* Reserved for strategy / progress metrics under the badge row. */
+/* Strategy / progress metrics under the badge row. */
 .helm-metrics-slot {
   flex: 1 1 auto;
   min-height: 12rem;
+}
+
+.helm-metrics {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.helm-metrics .forge-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.helm-metrics-scope {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+/* Strategy scope: keeps the chip's size/typography, borrows the .strategy-option
+   palette (bordered surface-3 → gold on hover/open), and reveals a caret. */
+.helm-scope-select {
+  position: relative;
+  display: inline-flex;
+}
+
+.helm-scope-trigger {
+  font-family: inherit;
+  line-height: 1.55;
+  cursor: pointer;
+  border: 1px solid var(--border-soft);
+  background: var(--surface-3);
+  color: var(--text-muted);
+  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+
+.helm-scope-trigger:hover,
+.helm-scope-trigger:focus-visible,
+.helm-scope-trigger[aria-expanded="true"] {
+  border-color: rgb(241 178 74 / 0.45);
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+}
+
+/* Caret is hidden until hover / focus / open, then slides in. */
+.helm-scope-trigger .helm-scope-caret {
+  width: 0;
+  opacity: 0;
+  transition: width 0.15s ease, opacity 0.15s ease;
+}
+
+.helm-scope-trigger:hover .helm-scope-caret,
+.helm-scope-trigger:focus-visible .helm-scope-caret,
+.helm-scope-trigger[aria-expanded="true"] .helm-scope-caret {
+  width: 1em;
+  opacity: 0.9;
+}
+
+.helm-scope-menu {
+  left: auto;
+  right: 0;
+  min-width: 12rem;
+  width: max-content;
+}
+
+.helm-metrics-empty {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+.helm-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+
+/* Same card shell as the Current Watch stock cards (.select-card); non-interactive. */
+.helm-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding: 0.75rem 0.85rem;
+}
+
+.helm-metric--wide {
+  grid-column: 1 / -1;
+}
+
+.helm-metric-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.helm-metric-value {
+  font-size: 1.5rem;
+  font-weight: 700;
+  line-height: 1.1;
+  color: var(--text-strong);
+}
+
+.helm-metric-value--up {
+  color: var(--positive);
+}
+
+.helm-metric-value--down {
+  color: var(--negative);
+}
+
+.helm-metric-unit {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-left: 0.15rem;
+}
+
+.helm-metric-note {
+  font-size: 0.72rem;
+  color: var(--text-faint);
+}
+
+.helm-metric-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.15rem;
+}
+
+@media (max-width: 1023px) {
+  .helm-metrics-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .helm-metrics-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .onboarding-badge-wrap {

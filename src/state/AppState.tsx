@@ -133,6 +133,10 @@ interface AppStateValue {
   flags: UserFlags;
   /** Record onboarding badge IDs that already showed (or silently backfilled) a toast. */
   markBadgeToastsSeen: (ids: string[]) => void;
+  /** Mark a Market Weather layer opened in detail (Weather Reader badge). */
+  markWeatherReaderLayer: (
+    layer: "market" | "sector" | "industry" | "stock",
+  ) => void;
   completeBetaSignIn: () => Promise<void>;
   /** @deprecated Mock-only; Beta uses completeBetaSignIn */
   signIn: (name?: string) => void;
@@ -161,6 +165,14 @@ interface AppStateValue {
   selectedTicker: string;
   selectTicker: (ticker: string) => void;
   selectedItem: WatchlistItem | undefined;
+
+  /**
+   * Shared Current Watch portfolio selection so other Home surfaces (the Helm
+   * metrics) can mirror it. UI selection state only — not persisted workspace
+   * data. (Strategy scope is owned locally by each consumer.)
+   */
+  selectedPortfolioId: string | null;
+  setSelectedPortfolioId: (id: string | null) => void;
 
   strategies: Strategy[];
   createStrategy: () => string;
@@ -339,6 +351,9 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   }, []);
   const [watchlist, setWatchlist] = useState<WatchlistItem[]>([]);
   const [selectedTicker, setSelectedTicker] = useState("");
+  const [selectedPortfolioId, setSelectedPortfolioId] = useState<string | null>(
+    null,
+  );
   const [strategies, setStrategies] = useState<Strategy[]>(() =>
     emptyWorkspace().strategies,
   );
@@ -569,6 +584,20 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       return { ...current, badgeToastsSeen: Array.from(seen) };
     });
   }, []);
+
+  const markWeatherReaderLayer = useCallback(
+    (layer: "market" | "sector" | "industry" | "stock") => {
+      setFlags((current) => {
+        const layers = current.weatherReaderLayers ?? [];
+        if (layers.includes(layer)) return current;
+        return {
+          ...current,
+          weatherReaderLayers: [...layers, layer],
+        };
+      });
+    },
+    [],
+  );
 
   const clearBudgetToast = useCallback(() => setBudgetToast(null), []);
   const clearCadenceToast = useCallback(() => setCadenceToast(null), []);
@@ -1376,6 +1405,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       dismissOnboardingModal,
       flags,
       markBadgeToastsSeen,
+      markWeatherReaderLayer,
       completeBetaSignIn,
       signIn,
       signUp,
@@ -1396,6 +1426,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       selectedTicker,
       selectTicker: setSelectedTicker,
       selectedItem,
+      selectedPortfolioId,
+      setSelectedPortfolioId,
       strategies,
       createStrategy,
       updateStrategy,
@@ -1444,6 +1476,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       openOnboardingModal,
       dismissOnboardingModal,
       markBadgeToastsSeen,
+      markWeatherReaderLayer,
       completeBetaSignIn,
       signIn,
       signUp,
@@ -1462,6 +1495,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       removeTicker,
       selectedTicker,
       selectedItem,
+      selectedPortfolioId,
       strategies,
       createStrategy,
       updateStrategy,

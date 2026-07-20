@@ -1235,6 +1235,7 @@ export function WatchlistWidget({
     createPortfolioSource,
     getWatchPullStamp,
     lastDataPullAtByStrategyId,
+    setSelectedPortfolioId,
   } = useAppState();
   const isPreview = Boolean(previewStrategyId);
   const panelTitle = isPreview ? "Watch Preview" : "Current Watch";
@@ -1342,6 +1343,14 @@ export function WatchlistWidget({
     canCycleStrategies && strategyViewIndex > 0
       ? appliedStrategies[strategyViewIndex - 1]
       : undefined;
+
+  // Mirror the real Current Watch portfolio selection into shared state so other
+  // Home surfaces (the Helm metrics) can follow it. The forge Watch Preview is a
+  // separate instance and must not clobber the shared selection.
+  useEffect(() => {
+    if (isPreview) return;
+    setSelectedPortfolioId(selectedSource.id);
+  }, [isPreview, selectedSource.id, setSelectedPortfolioId]);
 
   useEffect(() => {
     setStrategyViewIndex(0);

@@ -18,9 +18,14 @@ export interface UserFlags {
   /**
    * Onboarding badge IDs that already fired their congratulations toast
    * (or were silently backfilled for milestones already true at hydrate).
-   * Earn display still derives from live portfolios/strategies.
+   * Earn display still derives from live portfolios/strategies / weather visits.
    */
   badgeToastsSeen?: string[];
+  /**
+   * Market Weather layers the Captain has opened in detail (card click).
+   * Drives the Weather Reader onboarding badge when all four are present.
+   */
+  weatherReaderLayers?: Array<"market" | "sector" | "industry" | "stock">;
 }
 
 export interface UserWorkspace {

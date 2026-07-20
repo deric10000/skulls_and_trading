@@ -6,13 +6,16 @@ import {
   ListBullets,
   Strategy,
   UserCircle,
+  Waves,
 } from "../icons";
 import type { Portfolio, Strategy as StrategyModel } from "../../types";
+import type { UserFlags } from "../userStore";
 
 /**
  * Helm onboarding milestone badges. Earn state is derived from live workspace
- * data; congratulations toasts are one-shot via `UserFlags.badgeToastsSeen`.
- * Entries flagged `underConstruction` stay hidden until that surface ships.
+ * data (+ persisted weather-layer visits); congratulations toasts are one-shot
+ * via `UserFlags.badgeToastsSeen`. Entries flagged `underConstruction` stay
+ * hidden until that surface ships.
  */
 
 export type OnboardingBadgeId =
@@ -20,12 +23,23 @@ export type OnboardingBadgeId =
   | "first-watchlist"
   | "first-strategy-applied"
   | "first-custom-strategy"
+  | "weather-reader"
   | "first-dashboard"
   | "first-captain-profile";
+
+export type WeatherReaderLayer = "market" | "sector" | "industry" | "stock";
+
+export const WEATHER_READER_LAYERS: WeatherReaderLayer[] = [
+  "market",
+  "sector",
+  "industry",
+  "stock",
+];
 
 export interface OnboardingBadgeContext {
   portfolios: Portfolio[];
   strategies: StrategyModel[];
+  weatherReaderLayers?: UserFlags["weatherReaderLayers"];
 }
 
 export interface OnboardingBadgeDef {
@@ -38,6 +52,11 @@ export interface OnboardingBadgeDef {
   icon: Icon;
   underConstruction?: boolean;
   isEarned: (ctx: OnboardingBadgeContext) => boolean;
+}
+
+function hasWeatherReader(ctx: OnboardingBadgeContext): boolean {
+  const visited = new Set(ctx.weatherReaderLayers ?? []);
+  return WEATHER_READER_LAYERS.every((layer) => visited.has(layer));
 }
 
 export const ONBOARDING_BADGES: OnboardingBadgeDef[] = [
@@ -78,6 +97,16 @@ export const ONBOARDING_BADGES: OnboardingBadgeDef[] = [
       "Congratulations — you forged a custom strategy. Make the rules yours.",
     icon: Hammer,
     isEarned: (ctx) => ctx.strategies.some((s) => !s.isDefault),
+  },
+  {
+    id: "weather-reader",
+    name: "Weather Reader",
+    description:
+      "Open Market, Sector, Industry, and a Stock detail in Market Weather.",
+    congratulate:
+      "Congratulations — Weather Reader earned. You read the full stack from Market to Stock.",
+    icon: Waves,
+    isEarned: hasWeatherReader,
   },
   {
     id: "first-dashboard",

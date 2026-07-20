@@ -80,15 +80,21 @@ export function HeroCard({
   onReviewWatch,
   mobileNavDock = false,
 }: HeroCardProps) {
-  const { setActivePage, portfolios, openOnboardingModal } = useAppState();
+  const {
+    setActivePage,
+    portfolios,
+    openOnboardingModal,
+    captainName,
+    captain,
+  } = useAppState();
   const isMobile = useIsMobile();
-  // Default About so the existing manifesto stays the first view; The Helm
-  // hub starts blank until onboarding/progress content lands.
-  const [pageId, setPageId] = useState<HelmPageId>("about");
+  // Default The Helm — setup + progress is the Home landing surface.
+  const [pageId, setPageId] = useState<HelmPageId>("helm");
   const hasHoldings = portfolios.some(
     (portfolio) => portfolio.holdings.length > 0,
   );
   const pageTitle = HELM_PAGE_TITLE[pageId];
+  const displayCaptainName = (captainName || captain.handle || "").trim();
 
   function goToWatch() {
     if (onReviewWatch) {
@@ -215,7 +221,12 @@ export function HeroCard({
         aria-hidden="true"
       />
       <div className="panel-head">
-        <h2 id="helm-title">{pageTitle}</h2>
+        <div className="helm-title-row">
+          <h2 id="helm-title">{pageTitle}</h2>
+          {pageId === "helm" && displayCaptainName ? (
+            <span className="chip">{displayCaptainName}</span>
+          ) : null}
+        </div>
         {pageId === "helm" ? (
           <button
             type="button"

@@ -138,7 +138,7 @@ export function MarketFlowWidget({
   /** Ticker selected in Current Watch; drives Sector/Industry/Stock focus. */
   focusTicker?: string | null;
 }) {
-  const { watchlist } = useAppState();
+  const { watchlist, markWeatherReaderLayer } = useAppState();
 
   // Session detection picks which weather to read. The snapshot is fetched (mock)
   // ONCE per session, app-wide, and filtered to the user's watch here.
@@ -268,6 +268,14 @@ export function MarketFlowWidget({
     : Object.keys(snapshot.industries).sort((a, b) => a.localeCompare(b));
 
   const [selectedLayer, setSelectedLayer] = useState<MarketWeatherLayer | null>(null);
+
+  const openLayerDetail = useCallback(
+    (layer: MarketWeatherLayer) => {
+      setSelectedLayer(layer);
+      markWeatherReaderLayer(layer);
+    },
+    [markWeatherReaderLayer],
+  );
 
   const cards: LayerCard[] = [
     { layer: "market", reading: marketReading },
@@ -402,7 +410,7 @@ export function MarketFlowWidget({
               <button
                 type="button"
                 className="weather-hit"
-                onClick={() => reading && setSelectedLayer(card.layer)}
+                onClick={() => reading && openLayerDetail(card.layer)}
                 aria-pressed={isActive}
                 disabled={!reading}
                 aria-label={
