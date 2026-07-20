@@ -97,7 +97,10 @@ covered by that strategy's `appliedPortfolioIds` for the same source.
   `data-architecture.md` §5.
 - **Beta 0 user data:** Supabase Auth + Postgres RLS (`user_state`,
   `conviction_snapshots`). Not localStorage SoT. Invite codes + Admin role.
-  See `supabase/schema.sql` and `src/lib/userStore/`.
+  See `supabase/schema.sql` and `src/lib/userStore/`. `flags.badgeToastsSeen`
+  = one-shot Helm onboarding-badge toast IDs; `flags.weatherReaderLayers`
+  = Market/Sector/Industry/Stock detail opens for Weather Reader; earn state
+  stays derived (`onboardingBadges.ts`).
 
 ## Strategy Forge (`src/lib/forge/`)
 
@@ -129,6 +132,12 @@ covered by that strategy's `appliedPortfolioIds` for the same source.
   conviction/status/resolved onto the watchlist — downstream chips (`StatusStack`,
   `PortfolioCompass`) reflect it. "Notify" = in-app chips updating; **no**
   push-notification system.
+- The Helm progress metrics (`HelmMetrics` + pure `forge/helmMetrics.ts`) are a
+  **pure read** — no new source/seam/persisted field. The portfolio mirrors
+  Current Watch via the shared UI marker `selectedPortfolioId` in `AppState`
+  (display-only; not saved to `user_state`); the strategy scope is Helm-owned
+  local state. They reduce an existing `PortfolioAlignment` (all, or scoped to
+  the picked strategy).
 - Cadence: Check = Daily/Weekly/Monthly + 4 intraday session-closes + 4h/1h/30m
   (**15m disabled** "Future Capability"); Technicals candle-only; fundamentals
   refresh daily. Auto-refresh opt-in per strategy (`cadenceEnabled` +

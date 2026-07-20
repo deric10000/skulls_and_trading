@@ -355,6 +355,24 @@ allocation of one or more tickers. A ticker may live in **several** slices withi
 the same strategy (different share counts / entry dates). Modeled + seeded now;
 the bucket/share-allocation **authoring UI is a later dashboard pass**.
 
+### The Helm — derived progress metrics
+
+`HelmMetrics` (`src/components/helm/HelmMetrics.tsx`) is a **pure read** — it adds
+no new data source, seam accessor, or persisted field. The **portfolio** mirrors
+the Current Watch selection via one shared **UI** selection value in `AppState`
+(`selectedPortfolioId`, set from `WatchlistWidget`; the forge Watch Preview
+instance never writes it). The **strategy scope is owned locally** by
+`HelmMetrics` (a dropdown: All strategies, or one applied strategy) — not shared
+state. Metrics reduce an existing `PortfolioAlignment` (all-strategy memoized
+`getPortfolioAlignment`, or scoped to `[focusedStrategy]` via
+`computePortfolioAlignment` when one strategy is picked) through the pure
+`src/lib/forge/helmMetrics.ts` (`computeHelmMetrics`): MV-weighted conviction,
+aggregate open P&L (open P&L / cost basis via `portfolioRunningTotals`, matching
+the Current Watch totals footer), strategy coverage, status mix (by
+`STATUS_TONE`), and composition by headline bucket/lens. `selectedPortfolioId` is
+a display-only selection marker — not workspace data — so it is **not** persisted
+to `user_state`.
+
 ### User persistence (Beta 0 — Supabase)
 
 Invite-only accounts hydrate Home + Forge editable state from Postgres
@@ -368,15 +386,28 @@ change. **Postgres is source of truth** (not `localStorage`).
   merge from storage. Defaults reject body patches in `updateStrategy`.
 - `conviction_snapshots` append on per-strategy cadence refresh (charts later).
 - `user_state.flags` (`UserFlags` in `src/lib/userStore/`) is a small map of
-  **one-shot per-user UI markers** — currently `onboardingSeen`, set when the
-  first-login Onboarding modal (`OnboardingModal`) is dismissed
-  (`AppState.needsOnboardingModal` / `dismissOnboardingModal`). The modal's
-  last step carries the legal disclaimer: Acknowledge clears the per-session
-  legal gate too; closing early pops the standalone legal modal instead.
+  **one-shot per-user UI markers** — currently:
+  - `onboardingSeen` — set when the first-login Onboarding modal
+    (`OnboardingModal`) is dismissed (`AppState.needsOnboardingModal` /
+    `dismissOnboardingModal`). The modal's last step carries the legal
+    disclaimer: Acknowledge clears the per-session legal gate too; closing
+    early pops the standalone legal modal instead.
+  - `badgeToastsSeen` — onboarding badge IDs that already fired their
+    congratulations toast (or were silently backfilled when the milestone was
+    already true at hydrate). Earn display still **derives** from live
+    portfolios/strategies (+ weather visits) via
+    `src/lib/forge/onboardingBadges.ts`; do not persist earn state here.
+    `AppState.markBadgeToastsSeen`.
+  - `weatherReaderLayers` — Market Weather layers the Captain has opened in
+    detail (card click): `market` / `sector` / `industry` / `stock`. When all
+    four are present, the Weather Reader badge earns. Written by
+    `AppState.markWeatherReaderLayer` from `MarketFlowWidget` (not from
+    dropdown/prev-next alone).
   Flags ride the normal workspace load/save path; they are markers, not
   workspace data — do not stash content there. QA reset:
   `update user_state set flags = '{}'::jsonb where user_id = …` re-triggers
-  first-login surfaces for a test account.
+  first-login surfaces for a test account (and can re-fire badge toasts unless
+  milestones are silently backfilled again on load).
 - Soft caps: `src/lib/forge/budgets.ts` (tickers + active chips); Admin bypass.
 - Schema: `supabase/schema.sql`. Auth helpers: `src/lib/auth/`.
 

@@ -5,11 +5,11 @@ import { MarketFlowWidget } from "../components/MarketFlowWidget";
 import { Tabs, type TabItem } from "../components/Tabs";
 import { WatchlistWidget } from "../components/WatchlistWidget";
 
-type HomeTabId = "about" | "market-weather" | "current-watch";
+type HomeTabId = "helm" | "market-weather" | "current-watch";
 
 // Desktop/tablet tab order (tabs are visible 768–1023px; hidden >=1024px).
 const HOME_TABS: TabItem[] = [
-  { id: "about", label: "About" },
+  { id: "helm", label: "Helm" },
   { id: "current-watch", label: "Current Watch" },
   { id: "market-weather", label: "Market Weather" },
 ];
@@ -20,22 +20,22 @@ const HOME_TABS: TabItem[] = [
 const MOBILE_HOME_TABS: TabItem[] = [
   { id: "current-watch", label: "Current Watch" },
   { id: "market-weather", label: "Market Weather" },
-  { id: "about", label: "About" },
+  { id: "helm", label: "Helm" },
 ];
 
 // DOM order of the <section> slides below (= the mobile swipe order). Embla
 // indexes slides by DOM position, so this MUST match the JSX section order.
-const SLIDE_ORDER: HomeTabId[] = ["current-watch", "market-weather", "about"];
+const SLIDE_ORDER: HomeTabId[] = ["current-watch", "market-weather", "helm"];
 
 export function HomePage() {
-  // Default selection differs by viewport: Current Watch leads on mobile, About
+  // Default selection differs by viewport: Current Watch leads on mobile, Helm
   // on desktop/tablet (unchanged). Set at mount from the same 767px breakpoint
   // that drives the carousel so the first paint matches.
   const [activeTab, setActiveTab] = useState<HomeTabId>(() =>
     typeof window !== "undefined" &&
     window.matchMedia("(max-width: 767px)").matches
       ? "current-watch"
-      : "about",
+      : "helm",
   );
   // Shared so selecting a name in Current Watch refocuses Market Weather's
   // sector/industry/stock layers (the two live on separate home tabs).
@@ -117,10 +117,11 @@ export function HomePage() {
           <section className="home-slide home-slide--market" data-home-tab="market-weather">
             <MarketFlowWidget focusTicker={weatherFocusTicker} />
           </section>
-          <section className="home-slide home-slide--about" data-home-tab="about">
+          <section className="home-slide home-slide--helm" data-home-tab="helm">
             <HeroCard
               variant="center"
               onReviewWatch={() => scrollToTab("current-watch")}
+              mobileNavDock={activeTab === "helm"}
             />
           </section>
         </div>
