@@ -860,7 +860,7 @@ button {
   max-width: none;
 }
 
-/* Hero */
+/* Hero / Helm */
 .hero {
   position: relative;
   overflow: hidden;
@@ -872,6 +872,42 @@ button {
   /* Artwork lives on `.hero-backdrop`; keep the shell clear so cover shows. */
   background: transparent;
   box-shadow: var(--shadow-card);
+}
+
+/* Same `.panel-head` chrome as Current Watch / Market Weather — stays above
+   the scroll body so the Helm title doesn't move when content scrolls. */
+.hero > .panel-head {
+  position: relative;
+  z-index: 1;
+  flex: 0 0 auto;
+  margin-bottom: var(--space-3);
+}
+
+/* Eyebrow + Previous/Next on one row (desktop/tablet). Mobile hides the
+   inline toggle and uses the sticky `.helm-nav-footer` dock instead. */
+.hero-eyebrow-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.hero-eyebrow-row .eyebrow {
+  margin: 0;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.hero-eyebrow-row .weather-prevnext {
+  flex: 0 0 auto;
+  align-self: center;
+}
+
+@media (max-width: 767px) {
+  .hero-eyebrow-nav {
+    display: none;
+  }
 }
 
 /* The scrollable body holds the hero's two-column layout; .hero is just the
@@ -1126,32 +1162,6 @@ button {
   font-size: 0.9rem;
   color: var(--text-muted);
   margin: 0;
-}
-
-.hero-preview-footer {
-  display: flex;
-  justify-content: flex-end;
-}
-
-.hero-preview-action {
-  font: inherit;
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: var(--accent-strong);
-  background: none;
-  border: none;
-  padding: 0;
-  cursor: pointer;
-}
-
-.hero-preview-action:hover {
-  text-decoration: underline;
-}
-
-.hero-preview-action:focus-visible {
-  outline: 2px solid var(--accent-strong);
-  outline-offset: 2px;
-  border-radius: var(--radius-sm);
 }
 
 /* Panels — the app-wide card. 16px padding on every side so content breathes
@@ -2216,6 +2226,24 @@ span.checkbox {
   }
 
   .app-main:has(.watch-totals-footer.strategy-dock) .home-slide--watch .watchlist {
+    padding-bottom: calc(var(--sticky-footer-h, 4.5rem) + var(--space-3));
+  }
+
+  /* Helm Previous/Next — same sticky dock as Current Watch totals. */
+  .app-main:has(.helm-nav-footer.strategy-dock) {
+    min-height: calc(100svh - var(--app-header-h, 96px));
+    padding-bottom: 0;
+  }
+
+  .strategy-dock.helm-nav-footer {
+    justify-content: flex-end;
+    padding-top: var(--space-2);
+    padding-inline: var(--space-2);
+    border-top: 1px solid var(--border-soft);
+    background: var(--bg-base);
+  }
+
+  .app-main:has(.helm-nav-footer.strategy-dock) .home-slide--helm .hero {
     padding-bottom: calc(var(--sticky-footer-h, 4.5rem) + var(--space-3));
   }
 }
@@ -6783,7 +6811,7 @@ button.nav-link {
   min-height: 0;
 }
 
-/* Tablet (>=768px): About spans the top row full width; Current Watch +
+/* Tablet (>=768px): Helm spans the top row full width; Current Watch +
    Market Weather sit side-by-side below. Cards are content-height and never
    scroll internally — the page (.app-main) scrolls vertically so you "swipe up
    and down" to read everything. */
@@ -6821,7 +6849,7 @@ button.nav-link {
     overflow: visible;
   }
 
-  .home-slide--about {
+  .home-slide--helm {
     grid-column: 1 / -1;
     grid-row: 1;
   }
@@ -6838,7 +6866,7 @@ button.nav-link {
 }
 
 /* Desktop (>=1024px): a true full-height dashboard. Three columns on one row —
-   Current Watch (1-3) · About (4-9, the wide center card) · Market Weather
+   Current Watch (1-3) · Helm (4-9, the wide center card) · Market Weather
    (10-12). Each card fills the viewport height and shrinks with it; the page
    never scrolls — instead a card scrolls its own content only when the viewport
    gets too short to show it all. */
@@ -6915,7 +6943,7 @@ button.nav-link {
     grid-row: 1;
   }
 
-  .home-slide--about {
+  .home-slide--helm {
     grid-column: 4 / span 6;
     grid-row: 1;
   }
