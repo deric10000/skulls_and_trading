@@ -129,6 +129,10 @@ interface AppStateValue {
   /** Reopen the Onboarding walkthrough on demand (e.g. Home hero button). */
   openOnboardingModal: () => void;
   dismissOnboardingModal: () => void;
+  /** Persisted one-shot UI markers (`user_state.flags`). */
+  flags: UserFlags;
+  /** Record onboarding badge IDs that already showed (or silently backfilled) a toast. */
+  markBadgeToastsSeen: (ids: string[]) => void;
   completeBetaSignIn: () => Promise<void>;
   /** @deprecated Mock-only; Beta uses completeBetaSignIn */
   signIn: (name?: string) => void;
@@ -548,6 +552,22 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const dismissOnboardingModal = useCallback(() => {
     setFlags((current) => ({ ...current, onboardingSeen: true }));
     setOnboardingReopened(false);
+  }, []);
+
+  const markBadgeToastsSeen = useCallback((ids: string[]) => {
+    if (ids.length === 0) return;
+    setFlags((current) => {
+      const seen = new Set(current.badgeToastsSeen ?? []);
+      let changed = false;
+      for (const id of ids) {
+        if (!seen.has(id)) {
+          seen.add(id);
+          changed = true;
+        }
+      }
+      if (!changed) return current;
+      return { ...current, badgeToastsSeen: Array.from(seen) };
+    });
   }, []);
 
   const clearBudgetToast = useCallback(() => setBudgetToast(null), []);
@@ -1354,6 +1374,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         (isAuthenticated && !flags.onboardingSeen) || onboardingReopened,
       openOnboardingModal,
       dismissOnboardingModal,
+      flags,
+      markBadgeToastsSeen,
       completeBetaSignIn,
       signIn,
       signUp,
@@ -1421,6 +1443,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       onboardingReopened,
       openOnboardingModal,
       dismissOnboardingModal,
+      markBadgeToastsSeen,
       completeBetaSignIn,
       signIn,
       signUp,

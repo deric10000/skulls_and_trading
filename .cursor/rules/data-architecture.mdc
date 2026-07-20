@@ -97,7 +97,9 @@ covered by that strategy's `appliedPortfolioIds` for the same source.
   `data-architecture.md` §5.
 - **Beta 0 user data:** Supabase Auth + Postgres RLS (`user_state`,
   `conviction_snapshots`). Not localStorage SoT. Invite codes + Admin role.
-  See `supabase/schema.sql` and `src/lib/userStore/`.
+  See `supabase/schema.sql` and `src/lib/userStore/`. `flags.badgeToastsSeen`
+  = one-shot Helm onboarding-badge toast IDs; earn state stays derived
+  (`onboardingBadges.ts`).
 
 ## Strategy Forge (`src/lib/forge/`)
 

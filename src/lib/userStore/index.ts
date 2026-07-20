@@ -15,6 +15,12 @@ import { mergeStrategiesForHydrate } from "./strategyMerge";
 export interface UserFlags {
   /** True once the first-login Onboarding modal has been dismissed. */
   onboardingSeen?: boolean;
+  /**
+   * Onboarding badge IDs that already fired their congratulations toast
+   * (or were silently backfilled for milestones already true at hydrate).
+   * Earn display still derives from live portfolios/strategies.
+   */
+  badgeToastsSeen?: string[];
 }
 
 export interface UserWorkspace {

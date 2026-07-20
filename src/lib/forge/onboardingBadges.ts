@@ -1,0 +1,118 @@
+import type { Icon } from "../icons";
+import {
+  Briefcase,
+  ChartBar,
+  Hammer,
+  ListBullets,
+  Strategy,
+  UserCircle,
+} from "../icons";
+import type { Portfolio, Strategy as StrategyModel } from "../../types";
+
+/**
+ * Helm onboarding milestone badges. Earn state is derived from live workspace
+ * data; congratulations toasts are one-shot via `UserFlags.badgeToastsSeen`.
+ * Entries flagged `underConstruction` stay hidden until that surface ships.
+ */
+
+export type OnboardingBadgeId =
+  | "first-portfolio"
+  | "first-watchlist"
+  | "first-strategy-applied"
+  | "first-custom-strategy"
+  | "first-dashboard"
+  | "first-captain-profile";
+
+export interface OnboardingBadgeContext {
+  portfolios: Portfolio[];
+  strategies: StrategyModel[];
+}
+
+export interface OnboardingBadgeDef {
+  id: OnboardingBadgeId;
+  name: string;
+  /** Desktop hover tooltip body. */
+  description: string;
+  /** Success toast when the badge first earns in-session (after silent backfill). */
+  congratulate: string;
+  icon: Icon;
+  underConstruction?: boolean;
+  isEarned: (ctx: OnboardingBadgeContext) => boolean;
+}
+
+export const ONBOARDING_BADGES: OnboardingBadgeDef[] = [
+  {
+    id: "first-portfolio",
+    name: "First Portfolio",
+    description: "Create a portfolio book to track sized holdings against your plan.",
+    congratulate:
+      "Congratulations — your first portfolio is on the books. Solid start, Captain.",
+    icon: Briefcase,
+    isEarned: (ctx) => ctx.portfolios.some((p) => p.type === "portfolio"),
+  },
+  {
+    id: "first-watchlist",
+    name: "First Watchlist",
+    description: "Start a watchlist to track names without paper size.",
+    congratulate:
+      "Congratulations — your first watchlist is live. Keep the watch tight.",
+    icon: ListBullets,
+    isEarned: (ctx) => ctx.portfolios.some((p) => p.type === "watchlist"),
+  },
+  {
+    id: "first-strategy-applied",
+    name: "First Strategy Applied",
+    description:
+      "Apply a strategy (default or custom) to at least one portfolio or watchlist.",
+    congratulate:
+      "Congratulations — a strategy is applied. Conviction can now follow your rules.",
+    icon: Strategy,
+    isEarned: (ctx) =>
+      ctx.strategies.some((s) => (s.appliedPortfolioIds?.length ?? 0) > 0),
+  },
+  {
+    id: "first-custom-strategy",
+    name: "First Custom Strategy",
+    description: "Forge your own strategy — not just a seeded default.",
+    congratulate:
+      "Congratulations — you forged a custom strategy. Make the rules yours.",
+    icon: Hammer,
+    isEarned: (ctx) => ctx.strategies.some((s) => !s.isDefault),
+  },
+  {
+    id: "first-dashboard",
+    name: "First Dashboard Visit",
+    description: "Open the Dashboard once it ships for Closed Beta.",
+    congratulate: "Congratulations — you opened the Dashboard.",
+    icon: ChartBar,
+    underConstruction: true,
+    isEarned: () => false,
+  },
+  {
+    id: "first-captain-profile",
+    name: "Captain Profile",
+    description: "Complete your Captain Profile once that surface ships.",
+    congratulate: "Congratulations — Captain Profile is set.",
+    icon: UserCircle,
+    underConstruction: true,
+    isEarned: () => false,
+  },
+];
+
+export function visibleOnboardingBadges(): OnboardingBadgeDef[] {
+  return ONBOARDING_BADGES.filter((badge) => !badge.underConstruction);
+}
+
+export function earnedOnboardingBadgeIds(
+  ctx: OnboardingBadgeContext,
+): OnboardingBadgeId[] {
+  return visibleOnboardingBadges()
+    .filter((badge) => badge.isEarned(ctx))
+    .map((badge) => badge.id);
+}
+
+export function onboardingBadgeById(
+  id: string,
+): OnboardingBadgeDef | undefined {
+  return ONBOARDING_BADGES.find((badge) => badge.id === id);
+}

@@ -893,7 +893,8 @@ button {
   min-width: 0;
 }
 
-.hero-eyebrow-row .eyebrow {
+.hero-eyebrow-row .eyebrow,
+.hero-eyebrow-row-spacer {
   margin: 0;
   flex: 1 1 auto;
   min-width: 0;
@@ -907,6 +908,128 @@ button {
 @media (max-width: 767px) {
   .hero-eyebrow-nav {
     display: none;
+  }
+}
+
+/* The Helm — onboarding milestone badges (compact icon-btn family, larger).
+   Badge sizes step at tablet/mobile breakpoints — not fluid. */
+.helm-badges-block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  /* Pull up slightly toward the eyebrow row (hero-content gap stays). */
+  margin-top: calc(var(--space-2) * -1);
+  min-height: 0;
+}
+
+.helm-badge-toast-slot {
+  flex: 0 0 auto;
+}
+
+.helm-badges {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  flex: 0 0 auto;
+}
+
+.helm-badges-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+/* Reserved for strategy / progress metrics under the badge row. */
+.helm-metrics-slot {
+  flex: 1 1 auto;
+  min-height: 12rem;
+}
+
+.onboarding-badge-wrap {
+  display: inline-flex;
+  flex: 0 0 auto;
+}
+
+.onboarding-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  flex: 0 0 auto;
+  padding: 0;
+  border: 1px solid rgb(86 182 240 / 0.45);
+  border-radius: var(--radius-sm);
+  background: rgb(86 182 240 / 0.12);
+  color: var(--info);
+  cursor: default;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease,
+    border-color 0.15s ease,
+    opacity 0.15s ease;
+}
+
+.onboarding-badge svg {
+  width: 26px;
+  height: 26px;
+}
+
+.onboarding-badge:hover {
+  background: rgb(86 182 240 / 0.22);
+}
+
+/* Incomplete — muted, but still hoverable (not HTML-disabled). */
+.onboarding-badge--incomplete {
+  opacity: 0.45;
+  border-color: rgb(148 163 184 / 0.35);
+  background: rgb(148 163 184 / 0.08);
+  color: var(--text-muted);
+}
+
+.onboarding-badge--incomplete:hover {
+  opacity: 0.7;
+  border-color: rgb(148 163 184 / 0.55);
+  background: rgb(148 163 184 / 0.16);
+  color: var(--text-muted);
+}
+
+/* Tablet: step down badge + row gap. */
+@media (max-width: 1023px) {
+  .helm-badges-row {
+    gap: var(--space-2);
+  }
+
+  .onboarding-badge {
+    width: 48px;
+    height: 48px;
+  }
+
+  .onboarding-badge svg {
+    width: 24px;
+    height: 24px;
+  }
+}
+
+/* Mobile: compact but still ~44px touch-friendly. */
+@media (max-width: 767px) {
+  .helm-badges {
+    gap: var(--space-2);
+  }
+
+  .helm-badges-row {
+    gap: 0.45rem;
+  }
+
+  .onboarding-badge {
+    width: 44px;
+    height: 44px;
+  }
+
+  .onboarding-badge svg {
+    width: 22px;
+    height: 22px;
   }
 }
 
