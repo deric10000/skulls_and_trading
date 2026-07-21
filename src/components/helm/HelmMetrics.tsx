@@ -1,13 +1,26 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { useAppState } from "../../state/AppState";
 import { dataSource } from "../../lib/datasource";
-import { CaretDown } from "../../lib/icons";
 import { computePortfolioAlignment } from "../../lib/forge/alignment";
+import {
+  buildConvictionChangeView,
+  formatConvictionDelta,
+  portfolioConvictionSeries,
+  type ConvictionChangeView,
+  type TickerConvictionMark,
+} from "../../lib/forge/convictionChange";
 import { computeHelmMetrics } from "../../lib/forge/helmMetrics";
+import { shouldScoreTickerWithStrategy } from "../../lib/forge/tickerStrategy";
 import { seriesToSparkPoints } from "../../lib/finance/portfolioSnapshotSeries";
-import { fetchPortfolioSnapshots } from "../../lib/userStore";
+import {
+  fetchConvictionSnapshots,
+  fetchPortfolioSnapshots,
+} from "../../lib/userStore";
 import { formatChange, formatDecimals } from "../../lib/format";
 import type { SignalTone } from "../../types";
+import { PortfolioCompass } from "../PortfolioCompass";
+import { StatusStack } from "../StatusBadge";
+import { StrategyScopeSelect } from "../StrategyScopeSelect";
 
 const SparklineChart = lazy(() =>
   import("../charts/SparklineChart").then((mod) => ({
@@ -38,8 +51,8 @@ function resolveCssColor(varName: string, fallback: string): string {
 
 /**
  * The Helm — derived progress metrics for the portfolio selected in Current
- * Watch (mirrored via shared AppState). The strategy scope is Helm-owned: pick
- * a single applied strategy or "All strategies" from the scope dropdown.
+ * Watch (mirrored via shared AppState). Strategy scope is shared Home state
+ * (`watchStrategyScopeId`) so Progress and Current Watch filter together.
  * Open P&L history loads from portfolio_snapshots (additive; scoring unchanged).
  */
 export function HelmMetrics() {
@@ -49,6 +62,8 @@ export function HelmMetrics() {
     buckets,
     getPortfolioAlignment,
     selectedPortfolioId,
+    watchStrategyScopeId,
+    setWatchStrategyScopeId,
   } = useAppState();
 
   const portfolio = useMemo(
@@ -67,48 +82,29 @@ export function HelmMetrics() {
     [strategies, portfolio],
   );
 
-  const [scopeStrategyId, setScopeStrategyId] = useState<string | null>(null);
-  const [scopeOpen, setScopeOpen] = useState(false);
-  const scopeRef = useRef<HTMLDivElement>(null);
-
   const [sparkPoints, setSparkPoints] = useState<
     ReturnType<typeof seriesToSparkPoints>
   >([]);
   const [sparkLoaded, setSparkLoaded] = useState(false);
+  const [convictionView, setConvictionView] =
+    useState<ConvictionChangeView | null>(null);
 
+  // Drop a stale shared scope when the mirrored portfolio no longer applies it.
   useEffect(() => {
     if (
-      scopeStrategyId &&
-      !appliedStrategies.some((s) => s.id === scopeStrategyId)
+      watchStrategyScopeId &&
+      !appliedStrategies.some((s) => s.id === watchStrategyScopeId)
     ) {
-      setScopeStrategyId(null);
+      setWatchStrategyScopeId(null);
     }
-  }, [appliedStrategies, scopeStrategyId]);
-
-  useEffect(() => {
-    if (!scopeOpen) return;
-    const onDoc = (event: MouseEvent) => {
-      if (scopeRef.current && !scopeRef.current.contains(event.target as Node)) {
-        setScopeOpen(false);
-      }
-    };
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setScopeOpen(false);
-    };
-    document.addEventListener("mousedown", onDoc);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onDoc);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [scopeOpen]);
+  }, [appliedStrategies, watchStrategyScopeId, setWatchStrategyScopeId]);
 
   const focusedStrategy = useMemo(
     () =>
-      scopeStrategyId
-        ? appliedStrategies.find((s) => s.id === scopeStrategyId)
+      watchStrategyScopeId
+        ? appliedStrategies.find((s) => s.id === watchStrategyScopeId)
         : undefined,
-    [appliedStrategies, scopeStrategyId],
+    [appliedStrategies, watchStrategyScopeId],
   );
 
   const alignment = useMemo(() => {
@@ -120,35 +116,97 @@ export function HelmMetrics() {
 
   const metrics = useMemo(() => {
     if (!portfolio || !alignment) return undefined;
+    const portfolioId = portfolio.id;
+    const strategy = focusedStrategy;
     return computeHelmMetrics({
       portfolio,
       alignment,
       priceOf: (ticker) => dataSource.getTickerInfo(ticker)?.lastPrice ?? 0,
+      tickerInScope: strategy
+        ? (ticker) => {
+            const holding = portfolio.holdings.find((h) => h.ticker === ticker);
+            return (
+              holding != null &&
+              shouldScoreTickerWithStrategy(holding, strategy, portfolioId)
+            );
+          }
+        : undefined,
     });
-  }, [portfolio, alignment]);
+  }, [portfolio, alignment, focusedStrategy]);
 
   useEffect(() => {
-    if (!portfolio) {
+    if (!portfolio || !alignment) {
       setSparkPoints([]);
       setSparkLoaded(false);
+      setConvictionView(null);
       return;
     }
     let cancelled = false;
     setSparkLoaded(false);
-    void fetchPortfolioSnapshots({
-      portfolioId: portfolio.id,
-      strategyId: scopeStrategyId,
-    }).then((rows) => {
+
+    const from = new Date();
+    from.setUTCDate(from.getUTCDate() - 21);
+    const fromStr = from.toISOString().slice(0, 10);
+    const strategyIds = watchStrategyScopeId
+      ? [watchStrategyScopeId]
+      : appliedStrategies.map((s) => s.id);
+    const tickers = portfolio.holdings
+      .filter((h) => h.shares > 0)
+      .map((h) => h.ticker.toUpperCase());
+
+    void Promise.all([
+      fetchPortfolioSnapshots({
+        portfolioId: portfolio.id,
+        strategyId: watchStrategyScopeId,
+        from: fromStr,
+      }),
+      strategyIds.length > 0 && tickers.length > 0
+        ? fetchConvictionSnapshots({
+            strategyIds,
+            tickers,
+            from: fromStr,
+          })
+        : Promise.resolve([]),
+    ]).then(([bookRows, tickerRows]) => {
       if (cancelled) return;
-      setSparkPoints(seriesToSparkPoints(rows));
+      setSparkPoints(seriesToSparkPoints(bookRows));
       setSparkLoaded(true);
+
+      const liveConviction = alignment.portfolio.conviction;
+      const bookSeries = portfolioConvictionSeries(bookRows);
+      const byKey = new Map<string, TickerConvictionMark>();
+      for (const row of tickerRows) {
+        const key = `${row.asOf}:${row.ticker}`;
+        const marketValue =
+          typeof row.payload.marketValue === "number"
+            ? row.payload.marketValue
+            : undefined;
+        const existing = byKey.get(key);
+        if (!existing || row.conviction > existing.conviction) {
+          byKey.set(key, {
+            ticker: row.ticker,
+            asOf: row.asOf,
+            conviction: row.conviction,
+            marketValue,
+          });
+        }
+      }
+      setConvictionView(
+        buildConvictionChangeView(
+          liveConviction,
+          bookSeries,
+          Array.from(byKey.values()),
+          alignment,
+        ),
+      );
     });
+
     return () => {
       cancelled = true;
     };
-  }, [portfolio, scopeStrategyId]);
+  }, [portfolio, watchStrategyScopeId, appliedStrategies, alignment]);
 
-  if (!portfolio || !metrics) {
+  if (!portfolio || !metrics || !alignment) {
     return (
       <section className="helm-metrics" aria-labelledby="helm-metrics-title">
         <div className="forge-section-head">
@@ -163,7 +221,6 @@ export function HelmMetrics() {
     );
   }
 
-  const scopeLabel = focusedStrategy ? focusedStrategy.name : "All strategies";
   const pnlUp = metrics.openPnlPct >= 0;
   const lineColor = resolveCssColor(
     pnlUp ? "--positive" : "--negative",
@@ -172,6 +229,10 @@ export function HelmMetrics() {
   const showSpark = sparkLoaded && sparkPoints.length >= 2;
   const startDate = sparkPoints[0]?.time;
   const endDate = sparkPoints[sparkPoints.length - 1]?.time;
+  const todayDelta = convictionView?.change.todayDelta ?? null;
+  const sessions5Delta = convictionView?.change.sessions5Delta ?? null;
+  const showConvictionChange =
+    todayDelta != null || sessions5Delta != null;
 
   return (
     <section className="helm-metrics" aria-labelledby="helm-metrics-title">
@@ -181,74 +242,67 @@ export function HelmMetrics() {
         </h3>
         <span className="helm-metrics-scope">
           <span className="chip">{portfolio.label}</span>
-          <div className="helm-scope-select" ref={scopeRef}>
-            <button
-              type="button"
-              className="chip helm-scope-trigger"
-              aria-haspopup="listbox"
-              aria-expanded={scopeOpen}
-              onClick={() => setScopeOpen((open) => !open)}
-            >
-              {scopeLabel}
-              <CaretDown className="helm-scope-caret" aria-hidden weight="bold" />
-            </button>
-            {scopeOpen ? (
-              <ul
-                className="multiselect-menu helm-scope-menu"
-                role="listbox"
-                aria-label="Strategy scope"
-              >
-                <li>
-                  <button
-                    type="button"
-                    role="option"
-                    aria-selected={!scopeStrategyId}
-                    className={
-                      scopeStrategyId
-                        ? "multiselect-option"
-                        : "multiselect-option is-selected"
-                    }
-                    onClick={() => {
-                      setScopeStrategyId(null);
-                      setScopeOpen(false);
-                    }}
-                  >
-                    All strategies
-                  </button>
-                </li>
-                {appliedStrategies.map((strategy) => (
-                  <li key={strategy.id}>
-                    <button
-                      type="button"
-                      role="option"
-                      aria-selected={scopeStrategyId === strategy.id}
-                      className={
-                        scopeStrategyId === strategy.id
-                          ? "multiselect-option is-selected"
-                          : "multiselect-option"
-                      }
-                      onClick={() => {
-                        setScopeStrategyId(strategy.id);
-                        setScopeOpen(false);
-                      }}
-                    >
-                      {strategy.name}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            ) : null}
-          </div>
+          <StrategyScopeSelect
+            strategies={appliedStrategies}
+            value={watchStrategyScopeId}
+            onChange={setWatchStrategyScopeId}
+          />
         </span>
       </div>
 
       <div className="helm-metrics-grid">
-        <div className="select-card helm-metric">
-          <span className="helm-metric-label">Conviction</span>
-          <span className="helm-metric-value">
-            {formatDecimals(metrics.conviction)}
-            <span className="helm-metric-unit">/100</span>
-          </span>
+        <div className="select-card helm-metric helm-metric--conviction">
+          <div className="helm-conviction-top">
+            <div className="helm-conviction-copy">
+              <span className="helm-metric-label">Total Conviction</span>
+              <span className="helm-metric-value">
+                {formatDecimals(metrics.conviction)}
+                <span className="helm-metric-unit">/100</span>
+              </span>
+              {showConvictionChange ? (
+                <span className="helm-conviction-change">
+                  {todayDelta != null ? (
+                    <span
+                      className={
+                        todayDelta > 0
+                          ? "helm-metric-value--up"
+                          : todayDelta < 0
+                            ? "helm-metric-value--down"
+                            : undefined
+                      }
+                    >
+                      {formatConvictionDelta(todayDelta)} today
+                    </span>
+                  ) : null}
+                  {todayDelta != null && sessions5Delta != null ? (
+                    <span className="helm-conviction-change-sep" aria-hidden>
+                      {" · "}
+                    </span>
+                  ) : null}
+                  {sessions5Delta != null ? (
+                    <span
+                      className={
+                        sessions5Delta > 0
+                          ? "helm-metric-value--up"
+                          : sessions5Delta < 0
+                            ? "helm-metric-value--down"
+                            : undefined
+                      }
+                    >
+                      {formatConvictionDelta(sessions5Delta)} over 5 sessions
+                    </span>
+                  ) : null}
+                </span>
+              ) : null}
+              {convictionView?.driverSummary ? (
+                <span className="helm-conviction-drivers">
+                  {convictionView.driverSummary}
+                </span>
+              ) : null}
+            </div>
+            <PortfolioCompass status={alignment.portfolio.resolved.primary} />
+          </div>
+          <StatusStack resolved={alignment.portfolio.resolved} />
           <span className="helm-metric-note">Market-value weighted</span>
         </div>
 
@@ -295,7 +349,7 @@ export function HelmMetrics() {
         </div>
 
         <div className="select-card helm-metric helm-metric--wide">
-          <span className="helm-metric-label">Alignment</span>
+          <span className="helm-metric-label">Plan Alignment</span>
           {metrics.statusMix.length > 0 ? (
             <div className="helm-metric-chips">
               {metrics.statusMix.map((slice) => (
@@ -308,22 +362,34 @@ export function HelmMetrics() {
             <span className="helm-metric-note">No scored holdings yet</span>
           )}
         </div>
-
-        <div className="select-card helm-metric helm-metric--wide">
-          <span className="helm-metric-label">Composition</span>
-          {metrics.composition.length > 0 ? (
-            <div className="helm-metric-chips">
-              {metrics.composition.map((slice) => (
-                <span key={slice.label} className="chip">
-                  {slice.label} | {slice.count}
-                </span>
-              ))}
-            </div>
-          ) : (
-            <span className="helm-metric-note">No scored holdings yet</span>
-          )}
-        </div>
       </div>
+
+      <div className="forge-section-head">
+        <h3 id="helm-composition-title" className="forge-section-title">
+          Composition
+        </h3>
+      </div>
+      {metrics.composition.length > 0 ? (
+        <div
+          className="helm-metrics-grid"
+          aria-labelledby="helm-composition-title"
+        >
+          {metrics.composition.map((slice) => (
+            <div key={slice.label} className="select-card helm-metric">
+              <span className="helm-metric-label">{slice.label}</span>
+              <span className="helm-metric-value">
+                {slice.count}
+                <span className="helm-metric-unit">/{slice.count}</span>
+              </span>
+              <span className="helm-metric-note">
+                100% of position holdings
+              </span>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="helm-metrics-empty">No scored holdings yet</p>
+      )}
     </section>
   );
 }

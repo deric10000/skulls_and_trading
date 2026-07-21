@@ -275,3 +275,56 @@ export async function fetchPortfolioSnapshots(input: {
     metrics: (row.metrics as Record<string, unknown>) ?? {},
   }));
 }
+
+export interface ConvictionSnapshotRecord {
+  strategyId: string;
+  ticker: string;
+  asOf: string;
+  conviction: number;
+  status: string | null;
+  payload: Record<string, unknown>;
+}
+
+export async function fetchConvictionSnapshots(input: {
+  strategyIds?: string[];
+  tickers?: string[];
+  from?: string;
+  to?: string;
+}): Promise<ConvictionSnapshotRecord[]> {
+  const supabase = getSupabase();
+  const { data: auth } = await supabase.auth.getUser();
+  if (!auth.user) return [];
+
+  let query = supabase
+    .from("conviction_snapshots")
+    .select("strategy_id, ticker, as_of, conviction, status, payload")
+    .eq("user_id", auth.user.id)
+    .order("as_of", { ascending: true });
+
+  if (input.strategyIds && input.strategyIds.length > 0) {
+    query = query.in("strategy_id", input.strategyIds);
+  }
+  if (input.tickers && input.tickers.length > 0) {
+    query = query.in(
+      "ticker",
+      input.tickers.map((t) => t.toUpperCase()),
+    );
+  }
+  if (input.from) query = query.gte("as_of", input.from);
+  if (input.to) query = query.lte("as_of", input.to);
+
+  const { data, error } = await query;
+  if (error) {
+    console.warn("conviction snapshot fetch failed", error.message);
+    return [];
+  }
+
+  return (data ?? []).map((row) => ({
+    strategyId: row.strategy_id as string,
+    ticker: (row.ticker as string).toUpperCase(),
+    asOf: row.as_of as string,
+    conviction: Number(row.conviction),
+    status: (row.status as string | null) ?? null,
+    payload: (row.payload as Record<string, unknown>) ?? {},
+  }));
+}

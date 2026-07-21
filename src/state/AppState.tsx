@@ -181,10 +181,17 @@ interface AppStateValue {
   /**
    * Shared Current Watch portfolio selection so other Home surfaces (the Helm
    * metrics) can mirror it. UI selection state only — not persisted workspace
-   * data. (Strategy scope is owned locally by each consumer.)
+   * data.
    */
   selectedPortfolioId: string | null;
   setSelectedPortfolioId: (id: string | null) => void;
+  /**
+   * Shared Home strategy scope (null = All strategies). Drives Current Watch
+   * filtering and Helm Progress together. Display-only — not persisted.
+   * Forge Watch Preview keeps local scope and must not write this.
+   */
+  watchStrategyScopeId: string | null;
+  setWatchStrategyScopeId: (id: string | null) => void;
 
   strategies: Strategy[];
   createStrategy: () => string;
@@ -375,6 +382,9 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const [selectedPortfolioId, setSelectedPortfolioId] = useState<string | null>(
     null,
   );
+  const [watchStrategyScopeId, setWatchStrategyScopeId] = useState<
+    string | null
+  >(null);
   const [strategies, setStrategies] = useState<Strategy[]>(() =>
     emptyWorkspace().strategies,
   );
@@ -1514,6 +1524,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       selectedItem,
       selectedPortfolioId,
       setSelectedPortfolioId,
+      watchStrategyScopeId,
+      setWatchStrategyScopeId,
       strategies,
       createStrategy,
       updateStrategy,
@@ -1583,6 +1595,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       selectedTicker,
       selectedItem,
       selectedPortfolioId,
+      watchStrategyScopeId,
       strategies,
       createStrategy,
       updateStrategy,

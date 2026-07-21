@@ -373,17 +373,28 @@ the bucket/share-allocation **authoring UI is a later dashboard pass**.
 read** of alignment + holdings (no scoring changes). The **portfolio** mirrors
 the Current Watch selection via one shared **UI** selection value in `AppState`
 (`selectedPortfolioId`, set from `WatchlistWidget`; the forge Watch Preview
-instance never writes it). The **strategy scope is owned locally** by
-`HelmMetrics` (a dropdown: All strategies, or one applied strategy) — not shared
-state. Metrics reduce an existing `PortfolioAlignment` (all-strategy memoized
+instance never writes it). **Strategy scope** is also shared Home UI state
+(`watchStrategyScopeId`, null = All strategies) — Helm Progress and Current
+Watch filtering stay in sync; Forge Watch Preview keeps a local scope and does
+not write the shared marker. Neither selection is persisted to `user_state`.
+Metrics reduce an existing `PortfolioAlignment` (all-strategy memoized
 `getPortfolioAlignment`, or scoped to `[focusedStrategy]` via
 `computePortfolioAlignment` when one strategy is picked) through the pure
 `src/lib/forge/helmMetrics.ts` (`computeHelmMetrics`): MV-weighted conviction,
-aggregate open P&L (open P&L / cost basis via `portfolioRunningTotals`, matching
-the Current Watch totals footer), strategy coverage, status mix (by
-`STATUS_TONE`), and composition by headline bucket/lens. `selectedPortfolioId` is
-a display-only selection marker — not workspace data — so it is **not** persisted
-to `user_state`.
+aggregate open P&L (open P&L / cost basis via `portfolioRunningTotals`), strategy
+coverage, status mix (by `STATUS_TONE`, shown as Plan Alignment chips), and
+composition by headline bucket/lens (rendered as its own Progress-style section
+of metric cards — placeholder `held/held` until Forge position-holdings rules
+supply a target). When a single strategy is picked, every Progress metric —
+**including Open P&L** — reduces only over holdings enabled for that strategy
+(`shouldScoreTickerWithStrategy` / `tickerInScope`, same rule as Current Watch's
+strategy filter); "All strategies" uses the whole book.
+
+**Conviction change** (additive): `portfolio_snapshots.metrics.conviction` stores
+the MV-weighted book mark each refresh. Helm compares live conviction to the
+prior `as_of` (today) and to five sessions back; ticker drivers come from
+`conviction_snapshots` deltas + live weakest category labels (Thesis Fit /
+Technical Setup, etc.). No fabricated history when marks are missing.
 
 **Open P&L history** (additive): daily rows in `portfolio_snapshots` (see below).
 Helm fetches the series for the mirrored portfolio + scope and renders a lazy
@@ -401,7 +412,8 @@ Forge conviction / chip / zone math and `portfolioRunningTotals` are unchanged.
   (`shouldScoreTickerWithStrategy`) **plus the same cash**. Core columns mirror
   Current Watch totals: `holdings_market_value`, `cost_basis`, `cash_available`,
   `total_value`, `open_pnl`, `open_pnl_pct`. Forward-compatible `metrics jsonb`
-  for future daily book fields (do not delete core columns into jsonb). Upsert
+  for future daily book fields — currently includes MV-weighted `conviction`
+  for Helm Conviction Change (do not delete core columns into jsonb). Upsert
   last-write-wins. Skip incomplete books rather than fabricate prices.
 - **`conviction_snapshots`**: same unique grain; **enrich `payload`** at write
   with per-ticker marks (`portfolioId`, `shares`, `avgPrice`, `lastPrice`,

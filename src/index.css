@@ -987,8 +987,8 @@ button {
   flex-wrap: wrap;
 }
 
-/* Strategy scope: keeps the chip's size/typography, borrows the .strategy-option
-   palette (bordered surface-3 → gold on hover/open), and reveals a caret. */
+/* Strategy scope: keeps the chip's size/typography; always uses the
+   .strategy-option--on / hover palette (gold), with caret always visible. */
 .helm-scope-select {
   position: relative;
   display: inline-flex;
@@ -998,39 +998,34 @@ button {
   font-family: inherit;
   line-height: 1.55;
   cursor: pointer;
-  border: 1px solid var(--border-soft);
-  background: var(--surface-3);
-  color: var(--text-muted);
-  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
-}
-
-.helm-scope-trigger:hover,
-.helm-scope-trigger:focus-visible,
-.helm-scope-trigger[aria-expanded="true"] {
-  border-color: rgb(241 178 74 / 0.45);
+  border: 1px solid rgb(241 178 74 / 0.45);
   background: var(--accent-soft);
   color: var(--accent-strong);
 }
 
-/* Caret is hidden until hover / focus / open, then slides in. */
 .helm-scope-trigger .helm-scope-caret {
-  width: 0;
-  opacity: 0;
-  transition: width 0.15s ease, opacity 0.15s ease;
-}
-
-.helm-scope-trigger:hover .helm-scope-caret,
-.helm-scope-trigger:focus-visible .helm-scope-caret,
-.helm-scope-trigger[aria-expanded="true"] .helm-scope-caret {
   width: 1em;
   opacity: 0.9;
 }
 
-.helm-scope-menu {
-  left: auto;
-  right: 0;
+/* Scope menu: default end-align (Helm chip on the right). --start flips when
+   the chip sits near the left edge (Current Watch mobile) so the panel stays
+   in the viewport. max-width also clamps to the screen. */
+.multiselect-menu.helm-scope-menu {
   min-width: 12rem;
   width: max-content;
+  max-width: min(18rem, calc(100vw - 1rem));
+  z-index: 40;
+}
+
+.multiselect-menu.helm-scope-menu--end {
+  left: auto;
+  right: 0;
+}
+
+.multiselect-menu.helm-scope-menu--start {
+  left: 0;
+  right: auto;
 }
 
 .helm-metrics-empty {
@@ -1065,6 +1060,9 @@ button {
 }
 
 .helm-metric-value {
+  display: inline-block;
+  width: fit-content;
+  max-width: 100%;
   font-size: 1.5rem;
   font-weight: 700;
   line-height: 1.1;
@@ -1089,6 +1087,52 @@ button {
 .helm-metric-note {
   font-size: 0.72rem;
   color: var(--text-faint);
+}
+
+.helm-metric--conviction {
+  gap: 0.4rem;
+}
+
+.helm-conviction-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.helm-conviction-copy {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+.helm-conviction-change {
+  font-size: 0.72rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.35;
+  color: var(--text-muted);
+}
+
+.helm-conviction-change-sep {
+  color: var(--text-faint);
+  font-weight: 500;
+}
+
+.helm-conviction-drivers {
+  font-size: 0.72rem;
+  line-height: 1.35;
+  color: var(--text-faint);
+}
+
+.helm-metric--conviction .compass {
+  width: clamp(40px, 4.5vw, 48px);
+}
+
+.helm-metric--conviction .status-stack {
+  margin-top: 0.05rem;
 }
 
 .helm-metric--pnl {
