@@ -14,7 +14,6 @@ import {
 import { LAYER3_ZONES, type Layer3ZoneId } from "../lib/forge/layer3Zones";
 import type { ChipResult, StockAlignment } from "../lib/forge/scoring";
 import {
-  resolveAggregatedStatus,
   resolveStatus,
 } from "../lib/forge/status";
 import {
@@ -22,10 +21,9 @@ import {
   shouldScoreTickerWithStrategy,
 } from "../lib/forge/tickerStrategy";
 import { STATUS_TONE } from "../lib/status";
-import { StatusStack, WatchAlignLabel, WatchConvictionHead } from "./StatusBadge";
+import { WatchAlignLabel, WatchConvictionHead } from "./StatusBadge";
 import { Checkbox } from "./Checkbox";
 import { ForgePill } from "./ForgePill";
-import { PortfolioCompass } from "./PortfolioCompass";
 import {
   CaretDown,
   CaretLeft,
@@ -61,6 +59,7 @@ import type {
 import { ForgeToast } from "./forge/ForgeToast";
 import { ForgeTableModal } from "./forge/ForgeTableModal";
 import { ActionFooter } from "./ActionFooter";
+import { StrategyScopeSelect } from "./StrategyScopeSelect";
 
 /** Closed Beta: hide under-conviction Watch Summary detail until Dashboard ships. */
 const SHOW_WATCH_SUMMARY_DETAIL = false;
@@ -1237,6 +1236,8 @@ export function WatchlistWidget({
     getWatchPullStamp,
     lastDataPullAtByStrategyId,
     setSelectedPortfolioId,
+    watchStrategyScopeId,
+    setWatchStrategyScopeId,
   } = useAppState();
   const isPreview = Boolean(previewStrategyId);
   const panelTitle = isPreview ? "Watch Preview" : "Current Watch";
@@ -1293,8 +1294,10 @@ export function WatchlistWidget({
   const [portfolio, setPortfolio] = useState(
     () => availableSources[0]?.id ?? DEFAULT_SOURCE_ID,
   );
-  // 0 = All (merged); 1..n = appliedStrategies[n-1]. Only used when ≥2 applied.
-  const [strategyViewIndex, setStrategyViewIndex] = useState(0);
+  // 0 = unused. Home uses shared watchStrategyScopeId; forge preview uses local.
+  const [previewScopeStrategyId, setPreviewScopeStrategyId] = useState<
+    string | null
+  >(null);
 
   useEffect(() => {
     if (availableSources.length === 0) return;
@@ -1339,15 +1342,24 @@ export function WatchlistWidget({
         .filter((strategy) =>
           (strategy.appliedPortfolioIds ?? []).includes(selectedSource.id),
         )
-        .sort((a, b) => a.id.localeCompare(b.id)),
+        .sort((a, b) => a.name.localeCompare(b.name)),
     [strategies, selectedSource.id],
   );
   const canCycleStrategies = readOnly && appliedStrategies.length >= 2;
-  const cycleLength = appliedStrategies.length + 1; // All + each strategy
+  // Home: shared AppState scope. Forge Watch Preview: local only.
+  const scopeStrategyId = isPreview
+    ? previewScopeStrategyId
+    : watchStrategyScopeId;
+  const setScopeStrategyId = isPreview
+    ? setPreviewScopeStrategyId
+    : setWatchStrategyScopeId;
   const focusedStrategy =
-    canCycleStrategies && strategyViewIndex > 0
-      ? appliedStrategies[strategyViewIndex - 1]
+    canCycleStrategies && scopeStrategyId
+      ? appliedStrategies.find((s) => s.id === scopeStrategyId)
       : undefined;
+  // Chip on mobile Current Watch + always on Forge Watch Preview; desktop Home
+  // filters via the Helm Progress chip only.
+  const showScopeChip = canCycleStrategies && (isPreview || isMobile);
 
   // Mirror the real Current Watch portfolio selection into shared state so other
   // Home surfaces (the Helm metrics) can follow it. The forge Watch Preview is a
@@ -1358,7 +1370,11 @@ export function WatchlistWidget({
   }, [isPreview, selectedSource.id, setSelectedPortfolioId]);
 
   useEffect(() => {
-    setStrategyViewIndex(0);
+    if (isPreview) {
+      setPreviewScopeStrategyId(null);
+    } else {
+      setWatchStrategyScopeId(null);
+    }
     setEditMode(false);
     setEditDraft("");
     setEditToast(null);
@@ -1371,7 +1387,7 @@ export function WatchlistWidget({
     setDiscardConfirmOpen(false);
     setPendingSourceName(null);
     setEmptyGuideDismissed(readEmptyGuideDismissed(selectedSource.id));
-  }, [selectedSource.id]);
+  }, [selectedSource.id, isPreview, setWatchStrategyScopeId]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -1382,15 +1398,21 @@ export function WatchlistWidget({
     return () => media.removeEventListener("change", update);
   }, []);
 
+  // Clamp stale scope when applied strategies shrink or cycling is unavailable.
   useEffect(() => {
-    if (!canCycleStrategies) {
-      setStrategyViewIndex(0);
-      return;
+    if (!scopeStrategyId) return;
+    if (
+      !canCycleStrategies ||
+      !appliedStrategies.some((s) => s.id === scopeStrategyId)
+    ) {
+      setScopeStrategyId(null);
     }
-    if (strategyViewIndex >= cycleLength) {
-      setStrategyViewIndex(0);
-    }
-  }, [canCycleStrategies, cycleLength, strategyViewIndex]);
+  }, [
+    appliedStrategies,
+    canCycleStrategies,
+    scopeStrategyId,
+    setScopeStrategyId,
+  ]);
 
   useEffect(() => {
     if (!addPreview) return;
@@ -1680,47 +1702,8 @@ export function WatchlistWidget({
     }));
   }, [summaryItem, selectedSource.id, getAppliedStrategiesForTicker, getStrategyChipBreakdown]);
 
-  // Snapshot chip reflects the selected portfolio's market-value-weighted
-  // alignment (not the first watchlist row's status). When a single strategy
-  // is focused, re-weight across the filtered (on-strategy) holdings only.
-  const portfolioAlignment = getPortfolioAlignment(selectedSource.id);
-  const snapshotResolved = useMemo(() => {
-    if (!focusedStrategy) {
-      return portfolioAlignment.portfolio.resolved;
-    }
-    const slices = displayItems
-      .filter((item) => item.shares > 0)
-      .map((item) => {
-        const alignment = getStrategyChipBreakdown(
-          focusedStrategy.id,
-          item.ticker,
-          selectedSource.id,
-        );
-        return {
-          marketValue: item.price * item.shares,
-          conviction: alignment?.conviction ?? item.conviction,
-          categories: alignment?.categories ?? [],
-        };
-      });
-    return resolveAggregatedStatus(slices, {
-      hasStrategy: displayItems.length > 0,
-    });
-  }, [
-    focusedStrategy,
-    displayItems,
-    portfolioAlignment.portfolio.resolved,
-    getStrategyChipBreakdown,
-    selectedSource.id,
-  ]);
-
-  function onStrategyViewChange(value: string) {
-    if (value === "all") {
-      setStrategyViewIndex(0);
-      return;
-    }
-    const index = appliedStrategies.findIndex((strategy) => strategy.id === value);
-    if (index >= 0) setStrategyViewIndex(index + 1);
-  }
+  // Snapshot strategy cycling uses appliedStrategies / focusedStrategy above.
+  // Portfolio-level StatusStack + compass moved to The Helm Conviction tile.
 
   const pullStamp = getWatchPullStamp(
     appliedStrategies.map((strategy) => strategy.id),
@@ -2014,51 +1997,16 @@ export function WatchlistWidget({
           </ForgeToast>
         </div>
       ) : null}
-      {readOnly && !editMode ? (
-        // Snapshot headline reflects the selected source's lead alignment.
-        // With ≥2 applied strategies, a link-style select cycles All ↔ each strategy.
-        // Hidden while editing so the lookup field has room.
+      {readOnly && !editMode && showScopeChip ? (
+        // Mobile Current Watch + Forge Watch Preview: gold scope chip.
+        // Desktop Home: filter via Helm Progress chip (shared watchStrategyScopeId).
         <div className="watchlist-snapshot">
-          <PortfolioCompass status={snapshotResolved.primary} />
-          <div className="watchlist-snapshot-body">
-            {canCycleStrategies ? (
-              <div className="watchlist-snapshot-title-row watchlist-strategy-link-wrap">
-                <span className="watchlist-snapshot-label" aria-hidden="true">
-                  <CaretDown aria-hidden />
-                  Portfolio Strategy Alignment{" "}
-                  <span className="watchlist-strategy-count">
-                    ({appliedStrategies.length})
-                  </span>
-                </span>
-                <label className="visually-hidden" htmlFor="strategy-view-select">
-                  Switch strategy view
-                </label>
-                <select
-                  id="strategy-view-select"
-                  className="watchlist-strategy-link"
-                  value={focusedStrategy?.id ?? "all"}
-                  onChange={(event) => onStrategyViewChange(event.target.value)}
-                  aria-label="Switch strategy view"
-                >
-                  <option value="all">
-                    {appliedStrategies.length} Strategies Applied
-                  </option>
-                  {appliedStrategies.map((strategy) => (
-                    <option key={strategy.id} value={strategy.id}>
-                      {strategy.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            ) : (
-              <div className="watchlist-snapshot-title-row">
-                <span className="watchlist-snapshot-label">
-                  Portfolio Strategy Alignment
-                </span>
-              </div>
-            )}
-            <StatusStack resolved={snapshotResolved} />
-          </div>
+          <StrategyScopeSelect
+            strategies={appliedStrategies}
+            value={scopeStrategyId}
+            onChange={setScopeStrategyId}
+            aria-label="Switch strategy view"
+          />
         </div>
       ) : null}
       {showEmptyGuide ? (

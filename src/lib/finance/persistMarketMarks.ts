@@ -59,6 +59,27 @@ function totalsFromHoldings(
   return portfolioRunningTotals(positions, cashAvailable);
 }
 
+/** MV-weighted conviction for book marks — same idea as Helm Total Conviction. */
+function weightedConviction(
+  holdings: Portfolio["holdings"],
+): number | null {
+  let weighted = 0;
+  let weight = 0;
+  for (const holding of holdings) {
+    const mark = holdingMark(holding);
+    if (!mark || !Number.isFinite(holding.conviction)) continue;
+    weighted += holding.conviction * mark.marketValue;
+    weight += mark.marketValue;
+  }
+  if (weight <= 0) return null;
+  return weighted / weight;
+}
+
+function bookMetrics(holdings: Portfolio["holdings"]): Record<string, unknown> {
+  const conviction = weightedConviction(holdings);
+  return conviction == null ? {} : { conviction };
+}
+
 /**
  * Upsert whole-book + per-strategy portfolio_snapshots and enrich
  * conviction_snapshots.payload for the given tickers.
@@ -99,6 +120,7 @@ export async function persistBookAndConvictionMarks(
         totalValue: whole.totalValue,
         openPnl: whole.openPnl,
         openPnlPct: whole.openPnlPct,
+        metrics: bookMetrics(portfolio.holdings),
       });
     }
 
@@ -122,6 +144,7 @@ export async function persistBookAndConvictionMarks(
         totalValue: scoped.totalValue,
         openPnl: scoped.openPnl,
         openPnlPct: scoped.openPnlPct,
+        metrics: bookMetrics(filtered),
       });
     }
   }

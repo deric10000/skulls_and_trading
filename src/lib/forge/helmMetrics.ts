@@ -9,6 +9,10 @@ import type { PortfolioAlignment } from "./alignment";
  * is injected so this stays testable and side-effect free (the `dataSource`
  * seam is read once, in the calling component). Everything here is derived from
  * data already in the app — no new persisted fields or accessors.
+ *
+ * When `tickerInScope` is provided (Helm strategy dropdown), every metric —
+ * including Open P&L — is reduced over that ticker set only. Omit it for the
+ * All-strategies / whole-book view.
  */
 
 export interface HelmStatusSlice {
@@ -22,15 +26,19 @@ export interface HelmCompositionSlice {
 }
 
 export interface HelmMetrics {
-  /** Held names (shares > 0) that scored against an applied strategy. */
+  /** Held names (shares > 0, in scope) that scored against an applied strategy. */
   scoredCount: number;
-  /** Held names total (shares > 0). */
+  /** Held names total (shares > 0, in scope). */
   holdingCount: number;
   /** scoredCount / holdingCount as a 0–100 percentage (0 when no holdings). */
   coveragePct: number;
   /** Market-value-weighted portfolio conviction, 0–100. */
   conviction: number;
-  /** Aggregate open P&L % (open P&L / cost basis) — matches Current Watch. */
+  /**
+   * Aggregate open P&L % (open P&L / cost basis) over in-scope holdings —
+   * same formula as Current Watch (`portfolioRunningTotals`), scoped when a
+   * single strategy is selected.
+   */
   openPnlPct: number;
   /** Alignment status counts grouped by tone (positive→negative, zeros dropped). */
   statusMix: HelmStatusSlice[];
@@ -44,12 +52,17 @@ export function computeHelmMetrics({
   portfolio,
   alignment,
   priceOf,
+  tickerInScope,
 }: {
   portfolio: Portfolio | undefined;
   alignment: PortfolioAlignment;
   priceOf: (ticker: string) => number;
+  /** When set, only these tickers contribute to every metric (incl. Open P&L). */
+  tickerInScope?: (ticker: string) => boolean;
 }): HelmMetrics {
-  const holdings = (portfolio?.holdings ?? []).filter((h) => h.shares > 0);
+  const holdings = (portfolio?.holdings ?? []).filter(
+    (h) => h.shares > 0 && (tickerInScope?.(h.ticker) ?? true),
+  );
   const holdingCount = holdings.length;
 
   const byTicker = alignment.byTicker;
@@ -57,8 +70,7 @@ export function computeHelmMetrics({
   const coveragePct =
     holdingCount > 0 ? Math.round((scoredCount / holdingCount) * 100) : 0;
 
-  // Open P&L: reuse the canonical Current Watch calculation (open P&L / cost
-  // basis) so the Helm tile always agrees with the Current Watch totals footer.
+  // Same aggregate formula as Current Watch — over the in-scope holdings only.
   const openPnlPct = portfolioRunningTotals(
     holdings.map((holding) => ({
       price: priceOf(holding.ticker),
@@ -75,7 +87,7 @@ export function computeHelmMetrics({
     if (!entry) continue;
     const tone = STATUS_TONE[entry.status] ?? "neutral";
     toneCounts.set(tone, (toneCounts.get(tone) ?? 0) + 1);
-    // Composition = one chip per real lens/bucket. A merged multi-strategy
+    // Composition = one tile per real lens/bucket. A merged multi-strategy
     // headline is joined with " + " in alignment.ts, so split it back into the
     // individual strategies the name genuinely belongs to (honest membership).
     // A single strategy/bucket name (which may itself contain commas, e.g.

@@ -136,13 +136,18 @@ covered by that strategy's `appliedPortfolioIds` for the same source.
 - The Helm progress metrics (`HelmMetrics` + pure `forge/helmMetrics.ts`) live
   tiles are a **pure read** of alignment — no scoring change. Portfolio mirrors
   Current Watch via `selectedPortfolioId` (display-only; not in `user_state`);
-  strategy scope is Helm-owned local state. **Open P&L sparkline** reads
-  additive `portfolio_snapshots` (`strategy_id ''` = whole book; cash on every
-  scope). Write path: `persistBookAndConvictionMarks` after live refresh —
-  enriches `conviction_snapshots.payload` and upserts book rows; does **not**
-  change Forge / zone / `portfolioRunningTotals` math. Editable portfolio cash
-  (`updatePortfolioCash`) + `PortfolioTransaction` ledger in `share_fills`
-  (qty + cash, classification stamps only).
+  strategy scope is shared Home UI state `watchStrategyScopeId` (null = All;
+  Forge preview local only). Single-strategy scope filters every Progress metric
+  (incl. Open P&L) via `tickerInScope` / `shouldScoreTickerWithStrategy`.
+  **Conviction Change** uses `metrics.conviction` on book snapshots + ticker
+  `conviction_snapshots` for drivers (no fabricated history). **Open P&L
+  sparkline** reads additive `portfolio_snapshots` (`strategy_id ''` = whole
+  book; cash on every scope). Write path: `persistBookAndConvictionMarks` after
+  live refresh — enriches conviction payload, upserts book rows including
+  `metrics.conviction`; does **not** change Forge / zone /
+  `portfolioRunningTotals` math. Editable portfolio cash (`updatePortfolioCash`)
+  + `PortfolioTransaction` ledger in `share_fills` (qty + cash, classification
+  stamps only).
 - Cadence: Check = Daily/Weekly/Monthly + 4 intraday session-closes + 4h/1h/30m
   (**15m disabled** "Future Capability"); Technicals candle-only; fundamentals
   refresh daily. Auto-refresh opt-in per strategy (`cadenceEnabled` +
