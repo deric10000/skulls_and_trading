@@ -393,16 +393,18 @@ export interface Strategy {
   /** Custom strategies: tickers turned off per portfolio (defaults use strategyIds on holdings). */
   tickerExclusions?: Partial<Record<string, string[]>>;
   checkInterval?: CheckInterval; // re-score + notify cadence; default "1D"
-  technicalsInterval?: CheckInterval; // candle size (UI: candle-only); >= 30m
+  /** One or more ET session boundaries checked in addition to candle cadence. */
+  sessionCloseChecks?: SessionCloseInterval[];
+  technicalsInterval?: CheckInterval; // candle size (UI: candle-only); >= 1h
   /**
-   * Cadence feature master switch (default off). When off, checks still run at
-   * login / manual refresh — cadence is an opt-in addition, not the only path.
+   * Notification preference master switch. Strategy checks always run on the
+   * configured cadence; delivery channels remain future capability.
    */
   cadenceEnabled?: boolean;
   /**
    * Per-notification-type toggles for the cadence feature (all default off).
-   * Only `autoRefresh` is wired today; email/text/browser are UI placeholders
-   * (Future Capability) with no delivery backend yet.
+   * `autoRefresh` is retained only for persisted-workspace compatibility.
+   * Email/text/browser remain Future Capability with no delivery backend.
    */
   cadenceNotify?: {
     autoRefresh?: boolean;
@@ -451,6 +453,7 @@ export type DateRange =
   | "15m"
   | "30m"
   | "1h"
+  | "2h"
   | "4h"
   | "1D"
   | "1W";
@@ -618,7 +621,15 @@ export type CategoryWeights = Record<RuleCategory, number>;
 //
 // A candle size (fixed-length bar) — valid for both the check cadence and the
 // technicals candle size.
-export type CandleInterval = "15m" | "30m" | "1h" | "4h" | "1D" | "1W" | "1M";
+export type CandleInterval =
+  | "15m"
+  | "30m"
+  | "1h"
+  | "2h"
+  | "4h"
+  | "1D"
+  | "1W"
+  | "1M";
 // Intraday session-close triggers — fire once at a specific US session boundary
 // (ET), not on a fixed clock interval. Check cadence only (never a candle size).
 export type SessionCloseInterval =

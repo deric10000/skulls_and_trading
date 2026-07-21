@@ -254,7 +254,6 @@ function inheritSectorSeed(name: string): WeatherSeed {
 
 function inheritIndustrySeed(
   name: string,
-  sector: string,
   parentSeed: WeatherSeed,
 ): WeatherSeed {
   const authored = INDUSTRY_SEEDS[name];
@@ -300,7 +299,7 @@ function buildSnapshot(tf: MarketWeatherTimeframe): MarketWeatherSnapshot {
   for (const name of industries()) {
     const sector = industrySectors[name];
     const parentSeed = sectorSeedByName[sector] ?? MARKET_SEED;
-    const seed = inheritIndustrySeed(name, sector, parentSeed);
+    const seed = inheritIndustrySeed(name, parentSeed);
     industriesOut[name] = readingFor(
       seed,
       "industry",

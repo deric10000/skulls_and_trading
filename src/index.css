@@ -1588,6 +1588,18 @@ button {
   color: var(--text-muted);
 }
 
+/* Current Watch: stock count + Timer toggle in the panel-head upper right. */
+.watchlist-head-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-shrink: 0;
+}
+
+.watch-schedule-toast {
+  margin-bottom: var(--space-3);
+}
+
 /* Layer 3 critical gap — yellow caution, never invent a number. */
 .needs-data-review {
   display: inline-flex;
@@ -2092,7 +2104,7 @@ select.input:hover:not(:disabled) {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 44px;
   column-gap: var(--space-2);
-  align-items: center;
+  align-items: start;
   margin-bottom: var(--space-3);
 }
 
@@ -3296,6 +3308,28 @@ span.checkbox {
   gap: 0.5rem;
 }
 
+.watch-conviction-meter--pending {
+  min-height: 1.1rem;
+}
+
+.watch-conviction-score--pending {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--info);
+  letter-spacing: 0.01em;
+  text-transform: none;
+  font-size: 0.78rem;
+  font-weight: 500;
+  font-variant-numeric: normal;
+}
+
+.watch-conviction-score--pending > svg {
+  width: 0.95rem;
+  height: 0.95rem;
+  flex-shrink: 0;
+}
+
 .watch-conviction-track {
   flex: 1 1 auto;
   height: 6px;
@@ -4153,6 +4187,17 @@ span.checkbox {
   gap: 0.6rem;
 }
 
+.forge-session-checks {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.45rem 1rem;
+  margin-top: 0.9rem;
+}
+
+.forge-session-checks > .config-label {
+  grid-column: 1 / -1;
+}
+
 /* Cadence feature toggles — master switch + per-notification-type row. */
 .forge-cadence-toggles {
   display: flex;
@@ -4908,6 +4953,11 @@ span.checkbox {
 
 .forge-pill--off {
   opacity: 0.45;
+}
+
+.forge-pill--invalid {
+  background: color-mix(in srgb, var(--negative) 16%, transparent);
+  color: var(--negative);
 }
 
 /* Applied-portfolio ticker chips — green (not the standard rule-chip blue) so
@@ -6243,6 +6293,7 @@ select.forge-cell-input {
 
 @media (max-width: 540px) {
   .forge-cadence-row,
+  .forge-session-checks,
   .forge-cadence-notify,
   .forge-conviction-grid {
     grid-template-columns: minmax(0, 1fr);

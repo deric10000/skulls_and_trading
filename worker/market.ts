@@ -12,6 +12,7 @@ import {
   candleTtlMs,
   computeTimeframedIndicators,
   emptyTimeframedIndicators,
+  resampleHourlyBars,
   resampleTo4h,
 } from "./indicators";
 
@@ -45,6 +46,12 @@ export interface SearchHit {
 interface CacheEntry<T> {
   value: T;
   expiresAt: number;
+}
+
+export interface CronTechnicalBundle {
+  quote: QuotePayload;
+  technicals: Record<string, unknown>;
+  byTimeframe: Partial<Record<CandleTime, TimeframedIndicatorsPayload>>;
 }
 
 const DAY_MS = 86_400_000;
@@ -108,6 +115,7 @@ interface YahooSession {
 }
 
 let yahooSession: YahooSession | null = null;
+let yahooSessionInFlight: Promise<YahooSession | null> | null = null;
 
 function collectSetCookies(res: Response): string[] {
   const headers = res.headers as Headers & { getSetCookie?: () => string[] };
@@ -119,13 +127,13 @@ function collectSetCookies(res: Response): string[] {
 }
 
 /** Yahoo blocks crumb-less quote/quoteSummary; chart still works without crumb. */
-async function ensureYahooSession(): Promise<YahooSession | null> {
-  if (yahooSession && Date.now() < yahooSession.expiresAt) return yahooSession;
+async function createYahooSession(): Promise<YahooSession | null> {
   const cookies: string[] = [];
   try {
     const fc = await fetch("https://fc.yahoo.com", {
       headers: { "user-agent": YAHOO_UA },
       redirect: "manual",
+      signal: AbortSignal.timeout(12_000),
     });
     cookies.push(...collectSetCookies(fc));
   } catch {
@@ -136,6 +144,7 @@ async function ensureYahooSession(): Promise<YahooSession | null> {
       "user-agent": YAHOO_UA,
       cookie: cookies.join("; "),
     },
+    signal: AbortSignal.timeout(12_000),
   });
   cookies.push(...collectSetCookies(crumbRes));
   const crumb = (await crumbRes.text()).trim();
@@ -149,6 +158,15 @@ async function ensureYahooSession(): Promise<YahooSession | null> {
     expiresAt: Date.now() + 30 * MINUTE_MS,
   };
   return yahooSession;
+}
+
+async function ensureYahooSession(): Promise<YahooSession | null> {
+  if (yahooSession && Date.now() < yahooSession.expiresAt) return yahooSession;
+  if (yahooSessionInFlight) return yahooSessionInFlight;
+  yahooSessionInFlight = createYahooSession().finally(() => {
+    yahooSessionInFlight = null;
+  });
+  return yahooSessionInFlight;
 }
 
 function json(body: unknown, status = 200): Response {
@@ -336,7 +354,7 @@ async function searchYahoo(query: string): Promise<SearchHit[]> {
     .slice(0, 12);
 }
 
-async function fetchYahooQuoteSummary(
+export async function fetchYahooQuoteSummary(
   symbol: string,
 ): Promise<Record<string, unknown> | null> {
   if (!consumeBudget("yahoo", 30)) return null;
@@ -355,6 +373,7 @@ async function fetchYahooQuoteSummary(
       "user-agent": YAHOO_UA,
       cookie: session.cookie,
     },
+    signal: AbortSignal.timeout(12_000),
   });
   if (!res.ok) {
     // Crumb may have expired — force refresh once.
@@ -372,16 +391,18 @@ async function fetchYahooQuoteSummary(
   return data.quoteSummary?.result?.[0] ?? null;
 }
 
-async function fetchYahooChart(
+export async function fetchYahooChart(
   symbol: string,
   range = "1y",
   interval = "1d",
-  opts?: { skipBudget?: boolean },
+  opts?: { skipBudget?: boolean; includePrePost?: boolean },
 ): Promise<Record<string, unknown> | null> {
   if (!opts?.skipBudget && !consumeBudget("yahoo", 30)) return null;
-  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=${range}&interval=${interval}`;
+  const prePost = opts?.includePrePost ? "&includePrePost=true" : "";
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=${range}&interval=${interval}${prePost}`;
   const res = await fetch(url, {
     headers: { "user-agent": YAHOO_UA },
+    signal: AbortSignal.timeout(12_000),
   });
   if (!res.ok) return null;
   const data = (await res.json()) as {
@@ -421,7 +442,7 @@ function ema(values: number[], period: number): number | null {
   return value;
 }
 
-function extractBars(chart: Record<string, unknown>): OhlcvBar[] {
+export function extractBars(chart: Record<string, unknown>): OhlcvBar[] {
   const timestamps = (chart.timestamp ?? []) as Array<number | null>;
   const indicators = chart.indicators as
     | {
@@ -569,7 +590,7 @@ async function sectorEtf1mChange(etf: string): Promise<number | null> {
   return (last / prior - 1) * 100;
 }
 
-function mapFundamentals(
+export function mapFundamentals(
   symbol: string,
   summary: Record<string, unknown>,
 ): Record<string, unknown> {
@@ -653,6 +674,7 @@ const VALID_CANDLE_TIMES = new Set<CandleTime>([
   "15m",
   "30m",
   "1h",
+  "2h",
   "4h",
   "1D",
   "1W",
@@ -686,7 +708,9 @@ async function resolveTimeframedIndicators(
     return empty;
   }
   let bars = extractBars(chart);
-  if (fetchSpec.resample4h) bars = resampleTo4h(bars);
+  if (fetchSpec.resampleHours) {
+    bars = resampleHourlyBars(bars, fetchSpec.resampleHours);
+  }
   const payload = computeTimeframedIndicators(bars, {
     includeVwap: INTRADAY_TIMES.has(tf),
   });
@@ -699,12 +723,11 @@ async function resolveTimeframedIndicators(
   return payload;
 }
 
-function mapTechnicals(
+function mapTechnicalsFromBars(
   symbol: string,
-  chart: Record<string, unknown>,
+  bars: OhlcvBar[],
   spy: { t: number[]; close: number[] } | null,
 ): Record<string, unknown> {
-  const bars = extractBars(chart);
   const closes = bars.map((b) => b.close);
   const volumes = bars
     .map((b) => b.volume)
@@ -763,6 +786,14 @@ function mapTechnicals(
     asOf: new Date().toISOString().slice(0, 10),
     source: "live",
   };
+}
+
+export function mapTechnicals(
+  symbol: string,
+  chart: Record<string, unknown>,
+  spy: { t: number[]; close: number[] } | null,
+): Record<string, unknown> {
+  return mapTechnicalsFromBars(symbol, extractBars(chart), spy);
 }
 
 async function buildMarketContext(env: MarketEnv): Promise<Record<string, unknown>> {
@@ -834,6 +865,223 @@ async function buildMarketContext(env: MarketEnv): Promise<Record<string, unknow
 
   cacheSet(contextCache, "market", payload, DAY_MS);
   return payload;
+}
+
+function aggregateBars(
+  bars: OhlcvBar[],
+  bucketFor: (bar: OhlcvBar) => string,
+): OhlcvBar[] {
+  const out: OhlcvBar[] = [];
+  let bucket = "";
+  for (const bar of bars) {
+    const nextBucket = bucketFor(bar);
+    const current = out[out.length - 1];
+    if (!current || nextBucket !== bucket) {
+      out.push({ ...bar });
+      bucket = nextBucket;
+      continue;
+    }
+    current.t = bar.t;
+    current.close = bar.close;
+    current.high =
+      current.high == null
+        ? bar.high
+        : bar.high == null
+          ? current.high
+          : Math.max(current.high, bar.high);
+    current.low =
+      current.low == null
+        ? bar.low
+        : bar.low == null
+          ? current.low
+          : Math.min(current.low, bar.low);
+    current.volume =
+      current.volume == null && bar.volume == null
+        ? null
+        : (current.volume ?? 0) + (bar.volume ?? 0);
+  }
+  return out;
+}
+
+function intradayBucket(
+  bar: OhlcvBar,
+  timezoneOffsetSeconds: number,
+  hours: 1 | 2 | 4,
+): { key: string; closesAt: number } {
+  const shifted = bar.t + timezoneOffsetSeconds;
+  let day = Math.floor(shifted / 86_400);
+  const seconds = ((shifted % 86_400) + 86_400) % 86_400;
+  let session = "overnight";
+  let anchor = 20 * 60 * 60;
+  let sessionEnd = 28 * 60 * 60;
+  let position = seconds;
+  if (seconds < 4 * 60 * 60) {
+    day -= 1;
+    position += 86_400;
+  } else if (seconds < 9.5 * 60 * 60) {
+    session = "premarket";
+    anchor = 4 * 60 * 60;
+    sessionEnd = 9.5 * 60 * 60;
+  } else if (seconds < 16 * 60 * 60) {
+    session = "regular";
+    anchor = 9.5 * 60 * 60;
+    sessionEnd = 16 * 60 * 60;
+  } else if (seconds < 20 * 60 * 60) {
+    session = "afterhours";
+    anchor = 16 * 60 * 60;
+    sessionEnd = 20 * 60 * 60;
+  }
+  const bucket = Math.floor((position - anchor) / (hours * 60 * 60));
+  const closesLocal = Math.min(
+    day * 86_400 + anchor + (bucket + 1) * hours * 60 * 60,
+    day * 86_400 + sessionEnd,
+  );
+  return {
+    key: `${day}:${session}:${bucket}`,
+    closesAt: closesLocal - timezoneOffsetSeconds,
+  };
+}
+
+function resampleIntradayAtClose(
+  bars: OhlcvBar[],
+  hours: 2 | 4,
+  timezoneOffsetSeconds: number,
+  cycleCloseMs: number,
+): OhlcvBar[] {
+  const cycleCloseSeconds = Math.floor(cycleCloseMs / 1000);
+  const closed = bars.filter(
+    (bar) =>
+      intradayBucket(bar, timezoneOffsetSeconds, hours).closesAt <=
+      cycleCloseSeconds,
+  );
+  return aggregateBars(
+    closed,
+    (bar) => intradayBucket(bar, timezoneOffsetSeconds, hours).key,
+  );
+}
+
+function resampleClosedBars(
+  bars: OhlcvBar[],
+  timezoneOffsetSeconds: number,
+  cycleCloseMs: number,
+): Record<"1D" | "1W" | "1M", OhlcvBar[]> {
+  const shiftedDay = (bar: OhlcvBar) =>
+    Math.floor((bar.t + timezoneOffsetSeconds) / 86_400);
+  const shiftedCycleSeconds =
+    Math.floor(cycleCloseMs / 1000) + timezoneOffsetSeconds;
+  const currentDay = Math.floor(shiftedCycleSeconds / 86_400);
+  const cycleSecondsOfDay =
+    ((shiftedCycleSeconds % 86_400) + 86_400) % 86_400;
+  const regularBars = bars.filter((bar) => {
+    const seconds =
+      ((bar.t + timezoneOffsetSeconds) % 86_400 + 86_400) % 86_400;
+    const isRegular = seconds >= 9.5 * 60 * 60 && seconds < 16 * 60 * 60;
+    const dayClosed =
+      shiftedDay(bar) < currentDay || cycleSecondsOfDay >= 16 * 60 * 60;
+    return isRegular && dayClosed;
+  });
+  const daily = aggregateBars(regularBars, (bar) => String(shiftedDay(bar)));
+  const currentWeek = Math.floor((currentDay + 3) / 7);
+  const cycleWeekday = new Date(shiftedCycleSeconds * 1000).getUTCDay();
+  const weekly = aggregateBars(
+    daily.filter((bar) => {
+      const week = Math.floor((shiftedDay(bar) + 3) / 7);
+      return (
+        week < currentWeek ||
+        (cycleWeekday === 5 && cycleSecondsOfDay >= 16 * 60 * 60)
+      );
+    }),
+    (bar) => String(Math.floor((shiftedDay(bar) + 3) / 7)),
+  );
+  const currentShifted = new Date(shiftedCycleSeconds * 1000);
+  const currentMonth = `${currentShifted.getUTCFullYear()}-${currentShifted.getUTCMonth()}`;
+  const monthly = aggregateBars(daily, (bar) => {
+    const shifted = new Date((bar.t + timezoneOffsetSeconds) * 1000);
+    return `${shifted.getUTCFullYear()}-${shifted.getUTCMonth()}`;
+  }).filter((bar) => {
+    const shifted = new Date((bar.t + timezoneOffsetSeconds) * 1000);
+    return `${shifted.getUTCFullYear()}-${shifted.getUTCMonth()}` !== currentMonth;
+  });
+  return { "1D": daily, "1W": weekly, "1M": monthly };
+}
+
+/**
+ * One Yahoo 1h chart powers the hourly cycle's quote and every supported
+ * technical Time. Indicators with insufficient lookback stay null.
+ */
+export async function fetchCronTechnicalBundle(
+  symbol: string,
+  cycleCloseMs: number,
+): Promise<CronTechnicalBundle | null> {
+  const chart = await fetchYahooChart(symbol, "1y", "1h", {
+    includePrePost: true,
+  });
+  if (!chart) return null;
+  const meta = (chart.meta ?? {}) as {
+    gmtoffset?: number;
+    regularMarketPrice?: number;
+  };
+  const timezoneOffsetSeconds = meta.gmtoffset ?? -5 * 60 * 60;
+  const cycleCloseSeconds = Math.floor(cycleCloseMs / 1000);
+  const bars = extractBars(chart).filter(
+    (bar) =>
+      intradayBucket(bar, timezoneOffsetSeconds, 1).closesAt <=
+      cycleCloseSeconds,
+  );
+  const last = bars[bars.length - 1];
+  if (!last) return null;
+
+  const fourHour = resampleIntradayAtClose(
+    bars,
+    4,
+    timezoneOffsetSeconds,
+    cycleCloseMs,
+  );
+  const twoHour = resampleIntradayAtClose(
+    bars,
+    2,
+    timezoneOffsetSeconds,
+    cycleCloseMs,
+  );
+  const longer = resampleClosedBars(
+    bars,
+    timezoneOffsetSeconds,
+    cycleCloseMs,
+  );
+  const asOf = new Date(last.t * 1000).toISOString();
+  const byTimeframe: CronTechnicalBundle["byTimeframe"] = {
+    "1h": computeTimeframedIndicators(bars, { includeVwap: true, asOf }),
+    "2h": computeTimeframedIndicators(twoHour, { includeVwap: true, asOf }),
+    "4h": computeTimeframedIndicators(fourHour, { includeVwap: true, asOf }),
+    "1D": computeTimeframedIndicators(longer["1D"], { asOf }),
+    "1W": computeTimeframedIndicators(longer["1W"], { asOf }),
+    "1M": computeTimeframedIndicators(longer["1M"], { asOf }),
+  };
+  const technicals = mapTechnicalsFromBars(symbol, longer["1D"], null);
+  return {
+    quote: {
+      ticker: symbol,
+      lastPrice: last.close,
+      asOf,
+      source: "live",
+      provider: "yahoo",
+    },
+    technicals: { ...technicals, asOf },
+    byTimeframe,
+  };
+}
+
+export async function fetchCronFundamentals(
+  symbol: string,
+): Promise<Record<string, unknown> | null> {
+  const summary = await fetchYahooQuoteSummary(symbol);
+  return summary ? mapFundamentals(symbol, summary) : null;
+}
+
+export async function fetchCronMarketContext(
+  env: MarketEnv,
+): Promise<Record<string, unknown>> {
+  return buildMarketContext(env);
 }
 
 export async function handleMarketApi(

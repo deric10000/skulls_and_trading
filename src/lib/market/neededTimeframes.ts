@@ -11,6 +11,7 @@ const CANDLE_SET = new Set<string>([
   "15m",
   "30m",
   "1h",
+  "2h",
   "4h",
   "1D",
   "1W",

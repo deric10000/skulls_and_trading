@@ -18,14 +18,25 @@ import {
 import { dataSource } from "../lib/datasource";
 import {
   getLiveCacheGeneration,
+  getLiveQuote,
   getLastDataPullAt,
   getLastDataPullAtMap,
+  getMarketCycleMeta,
+  isConvictionScoreReady,
+  markStrategyConvictionDirty,
+  markTickerConvictionDirty,
+  resetLiveCache,
+  setLastDataPullAt,
+  setLiveQuotes,
   subscribeLiveCache,
 } from "../lib/market/liveCache";
 import {
   formatPullStamp,
-  refreshLiveMarketForPortfolios,
+  readLatestMarketCycle,
+  registerPortfolioMarketSymbols,
+  runImmediateStrategyCheck,
 } from "../lib/market/refresh";
+import { fetchMarketQuotes } from "../lib/market/client";
 import {
   computePortfolioAlignment,
   type PortfolioAlignment,
@@ -35,10 +46,15 @@ import { withPortfolioApplied } from "../lib/forge/appliedPortfolios";
 import {
   INTERVAL_LABEL,
   createRefreshScheduler,
+  nextStrategyCheckAt,
 } from "../lib/forge/scheduler";
 import { strategiesForHolding, isDefaultStrategyId } from "../lib/forge/tickerStrategy";
 import { canAddChips, canAddTicker, getBudgetUsage } from "../lib/forge/budgets";
 import { debounce } from "../lib/forge/persistence";
+import {
+  consumeTimeframeMigrations,
+  isSubHourTechnicalChip,
+} from "../lib/forge/timeframeFloor";
 import { resolveStatus } from "../lib/forge/status";
 import {
   scoreStock,
@@ -60,8 +76,10 @@ import type { UserProfile } from "../lib/auth/types";
 import { isAdmin } from "../lib/auth/types";
 import {
   emptyWorkspace,
+  fetchTickerMarks,
   loadUserWorkspace,
   saveUserWorkspace,
+  upsertTickerMarks,
   type UserFlags,
   type UserWorkspace,
 } from "../lib/userStore";
@@ -89,6 +107,30 @@ import {
   zoneHintsFromStatuses,
 } from "../lib/finance/portfolioTransactions";
 import { estimateFillTimestamp } from "../lib/finance/timestamps";
+
+const IMMEDIATE_CHECK_FIELDS = new Set<keyof Strategy>([
+  "appliedPortfolioIds",
+  "tickerExclusions",
+  "rules",
+  "ruleTags",
+  "categoryWeights",
+  "categoryEnabled",
+  "trimZoneRules",
+  "trimZoneTags",
+  "addZoneRules",
+  "addZoneTags",
+  "goToCashRules",
+  "goToCashTags",
+  "checkInterval",
+  "technicalsInterval",
+  "sessionCloseChecks",
+]);
+
+function strategyPatchNeedsImmediateCheck(patch: Partial<Strategy>): boolean {
+  return (Object.keys(patch) as Array<keyof Strategy>).some((key) =>
+    IMMEDIATE_CHECK_FIELDS.has(key),
+  );
+}
 
 function clonePortfolios(source: Portfolio[]): Portfolio[] {
   return source.map((portfolio) => ({
@@ -160,7 +202,7 @@ interface AppStateValue {
   signOut: () => void;
   budgetToast: string | null;
   clearBudgetToast: () => void;
-  /** Info toast when a strategy's cadence auto-refresh fires (null when idle). */
+  /** Info toast when a scheduled strategy check completes (null when idle). */
   cadenceToast: string | null;
   clearCadenceToast: () => void;
 
@@ -295,14 +337,31 @@ interface AppStateValue {
 
   /** ISO last successful live pull per strategy id. */
   lastDataPullAtByStrategyId: Record<string, string>;
-  /** mm/dd/yyyy for Current Watch stamp given applied strategies + optional focus. */
+  /** Formatted last-known check stamp (strategy pull or cycle meta). */
   getWatchPullStamp: (
     appliedStrategyIds: string[],
     focusedStrategyId?: string | null,
   ) => string | null;
+  /** Next check schedule for applied strategies — always when ids are non-empty. */
+  getWatchCheckSchedule: (
+    appliedStrategyIds: string[],
+    focusedStrategyId?: string | null,
+  ) => {
+    lastAt: string | null;
+    nextAt: string;
+    waitingOnCycle: boolean;
+  } | null;
+  /** False → Current Watch shows No Score until the next successful check. */
+  isConvictionScoreReady: (
+    portfolioId: string,
+    ticker: string,
+    strategyIds: string[],
+  ) => boolean;
   marketLoading: boolean;
   marketError: string | null;
   refreshLiveMarket: () => Promise<void>;
+  /** Debounced scoped first-value check for Forge apply/update/Preview. */
+  requestImmediateStrategyCheck: (strategyId: string) => void;
 
   logsByTicker: Record<string, LogEntry[]>;
   addLog: (ticker: string, draft: LogDraft) => void;
@@ -365,7 +424,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   // from the `onboardingSeen` flag gate so returning users can revisit it.
   const [onboardingReopened, setOnboardingReopened] = useState(false);
   const [budgetToast, setBudgetToast] = useState<string | null>(null);
-  // Info toast popped when a strategy's cadence auto-refresh fires.
+  // Info toast popped when a scheduled strategy check completes.
   const [cadenceToast, setCadenceToast] = useState<string | null>(null);
   const [authReady, setAuthReady] = useState(false);
   const [captain, setCaptain] = useState<CaptainProfile>({
@@ -401,10 +460,30 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const [marketLoading, setMarketLoading] = useState(false);
   const [marketError, setMarketError] = useState<string | null>(null);
   const persistEnabled = useRef(false);
+  const invalidTimeToastKey = useRef("");
+  const immediateCheckTimers = useRef(
+    new Map<string, ReturnType<typeof window.setTimeout>>(),
+  );
+  /** Avoid Yahoo spam: one bootstrap first-check attempt per strategy per session. */
+  const bootstrappedFirstChecks = useRef(new Set<string>());
+  const portfoliosRef = useRef(portfolios);
+  const strategiesRef = useRef(strategies);
+  portfoliosRef.current = portfolios;
+  strategiesRef.current = strategies;
 
   useEffect(() => {
     return subscribeLiveCache(() => setMarketGeneration(getLiveCacheGeneration()));
   }, []);
+
+  useEffect(
+    () => () => {
+      immediateCheckTimers.current.forEach((timer) =>
+        window.clearTimeout(timer),
+      );
+      immediateCheckTimers.current.clear();
+    },
+    [],
+  );
 
   const hydrateFromSession = useCallback(async () => {
     const profile = await fetchProfile();
@@ -413,7 +492,32 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     if (pending) {
       await redeemInviteCode(pending).catch(() => false);
     }
-    const workspace = await loadUserWorkspace(profile.captainName);
+    const [workspace, tickerMarks] = await Promise.all([
+      loadUserWorkspace(profile.captainName),
+      fetchTickerMarks(),
+    ]);
+    resetLiveCache();
+    setLiveQuotes(
+      Object.fromEntries(
+        tickerMarks.map((mark) => [
+          mark.ticker,
+          {
+            ticker: mark.ticker,
+            lastPrice: mark.lastPrice,
+            asOf: mark.asOf,
+            source: "live" as const,
+          },
+        ]),
+      ),
+    );
+    for (const [strategyId, stamp] of Object.entries(
+      workspace.flags.lastDataPullAtByStrategyId ?? {},
+    )) {
+      if (!Number.isNaN(Date.parse(stamp))) {
+        setLastDataPullAt(strategyId, stamp);
+      }
+    }
+    const timeframeMigrations = consumeTimeframeMigrations();
     applyWorkspaceToSetters(workspace, {
       setPortfolios,
       setStrategies,
@@ -432,6 +536,17 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     setNeedsLegalAck(true);
     setIsAuthenticated(true);
     setActivePage("home");
+    if (timeframeMigrations.length > 0) {
+      const labels = timeframeMigrations
+        .map(
+          (migration) =>
+            `${migration.strategyName}: ${migration.chipLabel} (${migration.from} → 1h)`,
+        )
+        .join("; ");
+      setCadenceToast(
+        `Updated legacy technical Times to the reliable 1-hour floor — ${labels}.`,
+      );
+    }
     persistEnabled.current = true;
   }, []);
 
@@ -462,6 +577,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       const { data: sub } = getSupabase().auth.onAuthStateChange((event) => {
         if (event === "SIGNED_OUT") {
           persistEnabled.current = false;
+          resetLiveCache();
+          bootstrappedFirstChecks.current.clear();
           setIsAuthenticated(false);
           setUserProfile(null);
           setNeedsLegalAck(false);
@@ -474,6 +591,27 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       unsubscribe?.();
     };
   }, [hydrateFromSession]);
+
+  const persistSharedMarketState = useCallback((tickers: string[]) => {
+    const marks = tickers.flatMap((ticker) => {
+      const quote = getLiveQuote(ticker);
+      return quote && quote.lastPrice > 0
+        ? [
+            {
+              ticker,
+              lastPrice: quote.lastPrice,
+              asOf: quote.asOf,
+              source: quote.source,
+            },
+          ]
+        : [];
+    });
+    setFlags((current) => ({
+      ...current,
+      lastDataPullAtByStrategyId: getLastDataPullAtMap(),
+    }));
+    return upsertTickerMarks(marks);
+  }, []);
 
   const refreshLiveMarket = useCallback(async () => {
     const tickers = [
@@ -489,8 +627,13 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     setMarketLoading(true);
     setMarketError(null);
     try {
-      await refreshLiveMarketForPortfolios(tickers, applied);
-      void persistBookAndConvictionMarks(portfolios, strategies, tickers);
+      const cycleAsOf = await readLatestMarketCycle(tickers, applied);
+      if (cycleAsOf) {
+        void Promise.all([
+          persistSharedMarketState(tickers),
+          persistBookAndConvictionMarks(portfolios, strategies, tickers),
+        ]);
+      }
     } catch (error) {
       setMarketError(
         error instanceof Error ? error.message : "Market refresh failed",
@@ -498,39 +641,140 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     } finally {
       setMarketLoading(false);
     }
-  }, [portfolios, strategies]);
+  }, [portfolios, strategies, persistSharedMarketState]);
 
   const refreshStrategyTickers = useCallback(
-    async (strategyId: string, tickers: string[]) => {
+    async (
+      strategyId: string,
+      tickers: string[],
+      requiredCycleAt: string,
+    ): Promise<boolean> => {
       const applied = strategies.filter((s) => s.id === strategyId);
       setMarketLoading(true);
       try {
-        await refreshLiveMarketForPortfolios(tickers, applied);
-        void persistBookAndConvictionMarks(portfolios, strategies, tickers, {
-          strategyId,
-        });
+        const cycleAsOf = await readLatestMarketCycle(
+          tickers,
+          applied,
+          requiredCycleAt,
+        );
+        if (cycleAsOf) {
+          void Promise.all([
+            persistSharedMarketState(tickers),
+            persistBookAndConvictionMarks(portfolios, strategies, tickers, {
+              strategyId,
+            }),
+          ]);
+          return true;
+        }
+        return false;
       } finally {
         setMarketLoading(false);
       }
     },
-    [strategies, portfolios],
+    [strategies, portfolios, persistSharedMarketState],
   );
+
+  const requestImmediateStrategyCheck = useCallback((strategyId: string) => {
+    const existing = immediateCheckTimers.current.get(strategyId);
+    if (existing) window.clearTimeout(existing);
+    const timer = window.setTimeout(() => {
+      immediateCheckTimers.current.delete(strategyId);
+      const strategy = strategiesRef.current.find(
+        (item) => item.id === strategyId,
+      );
+      if (!strategy || (strategy.appliedPortfolioIds ?? []).length === 0) return;
+      setMarketLoading(true);
+      setMarketError(null);
+      void runImmediateStrategyCheck(strategy, portfoliosRef.current)
+        .then(async (result) => {
+          if (!result) {
+            bootstrappedFirstChecks.current.delete(strategyId);
+            return;
+          }
+          bootstrappedFirstChecks.current.add(strategyId);
+          await Promise.all([
+            persistSharedMarketState(result.tickers),
+            persistBookAndConvictionMarks(
+              portfoliosRef.current,
+              strategiesRef.current,
+              result.tickers,
+              { strategyId },
+            ),
+          ]);
+          setCadenceToast("Strategy check complete — conviction is up to date.");
+        })
+        .catch((error) => {
+          bootstrappedFirstChecks.current.delete(strategyId);
+          setMarketError(
+            error instanceof Error
+              ? error.message
+              : "Immediate strategy check failed",
+          );
+        })
+        .finally(() => setMarketLoading(false));
+    }, 300);
+    immediateCheckTimers.current.set(strategyId, timer);
+  }, [persistSharedMarketState]);
 
   useEffect(() => {
     if (!isAuthenticated) return;
-    void refreshLiveMarket();
-  }, [isAuthenticated, refreshLiveMarket]);
+    const tickers = [
+      ...new Set(
+        portfolios.flatMap((portfolio) =>
+          portfolio.holdings.map((holding) => holding.ticker),
+        ),
+      ),
+    ];
+    const applied = strategies.filter(
+      (strategy) => (strategy.appliedPortfolioIds ?? []).length > 0,
+    );
+    void (async () => {
+      await registerPortfolioMarketSymbols(tickers);
+      await refreshLiveMarket();
+      // Cron may still be warming (cycle null). Pull book quotes so P&L paints,
+      // then run one scoped first check per unstamped applied strategy.
+      const missingQuotes = tickers.filter((ticker) => !getLiveQuote(ticker));
+      if (missingQuotes.length > 0) {
+        const quoteResult = await fetchMarketQuotes(missingQuotes);
+        if (quoteResult?.quotes && Object.keys(quoteResult.quotes).length > 0) {
+          setLiveQuotes(quoteResult.quotes);
+          await persistSharedMarketState(Object.keys(quoteResult.quotes));
+        }
+      }
+      for (const strategy of applied) {
+        if (getLastDataPullAt(strategy.id)) continue;
+        if (bootstrappedFirstChecks.current.has(strategy.id)) continue;
+        // Claim the slot while the debounced check runs; released on failure.
+        bootstrappedFirstChecks.current.add(strategy.id);
+        requestImmediateStrategyCheck(strategy.id);
+      }
+    })();
+  }, [
+    isAuthenticated,
+    portfolios,
+    strategies,
+    refreshLiveMarket,
+    persistSharedMarketState,
+    requestImmediateStrategyCheck,
+  ]);
 
   useEffect(() => {
     if (!isAuthenticated) return;
     const scheduler = createRefreshScheduler(
       portfolios,
       strategies,
-      (strategyId, tickers, interval) => {
-        void refreshStrategyTickers(strategyId, tickers);
-        setCadenceToast(
-          `Cadence check complete — conviction refreshed on your ${INTERVAL_LABEL[interval]} cadence. Turn cadence off anytime in Strategy Forge → Strategy Cadence.`,
+      async (strategyId, tickers, interval, requiredCycleAt) => {
+        const succeeded = await refreshStrategyTickers(
+          strategyId,
+          tickers,
+          requiredCycleAt,
         );
+        if (succeeded) {
+          setCadenceToast(
+            `Strategy check complete — conviction reviewed on your ${INTERVAL_LABEL[interval]} schedule.`,
+          );
+        }
+        return succeeded;
       },
     );
     scheduler.start();
@@ -568,6 +812,25 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     isAuthenticated,
     demoMode,
   ]);
+
+  useEffect(() => {
+    const invalid = strategies.flatMap((strategy) =>
+      [
+        ...(strategy.rules ?? []),
+        ...(strategy.trimZoneRules ?? []),
+        ...(strategy.addZoneRules ?? []),
+        ...(strategy.goToCashRules ?? []),
+      ]
+        .filter(isSubHourTechnicalChip)
+        .map((chip) => `${strategy.name}: ${chip.label} (${chip.dateRange})`),
+    );
+    const key = invalid.join("|");
+    if (!key || key === invalidTimeToastKey.current) return;
+    invalidTimeToastKey.current = key;
+    setCadenceToast(
+      `Update technical Times to 1h or longer before scoring — ${invalid.join("; ")}.`,
+    );
+  }, [strategies]);
 
   const idCounter = useRef(0);
   const nextId = useCallback((prefix: string) => {
@@ -667,6 +930,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const signOut = useCallback(() => {
     persistEnabled.current = false;
     void signOutSupabase();
+    resetLiveCache();
+    bootstrappedFirstChecks.current.clear();
     setIsAuthenticated(false);
     setDemoMode(false);
     setNeedsOnboarding(false);
@@ -800,6 +1065,20 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
           },
           ...current,
         ];
+      });
+      markTickerConvictionDirty(portfolioId, ticker);
+      void fetchMarketQuotes([ticker]).then((result) => {
+        const quote = result?.quotes[ticker];
+        if (!quote) return;
+        setLiveQuotes({ [ticker]: quote });
+        void upsertTickerMarks([
+          {
+            ticker,
+            lastPrice: quote.lastPrice,
+            asOf: quote.asOf,
+            source: quote.source,
+          },
+        ]);
       });
       return "added";
     },
@@ -1144,17 +1423,25 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   }, [nextId]);
 
   const updateStrategy = useCallback((id: string, patch: Partial<Strategy>) => {
+    const currentStrategy = strategiesRef.current.find(
+      (strategy) => strategy.id === id,
+    );
+    if (!currentStrategy) return;
+    const safePatch = sanitizeStrategyPatch(currentStrategy, patch);
+    if (Object.keys(safePatch).length === 0) return;
     setStrategies((current) =>
       current.map((strategy) => {
         if (strategy.id !== id) return strategy;
         const safe = sanitizeStrategyPatch(strategy, patch);
-        if (strategy.isDefault && Object.keys(safe).length === 0) {
-          return strategy;
-        }
+        if (Object.keys(safe).length === 0) return strategy;
         return { ...strategy, ...safe };
       }),
     );
-  }, []);
+    if (strategyPatchNeedsImmediateCheck(safePatch)) {
+      markStrategyConvictionDirty(id);
+      requestImmediateStrategyCheck(id);
+    }
+  }, [requestImmediateStrategyCheck]);
 
   const deleteStrategy = useCallback((id: string) => {
     setStrategies((current) =>
@@ -1206,6 +1493,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         appliedPortfolioIds: [],
       };
       setStrategies((current) => [...current, copy]);
+      markStrategyConvictionDirty(newId);
       return newId;
     },
     [strategies, nextId],
@@ -1225,7 +1513,9 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         };
       }),
     );
-  }, []);
+    markStrategyConvictionDirty(id);
+    requestImmediateStrategyCheck(id);
+  }, [requestImmediateStrategyCheck]);
 
   const saveChipToLibrary = useCallback(
     (chip: RuleChip) => {
@@ -1254,6 +1544,13 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         current.map((chip) => (chip.id === chipId ? { ...chip, ...patch } : chip)),
       );
       if (!propagate) return;
+      const affectedStrategyIds = strategiesRef.current
+        .filter((strategy) =>
+          (strategy.rules ?? []).some(
+            (chip) => chip.libraryChipId === chipId,
+          ),
+        )
+        .map((strategy) => strategy.id);
       setStrategies((current) =>
         current.map((strategy) => ({
           ...strategy,
@@ -1262,8 +1559,12 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
           ),
         })),
       );
+      for (const strategyId of affectedStrategyIds) {
+        markStrategyConvictionDirty(strategyId);
+        requestImmediateStrategyCheck(strategyId);
+      }
     },
-    [],
+    [requestImmediateStrategyCheck],
   );
 
   const setTickerEnabledForStrategy = useCallback(
@@ -1301,6 +1602,10 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
           return { ...next, tickerExclusions: exclusions };
         }),
       );
+      if (enabled) {
+        markTickerConvictionDirty(portfolioId, ticker);
+        markStrategyConvictionDirty(strategyId);
+      }
     },
     [],
   );
@@ -1327,17 +1632,78 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       appliedStrategyIds: string[],
       focusedStrategyId?: string | null,
     ): string | null => {
+      const cycleMeta = getMarketCycleMeta();
+      const cycleLast =
+        cycleMeta?.cycleAsOf ?? cycleMeta?.publishedAt ?? undefined;
       if (focusedStrategyId) {
-        return formatPullStamp(getLastDataPullAt(focusedStrategyId));
+        return formatPullStamp(
+          getLastDataPullAt(focusedStrategyId) ?? cycleLast,
+        );
       }
       const stamps = appliedStrategyIds
         .map((id) => getLastDataPullAt(id))
         .filter((iso): iso is string => Boolean(iso))
         .map((iso) => Date.parse(iso))
         .filter((ms) => !Number.isNaN(ms));
-      if (stamps.length === 0) return null;
+      if (stamps.length === 0) return formatPullStamp(cycleLast);
       return formatPullStamp(new Date(Math.max(...stamps)).toISOString());
     },
+    [marketGeneration],
+  );
+
+  const getWatchCheckSchedule = useCallback(
+    (
+      appliedStrategyIds: string[],
+      focusedStrategyId?: string | null,
+    ): {
+      lastAt: string | null;
+      nextAt: string;
+      waitingOnCycle: boolean;
+    } | null => {
+      const ids = focusedStrategyId
+        ? [focusedStrategyId]
+        : appliedStrategyIds;
+      if (ids.length === 0) return null;
+      const cycleMeta = getMarketCycleMeta();
+      const cycleLast =
+        cycleMeta?.cycleAsOf ?? cycleMeta?.publishedAt ?? undefined;
+      const now = Date.now();
+      const rows = ids.flatMap((strategyId) => {
+        const strategy = strategies.find((item) => item.id === strategyId);
+        if (!strategy) return [];
+        const lastAt =
+          getLastDataPullAt(strategyId) ?? cycleLast ?? null;
+        return [
+          {
+            lastAt,
+            nextAt: nextStrategyCheckAt(strategy, lastAt, now),
+          },
+        ];
+      });
+      if (rows.length === 0) return null;
+      const lastStamps = rows
+        .map((row) => row.lastAt)
+        .filter((iso): iso is string => Boolean(iso))
+        .map((iso) => Date.parse(iso))
+        .filter((ms) => !Number.isNaN(ms));
+      const lastAt =
+        lastStamps.length > 0
+          ? new Date(Math.max(...lastStamps)).toISOString()
+          : null;
+      const nextAt = new Date(
+        Math.min(...rows.map((row) => Date.parse(row.nextAt))),
+      ).toISOString();
+      const waitingOnCycle = ids.some(
+        (strategyId) => !getLastDataPullAt(strategyId),
+      );
+      return { lastAt, nextAt, waitingOnCycle };
+    },
+    [marketGeneration, strategies],
+  );
+
+  const isConvictionScoreReadyForWatch = useCallback(
+    (portfolioId: string, ticker: string, strategyIds: string[]) =>
+      isConvictionScoreReady(portfolioId, ticker, strategyIds),
     [marketGeneration],
   );
 
@@ -1554,9 +1920,12 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       getStrategyChipBreakdown,
       lastDataPullAtByStrategyId,
       getWatchPullStamp,
+      getWatchCheckSchedule,
+      isConvictionScoreReady: isConvictionScoreReadyForWatch,
       marketLoading,
       marketError,
       refreshLiveMarket,
+      requestImmediateStrategyCheck,
       logsByTicker,
       addLog,
       updateLog,
@@ -1624,9 +1993,12 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       getStrategyChipBreakdown,
       lastDataPullAtByStrategyId,
       getWatchPullStamp,
+      getWatchCheckSchedule,
+      isConvictionScoreReadyForWatch,
       marketLoading,
       marketError,
       refreshLiveMarket,
+      requestImmediateStrategyCheck,
       logsByTicker,
       addLog,
       updateLog,

@@ -14,6 +14,23 @@ import type {
 import { getAccessToken } from "../auth/session";
 import type { ProviderBudget } from "./liveCache";
 
+export interface MarketCyclePayload {
+  cycleAsOf: string;
+  completedAt: string;
+  publishedAt: string;
+  nextCycleAt: string;
+  symbols: string[];
+  quotes: Record<string, TickerQuote>;
+  fundamentals: Record<string, FundamentalSnapshot>;
+  technicals: Record<string, TechnicalSnapshot>;
+  byTimeframe: Record<
+    string,
+    Partial<Record<CandleInterval, TimeframedIndicators>>
+  >;
+  context: MarketContext | null;
+  errors: string[];
+}
+
 async function authHeaders(
   extra: Record<string, string> = {},
 ): Promise<Record<string, string>> {
@@ -45,6 +62,33 @@ export async function fetchMarketQuotes(
       body: JSON.stringify({ symbols: unique }),
     });
     return readJson(res);
+  } catch {
+    return null;
+  }
+}
+
+export async function registerMarketSymbols(symbols: string[]): Promise<boolean> {
+  const unique = [...new Set(symbols.map((s) => s.toUpperCase()).filter(Boolean))];
+  try {
+    const res = await fetch("/api/market/registry", {
+      method: "POST",
+      headers: await authHeaders({ "content-type": "application/json" }),
+      body: JSON.stringify({ symbols: unique }),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+export async function fetchLatestMarketCycle(): Promise<MarketCyclePayload | null> {
+  try {
+    const res = await fetch("/api/market/cycle", {
+      headers: await authHeaders(),
+      cache: "no-store",
+    });
+    const body = await readJson<{ cycle: MarketCyclePayload | null }>(res);
+    return body?.cycle ?? null;
   } catch {
     return null;
   }

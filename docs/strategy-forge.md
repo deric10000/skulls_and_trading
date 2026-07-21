@@ -175,22 +175,22 @@ until every check passes:
 ## 7. Buckets & check cadence
 
 - Each strategy carries its own cadence. `checkInterval` re-scores the bucket
-  and offers Daily/Weekly/Monthly (**1D default**), 4 intraday session-closes
-  (premarket 09:30 / regular 16:00 / after-hours 20:00 / overnight 04:00 ET),
-  and 4h/1h/30m candles; **15m ships disabled ("Future Capability")**.
+  and offers Daily/Weekly/Monthly (**1D default**) plus 4h/2h/1h candles.
+  `sessionCloseChecks` is a multi-select for premarket 09:30 / regular 16:00 /
+  after-hours 20:00 / overnight 04:00 ET. **15m/30m ship disabled
+  ("Future Capability")**; 1h is the reliable floor.
   `technicalsInterval` is the **default Time** (candle size) for new technical
-  rule chips; each chip can override Time in the rule table (15m–1M). Cadence
+  rule chips; each chip can override Time in the rule table (1h–1M). Cadence
   (when checks run) is separate from chip Time (which candles an indicator uses).
-  Fundamentals refresh on a fixed daily cadence.
-- **Cadence feature (opt-in, per strategy):** a master **Enable cadence** toggle
-  plus notification toggles — **Auto-refresh on cadence** (wired) and
-  **Email / Text / Browser** (disabled placeholders, "Future Capability"). All
-  default **off**. When cadence + auto-refresh are on, the scheduler
-  (`src/lib/forge/scheduler.ts`) refreshes that strategy's tickers on the chosen
-  interval and pops an info `cadenceToast`. Checks still run at login / manual
-  refresh regardless.
-- Worker quote TTL is market-hours aware (~5 min during the regular session,
-  1 day when closed) so intraday auto-refresh returns fresher numbers.
+  Every Time uses its last fully closed candle. Fundamentals refresh daily.
+- **Checks are scheduled core behavior:** Worker cron builds completed hourly
+  data cycles even while users are logged out; the browser scheduler only
+  re-scores from those cycles. Login/manual refresh never query upstream.
+- **Enable Notifications** is a preference label only. Email / Text / Browser
+  remain disabled placeholders ("Future Capability"); auto-refresh is no longer
+  a user toggle.
+- Legacy 15m/30m chips auto-migrate to 1h. Any invalid imported straggler turns
+  red with the stock tooltip, is excluded as no-data, and blocks Apply until fixed.
 - "Notify" (MVP) = the chips/tags on Home and Dashboard re-rendering at the
   check cadence. No push/notification (email/text/browser) delivery is built —
   those toggles are placeholders only.

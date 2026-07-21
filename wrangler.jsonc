@@ -3,12 +3,27 @@
   "name": "skullsandtrading",
   "compatibility_date": "2026-06-13",
   "main": "worker/index.ts",
+  "triggers": {
+    // Free Workers cap each invocation at 50 external subrequests. Short
+    // one-minute shards checkpoint an hourly sweep without long-running overlap.
+    "crons": ["* * * * *"]
+  },
+  "kv_namespaces": [
+    {
+      // Wrangler 4.45+ provisions this namespace automatically on deploy.
+      "binding": "MARKET_CACHE"
+    }
+  ],
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  },
   "assets": {
     "directory": "./dist",
     "not_found_handling": "single-page-application",
     "binding": "ASSETS",
     // Ensure /api/* hits the Worker before SPA asset fallback
     // (otherwise navigate/fetch can get index.html instead of JSON).
-    "run_worker_first": ["/api/*"]
+    "run_worker_first": ["/api/*", "/__scheduled"]
   }
 }

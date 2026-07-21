@@ -1,9 +1,9 @@
 /**
- * Soft free-tier caps for Beta 0 (Yahoo Worker ~30 calls/min + daily TTL).
+ * Soft free-tier caps for Beta 0 (cron-batched hourly market cycles).
  * Chips are local evaluations; ticker count drives API cost.
  */
 
-export const BETA0_MAX_TRACKED_TICKERS = 30;
+export const BETA0_MAX_TRACKED_TICKERS = 40;
 export const BETA0_MAX_ACTIVE_CHIPS = 200;
 
 export interface BudgetUsage {

@@ -17,7 +17,8 @@ export type ForgePillState =
   | "selected"
   | "inactive"
   | "muted"
-  | "off";
+  | "off"
+  | "invalid";
 
 export type ForgePillVariant = "default" | "applied";
 
@@ -44,6 +45,7 @@ function pillClassName(
 
   if (state === "muted") classes.push("forge-pill--muted");
   if (state === "off") classes.push("forge-pill--off");
+  if (state === "invalid") classes.push("forge-pill--invalid");
 
   if (state === "selected" || state === "inactive") {
     classes.push("forge-pill--toggle");

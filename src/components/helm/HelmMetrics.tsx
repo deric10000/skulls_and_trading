@@ -10,13 +10,17 @@ import {
   type TickerConvictionMark,
 } from "../../lib/forge/convictionChange";
 import { computeHelmMetrics } from "../../lib/forge/helmMetrics";
-import { shouldScoreTickerWithStrategy } from "../../lib/forge/tickerStrategy";
+import {
+  shouldScoreTickerWithStrategy,
+  strategiesForHolding,
+} from "../../lib/forge/tickerStrategy";
 import { seriesToSparkPoints } from "../../lib/finance/portfolioSnapshotSeries";
 import {
   fetchConvictionSnapshots,
   fetchPortfolioSnapshots,
 } from "../../lib/userStore";
 import { formatChange, formatDecimals } from "../../lib/format";
+import { STATUS_TONE } from "../../lib/status";
 import type { SignalTone } from "../../types";
 import { PortfolioCompass } from "../PortfolioCompass";
 import { StatusStack } from "../StatusBadge";
@@ -64,6 +68,8 @@ export function HelmMetrics() {
     selectedPortfolioId,
     watchStrategyScopeId,
     setWatchStrategyScopeId,
+    isConvictionScoreReady,
+    lastDataPullAtByStrategyId,
   } = useAppState();
 
   const portfolio = useMemo(
@@ -131,8 +137,27 @@ export function HelmMetrics() {
             );
           }
         : undefined,
+      isScoreReady: (ticker) => {
+        const holding = portfolio.holdings.find((h) => h.ticker === ticker);
+        if (!holding) return true;
+        const strategyIds = strategy
+          ? shouldScoreTickerWithStrategy(holding, strategy, portfolioId)
+            ? [strategy.id]
+            : []
+          : strategiesForHolding(holding, portfolioId, strategies).map(
+              (item) => item.id,
+            );
+        return isConvictionScoreReady(portfolioId, ticker, strategyIds);
+      },
     });
-  }, [portfolio, alignment, focusedStrategy]);
+  }, [
+    portfolio,
+    alignment,
+    focusedStrategy,
+    strategies,
+    isConvictionScoreReady,
+    lastDataPullAtByStrategyId,
+  ]);
 
   useEffect(() => {
     if (!portfolio || !alignment) {
@@ -234,6 +259,15 @@ export function HelmMetrics() {
   const showConvictionChange =
     todayDelta != null || sessions5Delta != null;
 
+  // Portfolio resolved status can still reflect pending/fake alignment. Only
+  // show StatusStack / compass when that primary tone appears among
+  // cadence-ready Plan Alignment counts (e.g. hide Review when nothing is
+  // actually due for review after the last check).
+  const primaryTone = STATUS_TONE[alignment.portfolio.resolved.primary];
+  const showConvictionStatus = metrics.statusMix.some(
+    (slice) => slice.tone === primaryTone,
+  );
+
   return (
     <section className="helm-metrics" aria-labelledby="helm-metrics-title">
       <div className="forge-section-head">
@@ -300,9 +334,13 @@ export function HelmMetrics() {
                 </span>
               ) : null}
             </div>
-            <PortfolioCompass status={alignment.portfolio.resolved.primary} />
+            {showConvictionStatus ? (
+              <PortfolioCompass status={alignment.portfolio.resolved.primary} />
+            ) : null}
           </div>
-          <StatusStack resolved={alignment.portfolio.resolved} />
+          {showConvictionStatus ? (
+            <StatusStack resolved={alignment.portfolio.resolved} />
+          ) : null}
           <span className="helm-metric-note">Market-value weighted</span>
         </div>
 
@@ -350,8 +388,13 @@ export function HelmMetrics() {
 
         <div className="select-card helm-metric helm-metric--wide">
           <span className="helm-metric-label">Plan Alignment</span>
-          {metrics.statusMix.length > 0 ? (
+          {metrics.statusMix.length > 0 || metrics.pendingScoreCount > 0 ? (
             <div className="helm-metric-chips">
+              {metrics.pendingScoreCount > 0 ? (
+                <span className="chip status--neutral">
+                  Pending Score | {metrics.pendingScoreCount}
+                </span>
+              ) : null}
               {metrics.statusMix.map((slice) => (
                 <span key={slice.tone} className={`chip status--${slice.tone}`}>
                   {TONE_LABEL[slice.tone]} | {slice.count}

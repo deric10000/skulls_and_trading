@@ -22,12 +22,10 @@ import {
   patchCategoryEnabled,
 } from "../lib/forge/categoryEnabled";
 import {
-  ENABLED_CADENCE,
   ENABLED_CANDLE,
   INTERVAL_LABEL,
   clampCadenceInterval,
   clampCandleInterval,
-  isSessionClose,
 } from "../lib/forge/scheduler";
 import {
   ArrowCounterClockwise,
@@ -67,12 +65,14 @@ import {
   type Layer3ZoneId,
 } from "../lib/forge/layer3Zones";
 import { GO_TO_CASH_SICADFU } from "../lib/status";
+import { isSubHourTechnicalChip } from "../lib/forge/timeframeFloor";
 import type {
   CheckInterval,
   RuleCategory,
   RuleChip,
   RuleTag,
   Strategy,
+  SessionCloseInterval,
 } from "../types";
 
 // ---------------------------------------------------------------------------
@@ -91,7 +91,14 @@ import type {
 // 15m is offered but disabled ("Future Capability").
 const FUTURE_CADENCE: CheckInterval = "15m";
 
-/** Build the Strategy Check dropdown: daily+, an Intraday group, a Candle group. */
+const SESSION_CLOSE_OPTIONS: SessionCloseInterval[] = [
+  "close-premarket",
+  "close-regular",
+  "close-afterhours",
+  "close-overnight",
+];
+
+/** Build the Strategy Check dropdown: fixed candle checks; session closes are checkboxes. */
 function buildCheckOptions() {
   const label = (interval: CheckInterval, disabled = false) => ({
     value: interval,
@@ -100,11 +107,7 @@ function buildCheckOptions() {
       : INTERVAL_LABEL[interval],
     disabled,
   });
-  const sessionCloses = ENABLED_CADENCE.filter(isSessionClose).map((interval) => ({
-    ...label(interval),
-    group: "Intraday — session close",
-  }));
-  const candles = (["4h", "1h", "30m"] as CheckInterval[]).map((interval) => ({
+  const candles = (["4h", "2h", "1h"] as CheckInterval[]).map((interval) => ({
     ...label(interval),
     group: "Candle close",
   }));
@@ -112,8 +115,8 @@ function buildCheckOptions() {
     label("1D"),
     label("1W"),
     label("1M"),
-    ...sessionCloses,
     ...candles,
+    { ...label("30m", true), group: "Candle close" },
     { ...label(FUTURE_CADENCE, true), group: "Candle close" },
   ];
 }
@@ -127,7 +130,7 @@ function buildTechnicalsOptions() {
       : INTERVAL_LABEL[interval],
     disabled,
   });
-  const candles = (["4h", "1h", "30m"] as CheckInterval[])
+  const candles = (["4h", "2h", "1h"] as CheckInterval[])
     .filter((interval) => ENABLED_CANDLE.includes(interval as never))
     .map((interval) => ({ ...label(interval), group: "Candle close" }));
   return [
@@ -135,6 +138,7 @@ function buildTechnicalsOptions() {
     label("1W"),
     label("1M"),
     ...candles,
+    { ...label("30m", true), group: "Candle close" },
     { ...label(FUTURE_CADENCE, true), group: "Candle close" },
   ];
 }
@@ -159,6 +163,7 @@ export type SectionTab = ForgeSectionTab;
 
 function ChipPill({ chip }: { chip: RuleChip }) {
   const meta = METRICS[chip.metric];
+  const invalidTime = isSubHourTechnicalChip(chip);
   return (
     <Tooltip
       title={chip.label}
@@ -171,6 +176,12 @@ function ChipPill({ chip }: { chip: RuleChip }) {
           <span className="tooltip-line">
             {formatChipCondition(chip)} | {chip.weightPct}%
           </span>
+          {invalidTime ? (
+            <span className="tooltip-line">
+              <strong>Needs update:</strong> This Time is below the reliable
+              1-hour data floor. Raise it to 1h or longer to re-enable scoring.
+            </span>
+          ) : null}
           <span className="tooltip-line">
             <strong>What it is:</strong>
           </span>
@@ -182,7 +193,11 @@ function ChipPill({ chip }: { chip: RuleChip }) {
         </>
       }
     >
-      <ForgePill state={chip.enabled ? "default" : "off"}>{chip.label}</ForgePill>
+      <ForgePill
+        state={invalidTime ? "invalid" : chip.enabled ? "default" : "off"}
+      >
+        {chip.label}
+      </ForgePill>
     </Tooltip>
   );
 }
@@ -352,10 +367,12 @@ export function StrategyForgePanel({ strategy }: { strategy: Strategy | undefine
     );
   }
 
+  const activeStrategy = strategy;
   const id = strategy.id;
   const weights = strategy.categoryWeights;
   const checkInterval = clampCadenceInterval(strategy.checkInterval);
   const technicalsInterval = clampCandleInterval(strategy.technicalsInterval);
+  const sessionCloseChecks = strategy.sessionCloseChecks ?? [];
   const cadenceEnabled = strategy.cadenceEnabled ?? false;
   const notify = strategy.cadenceNotify ?? {};
 
@@ -363,8 +380,11 @@ export function StrategyForgePanel({ strategy }: { strategy: Strategy | undefine
     updateStrategy(id, { checkInterval: value as CheckInterval });
   }
 
-  function setNotify(key: keyof NonNullable<Strategy["cadenceNotify"]>, on: boolean) {
-    updateStrategy(id, { cadenceNotify: { ...notify, [key]: on } });
+  function toggleSessionClose(interval: SessionCloseInterval, enabled: boolean) {
+    const next = new Set(sessionCloseChecks);
+    if (enabled) next.add(interval);
+    else next.delete(interval);
+    updateStrategy(id, { sessionCloseChecks: [...next] });
   }
 
   function openEditor(next: TableEditor) {
@@ -455,7 +475,7 @@ export function StrategyForgePanel({ strategy }: { strategy: Strategy | undefine
     weights?.[category];
 
   function patchCategoryWeight(category: RuleCategory, value: number) {
-    if (!isCategoryEnabled(strategy, category)) return;
+    if (!isCategoryEnabled(activeStrategy, category)) return;
     updateStrategy(id, {
       categoryWeights: {
         ...(weights ?? DEFAULT_CATEGORY_WEIGHTS),
@@ -465,11 +485,11 @@ export function StrategyForgePanel({ strategy }: { strategy: Strategy | undefine
   }
 
   function toggleCategoryEnabled(category: RuleCategory, enabled: boolean) {
-    if (!enabled && enabledCategories(strategy).length <= 1) {
+    if (!enabled && enabledCategories(activeStrategy).length <= 1) {
       showInfoToast("Keep at least one category on for conviction scoring.");
       return;
     }
-    const patch = patchCategoryEnabled(strategy, category, enabled);
+    const patch = patchCategoryEnabled(activeStrategy, category, enabled);
     if (!patch) return;
     updateStrategy(id, patch);
     const label = CATEGORY_META[category].stepLabel;
@@ -488,7 +508,7 @@ export function StrategyForgePanel({ strategy }: { strategy: Strategy | undefine
     setActiveSection(next);
     if (
       CATEGORY_ORDER.includes(next as RuleCategory) &&
-      !isCategoryEnabled(strategy, next as RuleCategory)
+      !isCategoryEnabled(activeStrategy, next as RuleCategory)
     ) {
       const label = CATEGORY_META[next as RuleCategory].stepLabel;
       showInfoToast(
@@ -788,9 +808,8 @@ export function StrategyForgePanel({ strategy }: { strategy: Strategy | undefine
           <h3 className="forge-section-title">1. Strategy Cadence</h3>
         </div>
         <p className="forge-section-q">
-          How often should the Forge re-score your strategy and refresh its
-          data? Checks always run at login and on manual refresh — cadence is an
-          optional addition on top.
+          How often should the Forge check your strategy against the latest
+          completed market-data cycle?
         </p>
         <div className="forge-cadence-row">
           <label className="config-field">
@@ -814,7 +833,7 @@ export function StrategyForgePanel({ strategy }: { strategy: Strategy | undefine
               Technical Indicators
               <InfoTip
                 label="About the technicals cadence"
-                body="Default Time (candle size) for new technical rule chips. Each chip can still pick its own Time in the rule table — 15m through 1M."
+                body="Default Time (candle size) for new technical rule chips. The reliable floor is 1 hour; each chip can choose 1h or a longer closed candle."
               />
             </span>
             <Dropdown
@@ -831,38 +850,48 @@ export function StrategyForgePanel({ strategy }: { strategy: Strategy | undefine
           </label>
         </div>
 
-        {/* Cadence feature toggles — master switch + per-notification-type.
-            All default off; only auto-refresh is wired today (email/text/browser
-            are Future Capability placeholders). */}
+        <div className="forge-session-checks" role="group" aria-label="Session-close checks">
+          <span className="config-label forge-label forge-label--muted">
+            Session-close checks
+            <InfoTip
+              label="About session-close checks"
+              body="Choose any session boundaries that should run an additional strategy check. These use the latest fully completed hourly market cycle."
+            />
+          </span>
+          {SESSION_CLOSE_OPTIONS.map((interval) => (
+            <label className="config-toggle" key={interval}>
+              <Checkbox
+                checked={sessionCloseChecks.includes(interval)}
+                aria-label={INTERVAL_LABEL[interval]}
+                onCheckedChange={(next) => toggleSessionClose(interval, next)}
+              />
+              <span className="config-label forge-label forge-label--muted">
+                {INTERVAL_LABEL[interval]}
+              </span>
+            </label>
+          ))}
+        </div>
+
+        {/* Notification preferences — delivery channels are Future Capability.
+            Strategy checks themselves always run on the configured cadence. */}
         <div className="forge-cadence-toggles">
           <div className="config-toggle">
             <Checkbox
               checked={cadenceEnabled}
-              aria-label="Enable cadence for this strategy"
+              aria-label="Enable notifications for this strategy"
               onCheckedChange={(next) =>
                 updateStrategy(id, { cadenceEnabled: next })
               }
             />
             <span className="config-label forge-label forge-label--muted">
-              Enable cadence
+              Enable Notifications
               <InfoTip
-                label="About enabling cadence"
-                body="Turn the cadence feature on for this strategy. When on, the notification types below fire on your selected interval. Off by default — checks still run at login and manual refresh either way."
+                label="About enabling notifications"
+                body="Notification delivery is a future capability. Strategy checks always run on the configured schedule whether this preference is on or off."
               />
             </span>
           </div>
           <div className="forge-cadence-notify" aria-disabled={!cadenceEnabled}>
-            <div className="config-toggle">
-              <Checkbox
-                checked={notify.autoRefresh ?? false}
-                disabled={!cadenceEnabled}
-                aria-label="Auto-refresh data on cadence"
-                onCheckedChange={(next) => setNotify("autoRefresh", next)}
-              />
-              <span className="config-label forge-label forge-label--muted">
-                Auto-refresh on cadence
-              </span>
-            </div>
             <div className="config-toggle">
               <Checkbox
                 checked={notify.email ?? false}

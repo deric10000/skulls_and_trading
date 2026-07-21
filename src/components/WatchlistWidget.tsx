@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { useAppState, type WatchEditSnapshot } from "../state/AppState";
 import { asyncSearchTickers, dataSource } from "../lib/datasource";
 import { getLiveQuote } from "../lib/market/liveCache";
-import { formatChange, formatPrice, formatDecimals } from "../lib/format";
+import { formatChange, formatPrice } from "../lib/format";
 import { NeedsDataReviewFlag } from "./NeedsDataReviewFlag";
 import { formatChipCondition, formatObservedBreach } from "../lib/forge/metrics";
 import {
@@ -21,8 +21,49 @@ import {
   shouldScoreTickerWithStrategy,
 } from "../lib/forge/tickerStrategy";
 import { STATUS_TONE } from "../lib/status";
-import { WatchAlignLabel, WatchConvictionHead } from "./StatusBadge";
+import { WatchAlignLabel, WatchConvictionHead, WatchConvictionMeter } from "./StatusBadge";
 import { Checkbox } from "./Checkbox";
+
+function formatCheckTime(iso: string): string {
+  const when = new Date(iso);
+  const nowParts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const whenParts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(when);
+  const part = (parts: Intl.DateTimeFormatPart[], type: string) =>
+    parts.find((entry) => entry.type === type)?.value ?? "";
+  const sameEtDay =
+    part(nowParts, "year") === part(whenParts, "year") &&
+    part(nowParts, "month") === part(whenParts, "month") &&
+    part(nowParts, "day") === part(whenParts, "day");
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    weekday: sameEtDay ? undefined : "short",
+    month: sameEtDay ? undefined : "numeric",
+    day: sameEtDay ? undefined : "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZoneName: "short",
+  }).format(when);
+}
+
+function formatCheckCountdown(ms: number): string {
+  const totalSeconds = Math.max(0, Math.ceil(ms / 1000));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  return hours > 0
+    ? `${hours}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`
+    : `${minutes}:${String(seconds).padStart(2, "0")}`;
+}
 import { ForgePill } from "./ForgePill";
 import {
   CaretDown,
@@ -30,6 +71,7 @@ import {
   MagnifyingGlass,
   PencilSimple,
   Plus,
+  Timer,
   Trash,
   X,
 } from "../lib/icons";
@@ -83,6 +125,32 @@ function writeEmptyGuideDismissed(sourceId: string) {
     sessionStorage.setItem(emptyGuideStorageKey(sourceId), "1");
   } catch {
     /* private mode / blocked storage — dismiss still works in-session via state */
+  }
+}
+
+const SCHEDULE_TOAST_STORAGE_PREFIX = "st-watch-schedule-collapsed:";
+
+function scheduleToastStorageKey(sourceId: string) {
+  return `${SCHEDULE_TOAST_STORAGE_PREFIX}${sourceId}`;
+}
+
+function readScheduleToastCollapsed(sourceId: string): boolean {
+  try {
+    return sessionStorage.getItem(scheduleToastStorageKey(sourceId)) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function writeScheduleToastCollapsed(sourceId: string, collapsed: boolean) {
+  try {
+    if (collapsed) {
+      sessionStorage.setItem(scheduleToastStorageKey(sourceId), "1");
+    } else {
+      sessionStorage.removeItem(scheduleToastStorageKey(sourceId));
+    }
+  } catch {
+    /* private mode / blocked storage — collapse still works in-session via state */
   }
 }
 
@@ -314,11 +382,13 @@ function StrategyConvictionBlock({
   alignment,
   fallbackStatus,
   ticker,
+  scoreReady,
 }: {
   strategy: Strategy;
   alignment: StockAlignment | undefined;
   fallbackStatus: StatusType;
   ticker: string;
+  scoreReady: boolean;
 }) {
   const conviction = alignment?.conviction ?? 0;
   const resolved = alignment?.resolved;
@@ -390,19 +460,14 @@ function StrategyConvictionBlock({
         <WatchConvictionHead
           resolved={resolved}
           fallbackStatus={status}
-          hideStatuses={planSections.length > 0}
+          hideStatuses={!scoreReady || planSections.length > 0}
         />
-        <span className="watch-conviction-meter">
-          <span className="watch-conviction-track">
-            <span
-              className="watch-conviction-fill"
-              style={{ width: `${conviction}%` }}
-            />
-          </span>
-          <span className="watch-conviction-score">{formatDecimals(conviction)}</span>
-        </span>
+        <WatchConvictionMeter
+          conviction={conviction}
+          scoreReady={scoreReady}
+        />
 
-        {planSections.length > 0 ? (
+        {scoreReady && planSections.length > 0 ? (
           <div className="watch-summary-plan-block">
             {planSections.map((section) => {
               const expanded = expandedPlanStatuses.has(section.status);
@@ -508,6 +573,7 @@ function WatchSummary({
   item,
   logs,
   strategyBreakdowns,
+  scoreReadyByStrategyId,
 }: {
   item: WatchlistItem;
   logs: LogEntry[];
@@ -517,11 +583,15 @@ function WatchSummary({
       the strategy-name chip stack and the "calculating"/"excluded" sections
       below, so the two always agree. */
   strategyBreakdowns: StrategyBreakdown[];
+  scoreReadyByStrategyId: Record<string, boolean>;
 }) {
   const owned = item.shares > 0;
-  const marketValue = item.price * item.shares;
-  const totalPnl = (item.price - item.avgPrice) * item.shares;
-  const changeUp = item.changePct >= 0;
+  const priceNeedsReview = !getLiveQuote(item.ticker);
+  const markPrice = priceNeedsReview ? 0 : item.price;
+  const marketValue = markPrice * item.shares;
+  const totalPnl = openPnlTotal(markPrice, item.avgPrice, item.shares);
+  const changePct = openPnlPercent(markPrice, item.avgPrice);
+  const changeUp = changePct >= 0;
   const changeClass = changeUp ? "watch-change--up" : "watch-change--down";
 
   const analysis = SHOW_WATCH_SUMMARY_DETAIL
@@ -561,7 +631,11 @@ function WatchSummary({
                   <span className="watch-metric">
                     <span className="watch-field-label">Last Price</span>
                     <span className="watch-figure watch-figure--strong">
-                      {formatPrice(item.price)}
+                      {priceNeedsReview ? (
+                        <NeedsDataReviewFlag />
+                      ) : (
+                        formatPrice(markPrice)
+                      )}
                     </span>
                   </span>
                   <span className="watch-metric">
@@ -575,7 +649,11 @@ function WatchSummary({
                 <span className="watch-metric">
                   <span className="watch-field-label">Last Price</span>
                   <span className="watch-figure watch-figure--strong">
-                    {formatPrice(item.price)}
+                    {priceNeedsReview ? (
+                      <NeedsDataReviewFlag />
+                    ) : (
+                      formatPrice(markPrice)
+                    )}
                   </span>
                 </span>
               )}
@@ -586,7 +664,7 @@ function WatchSummary({
                   </span>
                   <span className="watch-pnl">
                     <span className={`watch-figure watch-figure--medium ${changeClass}`}>
-                      {formatChange(item.changePct)}
+                      {formatChange(changePct)}
                     </span>
                     <span className={`watch-figure ${changeClass}`}>
                       {formatPrice(totalPnl)}
@@ -605,6 +683,7 @@ function WatchSummary({
                     alignment={alignment}
                     fallbackStatus={item.status}
                     ticker={item.ticker}
+                    scoreReady={scoreReadyByStrategyId[strategy.id] ?? false}
                   />
                 ))
               ) : (
@@ -612,18 +691,12 @@ function WatchSummary({
                   <WatchConvictionHead
                     resolved={item.resolved}
                     fallbackStatus={item.status}
+                    hideStatuses
                   />
-                  <span className="watch-conviction-meter">
-                    <span className="watch-conviction-track">
-                      <span
-                        className="watch-conviction-fill"
-                        style={{ width: `${item.conviction}%` }}
-                      />
-                    </span>
-                    <span className="watch-conviction-score">
-                      {formatDecimals(item.conviction)}
-                    </span>
-                  </span>
+                  <WatchConvictionMeter
+                    conviction={item.conviction}
+                    scoreReady={false}
+                  />
                 </div>
               )}
             </div>
@@ -909,9 +982,12 @@ function previewWatchItem(ticker: string): WatchlistItem | null {
 /** Read-only Current Watch row used in the add-confirm modal. */
 function WatchItemPreviewCard({ item }: { item: WatchlistItem }) {
   const owned = item.shares > 0;
-  const marketValue = item.price * item.shares;
-  const totalPnl = (item.price - item.avgPrice) * item.shares;
-  const changeUp = item.changePct >= 0;
+  const priceNeedsReview = !getLiveQuote(item.ticker);
+  const markPrice = priceNeedsReview ? 0 : item.price;
+  const marketValue = markPrice * item.shares;
+  const totalPnl = openPnlTotal(markPrice, item.avgPrice, item.shares);
+  const changePct = openPnlPercent(markPrice, item.avgPrice);
+  const changeUp = changePct >= 0;
   const changeClass = changeUp ? "watch-change--up" : "watch-change--down";
 
   return (
@@ -961,7 +1037,7 @@ function WatchItemPreviewCard({ item }: { item: WatchlistItem }) {
                 <span className="watch-field-label">{"Open P&L% | Total"}</span>
                 <span className="watch-pnl">
                   <span className={`watch-figure watch-figure--medium ${changeClass}`}>
-                    {formatChange(item.changePct)}
+                    {formatChange(changePct)}
                   </span>
                   <span className={`watch-figure ${changeClass}`}>
                     {formatPrice(totalPnl)}
@@ -975,16 +1051,9 @@ function WatchItemPreviewCard({ item }: { item: WatchlistItem }) {
             <WatchConvictionHead
               resolved={item.resolved}
               fallbackStatus={item.status}
+              hideStatuses
             />
-            <span className="watch-conviction-meter">
-              <span className="watch-conviction-track">
-                <span
-                  className="watch-conviction-fill"
-                  style={{ width: `${item.conviction}%` }}
-                />
-              </span>
-              <span className="watch-conviction-score">{formatDecimals(item.conviction)}</span>
-            </span>
+            <WatchConvictionMeter conviction={item.conviction} scoreReady={false} />
           </span>
         </span>
       </div>
@@ -1234,16 +1303,32 @@ export function WatchlistWidget({
     restoreWatchEditSnapshot,
     createPortfolioSource,
     getWatchPullStamp,
+    getWatchCheckSchedule,
+    isConvictionScoreReady,
     lastDataPullAtByStrategyId,
     setSelectedPortfolioId,
     watchStrategyScopeId,
     setWatchStrategyScopeId,
+    requestImmediateStrategyCheck,
+    marketLoading,
   } = useAppState();
   const isPreview = Boolean(previewStrategyId);
   const panelTitle = isPreview ? "Watch Preview" : "Current Watch";
   const previewStrategy = previewStrategyId
     ? strategies.find((strategy) => strategy.id === previewStrategyId)
     : undefined;
+  useEffect(() => {
+    if (
+      previewStrategyId &&
+      (previewStrategy?.appliedPortfolioIds ?? []).length > 0
+    ) {
+      requestImmediateStrategyCheck(previewStrategyId);
+    }
+  }, [
+    previewStrategyId,
+    previewStrategy,
+    requestImmediateStrategyCheck,
+  ]);
   const previewSources = useMemo(() => {
     if (!previewStrategy) return [];
     const applied = new Set(previewStrategy.appliedPortfolioIds ?? []);
@@ -1254,6 +1339,7 @@ export function WatchlistWidget({
   const [editDraft, setEditDraft] = useState("");
   const [editToast, setEditToast] = useState<string | null>(null);
   const [emptyGuideDismissed, setEmptyGuideDismissed] = useState(false);
+  const [scheduleToastCollapsed, setScheduleToastCollapsed] = useState(false);
   const [tickerSuggestionsOpen, setTickerSuggestionsOpen] = useState(false);
   const [editSuggestions, setEditSuggestions] = useState<
     { symbol: string; name: string }[]
@@ -1387,6 +1473,7 @@ export function WatchlistWidget({
     setDiscardConfirmOpen(false);
     setPendingSourceName(null);
     setEmptyGuideDismissed(readEmptyGuideDismissed(selectedSource.id));
+    setScheduleToastCollapsed(readScheduleToastCollapsed(selectedSource.id));
   }, [selectedSource.id, isPreview, setWatchStrategyScopeId]);
 
   useEffect(() => {
@@ -1702,6 +1789,24 @@ export function WatchlistWidget({
     }));
   }, [summaryItem, selectedSource.id, getAppliedStrategiesForTicker, getStrategyChipBreakdown]);
 
+  const summaryScoreReadyByStrategyId = useMemo(() => {
+    const map: Record<string, boolean> = {};
+    for (const { strategy } of strategyBreakdowns) {
+      map[strategy.id] = isConvictionScoreReady(
+        selectedSource.id,
+        summaryItem?.ticker ?? "",
+        [strategy.id],
+      );
+    }
+    return map;
+  }, [
+    strategyBreakdowns,
+    selectedSource.id,
+    summaryItem?.ticker,
+    isConvictionScoreReady,
+    lastDataPullAtByStrategyId,
+  ]);
+
   // Snapshot strategy cycling uses appliedStrategies / focusedStrategy above.
   // Portfolio-level StatusStack + compass moved to The Helm Conviction tile.
 
@@ -1709,16 +1814,41 @@ export function WatchlistWidget({
     appliedStrategies.map((strategy) => strategy.id),
     focusedStrategy?.id ?? null,
   );
-  const stocksTag =
-    appliedStrategies.length === 0 || !pullStamp
-      ? `${displayItems.length} stocks`
-      : `${displayItems.length} stocks, ${pullStamp}`;
+  const checkSchedule = getWatchCheckSchedule(
+    appliedStrategies.map((strategy) => strategy.id),
+    focusedStrategy?.id ?? null,
+  );
+  const [countdownNow, setCountdownNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!checkSchedule) return;
+    const timer = window.setInterval(() => setCountdownNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [checkSchedule?.nextAt]);
+  const countdown = checkSchedule
+    ? formatCheckCountdown(Date.parse(checkSchedule.nextAt) - countdownNow)
+    : null;
+  // Always show schedule chrome when strategies are applied — last-known stamp
+  // when available, otherwise an explicit waiting label so the clock is visible.
+  const stockCountTag = `${displayItems.length} stocks`;
+  const showScheduleChrome = appliedStrategies.length > 0;
+  const scheduleLastLabel = showScheduleChrome
+    ? (pullStamp ?? "Waiting on first check")
+    : null;
+  const scheduleNextLabel =
+    showScheduleChrome && checkSchedule?.waitingOnCycle
+      ? marketLoading
+        ? "Checking now…"
+        : "Due · running first check"
+      : showScheduleChrome && checkSchedule && countdown
+        ? `${formatCheckTime(checkSchedule.nextAt)} (${countdown})`
+        : null;
 
   const runningTotals = useMemo(
     () =>
       portfolioRunningTotals(
         items.map((item) => ({
-          price: item.price,
+          // Only cycle marks — new / unpriced names stay out of MV and P&L.
+          price: getLiveQuote(item.ticker) ? item.price : 0,
           shares: item.shares,
           avgPrice: item.avgPrice,
         })),
@@ -1732,6 +1862,7 @@ export function WatchlistWidget({
       editMode,
       isWatchlistSource,
       cashDraft,
+      lastDataPullAtByStrategyId,
     ],
   );
 
@@ -1741,6 +1872,11 @@ export function WatchlistWidget({
   function dismissEmptyGuide() {
     writeEmptyGuideDismissed(selectedSource.id);
     setEmptyGuideDismissed(true);
+  }
+
+  function setScheduleCollapsed(collapsed: boolean) {
+    writeScheduleToastCollapsed(selectedSource.id, collapsed);
+    setScheduleToastCollapsed(collapsed);
   }
 
   if (isPreview && previewSources.length === 0) {
@@ -1784,6 +1920,7 @@ export function WatchlistWidget({
           item={summaryItem}
           logs={logsByTicker[summaryItem.ticker] ?? []}
           strategyBreakdowns={strategyBreakdowns}
+          scoreReadyByStrategyId={summaryScoreReadyByStrategyId}
         />
       </section>
     );
@@ -1803,7 +1940,28 @@ export function WatchlistWidget({
     >
       <div className="panel-head">
         <h2 id="watchlist-title">{panelTitle}</h2>
-        <span className="panel-tag watchlist-tag">{stocksTag}</span>
+        <div className="watchlist-head-meta">
+          <span className="panel-tag watchlist-tag">{stockCountTag}</span>
+          {showScheduleChrome ? (
+            <button
+              type="button"
+              className={
+                scheduleToastCollapsed
+                  ? "icon-btn"
+                  : "icon-btn icon-btn--active"
+              }
+              aria-label={
+                scheduleToastCollapsed
+                  ? "Show check schedule"
+                  : "Minimize check schedule"
+              }
+              aria-expanded={!scheduleToastCollapsed}
+              onClick={() => setScheduleCollapsed(!scheduleToastCollapsed)}
+            >
+              <Timer aria-hidden weight="regular" />
+            </button>
+          ) : null}
+        </div>
       </div>
       <div className="portfolio-switcher">
         <div className="portfolio-field">
@@ -1852,6 +2010,22 @@ export function WatchlistWidget({
           </button>
         )}
       </div>
+      {showScheduleChrome && !scheduleToastCollapsed ? (
+        <div className="forge-toast-stack watch-schedule-toast">
+          <ForgeToast
+            tone="info"
+            onDismiss={() => setScheduleCollapsed(true)}
+            dismissLabel="Minimize check schedule"
+          >
+            <p>
+              Last Conviction Check: {scheduleLastLabel}
+              {scheduleNextLabel
+                ? ` · Next Check: ${scheduleNextLabel}`
+                : null}
+            </p>
+          </ForgeToast>
+        </div>
+      ) : null}
       {pendingSourceName ? (
         <ForgeTableModal
           title={`Create “${pendingSourceName}”?`}
@@ -2063,8 +2237,10 @@ export function WatchlistWidget({
             ? (qtyDrafts[item.ticker] ?? item.shares)
             : item.shares;
           const showOwnedMetrics = displayShares > 0 || canEditQty;
-          const lastPrice = item.price;
           const priceNeedsReview = !getLiveQuote(item.ticker);
+          // Marks only count after a cycle quote exists — missing/new names stay $0
+          // until the next check (never −100% vs avg cost).
+          const lastPrice = priceNeedsReview ? 0 : item.price;
           let displayAvg = item.avgPrice;
           if (canEditQty && displayShares !== baselineShares) {
             const side = qtySideFromDelta(displayShares - baselineShares);
@@ -2074,7 +2250,7 @@ export function WatchlistWidget({
                 avgBefore: item.avgPrice,
                 side,
                 deltaShares: Math.abs(displayShares - baselineShares),
-                fillPrice: lastPrice,
+                fillPrice: priceNeedsReview ? item.avgPrice : lastPrice,
                 sharesAfter: displayShares,
               });
             }
@@ -2209,6 +2385,16 @@ export function WatchlistWidget({
             </span>
           );
 
+          const rowStrategies = getAppliedStrategiesForTicker(
+            item.ticker,
+            selectedSource.id,
+          );
+          const scoreReady = isConvictionScoreReady(
+            selectedSource.id,
+            item.ticker,
+            rowStrategies.map((strategy) => strategy.id),
+          );
+
           const convictionOrStrategies = editMode ? (
             <WatchStrategyEditPicker
               ticker={item.ticker}
@@ -2229,16 +2415,14 @@ export function WatchlistWidget({
               <WatchConvictionHead
                 resolved={item.resolved}
                 fallbackStatus={item.status}
+                hideStatuses={!scoreReady}
               />
-              <span className="watch-conviction-meter">
-                <span className="watch-conviction-track">
-                  <span
-                    className="watch-conviction-fill"
-                    style={{ width: `${item.conviction}%` }}
-                  />
-                </span>
-                <span className="watch-conviction-score">{formatDecimals(item.conviction)}</span>
-              </span>
+              <WatchConvictionMeter
+                conviction={item.conviction}
+                scoreReady={
+                  rowStrategies.length === 0 ? true : scoreReady
+                }
+              />
             </span>
           );
 

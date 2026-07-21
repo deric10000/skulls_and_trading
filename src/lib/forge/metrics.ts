@@ -13,6 +13,7 @@ export const CANDLE_TIME_RANGES: CandleInterval[] = [
   "15m",
   "30m",
   "1h",
+  "2h",
   "4h",
   "1D",
   "1W",
@@ -20,7 +21,13 @@ export const CANDLE_TIME_RANGES: CandleInterval[] = [
 ];
 
 /** VWAP needs a real session — intraday Times only. */
-export const VWAP_TIME_RANGES: CandleInterval[] = ["15m", "30m", "1h", "4h"];
+export const VWAP_TIME_RANGES: CandleInterval[] = [
+  "15m",
+  "30m",
+  "1h",
+  "2h",
+  "4h",
+];
 
 // ---------------------------------------------------------------------------
 // Metric registry — the single source of truth for every data point a rule chip

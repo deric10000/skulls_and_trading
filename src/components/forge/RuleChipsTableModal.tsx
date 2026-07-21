@@ -23,6 +23,7 @@ import { ForgeToast } from "./ForgeToast";
 import { ForgeSectionTabs } from "./ForgeSectionTabs";
 import { useAppState } from "../../state/AppState";
 import { useIsMobile } from "../../lib/useIsMobile";
+import { isSubHourTime } from "../../lib/forge/timeframeFloor";
 import {
   BookmarkSimple,
   CaretDown,
@@ -669,8 +670,15 @@ export function RuleChipsTableModal({
                           }
                         >
                           {METRICS[libraryDraft.metric].dateRanges.map((range) => (
-                            <option key={range} value={range}>
+                            <option
+                              key={range}
+                              value={range}
+                              disabled={isSubHourTime(range)}
+                            >
                               {range}
+                              {isSubHourTime(range)
+                                ? " (Future Capability)"
+                                : ""}
                             </option>
                           ))}
                         </select>
@@ -939,8 +947,15 @@ export function RuleChipsTableModal({
                         }
                       >
                         {metricMeta.dateRanges.map((range) => (
-                          <option key={range} value={range}>
+                          <option
+                            key={range}
+                            value={range}
+                            disabled={isSubHourTime(range)}
+                          >
                             {range}
+                            {isSubHourTime(range)
+                              ? " (Future Capability)"
+                              : ""}
                           </option>
                         ))}
                       </select>
