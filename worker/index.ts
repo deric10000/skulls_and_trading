@@ -3,19 +3,25 @@
 // Market routes require Bearer JWT when Supabase is configured on the Worker.
 // See .cursor/rules/security-hardening.mdc and data-architecture.md.
 
-import { handleMarketApi, type MarketEnv } from "./market";
+import { handleMarketApi } from "./market";
+import {
+  handleMarketCycleApi,
+  runScheduledMarketCycle,
+  type MarketCycleEnv,
+} from "./marketCycle";
 import {
   marketAuthRequired,
   verifySupabaseAccessToken,
   type AuthEnv,
 } from "./auth";
 
-interface Env extends MarketEnv, AuthEnv {
-  ASSETS: { fetch: (request: Request) => Promise<Response> };
+type WorkerEnv = Env &
+  MarketCycleEnv &
+  AuthEnv & {
   DEMO_PASSWORD?: string;
   AUTH_SECRET?: string;
   ENABLE_DEMO_GATE?: string;
-}
+};
 
 const COOKIE_NAME = "st_demo";
 const MAX_AGE_SECONDS = 60 * 60 * 12;
@@ -61,7 +67,7 @@ function buildCookie(value: string, maxAge: number): string {
 }
 
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(request: Request, env: WorkerEnv): Promise<Response> {
     const url = new URL(request.url);
 
     if (url.pathname === "/api/demo-login") {
@@ -120,16 +126,33 @@ export default {
     }
 
     if (url.pathname.startsWith("/api/market/")) {
+      let userId = "local";
       if (marketAuthRequired(env)) {
         const user = await verifySupabaseAccessToken(request, env);
         if (!user) {
           return jsonResponse({ error: "Unauthorized" }, 401);
         }
+        userId = user.userId;
       }
+      const cycle = await handleMarketCycleApi(
+        request,
+        env,
+        url.pathname,
+        userId,
+      );
+      if (cycle) return cycle;
       const market = await handleMarketApi(request, env, url.pathname);
       if (market) return market;
     }
 
     return env.ASSETS.fetch(request);
+  },
+
+  async scheduled(
+    controller: ScheduledController,
+    env: WorkerEnv,
+    _ctx: ExecutionContext,
+  ): Promise<void> {
+    await runScheduledMarketCycle(env, controller.scheduledTime);
   },
 };

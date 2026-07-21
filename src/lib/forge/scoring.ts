@@ -25,6 +25,7 @@ import {
   LAYER3_ZONES,
 } from "./layer3Zones";
 import { bandFromConviction, resolveStatus, type ResolveContext } from "./status";
+import { isSubHourTechnicalChip } from "./timeframeFloor";
 
 // ---------------------------------------------------------------------------
 // Strategy Forge scoring engine — pure functions, no I/O.
@@ -60,6 +61,7 @@ const CANDLE_TIMES = new Set<string>([
   "15m",
   "30m",
   "1h",
+  "2h",
   "4h",
   "1D",
   "1W",
@@ -157,6 +159,9 @@ function compareNumeric(
 // ---- Chip evaluation ----------------------------------------------------
 
 export function evaluateChip(chip: RuleChip, ctx: MetricContext): ChipResult {
+  if (isSubHourTechnicalChip(chip)) {
+    return { chip, outcome: "no-data", value: null };
+  }
   // Qualitative timeframe match (string "is").
   if (chip.metric === "timeframe") {
     if (ctx.timeframe == null) return { chip, outcome: "no-data", value: null };
@@ -416,6 +421,19 @@ export function validateStrategy(strategy: Strategy): StrategyValidation {
   if (!strategy.name.trim()) issues.push("Name the strategy.");
   if (!strategy.thesisDescription?.trim()) {
     issues.push("Describe the thesis in Thesis & Fundamentals.");
+  }
+  const invalidTimes = [
+    ...(strategy.rules ?? []),
+    ...(strategy.trimZoneRules ?? []),
+    ...(strategy.addZoneRules ?? []),
+    ...(strategy.goToCashRules ?? []),
+  ].filter(isSubHourTechnicalChip);
+  if (invalidTimes.length > 0) {
+    issues.push(
+      `Raise technical Time to 1h or longer: ${invalidTimes
+        .map((chip) => chip.label)
+        .join(", ")}.`,
+    );
   }
 
   const weights: CategoryWeights =

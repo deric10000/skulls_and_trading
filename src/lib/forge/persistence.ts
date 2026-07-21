@@ -3,7 +3,15 @@ import { CHIP_LIBRARY_SEED, DEFAULT_STRATEGIES, PORTFOLIOS } from "../../data";
 import { portfolioIdsReferencingStrategy } from "./appliedPortfolios";
 import { isLiveSupportedMetric } from "./liveCoverage";
 import { migrateChips, migrateStrategyMetrics } from "./metricMigration";
-import { clampCadenceInterval, clampCandleInterval } from "./scheduler";
+import {
+  clampCadenceInterval,
+  clampCandleInterval,
+  isSessionClose,
+} from "./scheduler";
+import {
+  migrateChipLibraryTimeframeFloor,
+  migrateStrategyTimeframeFloor,
+} from "./timeframeFloor";
 
 const STORAGE_VERSION = 1;
 const STRATEGIES_KEY = "forge:strategies";
@@ -161,7 +169,9 @@ function pruneUnsupportedChips(chips: RuleChip[] | undefined): RuleChip[] {
 /** Layer 1 + cadence: migrate legacy keys, drop unsupported, clamp intervals. */
 function pruneStrategiesForLive(strategies: Strategy[]): Strategy[] {
   return strategies.map((strategy) => {
-    const migrated = migrateStrategyMetrics(strategy);
+    const migrated = migrateStrategyTimeframeFloor(
+      migrateStrategyMetrics(strategy),
+    );
     const rules = pruneUnsupportedChips(migrated.rules);
     const allowedIds = new Set(rules.map((chip) => chip.id));
     const pruneTags = (tags: RuleTag[] | undefined): RuleTag[] | undefined => {
@@ -171,10 +181,21 @@ function pruneStrategiesForLive(strategies: Strategy[]): Strategy[] {
         chipIds: tag.chipIds.filter((id) => allowedIds.has(id) || tag.system),
       }));
     };
-    const checkInterval = clampCadenceInterval(migrated.checkInterval);
+    const legacySession = migrated.checkInterval && isSessionClose(migrated.checkInterval)
+      ? migrated.checkInterval
+      : null;
+    const checkInterval = legacySession
+      ? "1D"
+      : clampCadenceInterval(migrated.checkInterval);
     return {
       ...migrated,
       checkInterval,
+      sessionCloseChecks: [
+        ...new Set([
+          ...(migrated.sessionCloseChecks ?? []),
+          ...(legacySession ? [legacySession] : []),
+        ]),
+      ],
       technicalsInterval: clampCandleInterval(migrated.technicalsInterval),
       rules,
       ruleTags: pruneTags(migrated.ruleTags),
@@ -217,7 +238,9 @@ export function loadPersistedChipLibrary(): RuleChip[] {
   const base = stored
     ? backfillChipLibraryPlans(stored)
     : CHIP_LIBRARY_SEED;
-  return pruneUnsupportedChips(migrateChips(base));
+  return migrateChipLibraryTimeframeFloor(
+    pruneUnsupportedChips(migrateChips(base)),
+  );
 }
 
 export function persistStrategies(strategies: Strategy[]): void {

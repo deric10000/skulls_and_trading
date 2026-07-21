@@ -67,18 +67,29 @@ covered by that strategy's `appliedPortfolioIds` for the same source.
 - Active binding: `freeTierDataSource` in `src/lib/datasource/index.ts`.
   Paid/brokerage later swaps the same export — don't scatter `fetch()` into UI.
 - Live fields (quotes, fundies, techs, market context, Weather, search) go through
-  Worker `/api/market/*` → `liveCache` → FreeTier; loading/error/pull stamps live
-  in `AppState` only. Never dual-read mock seeds for a field once it's live.
+  Worker `/api/market/*` → KV-published market cycle → atomic `liveCache` commit
+  → FreeTier. Authenticated clients register up to 40 symbols each (800 active
+  symbols globally). Login/manual refresh never fan out upstream for steady-state
+  cadence. Setup has scoped exceptions: add-ticker requests one quote for
+  immediate P&L (score remains pending); apply/update/Forge Preview runs one
+  debounced first check for that strategy's tickers; login also pulls missing
+  book quotes and one first check per unstamped applied strategy when the cron
+  cycle is still warming, preferring a completed cycle before the existing
+  Worker quote/fundamental/technical routes.
 - Quarantined: `TOP_SEARCH_TICKERS`, static `MARKET_CONTEXT`, `weather/mock` —
   mockDataSource / fixtures only. Live search = `asyncSearchTickers`.
-- Cadence: Check offers Daily/Weekly/Monthly + 4 intraday session-closes +
-  4h/1h/30m; **15m disabled** ("Future Capability"). Technicals candle-only.
-  Auto-refresh is opt-in per strategy (`cadenceEnabled` + `cadenceNotify`);
-  Worker quote TTL is market-hours aware (~5 min live, 1 day closed).
+- Cadence: Worker cron shards an hourly global sweep below Free-plan external
+  subrequest/Yahoo soft limits and publishes only completed cycles. Check offers
+  1h/2h/4h/Daily/Weekly/Monthly plus a multi-select of 4 session closes.
+  **15m/30m disabled** ("Future Capability"); 1h is the data floor. Checks run
+  for applied strategies regardless of `cadenceEnabled`; that field now controls
+  the **Enable Notifications** preference only.
 - Layer 1 coverage: `liveCoverage.ts` / Forge dropdowns / default strategies.
   Layer 2: null = no-data. Layer 3: `NeedsDataReviewFlag` for critical gaps.
-  Timeframed technicals: Worker computes comprehensive-core indicators from
-  Yahoo OHLCV per chip Time (`getTechnicalsByTimeframe` / `?timeframes=`).
+  Timeframed technicals: Worker computes comprehensive-core indicators from one
+  closed Yahoo 1h OHLCV series per ticker, resampled locally to
+  2h/4h/1D/1W/1M. Sub-hour legacy chips migrate to 1h; invalid stragglers score
+  no-data.
   Excluded (no honest free source): `interestCoverage`, `dividendGrowth5yPct`,
   `buybackYieldPct`. Never fabricate a value to widen coverage.
 
@@ -97,7 +108,12 @@ covered by that strategy's `appliedPortfolioIds` for the same source.
   holdings. Cache app-wide per timeframe until context refreshes. See
   `data-architecture.md` §5.
 - **Beta 0 user data:** Supabase Auth + Postgres RLS (`user_state`,
-  `conviction_snapshots`). Not localStorage SoT. Invite codes + Admin role.
+  `conviction_snapshots`, `portfolio_snapshots`, `ticker_marks`). Not
+  localStorage SoT. `ticker_marks` hydrates account last prices into
+  `liveCache`; `flags.lastDataPullAtByStrategyId` hydrates successful strategy
+  check stamps. Marks never make conviction ready without a stamp. Successful
+  setup/cron reads upsert both so local and deployed clients match for the same
+  account; their Worker KV stores remain separate. Invite codes + Admin role.
   See `supabase/schema.sql` and `src/lib/userStore/`. `flags.badgeToastsSeen`
   = one-shot Helm onboarding-badge toast IDs; `flags.weatherReaderLayers`
   = Market/Sector/Industry/Stock detail opens for Weather Reader; earn state
@@ -148,11 +164,11 @@ covered by that strategy's `appliedPortfolioIds` for the same source.
   `portfolioRunningTotals` math. Editable portfolio cash (`updatePortfolioCash`)
   + `PortfolioTransaction` ledger in `share_fills` (qty + cash, classification
   stamps only).
-- Cadence: Check = Daily/Weekly/Monthly + 4 intraday session-closes + 4h/1h/30m
-  (**15m disabled** "Future Capability"); Technicals candle-only; fundamentals
-  refresh daily. Auto-refresh opt-in per strategy (`cadenceEnabled` +
-  `cadenceNotify.autoRefresh`); email/text/browser are placeholders. See
-  `data-architecture.md` §6.
+- Cadence: Check = 1h/2h/4h/Daily/Weekly/Monthly + any combination of 4
+  intraday session-closes. **15m/30m disabled** ("Future Capability");
+  fundamentals refresh daily through the cron cycle. Checks are core behavior;
+  `cadenceEnabled` is notifications-only and email/text/browser are placeholders.
+  See `data-architecture.md` §6.
 
 ## Safety
 

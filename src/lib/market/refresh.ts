@@ -1,153 +1,178 @@
 /**
- * Pass 2 live refresh — fills liveCache from Worker, updates strategy pull stamps.
- * AppState owns loading; call after auth / when holdings change.
+ * Cron-cycle reader — registers a user's symbols and atomically fills liveCache
+ * from the latest completed Worker cycle. It never calls upstream providers.
  */
 
-import type {
-  CandleInterval,
-  FundamentalSnapshot,
-  MarketContext,
-  Strategy,
-  TechnicalSnapshot,
-  TimeframedIndicators,
-} from "../../types";
-import { TICKERS } from "../../data";
+import type { Portfolio, Strategy, TickerQuote } from "../../types";
 import {
-  fetchMarketContext,
   fetchMarketFundamentals,
   fetchMarketQuotes,
   fetchMarketTechnicals,
+  fetchLatestMarketCycle,
+  registerMarketSymbols,
 } from "./client";
-import { clearLiveWeatherCache } from "../datasource/freeTier";
 import {
-  setLastDataPullAt,
+  applyMarketCycle,
+  clearStrategyConvictionDirty,
+  clearTickerConvictionDirty,
+  getLiveQuote,
+  getMarketCycleMeta,
   setLiveFundamentals,
-  setLiveMarketContext,
   setLiveQuotes,
   setLiveTechnicals,
   setLiveTechnicalsByTimeframe,
-  setProviderBudgets,
+  setLastDataPullAt,
 } from "./liveCache";
+import {
+  checkBoundaryForCycle,
+  tickersForStrategy,
+} from "../forge/scheduler";
 import { neededTimeframesForStrategies } from "./neededTimeframes";
 
-/** GICS sector → SPDR sector ETF (taxonomy.ts keys). Powers sectorEtf1mChangePct. */
-const SECTOR_ETF: Record<string, string> = {
-  Energy: "XLE",
-  Materials: "XLB",
-  Industrials: "XLI",
-  "Consumer Discretionary": "XLY",
-  "Consumer Staples": "XLP",
-  "Health Care": "XLV",
-  Financials: "XLF",
-  "Information Technology": "XLK",
-  "Communication Services": "XLC",
-  Utilities: "XLU",
-  "Real Estate": "XLRE",
-};
-
-/**
- * Sector ETF only for researched tickers (TICKERS registry company facts) —
- * bootstrap tickers carry a placeholder sector, and scoring a real ETF against
- * a guessed sector would fabricate data.
- */
-function sectorEtfFor(ticker: string): string | undefined {
-  const sector = TICKERS[ticker]?.sector;
-  return sector ? SECTOR_ETF[sector] : undefined;
+export async function registerPortfolioMarketSymbols(
+  tickers: string[],
+): Promise<boolean> {
+  return registerMarketSymbols(tickers);
 }
 
-/** Weekdays (Mon–Fri) from today until `isoDate` — trading-day approximation. */
-function weekdaysUntil(isoDate: string): number | null {
-  const target = new Date(`${isoDate}T00:00:00`);
-  if (Number.isNaN(target.getTime())) return null;
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  if (target <= today) return 0;
-  let count = 0;
-  const cursor = new Date(today);
-  while (cursor < target) {
-    cursor.setDate(cursor.getDate() + 1);
-    const day = cursor.getDay();
-    if (day !== 0 && day !== 6) count += 1;
-  }
-  return count;
-}
-
-export async function refreshLiveMarketForPortfolios(
+export async function readLatestMarketCycle(
   tickers: string[],
   appliedStrategies: Strategy[],
-): Promise<void> {
+  requiredCycleAt?: string,
+): Promise<string | null> {
   const unique = [...new Set(tickers.map((t) => t.toUpperCase()).filter(Boolean))];
-  if (unique.length === 0) return;
-
-  const quotesRes = await fetchMarketQuotes(unique);
-  if (quotesRes?.budgets) setProviderBudgets(quotesRes.budgets);
-  if (quotesRes?.quotes) {
-    const mapped = Object.fromEntries(
-      Object.entries(quotesRes.quotes).map(([ticker, quote]) => [
-        ticker,
-        {
-          ticker,
-          lastPrice: quote.lastPrice,
-          asOf: quote.asOf,
-          source: "live" as const,
-        },
-      ]),
+  if (unique.length === 0) return null;
+  const cycle = await fetchLatestMarketCycle();
+  if (!cycle) return null;
+  if (
+    requiredCycleAt &&
+    Date.parse(cycle.cycleAsOf) < Date.parse(requiredCycleAt)
+  ) {
+    return null;
+  }
+  const complete = unique.every(
+    (ticker) =>
+      cycle.quotes[ticker] &&
+      cycle.technicals[ticker] &&
+      cycle.byTimeframe[ticker]?.["1h"],
+  );
+  if (!complete) return null;
+  const current = getMarketCycleMeta();
+  if (current?.cycleAsOf !== cycle.cycleAsOf) applyMarketCycle(cycle);
+  for (const strategy of appliedStrategies) {
+    setLastDataPullAt(
+      strategy.id,
+      checkBoundaryForCycle(strategy, cycle.cycleAsOf),
     );
-    setLiveQuotes(mapped);
+  }
+  return cycle.cycleAsOf;
+}
+
+export interface ImmediateStrategyCheckResult {
+  checkedAt: string;
+  tickers: string[];
+  quotes: Record<string, TickerQuote>;
+  source: "cycle" | "scoped";
+}
+
+function clearCheckedDirtyState(
+  strategy: Strategy,
+  portfolios: Portfolio[],
+  tickers: string[],
+): void {
+  clearStrategyConvictionDirty(strategy.id);
+  const checked = new Set(tickers);
+  for (const portfolio of portfolios) {
+    if (!(strategy.appliedPortfolioIds ?? []).includes(portfolio.id)) continue;
+    for (const holding of portfolio.holdings) {
+      if (checked.has(holding.ticker.toUpperCase())) {
+        clearTickerConvictionDirty(portfolio.id, holding.ticker);
+      }
+    }
+  }
+}
+
+/**
+ * First-value check for apply/update/Preview. Prefer the completed cron cycle;
+ * if it cannot cover this strategy, pull only this strategy's small universe.
+ */
+export async function runImmediateStrategyCheck(
+  strategy: Strategy,
+  portfolios: Portfolio[],
+): Promise<ImmediateStrategyCheckResult | null> {
+  const tickers = tickersForStrategy(strategy, portfolios);
+  if (tickers.length === 0) return null;
+  await registerMarketSymbols(tickers);
+
+  const cycleAsOf = await readLatestMarketCycle(tickers, [strategy]);
+  if (cycleAsOf) {
+    const quotes = Object.fromEntries(
+      tickers.flatMap((ticker) => {
+        const quote = getLiveQuote(ticker);
+        return quote ? [[ticker, quote] as const] : [];
+      }),
+    );
+    clearCheckedDirtyState(strategy, portfolios, tickers);
+    return { checkedAt: cycleAsOf, tickers, quotes, source: "cycle" };
   }
 
-  // Candle Times needed by enabled timeframed chips on applied strategies.
-  const timeframes = neededTimeframesForStrategies(appliedStrategies);
-
-  // Fundamentals + technicals — sequential to respect free-tier budgets.
-  for (const ticker of unique.slice(0, 25)) {
-    const fundy = await fetchMarketFundamentals(ticker);
-    if (fundy?.budgets) setProviderBudgets(fundy.budgets);
-    if (fundy?.fundamentals) {
-      setLiveFundamentals(ticker, fundy.fundamentals as FundamentalSnapshot);
+  const quoteResult = await fetchMarketQuotes(tickers);
+  if (!quoteResult) return null;
+  setLiveQuotes(quoteResult.quotes);
+  const timeframes = neededTimeframesForStrategies([strategy]);
+  const snapshots = await Promise.all(
+    tickers.map(async (ticker) => {
+      const [fundamentals, technicals] = await Promise.all([
+        fetchMarketFundamentals(ticker),
+        fetchMarketTechnicals(ticker, { timeframes }),
+      ]);
+      return { ticker, fundamentals, technicals };
+    }),
+  );
+  for (const snapshot of snapshots) {
+    if (snapshot.fundamentals?.fundamentals) {
+      setLiveFundamentals(snapshot.ticker, snapshot.fundamentals.fundamentals);
     }
-    const tech = await fetchMarketTechnicals(ticker, {
-      sectorEtf: sectorEtfFor(ticker),
-      timeframes,
-    });
-    if (tech?.budgets) setProviderBudgets(tech.budgets);
-    if (tech?.technicals) {
-      // daysUntilEarnings derives from the fundamentals pull (calendarEvents
-      // next earnings date) — the chart-only technicals payload can't know it.
-      const nextEarnings = (fundy?.fundamentals as FundamentalSnapshot | null)
-        ?.nextEarningsDate;
-      const technicals = tech.technicals as TechnicalSnapshot;
-      setLiveTechnicals(ticker, {
-        ...technicals,
-        daysUntilEarnings: nextEarnings
-          ? weekdaysUntil(nextEarnings)
-          : technicals.daysUntilEarnings,
-      });
+    if (snapshot.technicals?.technicals) {
+      setLiveTechnicals(snapshot.ticker, snapshot.technicals.technicals);
     }
-    if (tech?.byTimeframe) {
+    if (snapshot.technicals?.byTimeframe) {
       setLiveTechnicalsByTimeframe(
-        ticker,
-        tech.byTimeframe as Partial<
-          Record<CandleInterval, TimeframedIndicators>
-        >,
+        snapshot.ticker,
+        snapshot.technicals.byTimeframe,
       );
     }
   }
 
-  const ctx = await fetchMarketContext();
-  if (ctx?.budgets) setProviderBudgets(ctx.budgets);
-  if (ctx?.context) {
-    setLiveMarketContext(ctx.context as MarketContext);
-    clearLiveWeatherCache();
-  }
+  const complete = tickers.every(
+    (ticker) =>
+      quoteResult.quotes[ticker] &&
+      snapshots.some(
+        (snapshot) =>
+          snapshot.ticker === ticker && snapshot.technicals?.technicals,
+      ),
+  );
+  if (!complete) return null;
 
-  const pulledAt = quotesRes?.asOf ?? new Date().toISOString();
-  for (const strategy of appliedStrategies) {
-    setLastDataPullAt(strategy.id, pulledAt);
-  }
+  const quoteTimes = Object.values(quoteResult.quotes)
+    .map((quote) => Date.parse(quote.asOf))
+    .filter(Number.isFinite);
+  const dataAsOf =
+    quoteTimes.length > 0
+      ? new Date(Math.min(...quoteTimes)).toISOString()
+      : new Date().toISOString();
+  const checkedAt = checkBoundaryForCycle(strategy, dataAsOf);
+  setLastDataPullAt(strategy.id, checkedAt);
+  clearCheckedDirtyState(strategy, portfolios, tickers);
+  return {
+    checkedAt,
+    tickers,
+    quotes: quoteResult.quotes,
+    source: "scoped",
+  };
 }
 
-/** Format ISO / date for Current Watch stamp: mm/dd/yyyy */
+/** Format an ISO check boundary in ET. */
 export function formatPullStamp(iso: string | undefined): string | null {
   if (!iso) return null;
   const d = new Date(iso);
@@ -157,8 +182,13 @@ export function formatPullStamp(iso: string | undefined): string | null {
     if (m) return `${m[2]}/${m[3]}/${m[1]}`;
     return null;
   }
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  const yyyy = d.getFullYear();
-  return `${mm}/${dd}/${yyyy}`;
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    month: "2-digit",
+    day: "2-digit",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZoneName: "short",
+  }).format(d);
 }

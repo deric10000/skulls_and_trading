@@ -12,7 +12,15 @@ export interface OhlcvBar {
   volume: number | null;
 }
 
-export type CandleTime = "15m" | "30m" | "1h" | "4h" | "1D" | "1W" | "1M";
+export type CandleTime =
+  | "15m"
+  | "30m"
+  | "1h"
+  | "2h"
+  | "4h"
+  | "1D"
+  | "1W"
+  | "1M";
 
 export interface TimeframedIndicatorsPayload {
   rsi: number | null;
@@ -495,12 +503,15 @@ export function sessionVwapPct(bars: OhlcvBar[]): number | null {
 }
 
 /** Aggregate 1h bars into 4h bars (4×1h). */
-export function resampleTo4h(bars: OhlcvBar[]): OhlcvBar[] {
+export function resampleHourlyBars(
+  bars: OhlcvBar[],
+  hours: 2 | 4,
+): OhlcvBar[] {
   if (bars.length === 0) return [];
   const out: OhlcvBar[] = [];
-  for (let i = 0; i < bars.length; i += 4) {
-    const chunk = bars.slice(i, i + 4);
-    if (chunk.length === 0) continue;
+  for (let i = 0; i < bars.length; i += hours) {
+    const chunk = bars.slice(i, i + hours);
+    if (chunk.length < hours) continue;
     const first = chunk[0];
     const last = chunk[chunk.length - 1];
     const highs = chunk.map((b) => b.high).filter((v): v is number => v != null);
@@ -516,6 +527,10 @@ export function resampleTo4h(bars: OhlcvBar[]): OhlcvBar[] {
     });
   }
   return out;
+}
+
+export function resampleTo4h(bars: OhlcvBar[]): OhlcvBar[] {
+  return resampleHourlyBars(bars, 4);
 }
 
 export function emptyTimeframedIndicators(asOf: string): TimeframedIndicatorsPayload {
@@ -558,9 +573,9 @@ export function emptyTimeframedIndicators(asOf: string): TimeframedIndicatorsPay
 /** Compute the full comprehensive-core library for one bar series. */
 export function computeTimeframedIndicators(
   bars: OhlcvBar[],
-  opts?: { includeVwap?: boolean },
+  opts?: { includeVwap?: boolean; asOf?: string },
 ): TimeframedIndicatorsPayload {
-  const asOf = new Date().toISOString().slice(0, 10);
+  const asOf = opts?.asOf ?? new Date().toISOString();
   if (bars.length === 0) return emptyTimeframedIndicators(asOf);
 
   const closes = bars.map((b) => b.close);
@@ -624,18 +639,25 @@ export function computeTimeframedIndicators(
 /** Yahoo chart range/interval for each candle Time. 4h is resampled from 1h. */
 export const TIMEFRAME_FETCH: Record<
   CandleTime,
-  { range: string; interval: string; resample4h?: boolean }
+  { range: string; interval: string; resampleHours?: 2 | 4 }
 > = {
   "15m": { range: "60d", interval: "15m" },
   "30m": { range: "60d", interval: "30m" },
   "1h": { range: "1y", interval: "1h" },
-  "4h": { range: "1y", interval: "1h", resample4h: true },
+  "2h": { range: "1y", interval: "1h", resampleHours: 2 },
+  "4h": { range: "1y", interval: "1h", resampleHours: 4 },
   "1D": { range: "1y", interval: "1d" },
   "1W": { range: "5y", interval: "1wk" },
   "1M": { range: "max", interval: "1mo" },
 };
 
-export const INTRADAY_TIMES = new Set<CandleTime>(["15m", "30m", "1h", "4h"]);
+export const INTRADAY_TIMES = new Set<CandleTime>([
+  "15m",
+  "30m",
+  "1h",
+  "2h",
+  "4h",
+]);
 
 export function candleTtlMs(tf: CandleTime, marketOpen: boolean): number {
   if (!marketOpen) return 86_400_000;
@@ -643,6 +665,7 @@ export function candleTtlMs(tf: CandleTime, marketOpen: boolean): number {
     "15m": 15 * 60_000,
     "30m": 30 * 60_000,
     "1h": 60 * 60_000,
+    "2h": 2 * 60 * 60_000,
     "4h": 4 * 60 * 60_000,
     "1D": 86_400_000,
     "1W": 86_400_000,

@@ -42,6 +42,11 @@ export interface HelmMetrics {
   openPnlPct: number;
   /** Alignment status counts grouped by tone (positive→negative, zeros dropped). */
   statusMix: HelmStatusSlice[];
+  /**
+   * Held names waiting on a cadence check (add/apply/update or no last check).
+   * Excluded from `statusMix` so they never inflate On Plan / Watch / etc.
+   */
+  pendingScoreCount: number;
   /** Composition by each ticker's headline bucket/lens, most names first. */
   composition: HelmCompositionSlice[];
 }
@@ -53,12 +58,18 @@ export function computeHelmMetrics({
   alignment,
   priceOf,
   tickerInScope,
+  isScoreReady,
 }: {
   portfolio: Portfolio | undefined;
   alignment: PortfolioAlignment;
   priceOf: (ticker: string) => number;
   /** When set, only these tickers contribute to every metric (incl. Open P&L). */
   tickerInScope?: (ticker: string) => boolean;
+  /**
+   * When false, the holding is counted under `pendingScoreCount` and omitted
+   * from Plan Alignment tone chips (not treated as On Plan).
+   */
+  isScoreReady?: (ticker: string) => boolean;
 }): HelmMetrics {
   const holdings = (portfolio?.holdings ?? []).filter(
     (h) => h.shares > 0 && (tickerInScope?.(h.ticker) ?? true),
@@ -82,9 +93,14 @@ export function computeHelmMetrics({
   // Status mix + composition come from each held name's headline alignment.
   const toneCounts = new Map<SignalTone, number>();
   const bucketCounts = new Map<string, number>();
+  let pendingScoreCount = 0;
   for (const holding of holdings) {
     const entry = byTicker[holding.ticker];
     if (!entry) continue;
+    if (isScoreReady && !isScoreReady(holding.ticker)) {
+      pendingScoreCount += 1;
+      continue;
+    }
     const tone = STATUS_TONE[entry.status] ?? "neutral";
     toneCounts.set(tone, (toneCounts.get(tone) ?? 0) + 1);
     // Composition = one tile per real lens/bucket. A merged multi-strategy
@@ -116,6 +132,7 @@ export function computeHelmMetrics({
     conviction: alignment.portfolio.conviction,
     openPnlPct,
     statusMix,
+    pendingScoreCount,
     composition,
   };
 }

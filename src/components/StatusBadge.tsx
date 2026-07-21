@@ -1,11 +1,15 @@
-import { STATUS_ICON } from "../lib/icons";
+import { Info, STATUS_ICON } from "../lib/icons";
 import {
   GO_TO_CASH_SICADFU,
   STATUS_TONE,
   statusChipLabel,
 } from "../lib/status";
+import { formatDecimals } from "../lib/format";
 import type { ResolvedStatus, StatusType } from "../types";
-import { InfoTip } from "./Tooltip";
+import { InfoTip, Tooltip } from "./Tooltip";
+
+export const CONVICTION_NO_SCORE_TIP =
+  "Scoring conviction based on strategy cadence. The next check will fill this in.";
 
 export function StatusBadge({ status }: { status: StatusType }) {
   const Icon = STATUS_ICON[status];
@@ -112,6 +116,44 @@ export function WatchAlignStack({
           ))}
         </span>
       ) : null}
+    </span>
+  );
+}
+
+/** Meter + score, or pending cadence check (stock Tooltip + Info icon). */
+export function WatchConvictionMeter({
+  conviction,
+  scoreReady,
+}: {
+  conviction: number;
+  scoreReady: boolean;
+}) {
+  if (!scoreReady) {
+    return (
+      <Tooltip title="Score pending next check" body={CONVICTION_NO_SCORE_TIP}>
+        <span
+          className="watch-conviction-meter watch-conviction-meter--pending"
+          tabIndex={0}
+        >
+          <span className="watch-conviction-score watch-conviction-score--pending">
+            <Info aria-hidden weight="regular" />
+            Score Pending Next Check
+          </span>
+        </span>
+      </Tooltip>
+    );
+  }
+  return (
+    <span className="watch-conviction-meter">
+      <span className="watch-conviction-track">
+        <span
+          className="watch-conviction-fill"
+          style={{ width: `${conviction}%` }}
+        />
+      </span>
+      <span className="watch-conviction-score">
+        {formatDecimals(conviction)}
+      </span>
     </span>
   );
 }

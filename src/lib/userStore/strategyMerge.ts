@@ -3,9 +3,11 @@ import { DEFAULT_STRATEGIES } from "../../data";
 import {
   clampCadenceInterval,
   clampCandleInterval,
+  isSessionClose,
 } from "../forge/scheduler";
 import { isLiveSupportedMetric } from "../forge/liveCoverage";
 import { migrateStrategyMetrics } from "../forge/metricMigration";
+import { migrateStrategyTimeframeFloor } from "../forge/timeframeFloor";
 import type { MetricKey, RuleChip, RuleTag } from "../../types";
 
 const APPLY_ONLY_KEYS = new Set([
@@ -19,6 +21,7 @@ const APPLY_ONLY_KEYS = new Set([
   // editable + persisted even on default strategies.
   "checkInterval",
   "technicalsInterval",
+  "sessionCloseChecks",
   "cadenceEnabled",
   "cadenceNotify",
 ]);
@@ -35,7 +38,9 @@ function pruneUnsupportedChips(chips: RuleChip[] | undefined): RuleChip[] {
 }
 
 function pruneStrategyBody(strategy: Strategy): Strategy {
-  const migrated = migrateStrategyMetrics(strategy);
+  const migrated = migrateStrategyTimeframeFloor(
+    migrateStrategyMetrics(strategy),
+  );
   const rules = pruneUnsupportedChips(migrated.rules);
   const allowedIds = new Set(rules.map((chip) => chip.id));
   const pruneTags = (tags: RuleTag[] | undefined): RuleTag[] | undefined => {
@@ -45,10 +50,21 @@ function pruneStrategyBody(strategy: Strategy): Strategy {
       chipIds: tag.chipIds.filter((id) => allowedIds.has(id) || tag.system),
     }));
   };
-  const checkInterval = clampCadenceInterval(migrated.checkInterval);
+  const legacySession = migrated.checkInterval && isSessionClose(migrated.checkInterval)
+    ? migrated.checkInterval
+    : null;
+  const checkInterval = legacySession
+    ? "1D"
+    : clampCadenceInterval(migrated.checkInterval);
   return {
     ...migrated,
     checkInterval,
+    sessionCloseChecks: [
+      ...new Set([
+        ...(migrated.sessionCloseChecks ?? []),
+        ...(legacySession ? [legacySession] : []),
+      ]),
+    ],
     technicalsInterval: clampCandleInterval(migrated.technicalsInterval),
     rules,
     ruleTags: pruneTags(migrated.ruleTags),
@@ -77,6 +93,7 @@ export function mergeStrategiesForHydrate(
       categoryEnabled: overlay?.categoryEnabled,
       // Cadence prefs are user-owned even on defaults (see APPLY_ONLY_KEYS).
       checkInterval: overlay?.checkInterval ?? seed.checkInterval,
+      sessionCloseChecks: overlay?.sessionCloseChecks ?? seed.sessionCloseChecks,
       technicalsInterval:
         overlay?.technicalsInterval ?? seed.technicalsInterval,
       cadenceEnabled: overlay?.cadenceEnabled ?? seed.cadenceEnabled,
@@ -114,6 +131,9 @@ export function sanitizeStrategyPatch(
   }
   if ("technicalsInterval" in patch) {
     next.technicalsInterval = patch.technicalsInterval;
+  }
+  if ("sessionCloseChecks" in patch) {
+    next.sessionCloseChecks = patch.sessionCloseChecks;
   }
   if ("cadenceEnabled" in patch) {
     next.cadenceEnabled = patch.cadenceEnabled;

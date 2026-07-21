@@ -20,13 +20,13 @@ specific thing they ask for — never bundle in extra tweaks.
 | Nav links | `.nav-link`, `.nav-link--active` | Padding, color, active state. |
 | Account | `.site-account`, `.chip--soon` | Demo / Beta chip (Closed Beta tooltip) + `LinkButton` "Sign Out" (link-button, **never** a filled button). |
 | `LinkButton` | `src/components/LinkButton.tsx` | Renders `.btn.btn--link`. |
-| `Checkbox` | `src/components/Checkbox.tsx` | The one on/off checkbox: `.checkbox` / `.is-checked`, 28×28 blue info square + Phosphor Square/CheckSquare (22px). No native `<input type="checkbox">` or parallel check icons. `decorative` for marks inside a parent control. Supports `disabled` (used for the Forge cadence "Future Capability" email/text/browser toggles). Adopters: category conviction toggle, Forge Strategy Cadence (master **Enable cadence** + notification toggles in `.forge-cadence-toggles` / `.forge-cadence-notify`). |
+| `Checkbox` | `src/components/Checkbox.tsx` | The one on/off checkbox: `.checkbox` / `.is-checked`, 28×28 blue info square + Phosphor Square/CheckSquare (22px). No native `<input type="checkbox">` or parallel check icons. `decorative` for marks inside a parent control. Supports `disabled` (used for Future Capability email/text/browser toggles). Adopters: category conviction toggle, Forge Strategy Cadence (**Enable Notifications** + session-close multi-select in `.forge-session-checks`). |
 | `SiteFooter` | `src/components/SiteFooter.tsx` | Single shared footer in `AppShell`; content + behavior. Never add a second footer. |
 | Home widgets | `HeroCard` (Helm), `MarketFlowWidget`, `WatchlistWidget`, `Tabs` | Internal markup, content, and visual styling. **Helm** (`HeroCard`): two in-card pages via stock `.weather-prevnext` (**The Helm** / **About**); lands on **The Helm** by default. `.panel-head` title follows the active page; stock `.chip` beside the title shows the captain name (`captainName`, fallback `captain.handle`) in `.helm-title-row` on The Helm only. **About** = existing club manifesto + preview; **The Helm** = hub shell with `HelmBadgesSection` (onboarding milestone badges + `HelmMetrics` progress metrics in the `.helm-metrics-slot`) + panel-head `.icon-btn` with `MapTrifold` (Onboarding → `openOnboardingModal`, Helm page only). Desktop/tablet: toggle beside the eyebrow row (`.hero-eyebrow-row`). Mobile: sticky `.helm-nav-footer.strategy-dock` while the Helm tab is active (`mobileNavDock`). Home mobile tab label stays **Helm** (short). About seeded-book CTAs remain icon `.btn`s including ghost **Onboarding** (`MapTrifold`). |
 | `OnboardingBadge` | `src/components/badges/OnboardingBadge.tsx` | Compact reusable milestone badge (`.onboarding-badge`, icon-btn family, larger). Registry: `src/lib/forge/onboardingBadges.ts` — First Portfolio / Watchlist / Strategy Applied / Custom Strategy / Weather Reader (+ hidden under-construction Dashboard / Captain Profile). Earn **derived** from workspace + `flags.weatherReaderLayers` (all four Market Weather detail opens); incomplete uses `.onboarding-badge--incomplete` (muted, hoverable — not HTML-disabled). Desktop: stock `Tooltip` on hover. Mobile: no tooltip; click inert until per-badge destinations ship. Adopter: `HelmBadgesSection`. Do not reuse Dashboard `BadgeCard` rarity medallions here. |
 | `SparklineChart` | `src/components/charts/SparklineChart.tsx` | Thin TradingView `lightweight-charts` line wrapper (no chrome). Lazy-loaded only from Helm Open P&L. Vendor group `charts` in `vite.config.ts`. Props: `points`, `lineColor` (caller resolves `--positive` / `--negative`). |
 | `StrategyScopeSelect` | `src/components/StrategyScopeSelect.tsx` | Gold Helm-style strategy scope chip (`.chip.helm-scope-trigger` + `.multiselect-menu.helm-scope-menu`). Props: `strategies`, `value` (`null` = All), `onChange`. Droplist uses `--end` / `--start` alignment from available viewport space so it never clips off-screen. Adopters: `HelmMetrics` (shared `watchStrategyScopeId`), `WatchlistWidget` (mobile Home + Forge Watch Preview local). Do not restyle — reuse approved Helm chrome. |
-| `HelmMetrics` | `src/components/helm/HelmMetrics.tsx` | The Helm progress metrics strip, mounted in the `.helm-metrics-slot` inside `HelmBadgesSection` (Helm page only). Live tiles are **derived** (no scoring changes): the **portfolio** mirrors Current Watch via shared `AppState` (`selectedPortfolioId`); **strategy scope is shared Home state** (`watchStrategyScopeId`, null = All) so Progress and Current Watch filter together via `StrategyScopeSelect`. Scores via `computePortfolioAlignment` + `computeHelmMetrics` (`tickerInScope` when scoped). Progress tiles: **Total Conviction** (hosts `PortfolioCompass` + `StatusStack`; **Conviction Change** under the score — today + 5-session deltas from `portfolio_snapshots.metrics.conviction`, plus driver line from ticker `conviction_snapshots` + live weakest category — see `convictionChange.ts`; omit when history missing), Strategy Coverage, Open P&L (+ sparkline), **Plan Alignment** chips. **Composition** is a second section of per-lens metric cards. Desktop Current Watch has no strategy control — Helm chip only. Layout in `.helm-metrics*`. Tokens only. |
+| `HelmMetrics` | `src/components/helm/HelmMetrics.tsx` | The Helm progress metrics strip, mounted in the `.helm-metrics-slot` inside `HelmBadgesSection` (Helm page only). Live tiles are **derived** (no scoring changes): the **portfolio** mirrors Current Watch via shared `AppState` (`selectedPortfolioId`); **strategy scope is shared Home state** (`watchStrategyScopeId`, null = All) so Progress and Current Watch filter together via `StrategyScopeSelect`. Scores via `computePortfolioAlignment` + `computeHelmMetrics` (`tickerInScope` when scoped). Progress tiles: **Total Conviction** (hosts `PortfolioCompass` + `StatusStack` only when the portfolio primary tone appears in cadence-ready Plan Alignment counts — e.g. no Review chip while holdings are still Pending Score; **Conviction Change** under the score — today + 5-session deltas from `portfolio_snapshots.metrics.conviction`, plus driver line from ticker `conviction_snapshots` + live weakest category — see `convictionChange.ts`; omit when history missing), Strategy Coverage, Open P&L (+ sparkline), **Plan Alignment** chips (`On Plan` / `Watch` / `Review` / `Off Plan` from cadence-ready holdings only; **`Pending Score | N`** via stock `.chip.status--neutral` for names waiting on a check — never counted as On Plan). **Composition** is a second section of per-lens metric cards. Desktop Current Watch has no strategy control — Helm chip only. Layout in `.helm-metrics*`. Tokens only. |
 | `Tooltip` / `InfoTip` | `src/components/Tooltip.tsx` | Desktop hover/focus reveal (portaled; stock `.tooltip*` only); mobile tap-to-toggle bottom sheet + close button (see "Tooltip standard" below). |
 | `ComingSoonOverlay` | `src/components/ComingSoonOverlay.tsx` | Full-viewport fixed scrim portaled to `document.body` (scroll locked) + panel matching `.modal-card` / Forge title+body type. **States:** (1) `coming-soon` (default) — filled HardHat (`--warning`) + Closed Beta trust copy; no close/actions; header stays above for TopNav; wraps page children as inert; adopters Dashboard, Ships, Captain Profile. (2) `legal` — filled Warning + disclaimer + primary “Accept and Continue”; `coming-soon-overlay--gate` until acknowledged. Ephemeral dismissible notice (old Helm “Review alignment”) is archived at `archived/DismissibleComingSoonNotice.tsx` — do not reintroduce without an adopter. Desktop/tablet: centered. Mobile: panel under `--app-header-h`. Do not one-off a parallel scrim/panel. |
 | `ActionFooter` | `src/components/ActionFooter.tsx` | Reports its own height as `--sticky-footer-h` (see App shell below) — don't remove without checking consumers. |
@@ -94,6 +94,34 @@ unchanged.
 Portfolio copy = paper book + forge/apply/edit steps; watchlist copy = track
 without size yet. Do not invent a parallel empty-state banner.
 
+**Check schedule stamp:** when ≥1 strategy is applied, panel-head upper right
+shows stock count + Phosphor `Timer` `.icon-btn` (from `src/lib/icons`). Schedule
+copy lives in a stock `ForgeToast` (`tone="info"`) under the portfolio row —
+dismiss / Timer toggle minimize it (`sessionStorage` per source id
+`st-watch-schedule-collapsed:`). Expanded toast stays until minimized. Last
+known = strategy pull stamp, else published cycle meta; if neither, copy is
+`Waiting on first check`. Next Check derives from cadence even before the first
+successful cycle paint; while a first/scoped check has no successful strategy
+stamp, Next Check reads `Due · running first check` (or `Checking now…` while
+the pull is in flight) instead of skipping to tomorrow's wall. On login, if the
+cron cycle is still warming, the app pulls book quotes for P&L and runs one
+scoped first check per unstamped applied strategy. No applied strategies → stock
+count only (no Timer).
+
+**Score Pending Next Check** (`.watch-conviction-meter--pending` via
+`WatchConvictionMeter`): when a ticker has ≥1 applied strategy but no successful
+cadence check yet — or after add ticker / apply / update strategy /
+enable-on-ticker dirties the stamp — show Phosphor `Info` + sentence-case
+**Score Pending Next Check** in `--info` (zone labels hidden). Stock `Tooltip`
+title/body explain cadence scoring. Cleared when `lastDataPullAt` for those
+strategies is ≥ the dirty time. Does **not** change Helm snapshot logging
+(`persistBookAndConvictionMarks` still runs after successful cycle reads).
+Add-ticker requests one real quote immediately for Current Watch value/P&L but
+does not clear pending conviction. Apply/update and mounted Watch Preview request
+one debounced scoped first check (completed cycle first, Worker one-shot
+fallback); successful checks persist account marks/stamps so local and deployed
+clients hydrate the same state.
+
 **Editable cash** (portfolio sources only, edit mode): totals footer Cash becomes
 a compact `.watch-cash-input` (same compact figure patterns as qty — `font:
 inherit`, tokens only). Draft participates in dirty/Cancel/Update like qty;
@@ -142,10 +170,23 @@ own rule-chip breakdown:
 
 `RuleChipsTableModal` / `Layer3ZoneTableModal` label the former "Date Range"
 column **Time**. For timeframed technical metrics (`METRICS[key].timeframed`),
-options are candle sizes (15m–1M); fundamentals keep fiscal labels. New chips
+options are candle sizes (1h/2h/4h/1D/1W/1M); 15m/30m stay visible-disabled as
+Future Capability, and fundamentals keep fiscal labels. New chips
 default Time from strategy `technicalsInterval` via `resolveChipTime` — do not
-invent a parallel timeframe picker. Data Point dropdowns may use `<optgroup>`
-from `MetricMeta.group` (MACD, Stochastic, etc.).
+invent a parallel timeframe picker. Persisted sub-hour chips auto-migrate to
+1h. Safety-net invalid chips use the approved `.forge-pill--invalid` state
+(existing `--negative` token) wrapped in the stock `Tooltip`, explain the 1h
+floor, score no-data, and return to the normal blue pill after correction.
+Data Point dropdowns may use `<optgroup>` from `MetricMeta.group` (MACD,
+Stochastic, etc.).
+
+## Forge cadence controls
+
+Strategy Check uses the stock `Dropdown` for 1h/2h/4h/Daily/Weekly/Monthly.
+Session-close checks use the stock `Checkbox` in the existing `.config-toggle`
+row pattern and allow one or many ET boundaries. **Enable Notifications** is the
+master preference label; email/text/browser remain disabled Future Capability.
+Do not reintroduce an Auto-refresh toggle — scheduled checks are core behavior.
 
 ## Forge Risk / Trade / Layer 3 metric lenses
 

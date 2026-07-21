@@ -19,6 +19,7 @@ import {
 import { isExamplePlan, normalizePlanEdit } from "../../lib/forge/myPlan";
 import { ForgeSectionTabs } from "./ForgeSectionTabs";
 import { useIsMobile } from "../../lib/useIsMobile";
+import { isSubHourTime } from "../../lib/forge/timeframeFloor";
 import {
   CaretDown,
   CaretLeft,
@@ -732,8 +733,15 @@ export function Layer3ZoneTableModal({
                             }
                           >
                             {metricMeta.dateRanges.map((range) => (
-                              <option key={range} value={range}>
+                              <option
+                                key={range}
+                                value={range}
+                                disabled={isSubHourTime(range)}
+                              >
                                 {range}
+                                {isSubHourTime(range)
+                                  ? " (Future Capability)"
+                                  : ""}
                               </option>
                             ))}
                           </select>

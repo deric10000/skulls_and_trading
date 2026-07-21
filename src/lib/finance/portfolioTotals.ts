@@ -35,6 +35,9 @@ export function portfolioRunningTotals(
   let openPnl = 0;
   for (const position of positions) {
     if (position.shares <= 0) continue;
+    // No usable mark yet (pre-check / new name) — exclude from MV, cost, and P&L
+    // so missing prices never read as −100% open P&L.
+    if (!(position.price > 0)) continue;
     holdingsMarketValue += position.price * position.shares;
     costBasis += position.avgPrice * position.shares;
     openPnl += openPnlTotal(

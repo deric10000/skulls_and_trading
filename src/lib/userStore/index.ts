@@ -27,6 +27,8 @@ export interface UserFlags {
    * Drives the Weather Reader onboarding badge when all four are present.
    */
   weatherReaderLayers?: Array<"market" | "sector" | "industry" | "stock">;
+  /** Last successful real strategy-check boundary, shared across clients. */
+  lastDataPullAtByStrategyId?: Record<string, string>;
 }
 
 export interface UserWorkspace {
@@ -136,6 +138,73 @@ export async function saveUserWorkspace(workspace: UserWorkspace): Promise<void>
     { onConflict: "user_id" },
   );
   if (error) throw error;
+}
+
+export interface TickerMark {
+  ticker: string;
+  lastPrice: number;
+  asOf: string;
+  source: string;
+}
+
+/** Upsert latest real quote marks for the signed-in account. */
+export async function upsertTickerMarks(rows: TickerMark[]): Promise<void> {
+  const valid = rows.filter(
+    (row) =>
+      row.ticker.trim() &&
+      Number.isFinite(row.lastPrice) &&
+      row.lastPrice > 0 &&
+      !Number.isNaN(Date.parse(row.asOf)),
+  );
+  if (valid.length === 0) return;
+  const supabase = getSupabase();
+  const { data: auth } = await supabase.auth.getUser();
+  if (!auth.user) return;
+
+  const updatedAt = new Date().toISOString();
+  const payload = valid.map((row) => ({
+    user_id: auth.user!.id,
+    ticker: row.ticker.trim().toUpperCase(),
+    last_price: row.lastPrice,
+    as_of: row.asOf,
+    source: row.source,
+    updated_at: updatedAt,
+  }));
+  const { error } = await supabase
+    .from("ticker_marks")
+    .upsert(payload, { onConflict: "user_id,ticker" });
+  if (error) {
+    console.warn("ticker marks write failed", error.message);
+  }
+}
+
+/** Fetch account marks used to hydrate liveCache before the first cycle read. */
+export async function fetchTickerMarks(): Promise<TickerMark[]> {
+  const supabase = getSupabase();
+  const { data: auth } = await supabase.auth.getUser();
+  if (!auth.user) return [];
+
+  const { data, error } = await supabase
+    .from("ticker_marks")
+    .select("ticker, last_price, as_of, source")
+    .eq("user_id", auth.user.id);
+  if (error) {
+    console.warn("ticker marks fetch failed", error.message);
+    return [];
+  }
+  return (data ?? [])
+    .map((row) => ({
+      ticker: String(row.ticker).toUpperCase(),
+      lastPrice: Number(row.last_price),
+      asOf: String(row.as_of),
+      source: String(row.source),
+    }))
+    .filter(
+      (row) =>
+        Number.isFinite(row.lastPrice) &&
+        row.lastPrice > 0 &&
+        !Number.isNaN(Date.parse(row.asOf)),
+    );
 }
 
 export async function appendConvictionSnapshots(

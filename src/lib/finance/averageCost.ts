@@ -42,12 +42,12 @@ export function openPnlPercent(lastPrice: number, avgPrice: number): number {
   return ((lastPrice - avgPrice) / avgPrice) * 100;
 }
 
-/** Open P&L $ for the whole position. */
+/** Open P&L $ for the whole position. No mark → $0 (never treat as total loss). */
 export function openPnlTotal(
   lastPrice: number,
   avgPrice: number,
   shares: number,
 ): number {
-  if (shares <= 0) return 0;
+  if (shares <= 0 || lastPrice <= 0) return 0;
   return (lastPrice - avgPrice) * shares;
 }
