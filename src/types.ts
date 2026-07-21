@@ -252,8 +252,21 @@ export interface TickerQuote {
 export type QtySide = "buy" | "sell";
 
 /**
+ * How a ledger event maps to plan intent (Trim / Add / Go to Cash / Hold).
+ * Stamped at write time for later adherence analytics — does not change
+ * Layer 3 zone scoring math.
+ */
+export type TransactionActionClass =
+  | "trim"
+  | "add"
+  | "hold"
+  | "go_to_cash"
+  | "unclassified";
+
+/**
  * Session (later: API) record of a confirmed qty fill. Lives beside portfolios
  * so a live ledger can replace seed without reshaping holdings.
+ * Prefer `PortfolioTransaction` for new code; legacy rows omit `kind`.
  */
 export interface ShareFillEvent {
   id: string;
@@ -268,7 +281,33 @@ export interface ShareFillEvent {
   /** ISO — floored to 15m candle close (EST) for fill-price proximity. */
   filledAt: string;
   source: "mock" | "live";
+  /** Discriminator when stored in the unified ledger (`qty`). */
+  kind?: "qty";
+  actionClass?: TransactionActionClass;
+  strategyIds?: string[];
+  /** Layer 3 zone statuses active at fill time (read-only stamp). */
+  zoneHints?: StatusType[];
 }
+
+/** Cash edit recorded from Current Watch portfolio edit mode. */
+export interface CashTransactionEvent {
+  id: string;
+  kind: "cash";
+  portfolioId: string;
+  cashBefore: number;
+  cashAfter: number;
+  deltaCash: number;
+  filledAt: string;
+  source: "mock" | "live";
+  actionClass?: TransactionActionClass;
+  strategyIds?: string[];
+  zoneHints?: StatusType[];
+}
+
+/** Unified portfolio ledger entry (qty fills + cash edits). */
+export type PortfolioTransaction =
+  | (ShareFillEvent & { kind: "qty" })
+  | CashTransactionEvent;
 
 /** Editable review row before committing qty changes from Current Watch edit. */
 export interface PendingQtyOrder {

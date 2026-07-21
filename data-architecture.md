@@ -67,7 +67,19 @@ so they stay swappable later.
 
 `Portfolio.cashAvailable` is the settled cash balance for Current Watch running
 totals (holdings market value + cash). Seeded on demo portfolios; watchlists and
-new sources default to `0`. Not yet used to re-derive `ALLOCATIONS`.
+new sources default to `0`. **Editable** on portfolio sources in Current Watch
+edit mode via `AppState.updatePortfolioCash` (clamped ≥ 0; persists with
+`user_state`). Watchlists stay display-only / 0. Not used to re-derive
+`ALLOCATIONS`.
+
+### Portfolio transaction ledger (`user_state.share_fills`)
+
+Qty confirms and cash saves append `PortfolioTransaction` rows (legacy
+`ShareFillEvent` qty shapes still load via `normalizePortfolioTransactions`).
+Kinds: `qty` | `cash`. Optional stamps at write time (do **not** change Forge
+scoring / Layer 3 zone math): `actionClass` (`trim` | `add` | `hold` |
+`go_to_cash` | `unclassified`), `strategyIds`, `zoneHints`. Hold-from-inaction
+adherence is Phase 2. Optional later: promote to a dedicated Postgres table.
 
 ## 2. The `DataSource` seam (`src/lib/datasource/`)
 
@@ -357,8 +369,8 @@ the bucket/share-allocation **authoring UI is a later dashboard pass**.
 
 ### The Helm — derived progress metrics
 
-`HelmMetrics` (`src/components/helm/HelmMetrics.tsx`) is a **pure read** — it adds
-no new data source, seam accessor, or persisted field. The **portfolio** mirrors
+`HelmMetrics` (`src/components/helm/HelmMetrics.tsx`) live tiles are a **pure
+read** of alignment + holdings (no scoring changes). The **portfolio** mirrors
 the Current Watch selection via one shared **UI** selection value in `AppState`
 (`selectedPortfolioId`, set from `WatchlistWidget`; the forge Watch Preview
 instance never writes it). The **strategy scope is owned locally** by
@@ -373,6 +385,30 @@ the Current Watch totals footer), strategy coverage, status mix (by
 a display-only selection marker — not workspace data — so it is **not** persisted
 to `user_state`.
 
+**Open P&L history** (additive): daily rows in `portfolio_snapshots` (see below).
+Helm fetches the series for the mirrored portfolio + scope and renders a lazy
+`SparklineChart` when ≥2 distinct `as_of` days exist. No fabricated backfill.
+
+### Daily book + ticker snapshots
+
+Written after live market pull (`persistBookAndConvictionMarks` from
+`refreshLiveMarket` and `refreshStrategyTickers`) — **additive marks only**;
+Forge conviction / chip / zone math and `portfolioRunningTotals` are unchanged.
+
+- **`portfolio_snapshots`**: one row per `(user, portfolio_id, strategy_id,
+  as_of)`. `strategy_id = ''` = whole book (all holdings + `cashAvailable`).
+  Strategy-scoped rows use holdings enabled for that strategy
+  (`shouldScoreTickerWithStrategy`) **plus the same cash**. Core columns mirror
+  Current Watch totals: `holdings_market_value`, `cost_basis`, `cash_available`,
+  `total_value`, `open_pnl`, `open_pnl_pct`. Forward-compatible `metrics jsonb`
+  for future daily book fields (do not delete core columns into jsonb). Upsert
+  last-write-wins. Skip incomplete books rather than fabricate prices.
+- **`conviction_snapshots`**: same unique grain; **enrich `payload`** at write
+  with per-ticker marks (`portfolioId`, `shares`, `avgPrice`, `lastPrice`,
+  `marketValue`, `costBasis`, `openPnl`, `openPnlPct`) — future per-name fields
+  land in `payload` the same way. Read helpers: `fetchPortfolioSnapshots`,
+  pure `seriesToSparkPoints` (`src/lib/finance/portfolioSnapshotSeries.ts`).
+
 ### User persistence (Beta 0 — Supabase)
 
 Invite-only accounts hydrate Home + Forge editable state from Postgres
@@ -384,7 +420,10 @@ change. **Postgres is source of truth** (not `localStorage`).
 - `DEFAULT_STRATEGIES` remain available; bodies always re-seed from
   `src/data.ts` on hydrate; only `appliedPortfolioIds` / `tickerExclusions`
   merge from storage. Defaults reject body patches in `updateStrategy`.
-- `conviction_snapshots` append on per-strategy cadence refresh (charts later).
+- `conviction_snapshots` upsert on market / cadence refresh with enriched
+  position `payload` (charts / marks; scoring unchanged).
+- `portfolio_snapshots` upsert on the same refresh paths (whole-book +
+  per-applied-strategy; cash always included).
 - `user_state.flags` (`UserFlags` in `src/lib/userStore/`) is a small map of
   **one-shot per-user UI markers** — currently:
   - `onboardingSeen` — set when the first-login Onboarding modal

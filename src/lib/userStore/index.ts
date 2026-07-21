@@ -2,13 +2,14 @@ import type {
   CaptainProfile,
   LogEntry,
   Portfolio,
+  PortfolioTransaction,
   RuleChip,
-  ShareFillEvent,
   Strategy,
   WatchlistItem,
 } from "../../types";
 import { CHIP_LIBRARY_SEED, DEFAULT_CAPTAIN, DEFAULT_STRATEGIES } from "../../data";
 import { getSupabase } from "../auth/supabaseClient";
+import { normalizePortfolioTransactions } from "../finance/portfolioTransactions";
 import { mergeStrategiesForHydrate } from "./strategyMerge";
 
 /** One-shot per-user UI markers (persisted in user_state.flags). */
@@ -35,7 +36,7 @@ export interface UserWorkspace {
   watchlist: WatchlistItem[];
   logsByTicker: Record<string, LogEntry[]>;
   captain: CaptainProfile;
-  shareFills: ShareFillEvent[];
+  shareFills: PortfolioTransaction[];
   flags: UserFlags;
 }
 
@@ -109,7 +110,7 @@ export async function loadUserWorkspace(
         captainName ||
         fallback.captain.handle,
     },
-    shareFills: (data.share_fills as ShareFillEvent[]) ?? [],
+    shareFills: normalizePortfolioTransactions(data.share_fills),
     flags: (data.flags as UserFlags) ?? {},
   };
 }
@@ -168,4 +169,109 @@ export async function appendConvictionSnapshots(
   if (error) {
     console.warn("conviction snapshot write failed", error.message);
   }
+}
+
+/** One daily book/strategy mark — strategyId '' = whole book. */
+export interface PortfolioSnapshotRow {
+  portfolioId: string;
+  /** Empty string = whole-book mark (avoids Postgres NULL unique pitfalls). */
+  strategyId: string;
+  asOf: string;
+  holdingsMarketValue: number;
+  costBasis: number;
+  cashAvailable: number;
+  totalValue: number;
+  openPnl: number;
+  openPnlPct: number;
+  metrics?: Record<string, unknown>;
+}
+
+export async function appendPortfolioSnapshots(
+  rows: PortfolioSnapshotRow[],
+): Promise<void> {
+  if (rows.length === 0) return;
+  const supabase = getSupabase();
+  const { data: auth } = await supabase.auth.getUser();
+  if (!auth.user) return;
+
+  const payload = rows.map((row) => ({
+    user_id: auth.user!.id,
+    portfolio_id: row.portfolioId,
+    strategy_id: row.strategyId,
+    as_of: row.asOf,
+    holdings_market_value: row.holdingsMarketValue,
+    cost_basis: row.costBasis,
+    cash_available: row.cashAvailable,
+    total_value: row.totalValue,
+    open_pnl: row.openPnl,
+    open_pnl_pct: row.openPnlPct,
+    metrics: row.metrics ?? {},
+  }));
+
+  const { error } = await supabase
+    .from("portfolio_snapshots")
+    .upsert(payload, {
+      onConflict: "user_id,portfolio_id,strategy_id,as_of",
+    });
+  if (error) {
+    console.warn("portfolio snapshot write failed", error.message);
+  }
+}
+
+export interface PortfolioSnapshotRecord {
+  portfolioId: string;
+  strategyId: string;
+  asOf: string;
+  holdingsMarketValue: number;
+  costBasis: number;
+  cashAvailable: number;
+  totalValue: number;
+  openPnl: number;
+  openPnlPct: number;
+  metrics: Record<string, unknown>;
+}
+
+export async function fetchPortfolioSnapshots(input: {
+  portfolioId: string;
+  /** null / undefined = whole book (`strategy_id = ''`). */
+  strategyId?: string | null;
+  from?: string;
+  to?: string;
+}): Promise<PortfolioSnapshotRecord[]> {
+  const supabase = getSupabase();
+  const { data: auth } = await supabase.auth.getUser();
+  if (!auth.user) return [];
+
+  const strategyId = input.strategyId ?? "";
+  let query = supabase
+    .from("portfolio_snapshots")
+    .select(
+      "portfolio_id, strategy_id, as_of, holdings_market_value, cost_basis, cash_available, total_value, open_pnl, open_pnl_pct, metrics",
+    )
+    .eq("user_id", auth.user.id)
+    .eq("portfolio_id", input.portfolioId)
+    .eq("strategy_id", strategyId)
+    .order("as_of", { ascending: true });
+
+  if (input.from) query = query.gte("as_of", input.from);
+  if (input.to) query = query.lte("as_of", input.to);
+
+  const { data, error } = await query;
+  if (error) {
+    console.warn("portfolio snapshot fetch failed", error.message);
+    return [];
+  }
+
+  return (data ?? []).map((row) => ({
+    portfolioId: row.portfolio_id as string,
+    strategyId: row.strategy_id as string,
+    asOf: row.as_of as string,
+    holdingsMarketValue: Number(row.holdings_market_value),
+    costBasis: Number(row.cost_basis),
+    cashAvailable: Number(row.cash_available),
+    totalValue: Number(row.total_value),
+    openPnl: Number(row.open_pnl),
+    openPnlPct: Number(row.open_pnl_pct),
+    metrics: (row.metrics as Record<string, unknown>) ?? {},
+  }));
 }
