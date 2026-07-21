@@ -28,6 +28,11 @@ export default defineConfig({
               test: /node_modules[\\/]@phosphor-icons[\\/]/,
               priority: 2,
             },
+            {
+              name: "charts",
+              test: /node_modules[\\/]lightweight-charts[\\/]/,
+              priority: 2,
+            },
           ],
         },
       },

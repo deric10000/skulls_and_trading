@@ -1,11 +1,19 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useAppState } from "../../state/AppState";
 import { dataSource } from "../../lib/datasource";
 import { CaretDown } from "../../lib/icons";
 import { computePortfolioAlignment } from "../../lib/forge/alignment";
 import { computeHelmMetrics } from "../../lib/forge/helmMetrics";
+import { seriesToSparkPoints } from "../../lib/finance/portfolioSnapshotSeries";
+import { fetchPortfolioSnapshots } from "../../lib/userStore";
 import { formatChange, formatDecimals } from "../../lib/format";
 import type { SignalTone } from "../../types";
+
+const SparklineChart = lazy(() =>
+  import("../charts/SparklineChart").then((mod) => ({
+    default: mod.SparklineChart,
+  })),
+);
 
 const TONE_LABEL: Record<SignalTone, string> = {
   positive: "On Plan",
@@ -14,11 +22,25 @@ const TONE_LABEL: Record<SignalTone, string> = {
   negative: "Off Plan",
 };
 
+function formatSparkDate(isoDate: string): string {
+  const [y, m, d] = isoDate.split("-").map(Number);
+  if (!y || !m || !d) return isoDate;
+  return `${String(m).padStart(2, "0")}/${String(d).padStart(2, "0")}/${y}`;
+}
+
+function resolveCssColor(varName: string, fallback: string): string {
+  if (typeof window === "undefined") return fallback;
+  const value = getComputedStyle(document.documentElement)
+    .getPropertyValue(varName)
+    .trim();
+  return value || fallback;
+}
+
 /**
  * The Helm — derived progress metrics for the portfolio selected in Current
  * Watch (mirrored via shared AppState). The strategy scope is Helm-owned: pick
- * a single applied strategy or "All strategies" from the scope dropdown. All
- * values are computed from existing app data; nothing new is fetched or persisted.
+ * a single applied strategy or "All strategies" from the scope dropdown.
+ * Open P&L history loads from portfolio_snapshots (additive; scoring unchanged).
  */
 export function HelmMetrics() {
   const {
@@ -29,15 +51,12 @@ export function HelmMetrics() {
     selectedPortfolioId,
   } = useAppState();
 
-  // Resolve the shared selection to a real portfolio (Current Watch can point at
-  // a non-portfolio preview source; fall back to the first real portfolio).
   const portfolio = useMemo(
     () =>
       portfolios.find((p) => p.id === selectedPortfolioId) ?? portfolios[0],
     [portfolios, selectedPortfolioId],
   );
 
-  // Strategies applied to the mirrored portfolio — the scope dropdown options.
   const appliedStrategies = useMemo(
     () =>
       portfolio
@@ -48,12 +67,15 @@ export function HelmMetrics() {
     [strategies, portfolio],
   );
 
-  // Helm-owned strategy scope (null = All strategies).
   const [scopeStrategyId, setScopeStrategyId] = useState<string | null>(null);
   const [scopeOpen, setScopeOpen] = useState(false);
   const scopeRef = useRef<HTMLDivElement>(null);
 
-  // Drop a stale scope when the mirrored portfolio no longer applies it.
+  const [sparkPoints, setSparkPoints] = useState<
+    ReturnType<typeof seriesToSparkPoints>
+  >([]);
+  const [sparkLoaded, setSparkLoaded] = useState(false);
+
   useEffect(() => {
     if (
       scopeStrategyId &&
@@ -63,7 +85,6 @@ export function HelmMetrics() {
     }
   }, [appliedStrategies, scopeStrategyId]);
 
-  // Close the dropdown on outside click / Escape.
   useEffect(() => {
     if (!scopeOpen) return;
     const onDoc = (event: MouseEvent) => {
@@ -92,8 +113,6 @@ export function HelmMetrics() {
 
   const alignment = useMemo(() => {
     if (!portfolio) return undefined;
-    // Focused strategy → score against just that strategy for a per-lens view;
-    // otherwise use the app-wide (all-strategy) memoized alignment.
     return focusedStrategy
       ? computePortfolioAlignment(portfolio, buckets, [focusedStrategy])
       : getPortfolioAlignment(portfolio.id);
@@ -107,6 +126,27 @@ export function HelmMetrics() {
       priceOf: (ticker) => dataSource.getTickerInfo(ticker)?.lastPrice ?? 0,
     });
   }, [portfolio, alignment]);
+
+  useEffect(() => {
+    if (!portfolio) {
+      setSparkPoints([]);
+      setSparkLoaded(false);
+      return;
+    }
+    let cancelled = false;
+    setSparkLoaded(false);
+    void fetchPortfolioSnapshots({
+      portfolioId: portfolio.id,
+      strategyId: scopeStrategyId,
+    }).then((rows) => {
+      if (cancelled) return;
+      setSparkPoints(seriesToSparkPoints(rows));
+      setSparkLoaded(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [portfolio, scopeStrategyId]);
 
   if (!portfolio || !metrics) {
     return (
@@ -125,6 +165,13 @@ export function HelmMetrics() {
 
   const scopeLabel = focusedStrategy ? focusedStrategy.name : "All strategies";
   const pnlUp = metrics.openPnlPct >= 0;
+  const lineColor = resolveCssColor(
+    pnlUp ? "--positive" : "--negative",
+    pnlUp ? "#3d9a6a" : "#c45c4a",
+  );
+  const showSpark = sparkLoaded && sparkPoints.length >= 2;
+  const startDate = sparkPoints[0]?.time;
+  const endDate = sparkPoints[sparkPoints.length - 1]?.time;
 
   return (
     <section className="helm-metrics" aria-labelledby="helm-metrics-title">
@@ -214,7 +261,7 @@ export function HelmMetrics() {
           <span className="helm-metric-note">{metrics.coveragePct}% of holdings</span>
         </div>
 
-        <div className="select-card helm-metric">
+        <div className="select-card helm-metric helm-metric--pnl">
           <span className="helm-metric-label">Open P&amp;L</span>
           <span
             className={`helm-metric-value ${
@@ -223,7 +270,28 @@ export function HelmMetrics() {
           >
             {formatChange(metrics.openPnlPct)}
           </span>
-          <span className="helm-metric-note">A by-product of discipline</span>
+          {showSpark ? (
+            <>
+              <Suspense fallback={null}>
+                <SparklineChart
+                  points={sparkPoints}
+                  lineColor={lineColor}
+                  height={48}
+                  className="helm-pnl-spark"
+                />
+              </Suspense>
+              <span className="helm-pnl-dates">
+                <span>{startDate ? formatSparkDate(startDate) : ""}</span>
+                <span>{endDate ? formatSparkDate(endDate) : ""}</span>
+              </span>
+            </>
+          ) : (
+            <span className="helm-metric-note">
+              {sparkLoaded
+                ? "History starts after the next market refresh"
+                : "A by-product of discipline"}
+            </span>
+          )}
         </div>
 
         <div className="select-card helm-metric helm-metric--wide">

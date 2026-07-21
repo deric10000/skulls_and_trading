@@ -1091,6 +1091,24 @@ button {
   color: var(--text-faint);
 }
 
+.helm-metric--pnl {
+  min-height: 0;
+}
+
+.helm-pnl-spark {
+  width: 100%;
+  margin-top: 0.25rem;
+}
+
+.helm-pnl-dates {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.68rem;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
 .helm-metric-chips {
   display: flex;
   flex-wrap: wrap;
@@ -2268,6 +2286,14 @@ select.input:hover:not(:disabled) {
   opacity: 1;
   height: 1.4rem;
   margin-left: 0.25rem;
+}
+
+.watch-cash-input {
+  width: 100%;
+  max-width: 7.5rem;
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
 }
 
 .watch-item--editing .watch-body {

@@ -1229,6 +1229,7 @@ export function WatchlistWidget({
     addTickerToPortfolio,
     setTickerEnabledForStrategy,
     applyQtyOrders,
+    updatePortfolioCash,
     removeTickerFromPortfolio,
     captureWatchEditSnapshot,
     restoreWatchEditSnapshot,
@@ -1261,6 +1262,10 @@ export function WatchlistWidget({
   const [qtyBaseline, setQtyBaseline] = useState<Record<string, number>>({});
   /** In-session qty drafts — committed only via Update → review modal. */
   const [qtyDrafts, setQtyDrafts] = useState<Record<string, number>>({});
+  /** Settled cash at enter-edit (portfolios only). */
+  const [cashBaseline, setCashBaseline] = useState(0);
+  /** In-session cash draft — committed on Update / qty confirm. */
+  const [cashDraft, setCashDraft] = useState(0);
   const [pendingOrders, setPendingOrders] = useState<PendingQtyOrder[] | null>(
     null,
   );
@@ -1480,6 +1485,9 @@ export function WatchlistWidget({
     for (const item of items) baseline[item.ticker] = item.shares;
     setQtyBaseline(baseline);
     setQtyDrafts({ ...baseline });
+    const cash = selectedSource.cashAvailable ?? 0;
+    setCashBaseline(cash);
+    setCashDraft(cash);
     setEditSnapshot(captureWatchEditSnapshot(selectedSource.id));
     setDiscardConfirmOpen(false);
     setEditMode(true);
@@ -1493,6 +1501,8 @@ export function WatchlistWidget({
     setAddPreview(null);
     setQtyBaseline({});
     setQtyDrafts({});
+    setCashBaseline(0);
+    setCashDraft(0);
     setPendingOrders(null);
     setEditSnapshot(null);
     setDiscardConfirmOpen(false);
@@ -1526,10 +1536,24 @@ export function WatchlistWidget({
     [editMode, qtyBaseline, qtyDrafts],
   );
 
+  const cashIsDirty =
+    editMode &&
+    !isWatchlistSource &&
+    Number.isFinite(cashDraft) &&
+    cashDraft !== cashBaseline;
+
   const editIsDirty =
     editMode &&
     (pendingQtyOrders.length > 0 ||
+      cashIsDirty ||
       (editSnapshot != null && hasStructuralEdits(editSnapshot)));
+
+  function commitCashIfDirty() {
+    if (!cashIsDirty) return;
+    updatePortfolioCash(selectedSource.id, cashDraft, {
+      recordTransaction: true,
+    });
+  }
 
   function requestCancelEdit() {
     if (editIsDirty) {
@@ -1548,7 +1572,8 @@ export function WatchlistWidget({
     if (!editIsDirty) return;
     const orders = pendingQtyOrders;
     if (orders.length === 0) {
-      // Structural edits already apply live — Update just closes edit mode.
+      // Cash and/or structural edits — Update commits cash then closes.
+      commitCashIfDirty();
       cancelEditMode();
       return;
     }
@@ -1562,6 +1587,7 @@ export function WatchlistWidget({
       return;
     }
     applyQtyOrders(selectedSource.id, pendingOrders);
+    commitCashIfDirty();
     setPendingOrders(null);
     cancelEditMode();
   }
@@ -1713,9 +1739,17 @@ export function WatchlistWidget({
           shares: item.shares,
           avgPrice: item.avgPrice,
         })),
-        selectedSource.cashAvailable ?? 0,
+        editMode && !isWatchlistSource
+          ? cashDraft
+          : (selectedSource.cashAvailable ?? 0),
       ),
-    [items, selectedSource.cashAvailable],
+    [
+      items,
+      selectedSource.cashAvailable,
+      editMode,
+      isWatchlistSource,
+      cashDraft,
+    ],
   );
 
   const showEmptyGuide =
@@ -2314,18 +2348,22 @@ export function WatchlistWidget({
           </li>
         ) : null}
       </ul>
-      {!editMode && !isPreview && !isWatchlistSource
+      {!isPreview && !isWatchlistSource
         ? (() => {
             // Desktop/tablet: footer stays in the card (My Strategies in-card pattern).
             // Mobile: lift into .strategy-dock sticky on .app-main (same as My
             // Strategies list dock / watch edit Cancel+Update) so Embla cannot
             // clip it. Home gates via mobileTotalsDock while Current Watch is active.
             // Watchlists have no paper Total / Open P&L / Cash — hide the bar.
-            if (isMobile && !mobileTotalsDock) return null;
+            // Edit mode: Cash becomes a compact currency input (portfolios only).
+            if (isMobile && !mobileTotalsDock && !editMode) return null;
+            if (isMobile && editMode) {
+              // Edit actions own the mobile dock; cash input stays in-card.
+            }
             const footer = (
               <ActionFooter
                 className={
-                  isMobile
+                  isMobile && !editMode
                     ? "watch-totals-footer strategy-dock"
                     : "watch-totals-footer"
                 }
@@ -2374,13 +2412,35 @@ export function WatchlistWidget({
                 </span>
                 <span className="watch-totals-stat watch-metric">
                   <span className="watch-field-label">Cash</span>
-                  <span className="watch-figure watch-figure--strong">
-                    {formatPrice(runningTotals.cashAvailable)}
-                  </span>
+                  {editMode ? (
+                    <input
+                      type="number"
+                      className="input watch-qty-input watch-cash-input"
+                      min={0}
+                      step={0.01}
+                      inputMode="decimal"
+                      aria-label="Settled cash"
+                      value={cashDraft}
+                      onChange={(event) => {
+                        const next = Number.parseFloat(event.target.value);
+                        if (!Number.isFinite(next) || next < 0) {
+                          setCashDraft(0);
+                          return;
+                        }
+                        setCashDraft(next);
+                      }}
+                    />
+                  ) : (
+                    <span className="watch-figure watch-figure--strong">
+                      {formatPrice(runningTotals.cashAvailable)}
+                    </span>
+                  )}
                 </span>
               </ActionFooter>
             );
-            if (!isMobile || typeof document === "undefined") return footer;
+            if (editMode || !isMobile || typeof document === "undefined") {
+              return footer;
+            }
             const dockHost =
               document.querySelector("main.app-main") ?? document.body;
             return createPortal(footer, dockHost);

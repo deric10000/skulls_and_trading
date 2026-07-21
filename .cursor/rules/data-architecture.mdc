@@ -24,9 +24,10 @@ contracts below.
 
 ## Single source of truth
 
-- `TICKERS` (company facts) and `PORTFOLIOS[].holdings` (holding facts) in
+- `TICKERS` (company facts) and   `PORTFOLIOS[].holdings` (holding facts) in
   `src/data.ts` are authoritative. **Derive, don't duplicate.** Optional
-  `Portfolio.cashAvailable` is settled cash for Current Watch running totals.
+  `Portfolio.cashAvailable` is settled cash for Current Watch running totals —
+  editable on portfolio sources via `updatePortfolioCash` (not watchlists).
 - `INITIAL_WATCHLIST`, `TICKER_ANALYSIS`, `LOG_ENTRIES`, `DEFAULT_ASSIGNMENTS`,
   and `POSITIONS` are **derived** — never hand-edit them; edit the registries.
 - Keep derivation transforms (e.g. `watchlistFromHoldings()`) **pure**.
@@ -132,12 +133,16 @@ covered by that strategy's `appliedPortfolioIds` for the same source.
   conviction/status/resolved onto the watchlist — downstream chips (`StatusStack`,
   `PortfolioCompass`) reflect it. "Notify" = in-app chips updating; **no**
   push-notification system.
-- The Helm progress metrics (`HelmMetrics` + pure `forge/helmMetrics.ts`) are a
-  **pure read** — no new source/seam/persisted field. The portfolio mirrors
-  Current Watch via the shared UI marker `selectedPortfolioId` in `AppState`
-  (display-only; not saved to `user_state`); the strategy scope is Helm-owned
-  local state. They reduce an existing `PortfolioAlignment` (all, or scoped to
-  the picked strategy).
+- The Helm progress metrics (`HelmMetrics` + pure `forge/helmMetrics.ts`) live
+  tiles are a **pure read** of alignment — no scoring change. Portfolio mirrors
+  Current Watch via `selectedPortfolioId` (display-only; not in `user_state`);
+  strategy scope is Helm-owned local state. **Open P&L sparkline** reads
+  additive `portfolio_snapshots` (`strategy_id ''` = whole book; cash on every
+  scope). Write path: `persistBookAndConvictionMarks` after live refresh —
+  enriches `conviction_snapshots.payload` and upserts book rows; does **not**
+  change Forge / zone / `portfolioRunningTotals` math. Editable portfolio cash
+  (`updatePortfolioCash`) + `PortfolioTransaction` ledger in `share_fills`
+  (qty + cash, classification stamps only).
 - Cadence: Check = Daily/Weekly/Monthly + 4 intraday session-closes + 4h/1h/30m
   (**15m disabled** "Future Capability"); Technicals candle-only; fundamentals
   refresh daily. Auto-refresh opt-in per strategy (`cadenceEnabled` +
