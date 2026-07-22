@@ -263,19 +263,62 @@ export async function appendPortfolioSnapshots(
   const { data: auth } = await supabase.auth.getUser();
   if (!auth.user) return;
 
-  const payload = rows.map((row) => ({
-    user_id: auth.user!.id,
-    portfolio_id: row.portfolioId,
-    strategy_id: row.strategyId,
-    as_of: row.asOf,
-    holdings_market_value: row.holdingsMarketValue,
-    cost_basis: row.costBasis,
-    cash_available: row.cashAvailable,
-    total_value: row.totalValue,
-    open_pnl: row.openPnl,
-    open_pnl_pct: row.openPnlPct,
-    metrics: row.metrics ?? {},
-  }));
+  // Upsert replaces the whole metrics jsonb. If this write omits conviction
+  // (pending / zero score), preserve any existing non-zero check-day mark.
+  const mergeKeys = rows.filter(
+    (row) =>
+      row.metrics == null ||
+      !Object.prototype.hasOwnProperty.call(row.metrics, "conviction"),
+  );
+  const preserved = new Map<string, Record<string, unknown>>();
+  if (mergeKeys.length > 0) {
+    const portfolioIds = [...new Set(mergeKeys.map((r) => r.portfolioId))];
+    const strategyIds = [...new Set(mergeKeys.map((r) => r.strategyId))];
+    const asOfs = [...new Set(mergeKeys.map((r) => r.asOf))];
+    const { data: existing } = await supabase
+      .from("portfolio_snapshots")
+      .select("portfolio_id, strategy_id, as_of, metrics")
+      .eq("user_id", auth.user.id)
+      .in("portfolio_id", portfolioIds)
+      .in("strategy_id", strategyIds)
+      .in("as_of", asOfs);
+    for (const row of existing ?? []) {
+      const metrics = (row.metrics as Record<string, unknown>) ?? {};
+      const raw = metrics.conviction;
+      const conviction = typeof raw === "number" ? raw : Number(raw);
+      if (!Number.isFinite(conviction) || conviction === 0) continue;
+      preserved.set(
+        `${row.portfolio_id}|${row.strategy_id}|${row.as_of}`,
+        metrics,
+      );
+    }
+  }
+
+  const payload = rows.map((row) => {
+    const key = `${row.portfolioId}|${row.strategyId}|${row.asOf}`;
+    const nextMetrics = { ...(row.metrics ?? {}) };
+    const prior = preserved.get(key);
+    if (
+      prior &&
+      !Object.prototype.hasOwnProperty.call(nextMetrics, "conviction") &&
+      prior.conviction != null
+    ) {
+      nextMetrics.conviction = prior.conviction;
+    }
+    return {
+      user_id: auth.user!.id,
+      portfolio_id: row.portfolioId,
+      strategy_id: row.strategyId,
+      as_of: row.asOf,
+      holdings_market_value: row.holdingsMarketValue,
+      cost_basis: row.costBasis,
+      cash_available: row.cashAvailable,
+      total_value: row.totalValue,
+      open_pnl: row.openPnl,
+      open_pnl_pct: row.openPnlPct,
+      metrics: nextMetrics,
+    };
+  });
 
   const { error } = await supabase
     .from("portfolio_snapshots")
@@ -395,5 +438,85 @@ export async function fetchConvictionSnapshots(input: {
     conviction: Number(row.conviction),
     status: (row.status as string | null) ?? null,
     payload: (row.payload as Record<string, unknown>) ?? {},
+  }));
+}
+
+export type { ForgeCheckEvent } from "../forge/planAdherence";
+
+/** Append-only Plan Adherence check / hold events. */
+export async function appendForgeCheckEvents(
+  rows: import("../forge/planAdherence").ForgeCheckEvent[],
+): Promise<{ ok: boolean; error?: string }> {
+  if (rows.length === 0) return { ok: true };
+  const supabase = getSupabase();
+  const { data: auth } = await supabase.auth.getUser();
+  if (!auth.user) return { ok: false, error: "Not signed in" };
+
+  const payload = rows.map((row) => ({
+    user_id: auth.user!.id,
+    portfolio_id: row.portfolioId,
+    strategy_id: row.strategyId,
+    ticker: row.ticker.toUpperCase(),
+    checked_at: row.checkedAt,
+    as_of: row.asOf,
+    kind: row.kind,
+    primary_status: row.primaryStatus,
+    flags: row.flags,
+    conviction: row.conviction,
+  }));
+
+  const { error } = await supabase.from("forge_check_events").insert(payload);
+  if (error) {
+    console.warn("forge_check_events write failed", error.message);
+    return { ok: false, error: error.message };
+  }
+  return { ok: true };
+}
+
+export async function fetchForgeCheckEvents(input: {
+  portfolioId: string;
+  strategyIds?: string[] | null;
+  fromIso?: string;
+  toIso?: string;
+}): Promise<import("../forge/planAdherence").ForgeCheckEvent[]> {
+  const supabase = getSupabase();
+  const { data: auth } = await supabase.auth.getUser();
+  if (!auth.user) return [];
+
+  let query = supabase
+    .from("forge_check_events")
+    .select(
+      "id, portfolio_id, strategy_id, ticker, checked_at, as_of, kind, primary_status, flags, conviction",
+    )
+    .eq("user_id", auth.user.id)
+    .eq("portfolio_id", input.portfolioId)
+    .order("checked_at", { ascending: true });
+
+  if (input.strategyIds && input.strategyIds.length > 0) {
+    query = query.in("strategy_id", input.strategyIds);
+  }
+  if (input.fromIso) query = query.gte("checked_at", input.fromIso);
+  if (input.toIso) query = query.lte("checked_at", input.toIso);
+
+  const { data, error } = await query;
+  if (error) {
+    console.warn("forge_check_events fetch failed", error.message);
+    return [];
+  }
+
+  return (data ?? []).map((row) => ({
+    id: Number(row.id),
+    portfolioId: row.portfolio_id as string,
+    strategyId: row.strategy_id as string,
+    ticker: (row.ticker as string).toUpperCase(),
+    checkedAt: row.checked_at as string,
+    asOf: row.as_of as string,
+    kind: row.kind as "status" | "hold",
+    primaryStatus: (row.primary_status as string | null) ?? null,
+    flags: Array.isArray(row.flags)
+      ? (row.flags as import("../../types").StatusType[])
+      : [],
+    conviction:
+      row.conviction == null ? null : Number(row.conviction),
   }));
 }

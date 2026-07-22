@@ -87,8 +87,9 @@ Withdrawal). Qty-driven cash moves from paper buys/sells update
 `cashAvailable` without a cash ledger row — the qty fill is the record.
 `metrics.cashAdded` / `metrics.cashWithdrawn` on daily `portfolio_snapshots`
 sum same-day cash ledger deltas for Helm “Cash Added over Time.” Hold-from-
-inaction adherence is Phase 2. Optional later: promote to a dedicated Postgres
-table.
+inaction is recorded as `forge_check_events.kind = 'hold'` on each check when
+no qty fill landed in the cadence bucket (Plan Adherence Total Actions).
+Optional later: promote the qty/cash ledger to a dedicated Postgres table.
 
 ## 2. The `DataSource` seam (`src/lib/datasource/`)
 
@@ -406,14 +407,49 @@ supply a target). When a single strategy is picked, every Progress metric —
 strategy filter); "All strategies" uses the whole book.
 
 **Conviction change** (additive): `portfolio_snapshots.metrics.conviction` stores
-the MV-weighted book mark each refresh. Helm compares live conviction to the
-prior `as_of` (today) and to five sessions back; ticker drivers come from
+the MV-weighted book mark on **check days** (America/New_York `as_of`, aligned
+with Last Conviction Check). Mid-day refreshes still upsert Open P&L for today
+but only stamp `metrics.conviction` when a cadence/immediate check landed that
+ET day (or the write itself is check-driven). Helm “today” / “5 sessions”
+deltas only render after a **same-day** stamped mark exists — live drift against
+a lone older mark is not labeled “today”. Ticker drivers come from
 `conviction_snapshots` deltas + live weakest category labels (Thesis Fit /
 Technical Setup, etc.). No fabricated history when marks are missing.
 
 **Open P&L history** (additive): daily rows in `portfolio_snapshots` (see below).
 Helm fetches the series for the mirrored portfolio + scope and renders a lazy
-`SparklineChart` when ≥2 distinct `as_of` days exist. No fabricated backfill.
+`SparklineChart` when ≥2 distinct `as_of` days exist. Spark tips/axis are clipped
+through the Last Conviction Check ET day so a mid-day refresh cannot show a
+calendar day ahead of the toast. No fabricated backfill.
+
+**Shared Helm timeframe** (`src/lib/finance/helmTimeframe.ts`): default `1w`
+(indicator only; toggle UI later). Also plumbs `1m` / `1y` / `ytd` plus cadence
+floors `1h` / `2h` / `4h` when the focused strategy allows; **All strategies**
+uses the coarsest (slowest) floor among applied strategies. Total Conviction,
+Open P&L, and Plan Adherence all read the same clamped timeframe.
+
+**Plan Adherence** (below Composition): Notifications (check-event flag counts,
+with proxies from `conviction_snapshots` / book `metrics.conviction` check days
+when append-only events are not yet present — so a Total Conviction check mark
+never implies “No checks in range”), Total Actions (ledger buys/sells/cash +
+hold-inaction events; hold proxies fill the same check days when no same-day
+qty fill exists), Zone-Followed Impact (MV-weighted forward return after
+**zone-matched qty fills only** — Trim/Add/Go to Cash via `zoneHints` or
+same-day check flags; Hold counts Total Actions but does not score Impact).
+Honest empty states when no check-day marks exist at all.
+
+### Forge check events (`forge_check_events`)
+
+Append-only rows written after a successful strategy check
+(`persistForgeCheckEvents`):
+
+- `kind = status` — per in-scope ticker: `primary_status`, `flags` (L2 + L3),
+  `conviction`, `checked_at`, ET `as_of`
+- `kind = hold` — same grain when no qty buy/sell landed in the cadence bucket
+  ending at `checked_at` (promotes hold-from-inaction to shipped)
+
+RLS by `auth.uid()`; insert+select for `authenticated`. Failures surface via
+`setMarketError` (not silent-only).
 
 ### Daily book + ticker snapshots
 
@@ -422,16 +458,20 @@ Written after live market pull (`persistBookAndConvictionMarks` from
 Forge conviction / chip / zone math and `portfolioRunningTotals` are unchanged.
 
 - **`portfolio_snapshots`**: one row per `(user, portfolio_id, strategy_id,
-  as_of)`. `strategy_id = ''` = whole book (all holdings + `cashAvailable`).
+  as_of)` where `as_of` is the America/New_York session day of the market
+  cycle/quotes (not the writer's UTC wall clock). Non-check refreshes cap
+  `as_of` to the latest Last Conviction Check day so Open P&L cannot invent a
+  spark day ahead of that toast. Check-driven writes may advance the day.
+  `strategy_id = ''` = whole book (all holdings + `cashAvailable`).
   Strategy-scoped rows use holdings enabled for that strategy
   (`shouldScoreTickerWithStrategy`) **plus the same cash**. Core columns mirror
   Current Watch totals: `holdings_market_value`, `cost_basis`, `cash_available`,
   `total_value`, `open_pnl`, `open_pnl_pct`. Forward-compatible `metrics jsonb`
   for future daily book fields — currently includes MV-weighted `conviction`
-  for Helm Conviction Change, plus same-day `cashAdded` / `cashWithdrawn` from
-  the cash ledger (manual deposits/withdrawals only; do not delete core columns
-  into jsonb). Upsert last-write-wins. Skip incomplete books rather than
-  fabricate prices.
+  (check-day only; see Conviction change above), plus same-day `cashAdded` /
+  `cashWithdrawn` from the cash ledger (manual deposits/withdrawals only; do
+  not delete core columns into jsonb). Upsert last-write-wins. Skip incomplete
+  books rather than fabricate prices.
 - **`conviction_snapshots`**: same unique grain; **enrich `payload`** at write
   with per-ticker marks (`portfolioId`, `shares`, `avgPrice`, `lastPrice`,
   `marketValue`, `costBasis`, `openPnl`, `openPnlPct`) — future per-name fields

@@ -144,6 +144,10 @@ create policy "snapshots_select_own"
   on public.conviction_snapshots for select using (auth.uid() = user_id);
 create policy "snapshots_insert_own"
   on public.conviction_snapshots for insert with check (auth.uid() = user_id);
+create policy "snapshots_update_own"
+  on public.conviction_snapshots for update
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
 
 -- Daily portfolio / strategy book marks (Open P&L sparkline + future book fields).
 -- strategy_id '' = whole-book mark (same Current Watch totals universe).
@@ -198,10 +202,45 @@ grant usage on schema public to anon, authenticated;
 
 grant select, update on table public.profiles to authenticated;
 grant select, insert, update on table public.user_state to authenticated;
-grant select, insert on table public.conviction_snapshots to authenticated;
+grant select, insert, update on table public.conviction_snapshots to authenticated;
 grant select, insert, update on table public.portfolio_snapshots to authenticated;
 grant select, insert, update on table public.ticker_marks to authenticated;
+-- bigserial nextval() for snapshot inserts (table INSERT alone is not enough)
+grant usage, select on sequence public.conviction_snapshots_id_seq to authenticated;
+grant usage, select on sequence public.portfolio_snapshots_id_seq to authenticated;
 grant select on table public.invite_codes to authenticated;
+
+-- Append-only Forge check / hold-inaction events (Plan Adherence).
+create table if not exists public.forge_check_events (
+  id bigserial primary key,
+  user_id uuid not null references auth.users (id) on delete cascade,
+  portfolio_id text not null,
+  strategy_id text not null,
+  ticker text not null,
+  checked_at timestamptz not null,
+  as_of date not null,
+  kind text not null check (kind in ('status', 'hold')),
+  primary_status text,
+  flags jsonb not null default '[]'::jsonb,
+  conviction numeric,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists forge_check_events_user_checked_idx
+  on public.forge_check_events (user_id, checked_at desc);
+
+create index if not exists forge_check_events_scope_idx
+  on public.forge_check_events (user_id, portfolio_id, strategy_id, checked_at desc);
+
+alter table public.forge_check_events enable row level security;
+
+create policy "forge_check_events_select_own"
+  on public.forge_check_events for select using (auth.uid() = user_id);
+create policy "forge_check_events_insert_own"
+  on public.forge_check_events for insert with check (auth.uid() = user_id);
+
+grant select, insert on table public.forge_check_events to authenticated;
+grant usage, select on sequence public.forge_check_events_id_seq to authenticated;
 
 -- Auto-create profile + empty user_state on signup
 create or replace function public.handle_new_user()

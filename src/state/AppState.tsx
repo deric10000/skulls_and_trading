@@ -101,6 +101,7 @@ import {
   openPnlPercent,
 } from "../lib/finance/averageCost";
 import { persistBookAndConvictionMarks } from "../lib/finance/persistMarketMarks";
+import { persistForgeCheckEvents } from "../lib/forge/persistCheckEvents";
 import {
   classifyCashAction,
   classifyQtyAction,
@@ -677,6 +678,17 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
               strategyId,
               ledger: shareFills,
             }),
+            persistForgeCheckEvents({
+              portfolios,
+              strategies,
+              strategyId,
+              ledger: shareFills,
+              checkedAt: cycleAsOf,
+            }).then((result) => {
+              if (!result.ok && result.error) {
+                setMarketError(`Check event save failed: ${result.error}`);
+              }
+            }),
           ]);
           return true;
         }
@@ -714,6 +726,19 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
               result.tickers,
               { strategyId, ledger: shareFillsRef.current },
             ),
+            persistForgeCheckEvents({
+              portfolios: portfoliosRef.current,
+              strategies: strategiesRef.current,
+              strategyId,
+              ledger: shareFillsRef.current,
+              checkedAt: result.checkedAt,
+            }).then((persistResult) => {
+              if (!persistResult.ok && persistResult.error) {
+                setMarketError(
+                  `Check event save failed: ${persistResult.error}`,
+                );
+              }
+            }),
           ]);
           setCadenceToast(
             "Strategy check complete. Conviction scores are current.",
@@ -1136,14 +1161,21 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     (portfolioId: string, orders: PendingQtyOrder[]) => {
       if (orders.length === 0) return;
       const portfolio = portfolios.find((p) => p.id === portfolioId);
-      const appliedIds = strategies
-        .filter((s) => (s.appliedPortfolioIds ?? []).includes(portfolioId))
-        .map((s) => s.id);
+      const applied = strategies.filter((s) =>
+        (s.appliedPortfolioIds ?? []).includes(portfolioId),
+      );
+      const appliedIds = applied.map((s) => s.id);
+      const alignment = portfolio
+        ? computePortfolioAlignment(portfolio, buckets, applied)
+        : null;
 
       const fills: PortfolioTransaction[] = orders.map((order) => {
         const holding = portfolio?.holdings.find(
           (h) => h.ticker === order.ticker,
         );
+        const live =
+          alignment?.byTicker[order.ticker.toUpperCase()] ??
+          alignment?.byTicker[order.ticker];
         return {
           id: nextId("fill"),
           kind: "qty" as const,
@@ -1163,7 +1195,13 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
           strategyIds: holding?.strategyIds?.length
             ? [...holding.strategyIds]
             : appliedIds,
-          zoneHints: zoneHintsFromStatuses([holding?.status]),
+          // Layer 3 zones live on resolved flags — not only holding.status
+          // (often an L1 band). Impact needs these stamps.
+          zoneHints: zoneHintsFromStatuses([
+            live?.resolved.primary,
+            ...(live?.resolved.categoryFlags ?? []),
+            holding?.status,
+          ]),
         };
       });
 
@@ -1232,7 +1270,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         });
       }
     },
-    [nextId, portfolios, strategies],
+    [nextId, portfolios, strategies, buckets],
   );
 
   const updatePortfolioCash = useCallback(

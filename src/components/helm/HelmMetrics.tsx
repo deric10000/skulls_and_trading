@@ -14,9 +14,33 @@ import {
   shouldScoreTickerWithStrategy,
   strategiesForHolding,
 } from "../../lib/forge/tickerStrategy";
-import { seriesToSparkPoints } from "../../lib/finance/portfolioSnapshotSeries";
+import {
+  DEFAULT_HELM_TIMEFRAME,
+  HELM_TIMEFRAME_LABEL,
+  clampHelmTimeframe,
+  clipSparkPointsThrough,
+  displaySparkPointsForRange,
+  etIsoDate,
+  helmCadenceFloorForScope,
+  helmTimeframeBounds,
+  mergeConvictionSparkByDay,
+  seriesToConvictionSparkPoints,
+  seriesToSparkPoints,
+  sparkRangeShowsPointMarkers,
+  type HelmTimeframe,
+  type SparkPoint,
+} from "../../lib/finance/portfolioSnapshotSeries";
+import {
+  countActions,
+  countNotifications,
+  computeZoneFollowedImpact,
+  mergeCheckEventsWithProxies,
+  type ForgeCheckEvent,
+  type TickerPriceMark,
+} from "../../lib/forge/planAdherence";
 import {
   fetchConvictionSnapshots,
+  fetchForgeCheckEvents,
   fetchPortfolioSnapshots,
 } from "../../lib/userStore";
 import { formatChange, formatDecimals } from "../../lib/format";
@@ -25,6 +49,27 @@ import type { SignalTone } from "../../types";
 import { PortfolioCompass } from "../PortfolioCompass";
 import { StatusStack } from "../StatusBadge";
 import { StrategyScopeSelect } from "../StrategyScopeSelect";
+
+/** ET session day of the latest Last Conviction Check for the active scope. */
+function lastCheckSeedTime(
+  pullMap: Record<string, string>,
+  strategyId: string | null | undefined,
+  appliedStrategyIds: string[],
+): string {
+  const ids = strategyId ? [strategyId] : appliedStrategyIds;
+  let latestMs = 0;
+  let latestIso: string | undefined;
+  for (const id of ids) {
+    const pull = pullMap[id];
+    if (!pull) continue;
+    const ms = Date.parse(pull);
+    if (!Number.isNaN(ms) && ms >= latestMs) {
+      latestMs = ms;
+      latestIso = pull;
+    }
+  }
+  return latestIso ? etIsoDate(latestIso) : etIsoDate();
+}
 
 const SparklineChart = lazy(() =>
   import("../charts/SparklineChart").then((mod) => ({
@@ -45,6 +90,17 @@ function formatSparkDate(isoDate: string): string {
   return `${String(m).padStart(2, "0")}/${String(d).padStart(2, "0")}/${y}`;
 }
 
+/** Axis labels: single-day seed shows start date + "Pending Check." */
+function sparkAxisLabels(points: SparkPoint[]): { start: string; end: string } {
+  if (points.length === 0) return { start: "", end: "" };
+  const start = formatSparkDate(points[0]!.time);
+  if (points.length === 1) return { start, end: "Pending Check." };
+  return {
+    start,
+    end: formatSparkDate(points[points.length - 1]!.time),
+  };
+}
+
 function resolveCssColor(varName: string, fallback: string): string {
   if (typeof window === "undefined") return fallback;
   const value = getComputedStyle(document.documentElement)
@@ -57,7 +113,8 @@ function resolveCssColor(varName: string, fallback: string): string {
  * The Helm — derived progress metrics for the portfolio selected in Current
  * Watch (mirrored via shared AppState). Strategy scope is shared Home state
  * (`watchStrategyScopeId`) so Progress and Current Watch filter together.
- * Open P&L history loads from portfolio_snapshots (additive; scoring unchanged).
+ * Open P&L and Total Conviction history load from portfolio_snapshots
+ * (additive; scoring unchanged). Shared spark range defaults to 1 week.
  */
 export function HelmMetrics() {
   const {
@@ -70,6 +127,7 @@ export function HelmMetrics() {
     setWatchStrategyScopeId,
     isConvictionScoreReady,
     lastDataPullAtByStrategyId,
+    shareFills,
   } = useAppState();
 
   const portfolio = useMemo(
@@ -88,12 +146,19 @@ export function HelmMetrics() {
     [strategies, portfolio],
   );
 
-  const [sparkPoints, setSparkPoints] = useState<
-    ReturnType<typeof seriesToSparkPoints>
+  const [pnlSparkPoints, setPnlSparkPoints] = useState<SparkPoint[]>([]);
+  const [convictionSparkPoints, setConvictionSparkPoints] = useState<
+    SparkPoint[]
   >([]);
   const [sparkLoaded, setSparkLoaded] = useState(false);
   const [convictionView, setConvictionView] =
     useState<ConvictionChangeView | null>(null);
+  const [checkEvents, setCheckEvents] = useState<ForgeCheckEvent[]>([]);
+  const [priceMarks, setPriceMarks] = useState<TickerPriceMark[]>([]);
+  const [adherenceLoaded, setAdherenceLoaded] = useState(false);
+  // Shared Helm timeframe (default 1 week). Toggle UI later — all Progress +
+  // Plan Adherence tiles read this same value / label.
+  const [helmTimeframe] = useState<HelmTimeframe>(DEFAULT_HELM_TIMEFRAME);
 
   // Drop a stale shared scope when the mirrored portfolio no longer applies it.
   useEffect(() => {
@@ -111,6 +176,19 @@ export function HelmMetrics() {
         ? appliedStrategies.find((s) => s.id === watchStrategyScopeId)
         : undefined,
     [appliedStrategies, watchStrategyScopeId],
+  );
+
+  const cadenceFloor = useMemo(
+    () =>
+      helmCadenceFloorForScope(appliedStrategies, watchStrategyScopeId),
+    [appliedStrategies, watchStrategyScopeId],
+  );
+  const sparkRange = clampHelmTimeframe(helmTimeframe, cadenceFloor);
+  const sparkRangeLabel = HELM_TIMEFRAME_LABEL[sparkRange];
+  const showPointMarkers = sparkRangeShowsPointMarkers(sparkRange);
+  const timeframeBounds = useMemo(
+    () => helmTimeframeBounds(sparkRange),
+    [sparkRange],
   );
 
   const alignment = useMemo(() => {
@@ -161,13 +239,18 @@ export function HelmMetrics() {
 
   useEffect(() => {
     if (!portfolio || !alignment) {
-      setSparkPoints([]);
+      setPnlSparkPoints([]);
+      setConvictionSparkPoints([]);
       setSparkLoaded(false);
       setConvictionView(null);
+      setCheckEvents([]);
+      setPriceMarks([]);
+      setAdherenceLoaded(false);
       return;
     }
     let cancelled = false;
     setSparkLoaded(false);
+    setAdherenceLoaded(false);
 
     const from = new Date();
     from.setUTCDate(from.getUTCDate() - 21);
@@ -185,6 +268,19 @@ export function HelmMetrics() {
         strategyId: watchStrategyScopeId,
         from: fromStr,
       }),
+      // Per-strategy marks: All-strategies conviction spark + adherence proxies.
+      Promise.all(
+        (watchStrategyScopeId
+          ? appliedStrategies.filter((s) => s.id === watchStrategyScopeId)
+          : appliedStrategies
+        ).map((strategy) =>
+          fetchPortfolioSnapshots({
+            portfolioId: portfolio.id,
+            strategyId: strategy.id,
+            from: fromStr,
+          }),
+        ),
+      ).then((rows) => rows.flat()),
       strategyIds.length > 0 && tickers.length > 0
         ? fetchConvictionSnapshots({
             strategyIds,
@@ -192,10 +288,78 @@ export function HelmMetrics() {
             from: fromStr,
           })
         : Promise.resolve([]),
-    ]).then(([bookRows, tickerRows]) => {
+      fetchForgeCheckEvents({
+        portfolioId: portfolio.id,
+        strategyIds: watchStrategyScopeId
+          ? [watchStrategyScopeId]
+          : strategyIds,
+        fromIso: timeframeBounds.fromIso,
+        toIso: timeframeBounds.toIso,
+      }),
+    ]).then(([bookRows, scopedBookRows, tickerRows, events]) => {
       if (cancelled) return;
-      setSparkPoints(seriesToSparkPoints(bookRows));
+      setPnlSparkPoints(seriesToSparkPoints(bookRows));
+      // Conviction: scoped strategy rows (or merged across strategies for All).
+      // Never rely only on whole-book '' rows — those often lack conviction.
+      setConvictionSparkPoints(
+        watchStrategyScopeId
+          ? // Never fall back to whole-book `strategy_id ''` — those rows usually
+            // omit metrics.conviction and would seed a single "Pending Check" day.
+            seriesToConvictionSparkPoints(scopedBookRows)
+          : mergeConvictionSparkByDay(scopedBookRows),
+      );
       setSparkLoaded(true);
+
+      const adherenceBooks =
+        scopedBookRows.length > 0 ? scopedBookRows : bookRows;
+      const bookCheckDays: Array<{
+        strategyId: string;
+        asOf: string;
+        conviction: number;
+      }> = [];
+      for (const row of adherenceBooks) {
+        const raw = row.metrics?.conviction;
+        const conviction = typeof raw === "number" ? raw : Number(raw);
+        if (!Number.isFinite(conviction) || conviction === 0) continue;
+        if (!row.strategyId) continue;
+        bookCheckDays.push({
+          strategyId: row.strategyId,
+          asOf: row.asOf,
+          conviction,
+        });
+      }
+      setCheckEvents(
+        mergeCheckEventsWithProxies({
+          events,
+          portfolioId: portfolio.id,
+          snapshotRows: tickerRows.map((row) => ({
+            strategyId: row.strategyId,
+            ticker: row.ticker,
+            asOf: row.asOf,
+            conviction: row.conviction,
+            status: row.status,
+          })),
+          bookCheckDays,
+          tickers,
+          ledger: shareFills,
+        }),
+      );
+      const marks: TickerPriceMark[] = [];
+      for (const row of tickerRows) {
+        const lastPrice =
+          typeof row.payload.lastPrice === "number"
+            ? row.payload.lastPrice
+            : Number(row.payload.lastPrice);
+        if (Number.isFinite(lastPrice) && lastPrice > 0) {
+          marks.push({
+            ticker: row.ticker,
+            asOf: row.asOf,
+            lastPrice,
+          });
+        }
+      }
+      setPriceMarks(marks);
+      setAdherenceLoaded(true);
 
       const liveConviction = alignment.portfolio.conviction;
       const bookSeries = portfolioConvictionSeries(bookRows);
@@ -222,6 +386,7 @@ export function HelmMetrics() {
           bookSeries,
           Array.from(byKey.values()),
           alignment,
+          etIsoDate(),
         ),
       );
     });
@@ -229,7 +394,15 @@ export function HelmMetrics() {
     return () => {
       cancelled = true;
     };
-  }, [portfolio, watchStrategyScopeId, appliedStrategies, alignment]);
+  }, [
+    portfolio,
+    watchStrategyScopeId,
+    appliedStrategies,
+    alignment,
+    timeframeBounds.fromIso,
+    timeframeBounds.toIso,
+    shareFills,
+  ]);
 
   if (!portfolio || !metrics || !alignment) {
     return (
@@ -247,17 +420,100 @@ export function HelmMetrics() {
   }
 
   const pnlUp = metrics.openPnlPct >= 0;
-  const lineColor = resolveCssColor(
+  const pnlLineColor = resolveCssColor(
     pnlUp ? "--positive" : "--negative",
     pnlUp ? "#3d9a6a" : "#c45c4a",
   );
-  const showSpark = sparkLoaded && sparkPoints.length >= 2;
-  const startDate = sparkPoints[0]?.time;
-  const endDate = sparkPoints[sparkPoints.length - 1]?.time;
+
+  // Spark history ends on Last Conviction Check's ET day — never invent "today"
+  // ahead of the toast (Open P&L and Total Conviction share this bound).
+  const historyEndDay = lastCheckSeedTime(
+    lastDataPullAtByStrategyId,
+    watchStrategyScopeId,
+    appliedStrategies.map((s) => s.id),
+  );
+
+  const pnlDisplayPoints = displaySparkPointsForRange(
+    clipSparkPointsThrough(pnlSparkPoints, historyEndDay),
+    sparkRange,
+    {
+      loaded: sparkLoaded,
+      seedValue: metrics.openPnlPct,
+      seedTime: historyEndDay,
+    },
+  );
+  const showPnlSpark = pnlDisplayPoints.length >= 1;
+  const drawPnlLine = pnlDisplayPoints.length >= 2;
+  const pnlAxis = sparkAxisLabels(pnlDisplayPoints);
+
+  const convictionDisplayPoints = displaySparkPointsForRange(
+    clipSparkPointsThrough(convictionSparkPoints, historyEndDay),
+    sparkRange,
+    {
+      loaded: sparkLoaded,
+      seedValue: metrics.conviction,
+      seedTime: historyEndDay,
+    },
+  );
+  const showConvictionSpark = convictionDisplayPoints.length >= 1;
+  const drawConvictionLine = convictionDisplayPoints.length >= 2;
+  const convictionAxis = sparkAxisLabels(convictionDisplayPoints);
+  const convictionDelta =
+    drawConvictionLine &&
+    convictionDisplayPoints[0] &&
+    convictionDisplayPoints[convictionDisplayPoints.length - 1]
+      ? convictionDisplayPoints[convictionDisplayPoints.length - 1]!.value -
+        convictionDisplayPoints[0]!.value
+      : 0;
+  const convictionLineColor = resolveCssColor(
+    drawConvictionLine
+      ? convictionDelta >= 0
+        ? "--positive"
+        : "--negative"
+      : "--positive",
+    drawConvictionLine
+      ? convictionDelta >= 0
+        ? "#3d9a6a"
+        : "#c45c4a"
+      : "#3d9a6a",
+  );
+
   const todayDelta = convictionView?.change.todayDelta ?? null;
   const sessions5Delta = convictionView?.change.sessions5Delta ?? null;
   const showConvictionChange =
     todayDelta != null || sessions5Delta != null;
+
+  const adherenceStrategyIds = watchStrategyScopeId
+    ? [watchStrategyScopeId]
+    : null;
+  const notificationCount = adherenceLoaded
+    ? countNotifications(
+        checkEvents,
+        portfolio.id,
+        adherenceStrategyIds,
+        timeframeBounds,
+      )
+    : null;
+  const actionCounts = adherenceLoaded
+    ? countActions(
+        shareFills,
+        checkEvents,
+        portfolio.id,
+        adherenceStrategyIds,
+        timeframeBounds,
+      )
+    : null;
+  const zoneImpact = adherenceLoaded
+    ? computeZoneFollowedImpact(
+        shareFills,
+        priceMarks,
+        portfolio.id,
+        adherenceStrategyIds,
+        timeframeBounds,
+        undefined,
+        checkEvents,
+      )
+    : null;
 
   // Portfolio resolved status can still reflect pending/fake alignment. Only
   // show StatusStack / compass when that primary tone appears among
@@ -286,13 +542,23 @@ export function HelmMetrics() {
 
       <div className="helm-metrics-grid">
         <div className="select-card helm-metric helm-metric--conviction">
+          <div className="helm-metric-head">
+            <span className="helm-metric-label">Total Conviction</span>
+            <span className="panel-tag session-tag">{sparkRangeLabel}</span>
+          </div>
           <div className="helm-conviction-top">
-            <div className="helm-conviction-copy">
-              <span className="helm-metric-label">Total Conviction</span>
+            <div className="helm-conviction-score-row">
+              {showConvictionStatus ? (
+                <PortfolioCompass
+                  status={alignment.portfolio.resolved.primary}
+                />
+              ) : null}
               <span className="helm-metric-value">
                 {formatDecimals(metrics.conviction)}
                 <span className="helm-metric-unit">/100</span>
               </span>
+            </div>
+            <div className="helm-conviction-copy">
               {showConvictionChange ? (
                 <span className="helm-conviction-change">
                   {todayDelta != null ? (
@@ -334,27 +600,38 @@ export function HelmMetrics() {
                 </span>
               ) : null}
             </div>
-            {showConvictionStatus ? (
-              <PortfolioCompass status={alignment.portfolio.resolved.primary} />
-            ) : null}
           </div>
           {showConvictionStatus ? (
             <StatusStack resolved={alignment.portfolio.resolved} />
           ) : null}
+          {showConvictionSpark ? (
+            <>
+              <Suspense fallback={null}>
+                <SparklineChart
+                  points={convictionDisplayPoints}
+                  lineColor={convictionLineColor}
+                  height={48}
+                  className="helm-metric-spark"
+                  showPointMarkers={showPointMarkers}
+                  lineVisible={drawConvictionLine}
+                  formatValue={formatDecimals}
+                  ariaLabel="Total Conviction history"
+                />
+              </Suspense>
+              <span className="helm-metric-spark-dates">
+                <span>{convictionAxis.start}</span>
+                <span>{convictionAxis.end}</span>
+              </span>
+            </>
+          ) : null}
           <span className="helm-metric-note">Market-value weighted</span>
         </div>
 
-        <div className="select-card helm-metric">
-          <span className="helm-metric-label">Strategy Coverage</span>
-          <span className="helm-metric-value">
-            {metrics.scoredCount}
-            <span className="helm-metric-unit">/{metrics.holdingCount}</span>
-          </span>
-          <span className="helm-metric-note">{metrics.coveragePct}% of holdings</span>
-        </div>
-
         <div className="select-card helm-metric helm-metric--pnl">
-          <span className="helm-metric-label">Open P&amp;L</span>
+          <div className="helm-metric-head">
+            <span className="helm-metric-label">Open P&amp;L</span>
+            <span className="panel-tag session-tag">{sparkRangeLabel}</span>
+          </div>
           <span
             className={`helm-metric-value ${
               pnlUp ? "helm-metric-value--up" : "helm-metric-value--down"
@@ -362,28 +639,41 @@ export function HelmMetrics() {
           >
             {formatChange(metrics.openPnlPct)}
           </span>
-          {showSpark ? (
-            <>
+          {showPnlSpark ? (
+            <div className="helm-metric-spark-block">
               <Suspense fallback={null}>
                 <SparklineChart
-                  points={sparkPoints}
-                  lineColor={lineColor}
+                  points={pnlDisplayPoints}
+                  lineColor={pnlLineColor}
                   height={48}
-                  className="helm-pnl-spark"
+                  className="helm-metric-spark"
+                  showPointMarkers={showPointMarkers}
+                  lineVisible={drawPnlLine}
+                  formatValue={formatChange}
+                  ariaLabel="Open P&L history"
                 />
               </Suspense>
-              <span className="helm-pnl-dates">
-                <span>{startDate ? formatSparkDate(startDate) : ""}</span>
-                <span>{endDate ? formatSparkDate(endDate) : ""}</span>
+              <span className="helm-metric-spark-dates">
+                <span>{pnlAxis.start}</span>
+                <span>{pnlAxis.end}</span>
               </span>
-            </>
+            </div>
           ) : (
-            <span className="helm-metric-note">
-              {sparkLoaded
-                ? "History starts after the next market refresh"
-                : "A by-product of discipline"}
-            </span>
+            <span className="helm-metric-note">A by-product of discipline</span>
           )}
+        </div>
+
+        <div className="select-card helm-metric helm-metric--text">
+          <span className="helm-metric-label">Strategy Coverage</span>
+          <div className="helm-metric-body">
+            <span className="helm-metric-value">
+              {metrics.scoredCount}
+              <span className="helm-metric-unit">/{metrics.holdingCount}</span>
+            </span>
+            <span className="helm-metric-note">
+              {metrics.coveragePct}% of holdings
+            </span>
+          </div>
         </div>
 
         <div className="select-card helm-metric helm-metric--wide">
@@ -418,21 +708,103 @@ export function HelmMetrics() {
           aria-labelledby="helm-composition-title"
         >
           {metrics.composition.map((slice) => (
-            <div key={slice.label} className="select-card helm-metric">
+            <div
+              key={slice.label}
+              className="select-card helm-metric helm-metric--text"
+            >
               <span className="helm-metric-label">{slice.label}</span>
-              <span className="helm-metric-value">
-                {slice.count}
-                <span className="helm-metric-unit">/{slice.count}</span>
-              </span>
-              <span className="helm-metric-note">
-                100% of position holdings
-              </span>
+              <div className="helm-metric-body">
+                <span className="helm-metric-value">
+                  {slice.count}
+                  <span className="helm-metric-unit">/{slice.count}</span>
+                </span>
+                <span className="helm-metric-note">
+                  100% of position holdings
+                </span>
+              </div>
             </div>
           ))}
         </div>
       ) : (
         <p className="helm-metrics-empty">No scored holdings yet</p>
       )}
+
+      <div className="forge-section-head">
+        <h3 id="helm-adherence-title" className="forge-section-title">
+          Plan Adherence
+        </h3>
+      </div>
+      <div
+        className="helm-metrics-grid"
+        aria-labelledby="helm-adherence-title"
+      >
+        <div className="select-card helm-metric helm-metric--text">
+          <div className="helm-metric-head">
+            <span className="helm-metric-label">Notifications</span>
+            <span className="panel-tag session-tag">{sparkRangeLabel}</span>
+          </div>
+          <div className="helm-metric-body">
+            <span className="helm-metric-value">
+              {notificationCount == null ? "—" : notificationCount}
+            </span>
+            <span className="helm-metric-note">
+              {notificationCount === 0
+                ? "No checks in range yet"
+                : "Status + zone flags by check"}
+            </span>
+          </div>
+        </div>
+
+        <div className="select-card helm-metric helm-metric--text">
+          <div className="helm-metric-head">
+            <span className="helm-metric-label">Total Actions</span>
+            <span className="panel-tag session-tag">{sparkRangeLabel}</span>
+          </div>
+          <div className="helm-metric-body">
+            <span className="helm-metric-value">
+              {actionCounts == null ? "—" : actionCounts.total}
+            </span>
+            <span className="helm-metric-note">
+              {actionCounts == null
+                ? "Loading…"
+                : actionCounts.total === 0
+                  ? "No buys, sells, cash, or holds yet"
+                  : `Buy ${actionCounts.buy} · Sell ${actionCounts.sell} · Hold ${actionCounts.hold}`}
+            </span>
+          </div>
+        </div>
+
+        <div className="select-card helm-metric helm-metric--text">
+          <div className="helm-metric-head">
+            <span className="helm-metric-label">Zone-Followed Impact</span>
+            <span className="panel-tag session-tag">{sparkRangeLabel}</span>
+          </div>
+          <div className="helm-metric-body">
+            <span
+              className={`helm-metric-value${
+                zoneImpact?.avgReturnPct != null
+                  ? zoneImpact.avgReturnPct >= 0
+                    ? " helm-metric-value--up"
+                    : " helm-metric-value--down"
+                  : ""
+              }`}
+            >
+              {zoneImpact?.avgReturnPct == null
+                ? "—"
+                : formatChange(zoneImpact.avgReturnPct)}
+            </span>
+            <span className="helm-metric-note">
+              {zoneImpact == null
+                ? "Loading…"
+                : zoneImpact.matchedFills > 0
+                  ? `Trim/Add follows · ${zoneImpact.horizonSessions} sessions · ${zoneImpact.matchedFills} fills`
+                  : zoneImpact.consideredFills > 0
+                    ? `0 of ${zoneImpact.consideredFills} actions matched a zone`
+                    : "No zone-followed actions yet"}
+            </span>
+          </div>
+        </div>
+      </div>
     </section>
   );
 }

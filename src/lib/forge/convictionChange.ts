@@ -1,5 +1,6 @@
 import type { RuleCategory } from "../../types";
 import type { PortfolioAlignment } from "../forge/alignment";
+import { etIsoDate } from "../finance/portfolioSnapshotSeries";
 import type { PortfolioSnapshotRecord } from "../userStore";
 
 /** Short driver labels — scannable on the Conviction card. */
@@ -18,9 +19,13 @@ export interface ConvictionMark {
 }
 
 export interface ConvictionChange {
-  /** Live conviction − prior session mark (points on 0–100 scale). */
+  /**
+   * Live conviction − prior session mark (points on 0–100).
+   * Only set when a check stamped today's session — never live drift vs a lone
+   * historical mark labeled as "today".
+   */
   todayDelta: number | null;
-  /** Live conviction − mark from 5 sessions ago. */
+  /** Live conviction − mark from 5 sessions ago (same today-mark gate). */
   sessions5Delta: number | null;
 }
 
@@ -46,7 +51,8 @@ export function portfolioConvictionSeries(
   for (const row of rows) {
     const raw = row.metrics?.conviction;
     const conviction = typeof raw === "number" ? raw : Number(raw);
-    if (!Number.isFinite(conviction)) continue;
+    // Skip missing / non-finite / exact 0 (stale holding.conviction persist bug).
+    if (!Number.isFinite(conviction) || conviction === 0) continue;
     out.push({ asOf: row.asOf, conviction });
   }
   return out;
@@ -55,24 +61,30 @@ export function portfolioConvictionSeries(
 /**
  * Compare live book conviction to prior daily marks.
  * Does not fabricate history — null deltas when marks are missing.
+ * "Today" requires a same-session stamped mark so we never show live drift
+ * against a single older spark point as "−X today".
  */
 export function computeConvictionChange(
   liveConviction: number,
   series: ConvictionMark[],
-  today = new Date().toISOString().slice(0, 10),
+  today = etIsoDate(),
 ): ConvictionChange {
   if (!Number.isFinite(liveConviction)) {
     return { todayDelta: null, sessions5Delta: null };
   }
-  const prior = series.filter((mark) => mark.asOf < today);
-  const yesterday = prior.length > 0 ? prior[prior.length - 1] : null;
-  const fiveBack =
-    prior.length >= 5 ? prior[prior.length - 5] : null;
+  const sorted = series
+    .slice()
+    .sort((a, b) => a.asOf.localeCompare(b.asOf));
+  const todayMark = sorted.find((mark) => mark.asOf === today) ?? null;
+  if (!todayMark) {
+    return { todayDelta: null, sessions5Delta: null };
+  }
+  const prior = sorted.filter((mark) => mark.asOf < today);
+  const yesterday = prior.length > 0 ? prior[prior.length - 1]! : null;
+  const fiveBack = prior.length >= 5 ? prior[prior.length - 5]! : null;
 
   return {
-    todayDelta: yesterday
-      ? liveConviction - yesterday.conviction
-      : null,
+    todayDelta: yesterday ? liveConviction - yesterday.conviction : null,
     sessions5Delta: fiveBack
       ? liveConviction - fiveBack.conviction
       : null,
@@ -97,6 +109,7 @@ export function computeConvictionDrivers(
 ): ConvictionDriver[] {
   const byAsOf = new Map<string, TickerConvictionMark[]>();
   for (const mark of marks) {
+    if (!Number.isFinite(mark.conviction) || mark.conviction === 0) continue;
     const list = byAsOf.get(mark.asOf) ?? [];
     list.push(mark);
     byAsOf.set(mark.asOf, list);
@@ -182,7 +195,7 @@ export function buildConvictionChangeView(
   bookSeries: ConvictionMark[],
   tickerMarks: TickerConvictionMark[],
   alignment: PortfolioAlignment,
-  today = new Date().toISOString().slice(0, 10),
+  today = etIsoDate(),
 ): ConvictionChangeView {
   const change = computeConvictionChange(liveConviction, bookSeries, today);
   const drivers = computeConvictionDrivers(tickerMarks, alignment);
