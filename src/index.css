@@ -1163,7 +1163,10 @@ button {
 .sparkline-chart .helm-pnl-spark-tip {
   position: absolute;
   z-index: 2;
-  padding: 0.15rem 0.35rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  padding: 0.2rem 0.4rem;
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
   background: var(--bg-deep);
@@ -1174,6 +1177,15 @@ button {
   pointer-events: none;
   white-space: nowrap;
   box-shadow: 0 6px 16px rgb(0 0 0 / 0.35);
+}
+
+.helm-pnl-spark-tip__date {
+  color: var(--text-faint);
+}
+
+.helm-pnl-spark-tip__pnl {
+  font-weight: 600;
+  color: var(--text-strong);
 }
 
 .helm-pnl-dates {

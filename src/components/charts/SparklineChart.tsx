@@ -10,6 +10,8 @@ import {
   type Time,
 } from "lightweight-charts";
 import type { SparkPoint } from "../../lib/finance/portfolioSnapshotSeries";
+import { formatChange } from "../../lib/format";
+import { useIsMobile } from "../../lib/useIsMobile";
 
 export type SparklineChartProps = {
   points: SparkPoint[];
@@ -33,14 +35,68 @@ function formatSparkDate(isoDate: string): string {
 }
 
 type HoverTip = {
-  label: string;
+  time: string;
+  dateLabel: string;
+  pnlLabel: string;
   left: number;
   top: number;
 };
 
+function resolveTimeLabel(
+  param: MouseEventParams<Time>,
+  chart: IChartApi,
+): string | null {
+  if (typeof param.time === "string") return param.time;
+  if (!param.point) return null;
+  const fromCoord = chart.timeScale().coordinateToTime(param.point.x);
+  return typeof fromCoord === "string" ? fromCoord : null;
+}
+
+function nearestPoint(
+  points: SparkPoint[],
+  timeLabel: string | null,
+): SparkPoint | null {
+  if (points.length === 0) return null;
+  if (!timeLabel) return points[points.length - 1] ?? null;
+  const exact = points.find((point) => point.time === timeLabel);
+  if (exact) return exact;
+  // Closest calendar day if the click lands between bars.
+  let best = points[0]!;
+  let bestDist = Math.abs(Date.parse(best.time) - Date.parse(timeLabel));
+  for (const point of points.slice(1)) {
+    const dist = Math.abs(Date.parse(point.time) - Date.parse(timeLabel));
+    if (dist < bestDist) {
+      best = point;
+      bestDist = dist;
+    }
+  }
+  return best;
+}
+
+function tipFromPoint(
+  point: SparkPoint,
+  chartPoint: { x: number; y: number },
+  hostWidth: number,
+): HoverTip {
+  const tipWidth = 88;
+  const left = Math.min(
+    Math.max(chartPoint.x - tipWidth / 2, 0),
+    Math.max(hostWidth - tipWidth, 0),
+  );
+  return {
+    time: point.time,
+    dateLabel: formatSparkDate(point.time),
+    pnlLabel: formatChange(point.value),
+    left,
+    top: Math.max(chartPoint.y - 34, 0),
+  };
+}
+
 /**
  * Compact TradingView lightweight-charts line — no chrome, no axes labels
  * beyond what the parent renders. Lazy-load this module from Helm only.
+ * Desktop: hover tip via crosshair. Mobile: tap-to-toggle tip on a session
+ * point (outside tap dismisses).
  */
 export function SparklineChart({
   points,
@@ -50,12 +106,16 @@ export function SparklineChart({
   showPointMarkers = true,
   lineVisible = true,
 }: SparklineChartProps) {
+  const isMobile = useIsMobile();
+  const wrapRef = useRef<HTMLDivElement>(null);
   const hostRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<"Line"> | null>(null);
   const pointsRef = useRef(points);
   pointsRef.current = points;
+  const tipRef = useRef<HoverTip | null>(null);
   const [hoverTip, setHoverTip] = useState<HoverTip | null>(null);
+  tipRef.current = hoverTip;
 
   useEffect(() => {
     const host = hostRef.current;
@@ -117,37 +177,43 @@ export function SparklineChart({
         setHoverTip(null);
         return;
       }
-      // Day series uses UTC ISO date strings as Time.
-      const timeLabel = typeof param.time === "string" ? param.time : null;
-      if (!timeLabel) {
+      const timeLabel = resolveTimeLabel(param, chart);
+      const match = nearestPoint(pointsRef.current, timeLabel);
+      if (!match || !param.point) {
         setHoverTip(null);
         return;
       }
-      // Axis already labels first/last — hover dates are for in-between dots.
-      const seriesPoints = pointsRef.current;
-      const first = seriesPoints[0]?.time;
-      const last = seriesPoints[seriesPoints.length - 1]?.time;
-      if (
-        seriesPoints.length >= 2 &&
-        (timeLabel === first || timeLabel === last)
-      ) {
-        setHoverTip(null);
-        return;
-      }
-      const hostWidth = host.clientWidth || 200;
-      const tipWidth = 76;
-      const left = Math.min(
-        Math.max(param.point.x - tipWidth / 2, 0),
-        Math.max(hostWidth - tipWidth, 0),
-      );
-      setHoverTip({
-        label: formatSparkDate(timeLabel),
-        left,
-        top: Math.max(param.point.y - 22, 0),
-      });
+      setHoverTip(tipFromPoint(match, param.point, host.clientWidth || 200));
     };
 
-    chart.subscribeCrosshairMove(onMove);
+    const onClick = (param: MouseEventParams<Time>) => {
+      if (!showPointMarkers) {
+        setHoverTip(null);
+        return;
+      }
+      if (!param.point) {
+        setHoverTip(null);
+        return;
+      }
+      const timeLabel = resolveTimeLabel(param, chart);
+      const match = nearestPoint(pointsRef.current, timeLabel);
+      if (!match) {
+        setHoverTip(null);
+        return;
+      }
+      // Tap same point again to dismiss (mobile toggle).
+      if (tipRef.current?.time === match.time) {
+        setHoverTip(null);
+        return;
+      }
+      setHoverTip(tipFromPoint(match, param.point, host.clientWidth || 200));
+    };
+
+    if (isMobile) {
+      chart.subscribeClick(onClick);
+    } else {
+      chart.subscribeCrosshairMove(onMove);
+    }
 
     const ro = new ResizeObserver(() => {
       if (!hostRef.current || !chartRef.current) return;
@@ -158,14 +224,18 @@ export function SparklineChart({
     ro.observe(host);
 
     return () => {
-      chart.unsubscribeCrosshairMove(onMove);
+      if (isMobile) {
+        chart.unsubscribeClick(onClick);
+      } else {
+        chart.unsubscribeCrosshairMove(onMove);
+      }
       ro.disconnect();
       chart.remove();
       chartRef.current = null;
       seriesRef.current = null;
       setHoverTip(null);
     };
-  }, [height, lineColor, lineVisible, showPointMarkers]);
+  }, [height, lineColor, lineVisible, showPointMarkers, isMobile]);
 
   useEffect(() => {
     const series = seriesRef.current;
@@ -187,8 +257,21 @@ export function SparklineChart({
     chart.timeScale().fitContent();
   }, [points, lineColor, lineVisible, showPointMarkers]);
 
+  // Mobile: dismiss sticky tip on outside tap (matches Tooltip sheet).
+  useEffect(() => {
+    if (!isMobile || !hoverTip) return;
+    function handlePointerDown(event: PointerEvent) {
+      const target = event.target as Node;
+      if (wrapRef.current?.contains(target)) return;
+      setHoverTip(null);
+    }
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => document.removeEventListener("pointerdown", handlePointerDown);
+  }, [isMobile, hoverTip]);
+
   return (
     <div
+      ref={wrapRef}
       className={className ?? "sparkline-chart"}
       style={{ height, position: "relative" }}
       role="img"
@@ -200,7 +283,8 @@ export function SparklineChart({
           className="helm-pnl-spark-tip"
           style={{ left: hoverTip.left, top: hoverTip.top }}
         >
-          {hoverTip.label}
+          <span className="helm-pnl-spark-tip__date">{hoverTip.dateLabel}</span>
+          <span className="helm-pnl-spark-tip__pnl">{hoverTip.pnlLabel}</span>
         </span>
       ) : null}
     </div>
