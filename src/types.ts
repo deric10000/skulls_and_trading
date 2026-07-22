@@ -261,6 +261,8 @@ export type TransactionActionClass =
   | "add"
   | "hold"
   | "go_to_cash"
+  | "deposit"
+  | "withdrawal"
   | "unclassified";
 
 /**
@@ -317,6 +319,15 @@ export interface PendingQtyOrder {
   sharesBefore: number;
   sharesAfter: number;
   fillPrice: number;
+  filledAt: string;
+}
+
+/** Manual cash bump reviewed before confirm (deposit / withdrawal). */
+export interface PendingCashEdit {
+  side: "deposit" | "withdrawal";
+  cashBefore: number;
+  cashAfter: number;
+  deltaCash: number;
   filledAt: string;
 }
 

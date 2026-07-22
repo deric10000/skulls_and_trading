@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useAppState, type WatchEditSnapshot } from "../state/AppState";
 import { asyncSearchTickers, dataSource } from "../lib/datasource";
@@ -83,11 +83,18 @@ import {
 } from "../lib/finance/averageCost";
 import { portfolioRunningTotals } from "../lib/finance/portfolioTotals";
 import {
+  qtyCashImpact,
+  roundMoney,
+  simulatedEditCash,
+} from "../lib/finance/editCashFromQty";
+import {
   estimateFillTimestamp,
-  formatFillTimestampEst,
+  fromDatetimeLocalValue,
+  toDatetimeLocalValue,
 } from "../lib/finance/timestamps";
 import type {
   LogEntry,
+  PendingCashEdit,
   PendingQtyOrder,
   Portfolio,
   PortfolioHolding,
@@ -1069,15 +1076,17 @@ function WatchQtyInput({
 }: {
   ticker: string;
   shares: number;
-  onCommit: (shares: number) => void;
+  /** Return false to reject (e.g. not enough cash) and revert the field. */
+  onCommit: (shares: number) => boolean;
 }) {
   const [draft, setDraft] = useState<string | null>(null);
   const display = draft ?? String(shares);
 
-  function commit(raw: string) {
+  function commit(raw: string): boolean {
     const next =
       raw.trim() === "" ? 0 : Number.parseInt(raw, 10);
-    onCommit(Number.isFinite(next) ? Math.max(0, next) : 0);
+    const value = Number.isFinite(next) ? Math.max(0, next) : 0;
+    return onCommit(value);
   }
 
   return (
@@ -1099,10 +1108,15 @@ function WatchQtyInput({
           setDraft(raw);
           // Commit as soon as the value is a number (typing or stepper) so
           // dirty / Update enable without waiting for blur.
-          if (raw !== "") commit(raw);
+          if (raw !== "" && !commit(raw)) {
+            setDraft(String(shares));
+          }
         }}
         onBlur={(event) => {
-          commit(event.target.value);
+          if (!commit(event.target.value)) {
+            setDraft(String(shares));
+            return;
+          }
           setDraft(null);
         }}
         onKeyDown={(event) => {
@@ -1135,12 +1149,34 @@ function buildPendingQtyOrders(
       deltaShares: Math.abs(delta),
       sharesBefore: before,
       sharesAfter: after,
-      fillPrice: quote?.lastPrice ?? 0,
+      fillPrice: roundMoney(quote?.lastPrice ?? 0),
       filledAt,
     });
   }
   return orders.sort((a, b) => a.ticker.localeCompare(b.ticker));
 }
+
+function buildPendingCashEdit(
+  cashOffset: number,
+  cashBaseline: number,
+  qtyImpact: number,
+): PendingCashEdit | null {
+  if (Math.abs(cashOffset) < 0.005) return null;
+  const cashBefore = roundMoney(cashBaseline + qtyImpact);
+  const cashAfter = roundMoney(cashBefore + cashOffset);
+  return {
+    side: cashOffset > 0 ? "deposit" : "withdrawal",
+    cashBefore,
+    cashAfter,
+    deltaCash: roundMoney(cashOffset),
+    filledAt: estimateFillTimestamp(),
+  };
+}
+
+type PendingEditReview = {
+  orders: PendingQtyOrder[];
+  cash: PendingCashEdit | null;
+};
 
 /** Edit-mode strategy picker — ticker-suggestion droplist chrome + checkbox. */
 function WatchStrategyEditPicker({
@@ -1298,6 +1334,7 @@ export function WatchlistWidget({
     setTickerEnabledForStrategy,
     applyQtyOrders,
     updatePortfolioCash,
+    persistWatchEditMarks,
     removeTickerFromPortfolio,
     captureWatchEditSnapshot,
     restoreWatchEditSnapshot,
@@ -1351,9 +1388,12 @@ export function WatchlistWidget({
   const [qtyDrafts, setQtyDrafts] = useState<Record<string, number>>({});
   /** Settled cash at enter-edit (portfolios only). */
   const [cashBaseline, setCashBaseline] = useState(0);
-  /** In-session cash draft — committed on Update / qty confirm. */
-  const [cashDraft, setCashDraft] = useState(0);
-  const [pendingOrders, setPendingOrders] = useState<PendingQtyOrder[] | null>(
+  /**
+   * Manual cash bump vs auto qty simulation
+   * (`cashBaseline + qtyImpact + cashOffset`).
+   */
+  const [cashOffset, setCashOffset] = useState(0);
+  const [pendingReview, setPendingReview] = useState<PendingEditReview | null>(
     null,
   );
   /** Holdings + exclusions at enter-edit; Cancel→discard restores this. */
@@ -1468,7 +1508,9 @@ export function WatchlistWidget({
     setAddPreview(null);
     setQtyBaseline({});
     setQtyDrafts({});
-    setPendingOrders(null);
+    setCashBaseline(0);
+    setCashOffset(0);
+    setPendingReview(null);
     setEditSnapshot(null);
     setDiscardConfirmOpen(false);
     setPendingSourceName(null);
@@ -1596,7 +1638,7 @@ export function WatchlistWidget({
     setQtyDrafts({ ...baseline });
     const cash = selectedSource.cashAvailable ?? 0;
     setCashBaseline(cash);
-    setCashDraft(cash);
+    setCashOffset(0);
     setEditSnapshot(captureWatchEditSnapshot(selectedSource.id));
     setDiscardConfirmOpen(false);
     setEditMode(true);
@@ -1611,8 +1653,8 @@ export function WatchlistWidget({
     setQtyBaseline({});
     setQtyDrafts({});
     setCashBaseline(0);
-    setCashDraft(0);
-    setPendingOrders(null);
+    setCashOffset(0);
+    setPendingReview(null);
     setEditSnapshot(null);
     setDiscardConfirmOpen(false);
   }
@@ -1645,6 +1687,34 @@ export function WatchlistWidget({
     [editMode, qtyBaseline, qtyDrafts],
   );
 
+  const editMarkPrice = useCallback((ticker: string) => {
+    const quote = dataSource.getQuote(ticker);
+    return quote && quote.lastPrice > 0 ? quote.lastPrice : 0;
+  }, []);
+
+  const qtyImpact = useMemo(
+    () =>
+      editMode && !isWatchlistSource
+        ? qtyCashImpact(qtyBaseline, qtyDrafts, editMarkPrice)
+        : 0,
+    [editMode, isWatchlistSource, qtyBaseline, qtyDrafts, editMarkPrice],
+  );
+
+  const cashDraft = useMemo(
+    () =>
+      editMode && !isWatchlistSource
+        ? simulatedEditCash(cashBaseline, qtyImpact, cashOffset)
+        : (selectedSource.cashAvailable ?? 0),
+    [
+      editMode,
+      isWatchlistSource,
+      cashBaseline,
+      qtyImpact,
+      cashOffset,
+      selectedSource.cashAvailable,
+    ],
+  );
+
   const cashIsDirty =
     editMode &&
     !isWatchlistSource &&
@@ -1657,10 +1727,47 @@ export function WatchlistWidget({
       cashIsDirty ||
       (editSnapshot != null && hasStructuralEdits(editSnapshot)));
 
-  function commitCashIfDirty() {
+  function commitQtyDraft(ticker: string, nextShares: number): boolean {
+    const prev = qtyDrafts[ticker] ?? qtyBaseline[ticker] ?? 0;
+    const next = Math.max(0, Math.floor(nextShares));
+    if (next === prev) return true;
+
+    if (next > prev && editMarkPrice(ticker) <= 0) {
+      setEditToast("Need a last price before adding shares.");
+      return false;
+    }
+
+    const nextDrafts = { ...qtyDrafts, [ticker]: next };
+    const nextImpact = qtyCashImpact(qtyBaseline, nextDrafts, editMarkPrice);
+    const nextCash = cashBaseline + nextImpact + cashOffset;
+    if (nextCash < -0.005) {
+      setEditToast(
+        "Not enough cash — increase Cash before adding shares.",
+      );
+      return false;
+    }
+
+    setQtyDrafts(nextDrafts);
+    setEditToast(null);
+    return true;
+  }
+
+  function commitCashIfDirty(options?: {
+    recordManual?: boolean;
+    filledAt?: string;
+    transactionCashBefore?: number;
+  }) {
     if (!cashIsDirty) return;
+    const recordManual =
+      options?.recordManual ?? Math.abs(cashOffset) >= 0.005;
     updatePortfolioCash(selectedSource.id, cashDraft, {
-      recordTransaction: true,
+      recordTransaction: recordManual,
+      filledAt: options?.filledAt,
+      transactionCashBefore:
+        options?.transactionCashBefore ??
+        (recordManual
+          ? roundMoney(cashBaseline + qtyImpact)
+          : undefined),
     });
   }
 
@@ -1680,25 +1787,35 @@ export function WatchlistWidget({
   function requestUpdateOrders() {
     if (!editIsDirty) return;
     const orders = pendingQtyOrders;
-    if (orders.length === 0) {
-      // Cash and/or structural edits — Update commits cash then closes.
-      commitCashIfDirty();
+    const cash = buildPendingCashEdit(cashOffset, cashBaseline, qtyImpact);
+    if (orders.length === 0 && !cash) {
+      // Structural edits only — no simulated order review.
+      commitCashIfDirty({ recordManual: false });
       cancelEditMode();
       return;
     }
-    setPendingOrders(orders);
+    setPendingReview({ orders, cash });
   }
 
   function confirmPendingOrders() {
-    if (!pendingOrders || pendingOrders.length === 0) {
-      setPendingOrders(null);
+    if (!pendingReview) {
       cancelEditMode();
       return;
     }
-    applyQtyOrders(selectedSource.id, pendingOrders);
-    commitCashIfDirty();
-    setPendingOrders(null);
+    const { orders, cash } = pendingReview;
+    if (orders.length > 0) {
+      applyQtyOrders(selectedSource.id, orders);
+    }
+    if (cashIsDirty) {
+      commitCashIfDirty({
+        recordManual: Boolean(cash),
+        filledAt: cash?.filledAt,
+        transactionCashBefore: cash?.cashBefore,
+      });
+    }
+    setPendingReview(null);
     cancelEditMode();
+    persistWatchEditMarks();
   }
 
   // Leave drill-in if the focused strategy filter hides the selected ticker.
@@ -2293,12 +2410,7 @@ export function WatchlistWidget({
                       <WatchQtyInput
                         ticker={item.ticker}
                         shares={displayShares}
-                        onCommit={(next) =>
-                          setQtyDrafts((current) => ({
-                            ...current,
-                            [item.ticker]: next,
-                          }))
-                        }
+                        onCommit={(next) => commitQtyDraft(item.ticker, next)}
                       />
                     ) : (
                       <span className="watch-figure">{displayShares}</span>
@@ -2556,10 +2668,14 @@ export function WatchlistWidget({
                       onChange={(event) => {
                         const next = Number.parseFloat(event.target.value);
                         if (!Number.isFinite(next) || next < 0) {
-                          setCashDraft(0);
+                          setCashOffset(
+                            roundMoney(-(cashBaseline + qtyImpact)),
+                          );
                           return;
                         }
-                        setCashDraft(next);
+                        setCashOffset(
+                          roundMoney(next - (cashBaseline + qtyImpact)),
+                        );
                       }}
                     />
                   ) : (
@@ -2649,25 +2765,27 @@ export function WatchlistWidget({
           intro="You have unsaved changes on this watch. Discard them and leave edit mode?"
         />
       ) : null}
-      {pendingOrders ? (
+      {pendingReview ? (
         <ForgeTableModal
-          title="Review quantity changes"
+          title="Review simulated changes"
           titleId="qty-order-review-title"
-          onCancel={() => setPendingOrders(null)}
+          onCancel={() => setPendingReview(null)}
           onDone={confirmPendingOrders}
           doneLabel="Confirm"
-          intro={`Fill times use the ${formatFillTimestampEst(pendingOrders[0]?.filledAt ?? estimateFillTimestamp())} candle (15m). Adjust fill prices before confirming.`}
+          intro="Set the date and time for each simulated buy, sell, deposit, or withdrawal. Adjust fill prices before confirming."
         >
           <div className="forge-table watch-qty-order-table" role="table">
-            {pendingOrders.map((order, index) => (
+            {pendingReview.orders.map((order, index) => (
               <div
                 key={order.ticker}
                 className="forge-table-row watch-qty-order-row"
                 role="row"
               >
-                <div className="forge-table-cell" role="cell">
+                <div className="forge-table-cell forge-table-cell--order" role="cell">
                   <span className="watch-field-label">
-                    {order.side === "buy" ? "Buy Order" : "Sell Order"}
+                    {order.side === "buy"
+                      ? "Simulated Buy Order"
+                      : "Simulated Sell Order"}
                   </span>
                   <span className="watch-figure watch-figure--strong">
                     {order.ticker}
@@ -2686,20 +2804,26 @@ export function WatchlistWidget({
                     onChange={(event) => {
                       const next = Number.parseInt(event.target.value, 10);
                       if (!Number.isFinite(next) || next < 1) return;
-                      setPendingOrders((current) =>
+                      setPendingReview((current) =>
                         current
-                          ? current.map((row, i) =>
-                              i !== index
-                                ? row
-                                : {
-                                    ...row,
-                                    deltaShares: next,
-                                    sharesAfter:
-                                      row.side === "buy"
-                                        ? row.sharesBefore + next
-                                        : Math.max(0, row.sharesBefore - next),
-                                  },
-                            )
+                          ? {
+                              ...current,
+                              orders: current.orders.map((row, i) =>
+                                i !== index
+                                  ? row
+                                  : {
+                                      ...row,
+                                      deltaShares: next,
+                                      sharesAfter:
+                                        row.side === "buy"
+                                          ? row.sharesBefore + next
+                                          : Math.max(
+                                              0,
+                                              row.sharesBefore - next,
+                                            ),
+                                    },
+                              ),
+                            }
                           : current,
                       );
                     }}
@@ -2719,18 +2843,21 @@ export function WatchlistWidget({
                       const delta = after - order.sharesBefore;
                       const side = qtySideFromDelta(delta);
                       if (!side) return;
-                      setPendingOrders((current) =>
+                      setPendingReview((current) =>
                         current
-                          ? current.map((row, i) =>
-                              i !== index
-                                ? row
-                                : {
-                                    ...row,
-                                    side,
-                                    deltaShares: Math.abs(delta),
-                                    sharesAfter: after,
-                                  },
-                            )
+                          ? {
+                              ...current,
+                              orders: current.orders.map((row, i) =>
+                                i !== index
+                                  ? row
+                                  : {
+                                      ...row,
+                                      side,
+                                      deltaShares: Math.abs(delta),
+                                      sharesAfter: after,
+                                    },
+                              ),
+                            }
                           : current,
                       );
                     }}
@@ -2747,11 +2874,39 @@ export function WatchlistWidget({
                     onChange={(event) => {
                       const price = Number.parseFloat(event.target.value);
                       if (!Number.isFinite(price) || price < 0) return;
-                      setPendingOrders((current) =>
+                      setPendingReview((current) =>
                         current
-                          ? current.map((row, i) =>
-                              i !== index ? row : { ...row, fillPrice: price },
-                            )
+                          ? {
+                              ...current,
+                              orders: current.orders.map((row, i) =>
+                                i !== index
+                                  ? row
+                                  : { ...row, fillPrice: roundMoney(price) },
+                              ),
+                            }
+                          : current,
+                      );
+                    }}
+                  />
+                </label>
+                <label className="forge-table-cell forge-table-cell--datetime" role="cell">
+                  <span className="watch-field-label">Date / time</span>
+                  <input
+                    type="datetime-local"
+                    className="input watch-qty-input watch-fill-datetime"
+                    value={toDatetimeLocalValue(order.filledAt)}
+                    onChange={(event) => {
+                      const filledAt = fromDatetimeLocalValue(
+                        event.target.value,
+                      );
+                      setPendingReview((current) =>
+                        current
+                          ? {
+                              ...current,
+                              orders: current.orders.map((row, i) =>
+                                i !== index ? row : { ...row, filledAt },
+                              ),
+                            }
                           : current,
                       );
                     }}
@@ -2759,6 +2914,62 @@ export function WatchlistWidget({
                 </label>
               </div>
             ))}
+            {pendingReview.cash ? (
+              <div
+                className="forge-table-row watch-qty-order-row"
+                role="row"
+              >
+                <div className="forge-table-cell forge-table-cell--order" role="cell">
+                  <span className="watch-field-label">
+                    {pendingReview.cash.side === "deposit"
+                      ? "Simulated Cash Deposit"
+                      : "Simulated Cash Withdrawal"}
+                  </span>
+                  <span className="watch-figure watch-figure--strong">
+                    Cash
+                  </span>
+                </div>
+                <div className="forge-table-cell" role="cell">
+                  <span className="watch-field-label">Amount</span>
+                  <span className="watch-figure watch-figure--strong">
+                    {formatPrice(Math.abs(pendingReview.cash.deltaCash))}
+                  </span>
+                </div>
+                <div className="forge-table-cell" role="cell">
+                  <span className="watch-field-label">Before</span>
+                  <span className="watch-figure">
+                    {formatPrice(pendingReview.cash.cashBefore)}
+                  </span>
+                </div>
+                <div className="forge-table-cell" role="cell">
+                  <span className="watch-field-label">After</span>
+                  <span className="watch-figure">
+                    {formatPrice(pendingReview.cash.cashAfter)}
+                  </span>
+                </div>
+                <label className="forge-table-cell forge-table-cell--datetime" role="cell">
+                  <span className="watch-field-label">Date / time</span>
+                  <input
+                    type="datetime-local"
+                    className="input watch-qty-input watch-fill-datetime"
+                    value={toDatetimeLocalValue(pendingReview.cash.filledAt)}
+                    onChange={(event) => {
+                      const filledAt = fromDatetimeLocalValue(
+                        event.target.value,
+                      );
+                      setPendingReview((current) =>
+                        current?.cash
+                          ? {
+                              ...current,
+                              cash: { ...current.cash, filledAt },
+                            }
+                          : current,
+                      );
+                    }}
+                  />
+                </label>
+              </div>
+            ) : null}
           </div>
         </ForgeTableModal>
       ) : null}

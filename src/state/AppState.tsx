@@ -266,12 +266,17 @@ interface AppStateValue {
   ) => void;
   /**
    * Set settled cash on a portfolio source (clamped ≥ 0). Optionally append a
-   * cash ledger transaction when the value changes.
+   * cash ledger transaction when the value changes (manual deposit/withdrawal).
    */
   updatePortfolioCash: (
     portfolioId: string,
     cashAvailable: number,
-    options?: { recordTransaction?: boolean },
+    options?: {
+      recordTransaction?: boolean;
+      filledAt?: string;
+      /** Ledger cashBefore when recording a manual deposit/withdrawal slice. */
+      transactionCashBefore?: number;
+    },
   ) => void;
   /**
    * Session-only: confirm review-modal qty orders (average-cost + fill ledger).
@@ -281,6 +286,8 @@ interface AppStateValue {
     portfolioId: string,
     orders: PendingQtyOrder[],
   ) => void;
+  /** After edit confirm: refresh daily book marks (incl. cashAdded metrics). */
+  persistWatchEditMarks: () => void;
   /** Confirmed fill / cash ledger for this session (mock; later from API). */
   shareFills: PortfolioTransaction[];
   /** Session-only: drop a holding from a portfolio or watchlist. */
@@ -468,8 +475,10 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const bootstrappedFirstChecks = useRef(new Set<string>());
   const portfoliosRef = useRef(portfolios);
   const strategiesRef = useRef(strategies);
+  const shareFillsRef = useRef(shareFills);
   portfoliosRef.current = portfolios;
   strategiesRef.current = strategies;
+  shareFillsRef.current = shareFills;
 
   useEffect(() => {
     return subscribeLiveCache(() => setMarketGeneration(getLiveCacheGeneration()));
@@ -631,7 +640,9 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       if (cycleAsOf) {
         void Promise.all([
           persistSharedMarketState(tickers),
-          persistBookAndConvictionMarks(portfolios, strategies, tickers),
+          persistBookAndConvictionMarks(portfolios, strategies, tickers, {
+            ledger: shareFills,
+          }),
         ]);
       }
     } catch (error) {
@@ -641,7 +652,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     } finally {
       setMarketLoading(false);
     }
-  }, [portfolios, strategies, persistSharedMarketState]);
+  }, [portfolios, strategies, shareFills, persistSharedMarketState]);
 
   const refreshStrategyTickers = useCallback(
     async (
@@ -662,6 +673,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
             persistSharedMarketState(tickers),
             persistBookAndConvictionMarks(portfolios, strategies, tickers, {
               strategyId,
+              ledger: shareFills,
             }),
           ]);
           return true;
@@ -671,7 +683,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         setMarketLoading(false);
       }
     },
-    [strategies, portfolios, persistSharedMarketState],
+    [strategies, portfolios, shareFills, persistSharedMarketState],
   );
 
   const requestImmediateStrategyCheck = useCallback((strategyId: string) => {
@@ -698,7 +710,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
               portfoliosRef.current,
               strategiesRef.current,
               result.tickers,
-              { strategyId },
+              { strategyId, ledger: shareFillsRef.current },
             ),
           ]);
           setCadenceToast("Strategy check complete — conviction is up to date.");
@@ -1146,7 +1158,11 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         };
       });
 
-      setShareFills((current) => [...fills, ...current]);
+      setShareFills((current) => {
+        const next = [...fills, ...current];
+        shareFillsRef.current = next;
+        return next;
+      });
 
       setPortfolios((current) =>
         current.map((item) => {
@@ -1214,15 +1230,19 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     (
       portfolioId: string,
       cashAvailable: number,
-      options?: { recordTransaction?: boolean },
+      options?: {
+        recordTransaction?: boolean;
+        filledAt?: string;
+        transactionCashBefore?: number;
+      },
     ) => {
       const nextCash = clampCash(cashAvailable);
       const portfolio = portfolios.find((item) => item.id === portfolioId);
       if (!portfolio || portfolio.type === "watchlist") return;
-      const cashBefore = portfolio.cashAvailable ?? 0;
-      if (nextCash === cashBefore && !options?.recordTransaction) {
-        // Still write to keep UI draft sync when equal after clamp.
-      }
+      const cashBefore =
+        options?.transactionCashBefore != null
+          ? clampCash(options.transactionCashBefore)
+          : (portfolio.cashAvailable ?? 0);
       setPortfolios((current) =>
         current.map((item) =>
           item.id !== portfolioId || item.type === "watchlist"
@@ -1241,7 +1261,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
           cashBefore,
           cashAfter: nextCash,
           deltaCash: nextCash - cashBefore,
-          filledAt: new Date().toISOString(),
+          filledAt: options.filledAt ?? new Date().toISOString(),
           source: "mock",
           actionClass: classifyCashAction({
             cashBefore,
@@ -1249,11 +1269,38 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
           }),
           strategyIds: appliedIds,
         };
-        setShareFills((current) => [tx, ...current]);
+        setShareFills((current) => {
+          const next = [tx, ...current];
+          shareFillsRef.current = next;
+          return next;
+        });
       }
     },
     [nextId, portfolios, strategies],
   );
+
+  const persistWatchEditMarks = useCallback(() => {
+    window.setTimeout(() => {
+      const nextPortfolios = portfoliosRef.current;
+      const nextStrategies = strategiesRef.current;
+      const tickers = [
+        ...new Set(
+          nextPortfolios.flatMap((portfolio) =>
+            portfolio.holdings.map((holding) => holding.ticker),
+          ),
+        ),
+      ];
+      if (tickers.length === 0 && nextPortfolios.every((p) => (p.cashAvailable ?? 0) <= 0)) {
+        return;
+      }
+      void persistBookAndConvictionMarks(
+        nextPortfolios,
+        nextStrategies,
+        tickers,
+        { ledger: shareFillsRef.current },
+      );
+    }, 0);
+  }, []);
 
   const removeTickerFromPortfolio = useCallback(
     (portfolioId: string, ticker: string) => {
@@ -1909,6 +1956,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       updateHoldingShares,
       updatePortfolioCash,
       applyQtyOrders,
+      persistWatchEditMarks,
       shareFills,
       removeTickerFromPortfolio,
       createPortfolioSource,
@@ -1982,6 +2030,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       updateHoldingShares,
       updatePortfolioCash,
       applyQtyOrders,
+      persistWatchEditMarks,
       shareFills,
       removeTickerFromPortfolio,
       createPortfolioSource,
