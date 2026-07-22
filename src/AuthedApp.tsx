@@ -1,7 +1,8 @@
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import { AppShell } from "./components/AppShell";
 import { ComingSoonOverlay } from "./components/ComingSoonOverlay";
 import { MarketBudgetToasts } from "./components/MarketBudgetToasts";
+import { ForgeToast } from "./components/forge/ForgeToast";
 import { HomePage } from "./pages/HomePage";
 import { useAppState } from "./state/AppState";
 
@@ -56,7 +57,31 @@ export default function AuthedApp() {
     clearBudgetToast,
     cadenceToast,
     clearCadenceToast,
+    previewStrategyCheckToast,
   } = useAppState();
+
+  // One-shot preview: ?previewCadenceToast=1 (or DEV window hook).
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("previewCadenceToast") === "1") {
+      previewStrategyCheckToast();
+      params.delete("previewCadenceToast");
+      const next = params.toString();
+      const url = `${window.location.pathname}${next ? `?${next}` : ""}${window.location.hash}`;
+      window.history.replaceState({}, "", url);
+    }
+    if (import.meta.env.DEV) {
+      (
+        window as Window & { __previewStrategyCheckToast?: () => void }
+      ).__previewStrategyCheckToast = previewStrategyCheckToast;
+      return () => {
+        delete (
+          window as Window & { __previewStrategyCheckToast?: () => void }
+        ).__previewStrategyCheckToast;
+      };
+    }
+    return undefined;
+  }, [previewStrategyCheckToast]);
 
   return (
     <AppShell>
@@ -87,15 +112,14 @@ export default function AuthedApp() {
         </div>
       ) : null}
       {cadenceToast ? (
-        <div className="budget-cap-toast" role="status">
-          <p>{cadenceToast}</p>
-          <button
-            type="button"
-            className="btn btn--ghost"
-            onClick={clearCadenceToast}
+        <div className="cadence-toast-host" aria-live="polite">
+          <ForgeToast
+            tone="info"
+            onDismiss={clearCadenceToast}
+            dismissLabel="Dismiss strategy check notification"
           >
-            Dismiss
-          </button>
+            <p>{cadenceToast}</p>
+          </ForgeToast>
         </div>
       ) : null}
       <Suspense fallback={null}>

@@ -9337,3 +9337,28 @@ button.nav-link {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
 }
+
+/* Strategy check complete — stock ForgeToast, upper-right under global nav. */
+.cadence-toast-host {
+  position: fixed;
+  z-index: 80;
+  top: calc(var(--app-header-h, 96px) + var(--space-3));
+  right: max(var(--content-pad, 1.25rem), env(safe-area-inset-right, 0px));
+  left: auto;
+  width: min(24rem, calc(100vw - 2rem));
+  pointer-events: none;
+}
+
+.cadence-toast-host > * {
+  pointer-events: auto;
+}
+
+@media (min-width: 1024px) {
+  .cadence-toast-host {
+    /* Align with content column’s right edge on desktop. */
+    right: max(
+      calc((100vw - min(var(--content-max), 100%)) / 2 + var(--content-pad, 1.25rem)),
+      var(--content-pad, 1.25rem)
+    );
+  }
+}
