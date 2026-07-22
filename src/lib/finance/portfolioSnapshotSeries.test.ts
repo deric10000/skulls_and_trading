@@ -4,6 +4,7 @@ import {
   displaySparkPointsForRange,
   etIsoDate,
   latestEtDay,
+  mergeConvictionSparkByDay,
   seriesToConvictionSparkPoints,
   sparkPointsForRange,
   sparkRangeShowsPointMarkers,
@@ -100,6 +101,41 @@ describe("seriesToConvictionSparkPoints", () => {
       },
     ] as unknown as Parameters<typeof seriesToConvictionSparkPoints>[0];
     expect(seriesToConvictionSparkPoints(rows)).toEqual([]);
+  });
+});
+
+describe("mergeConvictionSparkByDay", () => {
+  it("averages per-strategy marks onto one point per day", () => {
+    const rows = [
+      {
+        strategyId: "a",
+        asOf: "2026-07-21",
+        openPnlPct: 1,
+        metrics: { conviction: 90 },
+      },
+      {
+        strategyId: "b",
+        asOf: "2026-07-21",
+        openPnlPct: 1,
+        metrics: { conviction: 80 },
+      },
+      {
+        strategyId: "a",
+        asOf: "2026-07-22",
+        openPnlPct: 1,
+        metrics: { conviction: 100 },
+      },
+      {
+        strategyId: "",
+        asOf: "2026-07-22",
+        openPnlPct: 1,
+        metrics: { conviction: 50 },
+      },
+    ] as Parameters<typeof mergeConvictionSparkByDay>[0];
+    expect(mergeConvictionSparkByDay(rows)).toEqual([
+      { time: "2026-07-21", value: 85 },
+      { time: "2026-07-22", value: 100 },
+    ]);
   });
 });
 

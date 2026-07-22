@@ -53,13 +53,33 @@ function convictionForAsOf(
   strategyIds: string[],
   checkDriven: boolean,
 ): number | null {
-  if (conviction == null || !Number.isFinite(conviction)) return null;
+  // Exact 0 is "no score / pending" in practice — never stamp it (spark skips 0
+  // and a 0 upsert looks like a check day while leaving the series empty).
+  if (conviction == null || !Number.isFinite(conviction) || conviction === 0) {
+    return null;
+  }
   if (checkDriven) return conviction;
   const latestPullDay = latestEtDay(
     strategyIds.map((id) => getLastDataPullAt(id)),
   );
   if (!latestPullDay || latestPullDay !== asOf) return null;
   return conviction;
+}
+
+function bookMetrics(
+  portfolioId: string,
+  asOf: string,
+  ledger: PortfolioTransaction[] | undefined,
+  /** Live Forge book conviction — never the stale holding.conviction seed. */
+  conviction: number | null,
+): Record<string, unknown> {
+  const metrics: Record<string, unknown> = {
+    ...cashFlowMetrics(portfolioId, asOf, ledger),
+  };
+  if (conviction != null && Number.isFinite(conviction) && conviction !== 0) {
+    metrics.conviction = conviction;
+  }
+  return metrics;
 }
 
 function holdingMark(holding: Portfolio["holdings"][number]) {
@@ -129,21 +149,6 @@ function cashFlowMetrics(
   if (cashAdded > 0) out.cashAdded = cashAdded;
   if (cashWithdrawn > 0) out.cashWithdrawn = cashWithdrawn;
   return out;
-}
-
-function bookMetrics(
-  portfolioId: string,
-  asOf: string,
-  ledger: PortfolioTransaction[] | undefined,
-  /** Live Forge book conviction — never the stale holding.conviction seed. */
-  conviction: number | null,
-): Record<string, unknown> {
-  return {
-    ...(conviction == null || !Number.isFinite(conviction)
-      ? {}
-      : { conviction }),
-    ...cashFlowMetrics(portfolioId, asOf, ledger),
-  };
 }
 
 /**

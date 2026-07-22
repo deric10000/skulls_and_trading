@@ -87,8 +87,9 @@ Withdrawal). Qty-driven cash moves from paper buys/sells update
 `cashAvailable` without a cash ledger row — the qty fill is the record.
 `metrics.cashAdded` / `metrics.cashWithdrawn` on daily `portfolio_snapshots`
 sum same-day cash ledger deltas for Helm “Cash Added over Time.” Hold-from-
-inaction adherence is Phase 2. Optional later: promote to a dedicated Postgres
-table.
+inaction is recorded as `forge_check_events.kind = 'hold'` on each check when
+no qty fill landed in the cadence bucket (Plan Adherence Total Actions).
+Optional later: promote the qty/cash ledger to a dedicated Postgres table.
 
 ## 2. The `DataSource` seam (`src/lib/datasource/`)
 
@@ -420,6 +421,35 @@ Helm fetches the series for the mirrored portfolio + scope and renders a lazy
 `SparklineChart` when ≥2 distinct `as_of` days exist. Spark tips/axis are clipped
 through the Last Conviction Check ET day so a mid-day refresh cannot show a
 calendar day ahead of the toast. No fabricated backfill.
+
+**Shared Helm timeframe** (`src/lib/finance/helmTimeframe.ts`): default `1w`
+(indicator only; toggle UI later). Also plumbs `1m` / `1y` / `ytd` plus cadence
+floors `1h` / `2h` / `4h` when the focused strategy allows; **All strategies**
+uses the coarsest (slowest) floor among applied strategies. Total Conviction,
+Open P&L, and Plan Adherence all read the same clamped timeframe.
+
+**Plan Adherence** (below Composition): Notifications (check-event flag counts,
+with proxies from `conviction_snapshots` / book `metrics.conviction` check days
+when append-only events are not yet present — so a Total Conviction check mark
+never implies “No checks in range”), Total Actions (ledger buys/sells/cash +
+hold-inaction events; hold proxies fill the same check days when no same-day
+qty fill exists), Zone-Followed Impact (MV-weighted forward return after
+**zone-matched qty fills only** — Trim/Add/Go to Cash via `zoneHints` or
+same-day check flags; Hold counts Total Actions but does not score Impact).
+Honest empty states when no check-day marks exist at all.
+
+### Forge check events (`forge_check_events`)
+
+Append-only rows written after a successful strategy check
+(`persistForgeCheckEvents`):
+
+- `kind = status` — per in-scope ticker: `primary_status`, `flags` (L2 + L3),
+  `conviction`, `checked_at`, ET `as_of`
+- `kind = hold` — same grain when no qty buy/sell landed in the cadence bucket
+  ending at `checked_at` (promotes hold-from-inaction to shipped)
+
+RLS by `auth.uid()`; insert+select for `authenticated`. Failures surface via
+`setMarketError` (not silent-only).
 
 ### Daily book + ticker snapshots
 

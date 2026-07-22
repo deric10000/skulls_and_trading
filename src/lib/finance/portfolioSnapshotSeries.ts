@@ -1,27 +1,34 @@
 import type { PortfolioSnapshotRecord } from "../userStore";
+import {
+  DEFAULT_HELM_SPARK_RANGE,
+  DEFAULT_HELM_TIMEFRAME,
+  HELM_SPARK_RANGE_LABEL,
+  HELM_TIMEFRAME_LABEL,
+  clampHelmTimeframe,
+  helmCadenceFloorForScope,
+  helmTimeframeBounds,
+  sparkRangeShowsPointMarkers,
+  type HelmSparkRange,
+  type HelmTimeframe,
+} from "./helmTimeframe";
+
+export type { HelmSparkRange, HelmTimeframe };
+export {
+  DEFAULT_HELM_SPARK_RANGE,
+  DEFAULT_HELM_TIMEFRAME,
+  HELM_SPARK_RANGE_LABEL,
+  HELM_TIMEFRAME_LABEL,
+  clampHelmTimeframe,
+  helmCadenceFloorForScope,
+  helmTimeframeBounds,
+  sparkRangeShowsPointMarkers,
+};
 
 export interface SparkPoint {
   /** ISO date `YYYY-MM-DD` (TradingView lightweight-charts UTC day). */
   time: string;
   value: number;
 }
-
-/**
- * Helm Progress sparkline window. Toggle UI comes later for all Progress
- * metrics — Open P&L and Total Conviction ship the default (`1w`) indicator
- * only for now.
- */
-export type HelmSparkRange = "1w" | "1m" | "1y" | "ytd";
-
-export const DEFAULT_HELM_SPARK_RANGE: HelmSparkRange = "1w";
-
-/** Display labels (`.panel-tag` uppercases). */
-export const HELM_SPARK_RANGE_LABEL: Record<HelmSparkRange, string> = {
-  "1w": "1 Week",
-  "1m": "1 Month",
-  "1y": "1 Year",
-  ytd: "YTD",
-};
 
 /** Pure: map portfolio snapshot rows to Open P&L % sparkline points. */
 export function seriesToSparkPoints(
@@ -49,6 +56,32 @@ export function seriesToConvictionSparkPoints(
     out.push({ time: row.asOf, value: conviction });
   }
   return out;
+}
+
+/**
+ * Merge per-strategy book marks into one point per as_of (mean of non-zero
+ * convictions). Used for All-strategies Helm scope so we don't only read the
+ * whole-book `strategy_id ''` row (often missing conviction).
+ */
+export function mergeConvictionSparkByDay(
+  rows: PortfolioSnapshotRecord[],
+): SparkPoint[] {
+  const byDay = new Map<string, number[]>();
+  for (const row of rows) {
+    if (!row.strategyId) continue;
+    const raw = row.metrics?.conviction;
+    const conviction = typeof raw === "number" ? raw : Number(raw);
+    if (!Number.isFinite(conviction) || conviction === 0) continue;
+    const list = byDay.get(row.asOf) ?? [];
+    list.push(conviction);
+    byDay.set(row.asOf, list);
+  }
+  return Array.from(byDay.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([time, values]) => ({
+      time,
+      value: values.reduce((sum, v) => sum + v, 0) / values.length,
+    }));
 }
 
 /**
@@ -87,9 +120,14 @@ export function windowSparkPointsYtd(
 /** Apply a Helm spark range to a point series. */
 export function sparkPointsForRange(
   points: SparkPoint[],
-  range: HelmSparkRange,
+  range: HelmTimeframe,
 ): SparkPoint[] {
   switch (range) {
+    case "1h":
+    case "2h":
+    case "4h":
+      // Daily marks cannot subdivide — show the latest session day in-window.
+      return windowSparkPoints(points, 1);
     case "1w":
       return windowSparkPoints(points, 7);
     case "1m":
@@ -107,7 +145,7 @@ export function sparkPointsForRange(
  */
 export function displaySparkPointsForRange(
   points: SparkPoint[],
-  range: HelmSparkRange,
+  range: HelmTimeframe,
   options: { loaded: boolean; seedValue: number; seedTime?: string },
 ): SparkPoint[] {
   const ranged = sparkPointsForRange(points, range);
@@ -119,11 +157,6 @@ export function displaySparkPointsForRange(
       value: options.seedValue,
     },
   ];
-}
-
-/** Session dots only on day/week views — off for month/year/YTD later. */
-export function sparkRangeShowsPointMarkers(range: HelmSparkRange): boolean {
-  return range === "1w";
 }
 
 /** Local calendar day as `YYYY-MM-DD` (new-user single-dot seed). */

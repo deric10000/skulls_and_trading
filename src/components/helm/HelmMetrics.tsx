@@ -15,18 +15,32 @@ import {
   strategiesForHolding,
 } from "../../lib/forge/tickerStrategy";
 import {
-  DEFAULT_HELM_SPARK_RANGE,
-  HELM_SPARK_RANGE_LABEL,
+  DEFAULT_HELM_TIMEFRAME,
+  HELM_TIMEFRAME_LABEL,
+  clampHelmTimeframe,
   clipSparkPointsThrough,
   displaySparkPointsForRange,
   etIsoDate,
+  helmCadenceFloorForScope,
+  helmTimeframeBounds,
+  mergeConvictionSparkByDay,
   seriesToConvictionSparkPoints,
   seriesToSparkPoints,
   sparkRangeShowsPointMarkers,
+  type HelmTimeframe,
   type SparkPoint,
 } from "../../lib/finance/portfolioSnapshotSeries";
 import {
+  countActions,
+  countNotifications,
+  computeZoneFollowedImpact,
+  mergeCheckEventsWithProxies,
+  type ForgeCheckEvent,
+  type TickerPriceMark,
+} from "../../lib/forge/planAdherence";
+import {
   fetchConvictionSnapshots,
+  fetchForgeCheckEvents,
   fetchPortfolioSnapshots,
 } from "../../lib/userStore";
 import { formatChange, formatDecimals } from "../../lib/format";
@@ -113,6 +127,7 @@ export function HelmMetrics() {
     setWatchStrategyScopeId,
     isConvictionScoreReady,
     lastDataPullAtByStrategyId,
+    shareFills,
   } = useAppState();
 
   const portfolio = useMemo(
@@ -138,6 +153,12 @@ export function HelmMetrics() {
   const [sparkLoaded, setSparkLoaded] = useState(false);
   const [convictionView, setConvictionView] =
     useState<ConvictionChangeView | null>(null);
+  const [checkEvents, setCheckEvents] = useState<ForgeCheckEvent[]>([]);
+  const [priceMarks, setPriceMarks] = useState<TickerPriceMark[]>([]);
+  const [adherenceLoaded, setAdherenceLoaded] = useState(false);
+  // Shared Helm timeframe (default 1 week). Toggle UI later — all Progress +
+  // Plan Adherence tiles read this same value / label.
+  const [helmTimeframe] = useState<HelmTimeframe>(DEFAULT_HELM_TIMEFRAME);
 
   // Drop a stale shared scope when the mirrored portfolio no longer applies it.
   useEffect(() => {
@@ -155,6 +176,19 @@ export function HelmMetrics() {
         ? appliedStrategies.find((s) => s.id === watchStrategyScopeId)
         : undefined,
     [appliedStrategies, watchStrategyScopeId],
+  );
+
+  const cadenceFloor = useMemo(
+    () =>
+      helmCadenceFloorForScope(appliedStrategies, watchStrategyScopeId),
+    [appliedStrategies, watchStrategyScopeId],
+  );
+  const sparkRange = clampHelmTimeframe(helmTimeframe, cadenceFloor);
+  const sparkRangeLabel = HELM_TIMEFRAME_LABEL[sparkRange];
+  const showPointMarkers = sparkRangeShowsPointMarkers(sparkRange);
+  const timeframeBounds = useMemo(
+    () => helmTimeframeBounds(sparkRange),
+    [sparkRange],
   );
 
   const alignment = useMemo(() => {
@@ -209,10 +243,14 @@ export function HelmMetrics() {
       setConvictionSparkPoints([]);
       setSparkLoaded(false);
       setConvictionView(null);
+      setCheckEvents([]);
+      setPriceMarks([]);
+      setAdherenceLoaded(false);
       return;
     }
     let cancelled = false;
     setSparkLoaded(false);
+    setAdherenceLoaded(false);
 
     const from = new Date();
     from.setUTCDate(from.getUTCDate() - 21);
@@ -230,6 +268,19 @@ export function HelmMetrics() {
         strategyId: watchStrategyScopeId,
         from: fromStr,
       }),
+      // Per-strategy marks: All-strategies conviction spark + adherence proxies.
+      Promise.all(
+        (watchStrategyScopeId
+          ? appliedStrategies.filter((s) => s.id === watchStrategyScopeId)
+          : appliedStrategies
+        ).map((strategy) =>
+          fetchPortfolioSnapshots({
+            portfolioId: portfolio.id,
+            strategyId: strategy.id,
+            from: fromStr,
+          }),
+        ),
+      ).then((rows) => rows.flat()),
       strategyIds.length > 0 && tickers.length > 0
         ? fetchConvictionSnapshots({
             strategyIds,
@@ -237,11 +288,78 @@ export function HelmMetrics() {
             from: fromStr,
           })
         : Promise.resolve([]),
-    ]).then(([bookRows, tickerRows]) => {
+      fetchForgeCheckEvents({
+        portfolioId: portfolio.id,
+        strategyIds: watchStrategyScopeId
+          ? [watchStrategyScopeId]
+          : strategyIds,
+        fromIso: timeframeBounds.fromIso,
+        toIso: timeframeBounds.toIso,
+      }),
+    ]).then(([bookRows, scopedBookRows, tickerRows, events]) => {
       if (cancelled) return;
       setPnlSparkPoints(seriesToSparkPoints(bookRows));
-      setConvictionSparkPoints(seriesToConvictionSparkPoints(bookRows));
+      // Conviction: scoped strategy rows (or merged across strategies for All).
+      // Never rely only on whole-book '' rows — those often lack conviction.
+      setConvictionSparkPoints(
+        watchStrategyScopeId
+          ? // Never fall back to whole-book `strategy_id ''` — those rows usually
+            // omit metrics.conviction and would seed a single "Pending Check" day.
+            seriesToConvictionSparkPoints(scopedBookRows)
+          : mergeConvictionSparkByDay(scopedBookRows),
+      );
       setSparkLoaded(true);
+
+      const adherenceBooks =
+        scopedBookRows.length > 0 ? scopedBookRows : bookRows;
+      const bookCheckDays: Array<{
+        strategyId: string;
+        asOf: string;
+        conviction: number;
+      }> = [];
+      for (const row of adherenceBooks) {
+        const raw = row.metrics?.conviction;
+        const conviction = typeof raw === "number" ? raw : Number(raw);
+        if (!Number.isFinite(conviction) || conviction === 0) continue;
+        if (!row.strategyId) continue;
+        bookCheckDays.push({
+          strategyId: row.strategyId,
+          asOf: row.asOf,
+          conviction,
+        });
+      }
+      setCheckEvents(
+        mergeCheckEventsWithProxies({
+          events,
+          portfolioId: portfolio.id,
+          snapshotRows: tickerRows.map((row) => ({
+            strategyId: row.strategyId,
+            ticker: row.ticker,
+            asOf: row.asOf,
+            conviction: row.conviction,
+            status: row.status,
+          })),
+          bookCheckDays,
+          tickers,
+          ledger: shareFills,
+        }),
+      );
+      const marks: TickerPriceMark[] = [];
+      for (const row of tickerRows) {
+        const lastPrice =
+          typeof row.payload.lastPrice === "number"
+            ? row.payload.lastPrice
+            : Number(row.payload.lastPrice);
+        if (Number.isFinite(lastPrice) && lastPrice > 0) {
+          marks.push({
+            ticker: row.ticker,
+            asOf: row.asOf,
+            lastPrice,
+          });
+        }
+      }
+      setPriceMarks(marks);
+      setAdherenceLoaded(true);
 
       const liveConviction = alignment.portfolio.conviction;
       const bookSeries = portfolioConvictionSeries(bookRows);
@@ -276,7 +394,15 @@ export function HelmMetrics() {
     return () => {
       cancelled = true;
     };
-  }, [portfolio, watchStrategyScopeId, appliedStrategies, alignment]);
+  }, [
+    portfolio,
+    watchStrategyScopeId,
+    appliedStrategies,
+    alignment,
+    timeframeBounds.fromIso,
+    timeframeBounds.toIso,
+    shareFills,
+  ]);
 
   if (!portfolio || !metrics || !alignment) {
     return (
@@ -298,11 +424,6 @@ export function HelmMetrics() {
     pnlUp ? "--positive" : "--negative",
     pnlUp ? "#3d9a6a" : "#c45c4a",
   );
-  // Shared Progress timeframe (default 1 week). Toggle UI comes later for all
-  // Progress metrics — both sparklines read the same range plumbing.
-  const sparkRange = DEFAULT_HELM_SPARK_RANGE;
-  const sparkRangeLabel = HELM_SPARK_RANGE_LABEL[sparkRange];
-  const showPointMarkers = sparkRangeShowsPointMarkers(sparkRange);
 
   // Spark history ends on Last Conviction Check's ET day — never invent "today"
   // ahead of the toast (Open P&L and Total Conviction share this bound).
@@ -361,6 +482,38 @@ export function HelmMetrics() {
   const sessions5Delta = convictionView?.change.sessions5Delta ?? null;
   const showConvictionChange =
     todayDelta != null || sessions5Delta != null;
+
+  const adherenceStrategyIds = watchStrategyScopeId
+    ? [watchStrategyScopeId]
+    : null;
+  const notificationCount = adherenceLoaded
+    ? countNotifications(
+        checkEvents,
+        portfolio.id,
+        adherenceStrategyIds,
+        timeframeBounds,
+      )
+    : null;
+  const actionCounts = adherenceLoaded
+    ? countActions(
+        shareFills,
+        checkEvents,
+        portfolio.id,
+        adherenceStrategyIds,
+        timeframeBounds,
+      )
+    : null;
+  const zoneImpact = adherenceLoaded
+    ? computeZoneFollowedImpact(
+        shareFills,
+        priceMarks,
+        portfolio.id,
+        adherenceStrategyIds,
+        timeframeBounds,
+        undefined,
+        checkEvents,
+      )
+    : null;
 
   // Portfolio resolved status can still reflect pending/fake alignment. Only
   // show StatusStack / compass when that primary tone appears among
@@ -575,6 +728,83 @@ export function HelmMetrics() {
       ) : (
         <p className="helm-metrics-empty">No scored holdings yet</p>
       )}
+
+      <div className="forge-section-head">
+        <h3 id="helm-adherence-title" className="forge-section-title">
+          Plan Adherence
+        </h3>
+      </div>
+      <div
+        className="helm-metrics-grid"
+        aria-labelledby="helm-adherence-title"
+      >
+        <div className="select-card helm-metric helm-metric--text">
+          <div className="helm-metric-head">
+            <span className="helm-metric-label">Notifications</span>
+            <span className="panel-tag session-tag">{sparkRangeLabel}</span>
+          </div>
+          <div className="helm-metric-body">
+            <span className="helm-metric-value">
+              {notificationCount == null ? "—" : notificationCount}
+            </span>
+            <span className="helm-metric-note">
+              {notificationCount === 0
+                ? "No checks in range yet"
+                : "Status + zone flags by check"}
+            </span>
+          </div>
+        </div>
+
+        <div className="select-card helm-metric helm-metric--text">
+          <div className="helm-metric-head">
+            <span className="helm-metric-label">Total Actions</span>
+            <span className="panel-tag session-tag">{sparkRangeLabel}</span>
+          </div>
+          <div className="helm-metric-body">
+            <span className="helm-metric-value">
+              {actionCounts == null ? "—" : actionCounts.total}
+            </span>
+            <span className="helm-metric-note">
+              {actionCounts == null
+                ? "Loading…"
+                : actionCounts.total === 0
+                  ? "No buys, sells, cash, or holds yet"
+                  : `Buy ${actionCounts.buy} · Sell ${actionCounts.sell} · Hold ${actionCounts.hold}`}
+            </span>
+          </div>
+        </div>
+
+        <div className="select-card helm-metric helm-metric--text">
+          <div className="helm-metric-head">
+            <span className="helm-metric-label">Zone-Followed Impact</span>
+            <span className="panel-tag session-tag">{sparkRangeLabel}</span>
+          </div>
+          <div className="helm-metric-body">
+            <span
+              className={`helm-metric-value${
+                zoneImpact?.avgReturnPct != null
+                  ? zoneImpact.avgReturnPct >= 0
+                    ? " helm-metric-value--up"
+                    : " helm-metric-value--down"
+                  : ""
+              }`}
+            >
+              {zoneImpact?.avgReturnPct == null
+                ? "—"
+                : formatChange(zoneImpact.avgReturnPct)}
+            </span>
+            <span className="helm-metric-note">
+              {zoneImpact == null
+                ? "Loading…"
+                : zoneImpact.matchedFills > 0
+                  ? `Trim/Add follows · ${zoneImpact.horizonSessions} sessions · ${zoneImpact.matchedFills} fills`
+                  : zoneImpact.consideredFills > 0
+                    ? `0 of ${zoneImpact.consideredFills} actions matched a zone`
+                    : "No zone-followed actions yet"}
+            </span>
+          </div>
+        </div>
+      </div>
     </section>
   );
 }
