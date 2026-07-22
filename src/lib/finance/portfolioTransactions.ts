@@ -60,8 +60,8 @@ export function classifyCashAction(input: {
   cashAfter: number;
 }): TransactionActionClass {
   if (input.cashAfter === input.cashBefore) return "unclassified";
-  // Cash edits alone are unclassified until correlated with sells / go-to-cash.
-  return "unclassified";
+  if (input.cashAfter > input.cashBefore) return "deposit";
+  return "withdrawal";
 }
 
 /** Collect Layer 3 zone statuses present on a resolved stamp (read-only). */

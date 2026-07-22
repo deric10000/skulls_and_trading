@@ -69,3 +69,19 @@ export function formatFillTimestampEst(iso: string): string {
     timeZoneName: "short",
   }).format(date);
 }
+
+/** Value for `<input type="datetime-local" />` from an ISO stamp. */
+export function toDatetimeLocalValue(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+/** Parse `<input type="datetime-local" />` into ISO (falls back to estimate). */
+export function fromDatetimeLocalValue(value: string): string {
+  if (!value.trim()) return estimateFillTimestamp();
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return estimateFillTimestamp();
+  return date.toISOString();
+}

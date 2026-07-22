@@ -125,8 +125,16 @@ clients hydrate the same state.
 **Editable cash** (portfolio sources only, edit mode): totals footer Cash becomes
 a compact `.watch-cash-input` (same compact figure patterns as qty — `font:
 inherit`, tokens only). Draft participates in dirty/Cancel/Update like qty;
-`updatePortfolioCash` persists + appends a `cash` ledger transaction. Read mode /
-watchlists / Watch Preview: display-only Cash unchanged.
+manual cash bumps open the review modal as Simulated Cash Deposit / Withdrawal
+with an editable date/time; `updatePortfolioCash` persists + appends a `cash`
+ledger transaction only for that manual slice (qty-driven cash does not). Qty
+edits simulate paper buys/sells at last price against that cash draft (buys
+spend, sells free cash) and review as Simulated Buy / Sell Order with editable
+fill price + date/time. Confirm writes ledger stamps + refreshes daily
+`portfolio_snapshots` (`metrics.cashAdded` / `cashWithdrawn`). Adding shares
+without enough cash is rejected with the stock
+edit warning toast — raise Cash first. No last price → cannot add shares.
+Read mode / watchlists / Watch Preview: display-only Cash unchanged.
 
 **Strategy scope** (read-only, ≥2 applied strategies): Home uses shared
 `AppState.watchStrategyScopeId` (null = All). Desktop Current Watch shows **no**

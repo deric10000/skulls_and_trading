@@ -4,7 +4,7 @@
  * the same figures Current Watch already displays.
  */
 
-import type { Portfolio, Strategy } from "../../types";
+import type { Portfolio, PortfolioTransaction, Strategy } from "../../types";
 import { dataSource } from "../datasource";
 import { portfolioRunningTotals } from "../finance/portfolioTotals";
 import { shouldScoreTickerWithStrategy } from "../forge/tickerStrategy";
@@ -75,9 +75,41 @@ function weightedConviction(
   return weighted / weight;
 }
 
-function bookMetrics(holdings: Portfolio["holdings"]): Record<string, unknown> {
+/**
+ * Manual cash deposits/withdrawals for a calendar day (ISO date of filledAt).
+ * Qty-driven cash moves are not cash ledger rows — they do not count here.
+ */
+function cashFlowMetrics(
+  portfolioId: string,
+  asOf: string,
+  ledger: PortfolioTransaction[] | undefined,
+): Record<string, unknown> {
+  if (!ledger?.length) return {};
+  let cashAdded = 0;
+  let cashWithdrawn = 0;
+  for (const tx of ledger) {
+    if (tx.kind !== "cash" || tx.portfolioId !== portfolioId) continue;
+    if (tx.filledAt.slice(0, 10) !== asOf) continue;
+    if (tx.deltaCash > 0) cashAdded += tx.deltaCash;
+    else if (tx.deltaCash < 0) cashWithdrawn += -tx.deltaCash;
+  }
+  const out: Record<string, unknown> = {};
+  if (cashAdded > 0) out.cashAdded = cashAdded;
+  if (cashWithdrawn > 0) out.cashWithdrawn = cashWithdrawn;
+  return out;
+}
+
+function bookMetrics(
+  holdings: Portfolio["holdings"],
+  portfolioId: string,
+  asOf: string,
+  ledger: PortfolioTransaction[] | undefined,
+): Record<string, unknown> {
   const conviction = weightedConviction(holdings);
-  return conviction == null ? {} : { conviction };
+  return {
+    ...(conviction == null ? {} : { conviction }),
+    ...cashFlowMetrics(portfolioId, asOf, ledger),
+  };
 }
 
 /**
@@ -88,7 +120,7 @@ export async function persistBookAndConvictionMarks(
   portfolios: Portfolio[],
   strategies: Strategy[],
   tickers: string[],
-  options?: { strategyId?: string },
+  options?: { strategyId?: string; ledger?: PortfolioTransaction[] },
 ): Promise<void> {
   const asOf = new Date().toISOString().slice(0, 10);
   const tickerSet = new Set(tickers.map((t) => t.toUpperCase()));
@@ -120,7 +152,12 @@ export async function persistBookAndConvictionMarks(
         totalValue: whole.totalValue,
         openPnl: whole.openPnl,
         openPnlPct: whole.openPnlPct,
-        metrics: bookMetrics(portfolio.holdings),
+        metrics: bookMetrics(
+          portfolio.holdings,
+          portfolio.id,
+          asOf,
+          options?.ledger,
+        ),
       });
     }
 
@@ -144,7 +181,7 @@ export async function persistBookAndConvictionMarks(
         totalValue: scoped.totalValue,
         openPnl: scoped.openPnl,
         openPnlPct: scoped.openPnlPct,
-        metrics: bookMetrics(filtered),
+        metrics: bookMetrics(filtered, portfolio.id, asOf, options?.ledger),
       });
     }
   }

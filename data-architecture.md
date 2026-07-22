@@ -74,12 +74,21 @@ edit mode via `AppState.updatePortfolioCash` (clamped ≥ 0; persists with
 
 ### Portfolio transaction ledger (`user_state.share_fills`)
 
-Qty confirms and cash saves append `PortfolioTransaction` rows (legacy
+Qty confirms and manual cash saves append `PortfolioTransaction` rows (legacy
 `ShareFillEvent` qty shapes still load via `normalizePortfolioTransactions`).
 Kinds: `qty` | `cash`. Optional stamps at write time (do **not** change Forge
 scoring / Layer 3 zone math): `actionClass` (`trim` | `add` | `hold` |
-`go_to_cash` | `unclassified`), `strategyIds`, `zoneHints`. Hold-from-inaction
-adherence is Phase 2. Optional later: promote to a dedicated Postgres table.
+`go_to_cash` | `deposit` | `withdrawal` | `unclassified`), `strategyIds`,
+`zoneHints`. Editable `filledAt` on the Current Watch review modal records when
+the Captain says the simulated buy/sell/deposit/withdrawal happened.
+
+**Manual cash only** creates `cash` ledger rows (Simulated Cash Deposit /
+Withdrawal). Qty-driven cash moves from paper buys/sells update
+`cashAvailable` without a cash ledger row — the qty fill is the record.
+`metrics.cashAdded` / `metrics.cashWithdrawn` on daily `portfolio_snapshots`
+sum same-day cash ledger deltas for Helm “Cash Added over Time.” Hold-from-
+inaction adherence is Phase 2. Optional later: promote to a dedicated Postgres
+table.
 
 ## 2. The `DataSource` seam (`src/lib/datasource/`)
 
@@ -419,8 +428,10 @@ Forge conviction / chip / zone math and `portfolioRunningTotals` are unchanged.
   Current Watch totals: `holdings_market_value`, `cost_basis`, `cash_available`,
   `total_value`, `open_pnl`, `open_pnl_pct`. Forward-compatible `metrics jsonb`
   for future daily book fields — currently includes MV-weighted `conviction`
-  for Helm Conviction Change (do not delete core columns into jsonb). Upsert
-  last-write-wins. Skip incomplete books rather than fabricate prices.
+  for Helm Conviction Change, plus same-day `cashAdded` / `cashWithdrawn` from
+  the cash ledger (manual deposits/withdrawals only; do not delete core columns
+  into jsonb). Upsert last-write-wins. Skip incomplete books rather than
+  fabricate prices.
 - **`conviction_snapshots`**: same unique grain; **enrich `payload`** at write
   with per-ticker marks (`portfolioId`, `shares`, `avgPrice`, `lastPrice`,
   `marketValue`, `costBasis`, `openPnl`, `openPnlPct`) — future per-name fields

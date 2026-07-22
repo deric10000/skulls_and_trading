@@ -117,7 +117,10 @@ covered by that strategy's `appliedPortfolioIds` for the same source.
   See `supabase/schema.sql` and `src/lib/userStore/`. `flags.badgeToastsSeen`
   = one-shot Helm onboarding-badge toast IDs; `flags.weatherReaderLayers`
   = Market/Sector/Industry/Stock detail opens for Weather Reader; earn state
-  stays derived (`onboardingBadges.ts`).
+  stays derived (`onboardingBadges.ts`). Manual cash deposit/withdrawal ledger
+  rows + `portfolio_snapshots.metrics.cashAdded` / `cashWithdrawn` (same-day
+  cash ledger sums) support Cash Added over Time; qty-driven cash is not a
+  cash ledger row.
 
 ## Strategy Forge (`src/lib/forge/`)
 
@@ -161,9 +164,10 @@ covered by that strategy's `appliedPortfolioIds` for the same source.
   book; cash on every scope). Write path: `persistBookAndConvictionMarks` after
   live refresh — enriches conviction payload, upserts book rows including
   `metrics.conviction`; does **not** change Forge / zone /
-  `portfolioRunningTotals` math. Editable portfolio cash (`updatePortfolioCash`)
-  + `PortfolioTransaction` ledger in `share_fills` (qty + cash, classification
-  stamps only).
+  `portfolioRunningTotals` math. Also writes `metrics.cashAdded` /
+  `cashWithdrawn` from same-day cash ledger rows. Editable portfolio cash
+  (`updatePortfolioCash`) + `PortfolioTransaction` ledger in `share_fills`
+  (qty + cash; cash rows are manual deposit/withdrawal only).
 - Cadence: Check = 1h/2h/4h/Daily/Weekly/Monthly + any combination of 4
   intraday session-closes. **15m/30m disabled** ("Future Capability");
   fundamentals refresh daily through the cron cycle. Checks are core behavior;

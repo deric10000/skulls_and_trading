@@ -2642,26 +2642,90 @@ span.checkbox {
 .watch-qty-order-table {
   display: flex;
   flex-direction: column;
+  width: 100%;
+  box-sizing: border-box;
+  /* No reserved scrollbar rail — flush date/time to modal padding. */
+  scrollbar-gutter: auto;
 }
 
-.watch-qty-order-row {
+/* Beat `.forge-table-row` (later in this file) — that rule's 7-col template +
+   min-height would otherwise win and flex-shrink would crush rows on mobile. */
+.forge-table.watch-qty-order-table .watch-qty-order-row {
+  flex: 0 0 auto;
   display: grid;
-  grid-template-columns: minmax(7rem, 1.1fr) repeat(3, minmax(5.5rem, 1fr));
-  gap: 0.55rem;
+  /* Label hugs; qty/total/fill share leftover equally; date/time hugs
+     and sits on the trailing edge (same gap as other columns). */
+  grid-template-columns:
+    max-content
+    minmax(5.75rem, 1fr)
+    minmax(5.75rem, 1fr)
+    minmax(5.75rem, 1fr)
+    max-content;
+  column-gap: 1rem;
+  row-gap: 0.65rem;
   align-items: end;
-  padding: var(--space-2) var(--space-3);
+  min-height: 0;
+  height: auto;
+  padding: var(--space-3);
+  width: 100%;
+  box-sizing: border-box;
 }
 
-.watch-qty-order-row .forge-table-cell {
+.forge-table.watch-qty-order-table .watch-qty-order-row .forge-table-cell {
   display: flex;
   flex-direction: column;
   gap: 0.15rem;
   min-width: 0;
 }
 
-@media (max-width: 540px) {
-  .watch-qty-order-row {
+.forge-table.watch-qty-order-table .watch-qty-order-row .forge-table-cell--order {
+  min-width: 9.5rem;
+}
+
+/* Beat `.input { min-width: 0 }` so datetime-local shows full date + time. */
+.forge-table.watch-qty-order-table .watch-qty-order-row .forge-table-cell--datetime {
+  width: max-content;
+  min-width: 0;
+  justify-self: end;
+}
+
+.forge-table.watch-qty-order-table .watch-qty-order-row .watch-fill-datetime {
+  width: max-content;
+  min-width: 17rem;
+  max-width: none;
+  font-variant-numeric: normal;
+}
+
+@media (max-width: 767px) {
+  .forge-table.watch-qty-order-table .watch-qty-order-row {
     grid-template-columns: 1fr 1fr;
+    align-items: stretch;
+    column-gap: 0.75rem;
+    row-gap: 0.75rem;
+    padding: var(--space-3);
+  }
+
+  .forge-table.watch-qty-order-table .watch-qty-order-row .forge-table-cell--order {
+    grid-column: 1 / -1;
+    min-width: 0;
+  }
+
+  .forge-table.watch-qty-order-table .watch-qty-order-row .forge-table-cell--datetime {
+    width: auto;
+    min-width: 0;
+    grid-column: 1 / -1;
+    justify-self: stretch;
+  }
+
+  .forge-table.watch-qty-order-table .watch-qty-order-row .watch-fill-datetime {
+    width: 100%;
+    min-width: 0;
+  }
+
+  /* Own labels already in-cell — skip empty forge mobile data-label chrome. */
+  .forge-table.watch-qty-order-table .watch-qty-order-row .forge-table-cell::before {
+    content: none;
+    display: none;
   }
 }
 
