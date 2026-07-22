@@ -1819,7 +1819,10 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         technicals: dataSource.getTechnicals(ticker),
         technicalsByTimeframe: dataSource.getTechnicalsByTimeframe(ticker),
         market: dataSource.getMarketContext(),
-        openPnlPct: holding?.openPnlPct,
+        openPnlPct:
+          holding && holding.avgPrice > 0
+            ? openPnlPercent(lastPrice(ticker), holding.avgPrice)
+            : undefined,
         weightPct,
       };
       return scoreStock(strategy, ctx);

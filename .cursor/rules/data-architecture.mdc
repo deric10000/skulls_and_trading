@@ -140,7 +140,9 @@ covered by that strategy's `appliedPortfolioIds` for the same source.
   (last close + latest reported fundamentals) carrying `asOf` + `source`.
 - The **metric registry** (`metrics.ts`) is the single source of truth for what
   a chip can test. Add a metric = add to `MetricKey` (`types.ts`) + seed the
-  snapshot (`data.ts`) + register in `metrics.ts`. Nothing else.
+  snapshot (`data.ts`) + register in `metrics.ts` **and** add a Free Tier
+  sanity bound (or explicit “no bound”) in `metricSanity.ts` / Worker twin.
+  Nothing else.
 - Scoring follows the normalized tag/chip/weight algorithm in
   `docs/strategy-forge.md`: active chips (tag-lens union, deduped) → pass/fail
   → rule weights renormalized to 100% of the category → `categoryScore ×
@@ -172,7 +174,11 @@ covered by that strategy's `appliedPortfolioIds` for the same source.
   intraday session-closes. **15m/30m disabled** ("Future Capability");
   fundamentals refresh daily through the cron cycle. Checks are core behavior;
   `cadenceEnabled` is notifications-only and email/text/browser are placeholders.
-  See `data-architecture.md` §6.
+  See `data-architecture.md` §6. Cadence / cron / KV publish stay unchanged;
+  chip pass/fail is stamp-aligned (see `docs/strategy-forge.md` Pass/fail audit
+  contract). `openPnlPct` for chips is mark × avg at score time; Free Tier
+  fundies pass through `metricSanity` (absurd → null / no-data). Incomplete
+  published cycles (missing context or ticker fundamentals) stay Score Pending.
 
 ## Safety
 

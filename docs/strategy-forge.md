@@ -195,6 +195,24 @@ until every check passes:
   check cadence. No push/notification (email/text/browser) delivery is built —
   those toggles are placeholders only.
 
+### Pass/fail audit contract (Free Tier)
+
+Cadence, cron shards, and KV publish are the source of truth for market
+readings — **do not** re-query Yahoo for scoring at click time.
+
+- **Stamp-aligned:** chip pass/fail is evaluated against the strategy’s last
+  completed cycle (and book marks), not wall-clock public quotes. Manual audits
+  must use the same as-of bar shown as “Checked as of …” on My Plan.
+- **Free Tier only:** Yahoo chart/quoteSummary + FRED + local book math. No
+  paid market APIs. Absurd free-tier fundamentals are quarantined to `null`
+  (no-data) via dynamic sanity rules — never fabricated.
+- **Book metrics:** `openPnlPct` for chips is derived at score time from last
+  mark × average cost (same quote cache as Current Watch). Do not prefer a
+  stale stored holding %. `weightPct` uses the same mark-based market values.
+- **Incomplete cycles:** if fundamentals or market context are missing from the
+  published cycle, conviction stays Score Pending for that ticker — do not
+  silently renormalize over technicals-only as if the plan were fully checked.
+
 ## 8. Deferred (later passes)
 
 - Per-stock tag application UI (applying `Growth` to NVDA etc.) — the engine

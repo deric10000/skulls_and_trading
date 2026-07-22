@@ -511,6 +511,13 @@ offline only — do not use as SoT for Beta accounts.
 - Steady-state cycle reads also persist `ticker_marks` and
   `flags.lastDataPullAtByStrategyId`; Supabase is the account bridge, not an
   assertion that local Wrangler KV and deployed KV are shared.
+- **Pass/fail audit (unchanged cadence):** chips score from the last completed
+  Free Tier cycle stamp (Yahoo + FRED + book math) — not wall-clock public
+  quotes. `openPnlPct` for scoring is mark × avg at score time. Dynamic
+  fundamental sanity rules quarantine absurd free-tier ratios to no-data.
+  Incomplete cycles (missing fundamentals or market context) keep Score Pending
+  rather than renormalizing as a full check. See `docs/strategy-forge.md`
+  “Pass/fail audit contract”.
 - Enabled cadences: 1h/2h/4h/Daily/Weekly/Monthly plus any combination of the
   4 intraday session-closes
   (`close-premarket` 09:30 / `close-regular` 16:00 / `close-afterhours` 20:00 /

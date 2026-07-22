@@ -1,6 +1,7 @@
 import type { DataSource } from "./DataSource";
 import { mockDataSource } from "./mock";
 import { mergeTechnicalsByTimeframe } from "../forge/timeframedFromLegacy";
+import { sanitizeFundamentals } from "../forge/metricSanity";
 import {
   getBootstrapName,
   getLiveFundamentals,
@@ -152,8 +153,11 @@ export const freeTierDataSource: DataSource = {
     weatherCache.set(timeframe, snapshot);
     return snapshot;
   },
-  getFundamentals: (ticker) =>
-    getLiveFundamentals(ticker) ?? emptyFundamentalShape(),
+  getFundamentals: (ticker) => {
+    const live = getLiveFundamentals(ticker);
+    if (!live) return emptyFundamentalShape();
+    return sanitizeFundamentals(live);
+  },
   getTechnicals: (ticker) => getLiveTechnicals(ticker) ?? emptyTechnicalShape(),
   getTechnicalsByTimeframe: (ticker) =>
     mergeTechnicalsByTimeframe(
