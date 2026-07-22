@@ -205,6 +205,8 @@ interface AppStateValue {
   /** Info toast when a scheduled strategy check completes (null when idle). */
   cadenceToast: string | null;
   clearCadenceToast: () => void;
+  /** Preview the strategy-check ForgeToast without running a market pull. */
+  previewStrategyCheckToast: () => void;
 
   captain: CaptainProfile;
   updateCaptain: (patch: Partial<CaptainProfile>) => void;
@@ -713,7 +715,9 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
               { strategyId, ledger: shareFillsRef.current },
             ),
           ]);
-          setCadenceToast("Strategy check complete — conviction is up to date.");
+          setCadenceToast(
+            "Strategy check complete. Conviction scores are current.",
+          );
         })
         .catch((error) => {
           bootstrappedFirstChecks.current.delete(strategyId);
@@ -783,7 +787,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         );
         if (succeeded) {
           setCadenceToast(
-            `Strategy check complete — conviction reviewed on your ${INTERVAL_LABEL[interval]} schedule.`,
+            `Strategy check complete. Reviewed on your ${INTERVAL_LABEL[interval]} schedule.`,
           );
         }
         return succeeded;
@@ -895,6 +899,11 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 
   const clearBudgetToast = useCallback(() => setBudgetToast(null), []);
   const clearCadenceToast = useCallback(() => setCadenceToast(null), []);
+  const previewStrategyCheckToast = useCallback(() => {
+    setCadenceToast(
+      "Strategy check complete. Conviction scores are current.",
+    );
+  }, []);
 
   const adminBypass = isAdmin(userProfile);
 
@@ -1928,6 +1937,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       clearBudgetToast,
       cadenceToast,
       clearCadenceToast,
+      previewStrategyCheckToast,
       captain,
       updateCaptain,
       activePage,
@@ -2006,6 +2016,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       clearBudgetToast,
       cadenceToast,
       clearCadenceToast,
+      previewStrategyCheckToast,
       captain,
       updateCaptain,
       activePage,

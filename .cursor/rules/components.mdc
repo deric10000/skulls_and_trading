@@ -108,6 +108,12 @@ cron cycle is still warming, the app pulls book quotes for P&L and runs one
 scoped first check per unstamped applied strategy. No applied strategies → stock
 count only (no Timer).
 
+**Strategy check complete toast** (global): stock `ForgeToast` (`tone="info"`)
+in `.cadence-toast-host` — fixed upper-right under `--app-header-h`, not the
+legacy centered `.budget-cap-toast`. Copy matches Forge toast voice (“Strategy
+check complete. Conviction scores are current.”). Preview without a pull:
+`?previewCadenceToast=1` or DEV `window.__previewStrategyCheckToast()`.
+
 **Score Pending Next Check** (`.watch-conviction-meter--pending` via
 `WatchConvictionMeter`): when a ticker has ≥1 applied strategy but no successful
 cadence check yet — or after add ticker / apply / update strategy /
