@@ -406,14 +406,20 @@ supply a target). When a single strategy is picked, every Progress metric —
 strategy filter); "All strategies" uses the whole book.
 
 **Conviction change** (additive): `portfolio_snapshots.metrics.conviction` stores
-the MV-weighted book mark each refresh. Helm compares live conviction to the
-prior `as_of` (today) and to five sessions back; ticker drivers come from
+the MV-weighted book mark on **check days** (America/New_York `as_of`, aligned
+with Last Conviction Check). Mid-day refreshes still upsert Open P&L for today
+but only stamp `metrics.conviction` when a cadence/immediate check landed that
+ET day (or the write itself is check-driven). Helm “today” / “5 sessions”
+deltas only render after a **same-day** stamped mark exists — live drift against
+a lone older mark is not labeled “today”. Ticker drivers come from
 `conviction_snapshots` deltas + live weakest category labels (Thesis Fit /
 Technical Setup, etc.). No fabricated history when marks are missing.
 
 **Open P&L history** (additive): daily rows in `portfolio_snapshots` (see below).
 Helm fetches the series for the mirrored portfolio + scope and renders a lazy
-`SparklineChart` when ≥2 distinct `as_of` days exist. No fabricated backfill.
+`SparklineChart` when ≥2 distinct `as_of` days exist. Spark tips/axis are clipped
+through the Last Conviction Check ET day so a mid-day refresh cannot show a
+calendar day ahead of the toast. No fabricated backfill.
 
 ### Daily book + ticker snapshots
 
@@ -422,16 +428,20 @@ Written after live market pull (`persistBookAndConvictionMarks` from
 Forge conviction / chip / zone math and `portfolioRunningTotals` are unchanged.
 
 - **`portfolio_snapshots`**: one row per `(user, portfolio_id, strategy_id,
-  as_of)`. `strategy_id = ''` = whole book (all holdings + `cashAvailable`).
+  as_of)` where `as_of` is the America/New_York session day of the market
+  cycle/quotes (not the writer's UTC wall clock). Non-check refreshes cap
+  `as_of` to the latest Last Conviction Check day so Open P&L cannot invent a
+  spark day ahead of that toast. Check-driven writes may advance the day.
+  `strategy_id = ''` = whole book (all holdings + `cashAvailable`).
   Strategy-scoped rows use holdings enabled for that strategy
   (`shouldScoreTickerWithStrategy`) **plus the same cash**. Core columns mirror
   Current Watch totals: `holdings_market_value`, `cost_basis`, `cash_available`,
   `total_value`, `open_pnl`, `open_pnl_pct`. Forward-compatible `metrics jsonb`
   for future daily book fields — currently includes MV-weighted `conviction`
-  for Helm Conviction Change, plus same-day `cashAdded` / `cashWithdrawn` from
-  the cash ledger (manual deposits/withdrawals only; do not delete core columns
-  into jsonb). Upsert last-write-wins. Skip incomplete books rather than
-  fabricate prices.
+  (check-day only; see Conviction change above), plus same-day `cashAdded` /
+  `cashWithdrawn` from the cash ledger (manual deposits/withdrawals only; do
+  not delete core columns into jsonb). Upsert last-write-wins. Skip incomplete
+  books rather than fabricate prices.
 - **`conviction_snapshots`**: same unique grain; **enrich `payload`** at write
   with per-ticker marks (`portfolioId`, `shares`, `avgPrice`, `lastPrice`,
   `marketValue`, `costBasis`, `openPnl`, `openPnlPct`) — future per-name fields

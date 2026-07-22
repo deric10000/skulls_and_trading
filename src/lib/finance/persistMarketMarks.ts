@@ -1,18 +1,66 @@
 /**
  * Additive daily book / ticker marks after a live market pull.
  * Does not change Forge scoring or portfolioRunningTotals math — only persists
- * the same figures Current Watch already displays.
+ * the same figures Current Watch / Helm already display from live alignment.
  */
 
 import type { Portfolio, PortfolioTransaction, Strategy } from "../../types";
 import { dataSource } from "../datasource";
 import { portfolioRunningTotals } from "../finance/portfolioTotals";
+import {
+  etIsoDate,
+  latestEtDay,
+} from "../finance/portfolioSnapshotSeries";
+import { computePortfolioAlignment } from "../forge/alignment";
 import { shouldScoreTickerWithStrategy } from "../forge/tickerStrategy";
+import {
+  getLastDataPullAt,
+  getLiveQuote,
+  getMarketCycleMeta,
+} from "../market/liveCache";
 import {
   appendConvictionSnapshots,
   appendPortfolioSnapshots,
   type PortfolioSnapshotRow,
 } from "../userStore";
+
+/**
+ * Snapshot day for Open P&L / conviction marks.
+ * Prefer market-cycle + quote session time (ET). Mid-day refreshes that are
+ * not check-driven cannot invent a calendar day ahead of Last Conviction Check.
+ */
+function resolvePersistAsOf(
+  tickers: string[],
+  strategyIds: string[],
+  checkDriven: boolean,
+): string {
+  const cycle = getMarketCycleMeta();
+  const quoteAsOfs = tickers.map((ticker) => getLiveQuote(ticker)?.asOf);
+  const pullAsOfs = strategyIds.map((id) => getLastDataPullAt(id));
+  const marketDay =
+    latestEtDay([cycle?.cycleAsOf, ...quoteAsOfs, ...pullAsOfs]) ??
+    etIsoDate();
+  if (checkDriven) return marketDay;
+  const checkDay = latestEtDay(pullAsOfs);
+  if (checkDay && marketDay > checkDay) return checkDay;
+  return marketDay;
+}
+
+/** Stamp conviction onto a day only when a check landed that ET day. */
+function convictionForAsOf(
+  asOf: string,
+  conviction: number | null,
+  strategyIds: string[],
+  checkDriven: boolean,
+): number | null {
+  if (conviction == null || !Number.isFinite(conviction)) return null;
+  if (checkDriven) return conviction;
+  const latestPullDay = latestEtDay(
+    strategyIds.map((id) => getLastDataPullAt(id)),
+  );
+  if (!latestPullDay || latestPullDay !== asOf) return null;
+  return conviction;
+}
 
 function holdingMark(holding: Portfolio["holdings"][number]) {
   const info = dataSource.getTickerInfo(holding.ticker);
@@ -59,22 +107,6 @@ function totalsFromHoldings(
   return portfolioRunningTotals(positions, cashAvailable);
 }
 
-/** MV-weighted conviction for book marks — same idea as Helm Total Conviction. */
-function weightedConviction(
-  holdings: Portfolio["holdings"],
-): number | null {
-  let weighted = 0;
-  let weight = 0;
-  for (const holding of holdings) {
-    const mark = holdingMark(holding);
-    if (!mark || !Number.isFinite(holding.conviction)) continue;
-    weighted += holding.conviction * mark.marketValue;
-    weight += mark.marketValue;
-  }
-  if (weight <= 0) return null;
-  return weighted / weight;
-}
-
 /**
  * Manual cash deposits/withdrawals for a calendar day (ISO date of filledAt).
  * Qty-driven cash moves are not cash ledger rows — they do not count here.
@@ -100,14 +132,16 @@ function cashFlowMetrics(
 }
 
 function bookMetrics(
-  holdings: Portfolio["holdings"],
   portfolioId: string,
   asOf: string,
   ledger: PortfolioTransaction[] | undefined,
+  /** Live Forge book conviction — never the stale holding.conviction seed. */
+  conviction: number | null,
 ): Record<string, unknown> {
-  const conviction = weightedConviction(holdings);
   return {
-    ...(conviction == null ? {} : { conviction }),
+    ...(conviction == null || !Number.isFinite(conviction)
+      ? {}
+      : { conviction }),
     ...cashFlowMetrics(portfolioId, asOf, ledger),
   };
 }
@@ -122,8 +156,18 @@ export async function persistBookAndConvictionMarks(
   tickers: string[],
   options?: { strategyId?: string; ledger?: PortfolioTransaction[] },
 ): Promise<void> {
-  const asOf = new Date().toISOString().slice(0, 10);
+  const checkDriven = Boolean(options?.strategyId);
+  const appliedStrategyIds = strategies
+    .filter((s) => (s.appliedPortfolioIds ?? []).length > 0)
+    .map((s) => s.id);
+  const asOfStrategyIds = options?.strategyId
+    ? [options.strategyId]
+    : appliedStrategyIds;
+  // Market session day (ET), capped to Last Conviction Check on non-check writes
+  // so Open P&L sparklines cannot invent a day ahead of the toast.
+  const asOf = resolvePersistAsOf(tickers, asOfStrategyIds, checkDriven);
   const tickerSet = new Set(tickers.map((t) => t.toUpperCase()));
+  const buckets = dataSource.getBuckets();
   const bookRows: PortfolioSnapshotRow[] = [];
   const convictionRows: {
     strategyId: string;
@@ -140,6 +184,20 @@ export async function persistBookAndConvictionMarks(
       // cash stays 0 unless later added.
     }
     const cash = portfolio.cashAvailable ?? 0;
+    const applied = strategies.filter((s) =>
+      (s.appliedPortfolioIds ?? []).includes(portfolio.id),
+    );
+    const appliedIds = applied.map((s) => s.id);
+    const wholeAlignment = computePortfolioAlignment(
+      portfolio,
+      buckets,
+      applied,
+    );
+    const wholeConviction =
+      Object.keys(wholeAlignment.byTicker).length > 0
+        ? wholeAlignment.portfolio.conviction
+        : null;
+
     const whole = totalsFromHoldings(portfolio.holdings, cash);
     if (whole) {
       bookRows.push({
@@ -153,17 +211,19 @@ export async function persistBookAndConvictionMarks(
         openPnl: whole.openPnl,
         openPnlPct: whole.openPnlPct,
         metrics: bookMetrics(
-          portfolio.holdings,
           portfolio.id,
           asOf,
           options?.ledger,
+          convictionForAsOf(
+            asOf,
+            wholeConviction,
+            appliedIds,
+            checkDriven,
+          ),
         ),
       });
     }
 
-    const applied = strategies.filter((s) =>
-      (s.appliedPortfolioIds ?? []).includes(portfolio.id),
-    );
     for (const strategy of applied) {
       if (options?.strategyId && strategy.id !== options.strategyId) continue;
       const filtered = portfolio.holdings.filter((h) =>
@@ -171,6 +231,15 @@ export async function persistBookAndConvictionMarks(
       );
       const scoped = totalsFromHoldings(filtered, cash);
       if (!scoped) continue;
+      const scopedAlignment = computePortfolioAlignment(
+        portfolio,
+        buckets,
+        [strategy],
+      );
+      const scopedConviction =
+        Object.keys(scopedAlignment.byTicker).length > 0
+          ? scopedAlignment.portfolio.conviction
+          : null;
       bookRows.push({
         portfolioId: portfolio.id,
         strategyId: strategy.id,
@@ -181,7 +250,17 @@ export async function persistBookAndConvictionMarks(
         totalValue: scoped.totalValue,
         openPnl: scoped.openPnl,
         openPnlPct: scoped.openPnlPct,
-        metrics: bookMetrics(filtered, portfolio.id, asOf, options?.ledger),
+        metrics: bookMetrics(
+          portfolio.id,
+          asOf,
+          options?.ledger,
+          convictionForAsOf(
+            asOf,
+            scopedConviction,
+            [strategy.id],
+            checkDriven,
+          ),
+        ),
       });
     }
   }
@@ -212,7 +291,6 @@ export async function persistBookAndConvictionMarks(
         }
       }
       if (!matched) {
-        // Still record conviction if any holding exists for this strategy refresh
         const holding = portfolios
           .flatMap((p) =>
             p.holdings.map((h) => ({ portfolio: p, holding: h })),
@@ -221,13 +299,26 @@ export async function persistBookAndConvictionMarks(
         if (!holding) continue;
         matched = holding;
       }
+      const alignment = computePortfolioAlignment(
+        matched.portfolio,
+        buckets,
+        [strategy],
+      );
+      const live = alignment.byTicker[ticker] ?? alignment.byTicker[matched.holding.ticker];
+      if (!live || !Number.isFinite(live.conviction)) continue;
+      if (
+        convictionForAsOf(asOf, live.conviction, [strategy.id], checkDriven) ==
+        null
+      ) {
+        continue;
+      }
       const mark = holdingMark(matched.holding);
       convictionRows.push({
         strategyId: strategy.id,
         ticker,
         asOf,
-        conviction: matched.holding.conviction ?? 0,
-        status: matched.holding.status,
+        conviction: live.conviction,
+        status: live.status,
         payload: mark
           ? {
               portfolioId: matched.portfolio.id,

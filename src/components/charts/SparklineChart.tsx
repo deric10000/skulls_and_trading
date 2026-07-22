@@ -26,6 +26,10 @@ export type SparklineChartProps = {
   showPointMarkers?: boolean;
   /** False for a single-point seed (dot only, no line segment). */
   lineVisible?: boolean;
+  /** Tip value formatter (Open P&L `%` vs conviction score). */
+  formatValue?: (value: number) => string;
+  /** Accessible name for the chart surface. */
+  ariaLabel?: string;
 };
 
 function formatSparkDate(isoDate: string): string {
@@ -37,7 +41,7 @@ function formatSparkDate(isoDate: string): string {
 type HoverTip = {
   time: string;
   dateLabel: string;
-  pnlLabel: string;
+  valueLabel: string;
   left: number;
   top: number;
 };
@@ -60,7 +64,6 @@ function nearestPoint(
   if (!timeLabel) return points[points.length - 1] ?? null;
   const exact = points.find((point) => point.time === timeLabel);
   if (exact) return exact;
-  // Closest calendar day if the click lands between bars.
   let best = points[0]!;
   let bestDist = Math.abs(Date.parse(best.time) - Date.parse(timeLabel));
   for (const point of points.slice(1)) {
@@ -77,6 +80,7 @@ function tipFromPoint(
   point: SparkPoint,
   chartPoint: { x: number; y: number },
   hostWidth: number,
+  formatValue: (value: number) => string,
 ): HoverTip {
   const tipWidth = 88;
   const left = Math.min(
@@ -86,7 +90,7 @@ function tipFromPoint(
   return {
     time: point.time,
     dateLabel: formatSparkDate(point.time),
-    pnlLabel: formatChange(point.value),
+    valueLabel: formatValue(point.value),
     left,
     top: Math.max(chartPoint.y - 34, 0),
   };
@@ -97,6 +101,9 @@ function tipFromPoint(
  * beyond what the parent renders. Lazy-load this module from Helm only.
  * Desktop: hover tip via crosshair. Mobile: tap-to-toggle tip on a session
  * point (outside tap dismisses).
+ *
+ * Single-point seeds skip LWC (it pins one bar to the right) and render a
+ * left-aligned CSS mark next to the start date.
  */
 export function SparklineChart({
   points,
@@ -105,19 +112,25 @@ export function SparklineChart({
   className,
   showPointMarkers = true,
   lineVisible = true,
+  formatValue = formatChange,
+  ariaLabel = "History",
 }: SparklineChartProps) {
   const isMobile = useIsMobile();
+  const isSinglePoint = points.length === 1;
   const wrapRef = useRef<HTMLDivElement>(null);
   const hostRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<"Line"> | null>(null);
   const pointsRef = useRef(points);
   pointsRef.current = points;
+  const formatValueRef = useRef(formatValue);
+  formatValueRef.current = formatValue;
   const tipRef = useRef<HoverTip | null>(null);
   const [hoverTip, setHoverTip] = useState<HoverTip | null>(null);
   tipRef.current = hoverTip;
 
   useEffect(() => {
+    if (isSinglePoint) return;
     const host = hostRef.current;
     if (!host) return;
 
@@ -183,7 +196,14 @@ export function SparklineChart({
         setHoverTip(null);
         return;
       }
-      setHoverTip(tipFromPoint(match, param.point, host.clientWidth || 200));
+      setHoverTip(
+        tipFromPoint(
+          match,
+          param.point,
+          host.clientWidth || 200,
+          formatValueRef.current,
+        ),
+      );
     };
 
     const onClick = (param: MouseEventParams<Time>) => {
@@ -201,12 +221,18 @@ export function SparklineChart({
         setHoverTip(null);
         return;
       }
-      // Tap same point again to dismiss (mobile toggle).
       if (tipRef.current?.time === match.time) {
         setHoverTip(null);
         return;
       }
-      setHoverTip(tipFromPoint(match, param.point, host.clientWidth || 200));
+      setHoverTip(
+        tipFromPoint(
+          match,
+          param.point,
+          host.clientWidth || 200,
+          formatValueRef.current,
+        ),
+      );
     };
 
     if (isMobile) {
@@ -235,9 +261,10 @@ export function SparklineChart({
       seriesRef.current = null;
       setHoverTip(null);
     };
-  }, [height, lineColor, lineVisible, showPointMarkers, isMobile]);
+  }, [height, lineColor, lineVisible, showPointMarkers, isMobile, isSinglePoint]);
 
   useEffect(() => {
+    if (isSinglePoint) return;
     const series = seriesRef.current;
     const chart = chartRef.current;
     if (!series || !chart) return;
@@ -255,9 +282,8 @@ export function SparklineChart({
       crosshairMarkerBackgroundColor: lineColor,
     });
     chart.timeScale().fitContent();
-  }, [points, lineColor, lineVisible, showPointMarkers]);
+  }, [points, lineColor, lineVisible, showPointMarkers, isSinglePoint]);
 
-  // Mobile: dismiss sticky tip on outside tap (matches Tooltip sheet).
   useEffect(() => {
     if (!isMobile || !hoverTip) return;
     function handlePointerDown(event: PointerEvent) {
@@ -269,22 +295,87 @@ export function SparklineChart({
     return () => document.removeEventListener("pointerdown", handlePointerDown);
   }, [isMobile, hoverTip]);
 
+  function showSingleTip(which: "known" | "pending") {
+    const point = points[0];
+    if (!point || !showPointMarkers) return;
+    const tipTime = which === "pending" ? `${point.time}:pending` : point.time;
+    if (isMobile && tipRef.current?.time === tipTime) {
+      setHoverTip(null);
+      return;
+    }
+    const hostWidth = wrapRef.current?.clientWidth || 200;
+    setHoverTip({
+      time: tipTime,
+      dateLabel:
+        which === "pending" ? "Pending Check." : formatSparkDate(point.time),
+      valueLabel: which === "pending" ? "—" : formatValue(point.value),
+      left: which === "pending" ? Math.max(hostWidth - 88, 0) : 0,
+      top: Math.max(height / 2 - 34, 0),
+    });
+  }
+
+  function clearSingleTip() {
+    if (!isMobile) setHoverTip(null);
+  }
+
   return (
     <div
       ref={wrapRef}
       className={className ?? "sparkline-chart"}
       style={{ height, position: "relative" }}
       role="img"
-      aria-label="Open P&L history"
+      aria-label={ariaLabel}
     >
-      <div ref={hostRef} style={{ width: "100%", height: "100%" }} />
+      {isSinglePoint ? (
+        <div className="helm-metric-spark-single">
+          <button
+            type="button"
+            className="helm-metric-spark-single__hit"
+            aria-label={`${formatSparkDate(points[0]!.time)} ${formatValue(points[0]!.value)}`}
+            onMouseEnter={isMobile ? undefined : () => showSingleTip("known")}
+            onMouseLeave={isMobile ? undefined : clearSingleTip}
+            onFocus={isMobile ? undefined : () => showSingleTip("known")}
+            onBlur={isMobile ? undefined : clearSingleTip}
+            onClick={isMobile ? () => showSingleTip("known") : undefined}
+          >
+            <span
+              className="helm-metric-spark-single__dot helm-metric-spark-single__dot--known"
+              style={{ background: lineColor }}
+              aria-hidden
+            />
+          </button>
+          <button
+            type="button"
+            className="helm-metric-spark-single__hit helm-metric-spark-single__hit--end"
+            aria-label="Pending Check."
+            onMouseEnter={
+              isMobile ? undefined : () => showSingleTip("pending")
+            }
+            onMouseLeave={isMobile ? undefined : clearSingleTip}
+            onFocus={isMobile ? undefined : () => showSingleTip("pending")}
+            onBlur={isMobile ? undefined : clearSingleTip}
+            onClick={isMobile ? () => showSingleTip("pending") : undefined}
+          >
+            <span
+              className="helm-metric-spark-single__dot helm-metric-spark-single__dot--pending"
+              aria-hidden
+            />
+          </button>
+        </div>
+      ) : (
+        <div ref={hostRef} style={{ width: "100%", height: "100%" }} />
+      )}
       {hoverTip ? (
         <span
-          className="helm-pnl-spark-tip"
+          className="helm-metric-spark-tip"
           style={{ left: hoverTip.left, top: hoverTip.top }}
         >
-          <span className="helm-pnl-spark-tip__date">{hoverTip.dateLabel}</span>
-          <span className="helm-pnl-spark-tip__pnl">{hoverTip.pnlLabel}</span>
+          <span className="helm-metric-spark-tip__date">
+            {hoverTip.dateLabel}
+          </span>
+          <span className="helm-metric-spark-tip__value">
+            {hoverTip.valueLabel}
+          </span>
         </span>
       ) : null}
     </div>

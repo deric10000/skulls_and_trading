@@ -164,12 +164,15 @@ covered by that strategy's `appliedPortfolioIds` for the same source.
   `conviction_snapshots` for drivers (no fabricated history). **Open P&L
   sparkline** reads additive `portfolio_snapshots` (`strategy_id ''` = whole
   book; cash on every scope). Write path: `persistBookAndConvictionMarks` after
-  live refresh — enriches conviction payload, upserts book rows including
-  `metrics.conviction`; does **not** change Forge / zone /
-  `portfolioRunningTotals` math. Also writes `metrics.cashAdded` /
-  `cashWithdrawn` from same-day cash ledger rows. Editable portfolio cash
-  (`updatePortfolioCash`) + `PortfolioTransaction` ledger in `share_fills`
-  (qty + cash; cash rows are manual deposit/withdrawal only).
+  live refresh — `as_of` is America/New_York market session day (capped to Last
+  Conviction Check on non-check writes so Open P&L cannot invent a spark day
+  ahead of the toast); Open P&L upserts on that day, but `metrics.conviction`
+  stamps only on check days (or check-driven writes); enriches ticker conviction
+  payload; does **not** change Forge / zone / `portfolioRunningTotals` math. Also
+  writes `metrics.cashAdded` / `cashWithdrawn` from same-day cash ledger rows.
+  Editable portfolio cash (`updatePortfolioCash`) + `PortfolioTransaction`
+  ledger in `share_fills` (qty + cash; cash rows are manual deposit/withdrawal
+  only).
 - Cadence: Check = 1h/2h/4h/Daily/Weekly/Monthly + any combination of 4
   intraday session-closes. **15m/30m disabled** ("Future Capability");
   fundamentals refresh daily through the cron cycle. Checks are core behavior;
