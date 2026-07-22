@@ -198,9 +198,12 @@ grant usage on schema public to anon, authenticated;
 
 grant select, update on table public.profiles to authenticated;
 grant select, insert, update on table public.user_state to authenticated;
-grant select, insert on table public.conviction_snapshots to authenticated;
+grant select, insert, update on table public.conviction_snapshots to authenticated;
 grant select, insert, update on table public.portfolio_snapshots to authenticated;
 grant select, insert, update on table public.ticker_marks to authenticated;
+-- bigserial nextval() for snapshot inserts (table INSERT alone is not enough)
+grant usage, select on sequence public.conviction_snapshots_id_seq to authenticated;
+grant usage, select on sequence public.portfolio_snapshots_id_seq to authenticated;
 grant select on table public.invite_codes to authenticated;
 
 -- Auto-create profile + empty user_state on signup

@@ -14,7 +14,15 @@ import {
   shouldScoreTickerWithStrategy,
   strategiesForHolding,
 } from "../../lib/forge/tickerStrategy";
-import { seriesToSparkPoints } from "../../lib/finance/portfolioSnapshotSeries";
+import {
+  DEFAULT_HELM_SPARK_RANGE,
+  HELM_SPARK_RANGE_LABEL,
+  localIsoDate,
+  seriesToSparkPoints,
+  sparkPointsForRange,
+  sparkRangeShowsPointMarkers,
+  type SparkPoint,
+} from "../../lib/finance/portfolioSnapshotSeries";
 import {
   fetchConvictionSnapshots,
   fetchPortfolioSnapshots,
@@ -88,9 +96,7 @@ export function HelmMetrics() {
     [strategies, portfolio],
   );
 
-  const [sparkPoints, setSparkPoints] = useState<
-    ReturnType<typeof seriesToSparkPoints>
-  >([]);
+  const [sparkPoints, setSparkPoints] = useState<SparkPoint[]>([]);
   const [sparkLoaded, setSparkLoaded] = useState(false);
   const [convictionView, setConvictionView] =
     useState<ConvictionChangeView | null>(null);
@@ -251,9 +257,22 @@ export function HelmMetrics() {
     pnlUp ? "--positive" : "--negative",
     pnlUp ? "#3d9a6a" : "#c45c4a",
   );
-  const showSpark = sparkLoaded && sparkPoints.length >= 2;
-  const startDate = sparkPoints[0]?.time;
-  const endDate = sparkPoints[sparkPoints.length - 1]?.time;
+  // Default Helm window = 1 week. Shared Progress timeframe toggles later —
+  // Open P&L only shows the default indicator for now.
+  const sparkRange = DEFAULT_HELM_SPARK_RANGE;
+  const rangedPoints = sparkPointsForRange(sparkPoints, sparkRange);
+  const displayPoints: SparkPoint[] =
+    rangedPoints.length > 0
+      ? rangedPoints
+      : sparkLoaded
+        ? [{ time: localIsoDate(), value: metrics.openPnlPct }]
+        : [];
+  const showSpark = displayPoints.length >= 1;
+  const drawLine = displayPoints.length >= 2;
+  const showPointMarkers = sparkRangeShowsPointMarkers(sparkRange);
+  const sparkRangeLabel = HELM_SPARK_RANGE_LABEL[sparkRange];
+  const startDate = displayPoints[0]?.time;
+  const endDate = displayPoints[displayPoints.length - 1]?.time;
   const todayDelta = convictionView?.change.todayDelta ?? null;
   const sessions5Delta = convictionView?.change.sessions5Delta ?? null;
   const showConvictionChange =
@@ -354,7 +373,10 @@ export function HelmMetrics() {
         </div>
 
         <div className="select-card helm-metric helm-metric--pnl">
-          <span className="helm-metric-label">Open P&amp;L</span>
+          <div className="helm-metric-head">
+            <span className="helm-metric-label">Open P&amp;L</span>
+            <span className="panel-tag session-tag">{sparkRangeLabel}</span>
+          </div>
           <span
             className={`helm-metric-value ${
               pnlUp ? "helm-metric-value--up" : "helm-metric-value--down"
@@ -366,10 +388,12 @@ export function HelmMetrics() {
             <>
               <Suspense fallback={null}>
                 <SparklineChart
-                  points={sparkPoints}
+                  points={displayPoints}
                   lineColor={lineColor}
                   height={48}
                   className="helm-pnl-spark"
+                  showPointMarkers={showPointMarkers}
+                  lineVisible={drawLine}
                 />
               </Suspense>
               <span className="helm-pnl-dates">
@@ -378,11 +402,7 @@ export function HelmMetrics() {
               </span>
             </>
           ) : (
-            <span className="helm-metric-note">
-              {sparkLoaded
-                ? "History starts after the next market refresh"
-                : "A by-product of discipline"}
-            </span>
+            <span className="helm-metric-note">A by-product of discipline</span>
           )}
         </div>
 

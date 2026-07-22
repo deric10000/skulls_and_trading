@@ -1059,6 +1059,21 @@ button {
   color: var(--text-muted);
 }
 
+.helm-metric-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.helm-metric-head .helm-metric-label {
+  min-width: 0;
+}
+
+.helm-metric-head .panel-tag {
+  flex-shrink: 0;
+}
+
 .helm-metric-value {
   display: inline-block;
   width: fit-content;
@@ -1142,6 +1157,23 @@ button {
 .helm-pnl-spark {
   width: 100%;
   margin-top: 0.25rem;
+}
+
+.helm-pnl-spark .helm-pnl-spark-tip,
+.sparkline-chart .helm-pnl-spark-tip {
+  position: absolute;
+  z-index: 2;
+  padding: 0.15rem 0.35rem;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg-deep);
+  color: var(--text-base);
+  font-size: 0.68rem;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+  pointer-events: none;
+  white-space: nowrap;
+  box-shadow: 0 6px 16px rgb(0 0 0 / 0.35);
 }
 
 .helm-pnl-dates {
