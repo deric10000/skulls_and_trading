@@ -15,6 +15,7 @@ import {
   resampleHourlyBars,
   resampleTo4h,
 } from "./indicators";
+import { sanitizeFundamentals } from "./metricSanity";
 
 export interface MarketEnv {
   FINNHUB_API_KEY?: string;
@@ -628,7 +629,7 @@ export function mapFundamentals(
       ? new Date(earningsRaw * 1000).toISOString().slice(0, 10)
       : null;
 
-  return {
+  const rawSnapshot = {
     ticker: symbol,
     revenueGrowthPct: pct(raw(financial, "revenueGrowth")),
     epsGrowthPct: pct(raw(financial, "earningsGrowth")),
@@ -666,8 +667,9 @@ export function mapFundamentals(
     buybackYieldPct: null,
     nextEarningsDate,
     asOf: new Date().toISOString().slice(0, 10),
-    source: "live",
+    source: "live" as const,
   };
+  return sanitizeFundamentals(rawSnapshot);
 }
 
 const VALID_CANDLE_TIMES = new Set<CandleTime>([

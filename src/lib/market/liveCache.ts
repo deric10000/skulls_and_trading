@@ -12,6 +12,7 @@ import type {
   TimeframedIndicators,
 } from "../../types";
 import type { MarketCyclePayload } from "./client";
+import { sanitizeFundamentals } from "../forge/metricSanity";
 
 export type ProviderId = "yahoo" | "finnhub" | "fred" | "stooq";
 
@@ -82,7 +83,7 @@ export function applyMarketCycle(cycle: MarketCyclePayload): void {
     quotes.set(ticker.toUpperCase(), { ...quote, source: "live" });
   }
   for (const [ticker, snapshot] of Object.entries(cycle.fundamentals)) {
-    fundamentals.set(ticker.toUpperCase(), snapshot);
+    fundamentals.set(ticker.toUpperCase(), sanitizeFundamentals(snapshot));
   }
   for (const [ticker, snapshot] of Object.entries(cycle.technicals)) {
     technicals.set(ticker.toUpperCase(), snapshot);
@@ -119,7 +120,7 @@ export function setLiveFundamentals(
   ticker: string,
   snapshot: FundamentalSnapshot,
 ): void {
-  fundamentals.set(ticker.toUpperCase(), snapshot);
+  fundamentals.set(ticker.toUpperCase(), sanitizeFundamentals(snapshot));
   bump();
 }
 
@@ -217,7 +218,8 @@ export function clearTickerConvictionDirty(
 
 /**
  * True when displayed conviction may show for this ticker. False → No Score
- * (no completed check yet, or add/apply/update is newer than the last check).
+ * (no completed check yet, or add/apply/update is newer than the last check,
+ * or a published cycle is incomplete for thesis/risk inputs).
  */
 export function isConvictionScoreReady(
   portfolioId: string,
@@ -234,6 +236,12 @@ export function isConvictionScoreReady(
     const dirty = strategyDirtyAt.get(strategyId);
     if (dirty != null && lastMs < dirty) return false;
     if (tickerDirty != null && lastMs < tickerDirty) return false;
+  }
+  // Incomplete published cycle: missing context or ticker fundamentals →
+  // Score Pending (do not silently renormalize over technicals-only).
+  if (marketCycle) {
+    if (!marketContext) return false;
+    if (!fundamentals.has(ticker.toUpperCase())) return false;
   }
   return true;
 }

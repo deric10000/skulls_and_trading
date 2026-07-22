@@ -1299,37 +1299,56 @@ function formatGapValue(
   return formatMetricValue(gap, meta);
 }
 
-/** Plain-English threshold phrase, e.g. "5% or more", "below 30x". */
-function thresholdPhrase(
-  chip: RuleChip,
+/** Gap phrase with units that read clearly next to “short / over / outside”. */
+function formatGapPhrase(
+  gap: number,
   meta: Pick<MetricMeta, "format" | "unit">,
 ): string {
+  const abs = Math.abs(gap);
+  if (meta.format === "percent") {
+    return `${roundMetricDisplay(abs).toFixed(2)} percentage points`;
+  }
+  return formatGapValue(abs, meta);
+}
+
+/** Plain-English plan need for a chip (no “threshold” stacking). */
+function planNeedPhrase(
+  chip: RuleChip,
+  meta: Pick<MetricMeta, "format" | "unit" | "label" | "plainLabel">,
+): string {
   if (chip.operator === "between" && Array.isArray(chip.value)) {
-    return `${formatMetricValue(chip.value[0], meta)}–${formatMetricValue(chip.value[1], meta)} band`;
+    return `Your plan needs ${formatMetricValue(chip.value[0], meta)}–${formatMetricValue(chip.value[1], meta)}`;
   }
   const target = Array.isArray(chip.value) ? chip.value[0] : chip.value;
   const formatted = formatMetricValue(target, meta);
   switch (chip.operator) {
     case ">=":
-      return `${formatted} or more`;
+      return `Your plan needs ${formatted} or better`;
     case ">":
       return meta.format === "currency"
-        ? `greater than ${formatted}`
-        : `above ${formatted}`;
+        ? `Your plan needs greater than ${formatted}`
+        : `Your plan needs above ${formatted}`;
     case "<=":
-      return `${formatted} or less`;
+      return `Your plan needs ${formatted} or lower`;
     case "<":
-      return `below ${formatted}`;
+      return `Your plan needs below ${formatted}`;
     case "is":
-      return formatted;
+      if (meta.format === "boolean") {
+        const wantTrue = target === 1 || target === "TRUE" || target === "true";
+        const sense = meta.plainLabel || meta.label;
+        return wantTrue
+          ? `Your plan needs this to hold (${sense})`
+          : `Your plan needs this not to hold (${sense})`;
+      }
+      return `Your plan needs ${formatted}`;
     default:
-      return formatted;
+      return `Your plan needs ${formatted}`;
   }
 }
 
 /**
- * Live failing reading + how far it missed the rule, e.g.
- * "Diluted EPS Growth YoY = -77.08%, 82.08% below my 5% or more threshold".
+ * Live failing reading + how far it missed the rule.
+ * Metric-agnostic: every format × operator reads in plain Captain language.
  */
 export function formatObservedBreach(
   chip: RuleChip,
@@ -1339,24 +1358,31 @@ export function formatObservedBreach(
   const label = meta?.label ?? chip.metric;
   if (value == null) return `${label} = —`;
 
-  const observed = `${label} = ${formatMetricValue(value, meta)}`;
+  const observed = `${label} is ${formatMetricValue(value, meta)}`;
 
-  // Boolean / qualitative "is" — no numeric gap; state the expected value.
+  // Boolean / qualitative "is" — no numeric gap.
   if (chip.operator === "is") {
+    const need = planNeedPhrase(chip, meta);
+    if (meta?.format === "boolean") {
+      const expected = Array.isArray(chip.value) ? chip.value[0] : chip.value;
+      const wantTrue =
+        expected === 1 || expected === "TRUE" || expected === "true";
+      const isTrue = value === 1;
+      if (wantTrue === isTrue) return observed;
+      return `${observed}. ${need}.`;
+    }
     const expected = Array.isArray(chip.value) ? chip.value[0] : chip.value;
-    return `${observed}, my rule requires ${formatMetricValue(expected, meta)}`;
+    return `${observed}. ${need} (reading ${formatMetricValue(expected, meta)}).`;
   }
 
   if (chip.operator === "between" && Array.isArray(chip.value)) {
     const [low, high] = chip.value;
-    const phrase = thresholdPhrase(chip, meta);
+    const need = planNeedPhrase(chip, meta);
     if (value < low) {
-      const gap = formatGapValue(low - value, meta);
-      return `${observed}, ${gap} below my ${phrase}`;
+      return `${observed}. ${need} — you are ${formatGapPhrase(low - value, meta)} below that band.`;
     }
     if (value > high) {
-      const gap = formatGapValue(value - high, meta);
-      return `${observed}, ${gap} above my ${phrase}`;
+      return `${observed}. ${need} — you are ${formatGapPhrase(value - high, meta)} above that band.`;
     }
     return observed;
   }
@@ -1364,18 +1390,16 @@ export function formatObservedBreach(
   const target = Array.isArray(chip.value) ? chip.value[0] : chip.value;
   if (typeof target !== "number") return observed;
 
-  const phrase = thresholdPhrase(chip, meta);
+  const need = planNeedPhrase(chip, meta);
   if (chip.operator === ">=" || chip.operator === ">") {
     if (value >= target && chip.operator === ">=") return observed;
     if (value > target && chip.operator === ">") return observed;
-    const gap = formatGapValue(target - value, meta);
-    return `${observed}, ${gap} below my ${phrase} threshold`;
+    return `${observed}. ${need} — you are ${formatGapPhrase(target - value, meta)} short.`;
   }
   if (chip.operator === "<=" || chip.operator === "<") {
     if (value <= target && chip.operator === "<=") return observed;
     if (value < target && chip.operator === "<") return observed;
-    const gap = formatGapValue(value - target, meta);
-    return `${observed}, ${gap} above my ${phrase} threshold`;
+    return `${observed}. ${need} — you are ${formatGapPhrase(value - target, meta)} over.`;
   }
 
   return observed;

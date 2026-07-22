@@ -1,5 +1,6 @@
 import type { Bucket, Portfolio, PortfolioHolding, ResolvedStatus, StatusType, Strategy } from "../../types";
 import { dataSource } from "../datasource";
+import { openPnlPercent } from "../finance/averageCost";
 import {
   evaluateZoneFlags,
   scoreStock,
@@ -59,6 +60,17 @@ const EMPTY: PortfolioAlignment = {
 
 function coverageKey(strategyId: string, ticker: string): string {
   return `${strategyId}:${ticker}`;
+}
+
+/** Score-time open P&L from mark × avg — never prefer a stale stored %. */
+function openPnlPctFromMark(
+  ticker: string,
+  holding: PortfolioHolding | undefined,
+): number | undefined {
+  if (!holding || holding.avgPrice <= 0) return undefined;
+  const last = dataSource.getTickerInfo(ticker)?.lastPrice ?? 0;
+  if (last <= 0) return undefined;
+  return openPnlPercent(last, holding.avgPrice);
 }
 
 function strategyAppliesToPortfolio(
@@ -192,7 +204,7 @@ export function computePortfolioAlignment(
         technicalsByTimeframe: dataSource.getTechnicalsByTimeframe(ticker),
         market,
         weightPct: weightPctFor(ticker),
-        openPnlPct: holding.openPnlPct,
+        openPnlPct: openPnlPctFromMark(ticker, holding),
         holdingDays: holdingDaysFor(allocation.entryDate),
       };
 
@@ -224,7 +236,7 @@ export function computePortfolioAlignment(
         technicalsByTimeframe: dataSource.getTechnicalsByTimeframe(ticker),
         market,
         weightPct: weightPctFor(ticker),
-        openPnlPct: holding.openPnlPct,
+        openPnlPct: openPnlPctFromMark(ticker, holding),
         holdingDays: holdingDaysFor(entryDateForTicker(ticker)),
       };
 
@@ -246,7 +258,7 @@ export function computePortfolioAlignment(
       technicalsByTimeframe: dataSource.getTechnicalsByTimeframe(ticker),
       market,
       weightPct: weightPctFor(ticker),
-      openPnlPct: holding.openPnlPct,
+      openPnlPct: openPnlPctFromMark(ticker, holding),
       holdingDays: holdingDaysFor(entryDateForTicker(ticker)),
     };
   }

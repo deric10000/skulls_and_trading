@@ -390,12 +390,15 @@ function StrategyConvictionBlock({
   fallbackStatus,
   ticker,
   scoreReady,
+  checkedAsOf,
 }: {
   strategy: Strategy;
   alignment: StockAlignment | undefined;
   fallbackStatus: StatusType;
   ticker: string;
   scoreReady: boolean;
+  /** Existing check/pull stamp — display only near My Plan. */
+  checkedAsOf: string | null;
 }) {
   const conviction = alignment?.conviction ?? 0;
   const resolved = alignment?.resolved;
@@ -541,6 +544,11 @@ function StrategyConvictionBlock({
                           <span className="config-label forge-label">
                             {sectionPlanTitle}
                           </span>
+                          {checkedAsOf ? (
+                            <span className="watch-field-label">
+                              Checked as of {checkedAsOf}
+                            </span>
+                          ) : null}
                           {sectionSelected.dataPoints.length > 0 ? (
                             <ul
                               className={`watch-my-plan-datapoints watch-align--${sectionTone}`}
@@ -581,6 +589,7 @@ function WatchSummary({
   logs,
   strategyBreakdowns,
   scoreReadyByStrategyId,
+  getCheckedAsOf,
 }: {
   item: WatchlistItem;
   logs: LogEntry[];
@@ -591,6 +600,7 @@ function WatchSummary({
       below, so the two always agree. */
   strategyBreakdowns: StrategyBreakdown[];
   scoreReadyByStrategyId: Record<string, boolean>;
+  getCheckedAsOf: (strategyId: string) => string | null;
 }) {
   const owned = item.shares > 0;
   const priceNeedsReview = !getLiveQuote(item.ticker);
@@ -691,6 +701,7 @@ function WatchSummary({
                     fallbackStatus={item.status}
                     ticker={item.ticker}
                     scoreReady={scoreReadyByStrategyId[strategy.id] ?? false}
+                    checkedAsOf={getCheckedAsOf(strategy.id)}
                   />
                 ))
               ) : (
@@ -2038,6 +2049,9 @@ export function WatchlistWidget({
           logs={logsByTicker[summaryItem.ticker] ?? []}
           strategyBreakdowns={strategyBreakdowns}
           scoreReadyByStrategyId={summaryScoreReadyByStrategyId}
+          getCheckedAsOf={(strategyId) =>
+            getWatchPullStamp([strategyId], strategyId)
+          }
         />
       </section>
     );
