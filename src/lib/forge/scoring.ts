@@ -333,20 +333,26 @@ export function scoreStock(
   ctx: MetricContext,
   resolveCtx: ResolveContext = { hasStrategy: true },
 ): StockAlignment {
-  const zoneResults = evaluateZoneChipResults(strategy, ctx);
-  const zoneFlags = zoneResults
-    .filter((result) => result.outcome === "fail")
-    .reduce<StatusType[]>((flags, result) => {
-      const zoneId = zoneIdForChip(strategy, result.chip.id);
-      if (!zoneId) return flags;
-      const status = LAYER3_ZONES[zoneId].status;
-      if (!flags.includes(status)) flags.push(status);
-      return flags;
-    }, []);
+  const allowOverlays = resolveCtx.allowRuleOverlays !== false;
+  const zoneResults = allowOverlays
+    ? evaluateZoneChipResults(strategy, ctx)
+    : [];
+  const zoneFlags = allowOverlays
+    ? zoneResults
+        .filter((result) => result.outcome === "fail")
+        .reduce<StatusType[]>((flags, result) => {
+          const zoneId = zoneIdForChip(strategy, result.chip.id);
+          if (!zoneId) return flags;
+          const status = LAYER3_ZONES[zoneId].status;
+          if (!flags.includes(status)) flags.push(status);
+          return flags;
+        }, [])
+    : [];
   const statusCtx: ResolveContext = {
     ...resolveCtx,
     zoneFlags,
     zoneSurface: resolveCtx.zoneSurface ?? "ticker",
+    allowRuleOverlays: allowOverlays,
   };
   const rules = (strategy.rules ?? []).filter((chip) => chip.enabled);
   if (rules.length === 0) {

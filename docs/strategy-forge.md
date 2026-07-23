@@ -208,7 +208,11 @@ readings — **do not** re-query Yahoo for scoring at click time.
   (no-data) via dynamic sanity rules — never fabricated.
 - **Book metrics:** `openPnlPct` for chips is derived at score time from last
   mark × average cost (same quote cache as Current Watch). Do not prefer a
-  stale stored holding %. `weightPct` uses the same mark-based market values.
+  stale stored holding %. `weightPct` uses the same mark-based market values
+  and is **undefined** (chip no-data) when the name has no usable last price —
+  never a fake 0% that trips Add/Trim floors. Layer 2/3 overlays (zones and
+  category diagnostics) stay suppressed until `isConvictionScoreReady` for that
+  ticker/strategy.
 - **Incomplete cycles:** if fundamentals or market context are missing from the
   published cycle, conviction stays Score Pending for that ticker — do not
   silently renormalize over technicals-only as if the plan were fully checked.

@@ -18,6 +18,12 @@ export interface ResolveContext {
   zoneFlags?: StatusType[];
   /** ticker → Trim/Add only; portfolio → Go to Cash only. Default ticker. */
   zoneSurface?: "ticker" | "portfolio";
+  /**
+   * When false (no completed conviction check yet), suppress Layer 2/3
+   * diagnostics and zone overlays — only the conviction band may show.
+   * Default true for callers that already gate on readiness elsewhere.
+   */
+  allowRuleOverlays?: boolean;
 }
 
 /** Lower index = more severe (wins primary headline). */
@@ -150,6 +156,16 @@ export function resolveStatus(
     return {
       primary: "No Strategy",
       categoryFlags: ["No Strategy"],
+      baseBand,
+      conviction,
+    };
+  }
+
+  // Pre-check: no Trim/Add/Go-to-Cash or category diagnostic triggers yet.
+  if (ctx.allowRuleOverlays === false) {
+    return {
+      primary: baseBand,
+      categoryFlags: [],
       baseBand,
       conviction,
     };

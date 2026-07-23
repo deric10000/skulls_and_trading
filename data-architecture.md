@@ -521,6 +521,10 @@ change. **Postgres is source of truth** (not `localStorage`).
   - `lastDataPullAtByStrategyId` — the last successful real check boundary per
     strategy. It hydrates `liveCache` across local/deployed clients and is the
     persisted readiness stamp behind Score Pending Next Check.
+  - `tickerConvictionDirtyAt` — `portfolioId:TICKER` → ISO dirty-at after add
+    or enable. Hydrates with the workspace so a refresh cannot treat a new name
+    as checked just because the strategy’s last pull is older. Cleared when a
+    real check includes that ticker.
   Flags ride the normal workspace load/save path; they are markers, not
   workspace data — do not stash content there. QA reset:
   `update user_state set flags = '{}'::jsonb where user_id = …` re-triggers

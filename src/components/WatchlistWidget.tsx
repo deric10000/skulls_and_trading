@@ -1941,7 +1941,14 @@ export function WatchlistWidget({
         selectedSource.id,
       ),
     }));
-  }, [summaryItem, selectedSource.id, getAppliedStrategiesForTicker, getStrategyChipBreakdown]);
+    // lastDataPullAtByStrategyId + live rebuilds: overlays/weight refresh after checks/quotes
+  }, [
+    summaryItem,
+    selectedSource.id,
+    getAppliedStrategiesForTicker,
+    getStrategyChipBreakdown,
+    lastDataPullAtByStrategyId,
+  ]);
 
   const summaryScoreReadyByStrategyId = useMemo(() => {
     const map: Record<string, boolean> = {};
