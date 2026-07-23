@@ -511,15 +511,17 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     resetLiveCache();
     setLiveQuotes(
       Object.fromEntries(
-        tickerMarks.map((mark) => [
-          mark.ticker,
-          {
-            ticker: mark.ticker,
-            lastPrice: mark.lastPrice,
-            asOf: mark.asOf,
-            source: "live" as const,
-          },
-        ]),
+        tickerMarks
+          .filter((mark) => Number.isFinite(mark.lastPrice) && mark.lastPrice > 0)
+          .map((mark) => [
+            mark.ticker,
+            {
+              ticker: mark.ticker,
+              lastPrice: mark.lastPrice,
+              asOf: mark.asOf,
+              source: "live" as const,
+            },
+          ]),
       ),
     );
     for (const [strategyId, stamp] of Object.entries(
@@ -1115,8 +1117,15 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       markTickerConvictionDirty(portfolioId, ticker);
       void fetchMarketQuotes([ticker]).then((result) => {
         const quote = result?.quotes[ticker];
-        if (!quote) return;
+        if (!quote || !(quote.lastPrice > 0)) return;
         setLiveQuotes({ [ticker]: quote });
+        setWatchlist((current) =>
+          current.map((item) =>
+            item.ticker === ticker
+              ? { ...item, price: quote.lastPrice }
+              : item,
+          ),
+        );
         void upsertTickerMarks([
           {
             ticker,

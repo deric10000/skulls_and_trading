@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useAppState, type WatchEditSnapshot } from "../state/AppState";
 import { asyncSearchTickers, dataSource } from "../lib/datasource";
-import { getLiveQuote } from "../lib/market/liveCache";
+import { getLiveQuote, subscribeLiveCache } from "../lib/market/liveCache";
 import { formatChange, formatPrice } from "../lib/format";
 import { NeedsDataReviewFlag } from "./NeedsDataReviewFlag";
 import { formatChipCondition, formatObservedBreach } from "../lib/forge/metrics";
@@ -603,8 +603,9 @@ function WatchSummary({
   getCheckedAsOf: (strategyId: string) => string | null;
 }) {
   const owned = item.shares > 0;
-  const priceNeedsReview = !getLiveQuote(item.ticker);
-  const markPrice = priceNeedsReview ? 0 : item.price;
+  const markPriceLive = usableMarkPrice(item.ticker);
+  const priceNeedsReview = markPriceLive == null;
+  const markPrice = markPriceLive ?? 0;
   const marketValue = markPrice * item.shares;
   const totalPnl = openPnlTotal(markPrice, item.avgPrice, item.shares);
   const changePct = openPnlPercent(markPrice, item.avgPrice);
@@ -961,9 +962,18 @@ function PortfolioSourceSwitcher({
   );
 }
 
+/** Live last mark for display — null when missing or zero (Needs Data Review). */
+function usableMarkPrice(ticker: string): number | null {
+  const quote = getLiveQuote(ticker);
+  if (quote && Number.isFinite(quote.lastPrice) && quote.lastPrice > 0) {
+    return quote.lastPrice;
+  }
+  return null;
+}
+
 function watchItemFromHolding(holding: PortfolioHolding): WatchlistItem {
   const info = dataSource.getTickerInfo(holding.ticker);
-  const last = info?.lastPrice ?? 0;
+  const last = usableMarkPrice(holding.ticker) ?? 0;
   const avg = holding.avgPrice;
   return {
     ticker: holding.ticker,
@@ -1000,8 +1010,9 @@ function previewWatchItem(ticker: string): WatchlistItem | null {
 /** Read-only Current Watch row used in the add-confirm modal. */
 function WatchItemPreviewCard({ item }: { item: WatchlistItem }) {
   const owned = item.shares > 0;
-  const priceNeedsReview = !getLiveQuote(item.ticker);
-  const markPrice = priceNeedsReview ? 0 : item.price;
+  const markPriceLive = usableMarkPrice(item.ticker);
+  const priceNeedsReview = markPriceLive == null;
+  const markPrice = markPriceLive ?? 0;
   const marketValue = markPrice * item.shares;
   const totalPnl = openPnlTotal(markPrice, item.avgPrice, item.shares);
   const changePct = openPnlPercent(markPrice, item.avgPrice);
@@ -1034,7 +1045,11 @@ function WatchItemPreviewCard({ item }: { item: WatchlistItem }) {
                 <span className="watch-metric">
                   <span className="watch-field-label">Last Price</span>
                   <span className="watch-figure watch-figure--strong">
-                    {formatPrice(item.price)}
+                    {priceNeedsReview ? (
+                      <NeedsDataReviewFlag />
+                    ) : (
+                      formatPrice(markPrice)
+                    )}
                   </span>
                 </span>
                 <span className="watch-metric">
@@ -1046,7 +1061,11 @@ function WatchItemPreviewCard({ item }: { item: WatchlistItem }) {
               <span className="watch-metric">
                 <span className="watch-field-label">Last Price</span>
                 <span className="watch-figure watch-figure--strong">
-                  {formatPrice(item.price)}
+                  {priceNeedsReview ? (
+                    <NeedsDataReviewFlag />
+                  ) : (
+                    formatPrice(markPrice)
+                  )}
                 </span>
               </span>
             )}
@@ -1570,7 +1589,14 @@ export function WatchlistWidget({
   );
   useEffect(() => {
     if (isDefaultSource) return;
-    setWatchlistItems((livePortfolio?.holdings ?? []).map(watchItemFromHolding));
+    const rebuild = () => {
+      setWatchlistItems(
+        (livePortfolio?.holdings ?? []).map(watchItemFromHolding),
+      );
+    };
+    rebuild();
+    // Quotes hydrate/refresh after holdings — rebuild so Last Price tracks liveCache.
+    return subscribeLiveCache(rebuild);
   }, [isDefaultSource, livePortfolio, lastDataPullAtByStrategyId]);
 
   // The list to render: the default portfolio mirrors live app state (already
@@ -1977,7 +2003,7 @@ export function WatchlistWidget({
       portfolioRunningTotals(
         items.map((item) => ({
           // Only cycle marks — new / unpriced names stay out of MV and P&L.
-          price: getLiveQuote(item.ticker) ? item.price : 0,
+          price: usableMarkPrice(item.ticker) ?? 0,
           shares: item.shares,
           avgPrice: item.avgPrice,
         })),
@@ -2369,10 +2395,11 @@ export function WatchlistWidget({
             ? (qtyDrafts[item.ticker] ?? item.shares)
             : item.shares;
           const showOwnedMetrics = displayShares > 0 || canEditQty;
-          const priceNeedsReview = !getLiveQuote(item.ticker);
-          // Marks only count after a cycle quote exists — missing/new names stay $0
-          // until the next check (never −100% vs avg cost).
-          const lastPrice = priceNeedsReview ? 0 : item.price;
+          const markPriceLive = usableMarkPrice(item.ticker);
+          const priceNeedsReview = markPriceLive == null;
+          // Marks only count after a real positive quote exists — missing/new
+          // names stay out of MV and P&L (never −100% vs avg cost).
+          const lastPrice = markPriceLive ?? 0;
           let displayAvg = item.avgPrice;
           if (canEditQty && displayShares !== baselineShares) {
             const side = qtySideFromDelta(displayShares - baselineShares);

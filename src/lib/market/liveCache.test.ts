@@ -4,6 +4,7 @@ import {
   clearStrategyConvictionDirty,
   getLastDataPullAt,
   getLiveQuote,
+  hasUsableLiveQuote,
   isConvictionScoreReady,
   markStrategyConvictionDirty,
   resetLiveCache,
@@ -158,5 +159,29 @@ describe("account market-state hydration", () => {
     );
 
     expect(isConvictionScoreReady("book", "AAPL", ["strategy"])).toBe(true);
+  });
+});
+
+describe("hasUsableLiveQuote", () => {
+  it("rejects missing and zero lastPrice marks", () => {
+    expect(hasUsableLiveQuote("MISSING")).toBe(false);
+    setLiveQuotes({
+      ZED: {
+        ticker: "ZED",
+        lastPrice: 0,
+        asOf: "2026-07-22T20:00:00.000Z",
+        source: "live",
+      },
+    });
+    expect(hasUsableLiveQuote("ZED")).toBe(false);
+    setLiveQuotes({
+      ZED: {
+        ticker: "ZED",
+        lastPrice: 12.5,
+        asOf: "2026-07-22T20:00:00.000Z",
+        source: "live",
+      },
+    });
+    expect(hasUsableLiveQuote("ZED")).toBe(true);
   });
 });

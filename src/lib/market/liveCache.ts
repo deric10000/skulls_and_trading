@@ -116,6 +116,14 @@ export function getLiveQuote(ticker: string): TickerQuote | undefined {
   return quotes.get(ticker.toUpperCase());
 }
 
+/** True when a live mark exists with a real positive last price (not a zero stub). */
+export function hasUsableLiveQuote(ticker: string): boolean {
+  const quote = getLiveQuote(ticker);
+  return Boolean(
+    quote && Number.isFinite(quote.lastPrice) && quote.lastPrice > 0,
+  );
+}
+
 export function setLiveFundamentals(
   ticker: string,
   snapshot: FundamentalSnapshot,
