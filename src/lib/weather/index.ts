@@ -7,7 +7,8 @@ export * from "./scoring";
 export * from "./session";
 export * from "./graphics";
 export * from "./taxonomy";
-export { buildLiveWeatherSnapshot, subScoresFromMarketContext } from "./live";
+export { buildLiveWeatherSnapshot, subScoresFromMarketContext, augmentWeatherStocks } from "./live";
+export { mapYahooTaxonomy } from "./yahooTaxonomy";
 /** Mock-only — FreeTier uses `weather/live` via dataSource.getMarketWeather. */
 export { getMarketWeatherSnapshot } from "./mock";
 

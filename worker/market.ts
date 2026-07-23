@@ -361,12 +361,15 @@ export async function fetchYahooQuoteSummary(
   if (!consumeBudget("yahoo", 30)) return null;
   const session = await ensureYahooSession();
   if (!session) return null;
+  // assetProfile adds sector/industry on the SAME quoteSummary call (no extra
+  // Yahoo budget unit) so live holdings can map into Market Weather GICS.
   const modules = [
     "defaultKeyStatistics",
     "financialData",
     "summaryDetail",
     "earningsTrend",
     "calendarEvents",
+    "assetProfile",
   ].join(",");
   const url = `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(symbol)}?modules=${modules}&crumb=${encodeURIComponent(session.crumb)}`;
   const res = await fetch(url, {
@@ -602,9 +605,22 @@ export function mapFundamentals(
   //   summaryDetail        — trailingPE/forwardPE, P/S TTM, dividendYield,
   //                          payoutRatio (fractions)
   //   calendarEvents       — next earnings date (drives daysUntilEarnings)
+  //   assetProfile         — sector / industry labels (mapped client-side to GICS)
   const financial = (summary.financialData ?? {}) as Record<string, { raw?: number }>;
   const keyStats = (summary.defaultKeyStatistics ?? {}) as Record<string, { raw?: number }>;
   const detail = (summary.summaryDetail ?? {}) as Record<string, { raw?: number }>;
+  const profile = (summary.assetProfile ?? {}) as {
+    sector?: string;
+    industry?: string;
+  };
+  const providerSector =
+    typeof profile.sector === "string" && profile.sector.trim()
+      ? profile.sector.trim()
+      : null;
+  const providerIndustry =
+    typeof profile.industry === "string" && profile.industry.trim()
+      ? profile.industry.trim()
+      : null;
   const raw = (obj: Record<string, { raw?: number }>, key: string): number | null => {
     const v = obj[key]?.raw;
     return typeof v === "number" && Number.isFinite(v) ? v : null;
@@ -666,6 +682,8 @@ export function mapFundamentals(
     dividendGrowth5yPct: null,
     buybackYieldPct: null,
     nextEarningsDate,
+    providerSector,
+    providerIndustry,
     asOf: new Date().toISOString().slice(0, 10),
     source: "live" as const,
   };

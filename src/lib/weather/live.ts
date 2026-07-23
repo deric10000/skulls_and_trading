@@ -142,18 +142,17 @@ export function buildLiveWeatherSnapshot(
 
   const stocks: Record<string, WeatherLayerReading> = {};
   for (const [ticker, info] of Object.entries(TICKERS)) {
-    const industryName = info.industry;
-    const parent = industryName ? industriesOut[industryName] : undefined;
-    const sector = info.sector;
-    stocks[ticker] = buildReading({
-      layer: "stock",
-      label: ticker,
+    if (!info.sector || !info.industry) continue;
+    stocks[ticker] = buildStockReading({
+      ticker,
+      sector: info.sector,
+      industry: info.industry,
+      marketSub,
+      climate,
+      industriesOut,
+      sectorsOut,
       timeframe,
-      subScores: tilt(marketSub, (SECTOR_TILT[sector] ?? 0) - 1),
-      priceVs200DayMA: climate.priceVs200DayMA,
-      distanceFrom200DayMA: climate.distanceFrom200DayMA,
-      classify: { higherLayerScore: parent?.score ?? sectorsOut[sector]?.score },
-      lastUpdated: generatedAt,
+      generatedAt,
     });
   }
 
@@ -166,4 +165,81 @@ export function buildLiveWeatherSnapshot(
     stocks,
     industrySectors,
   };
+}
+
+/** One stock-layer reading — cascade tilt from industry → sector → market. */
+export function buildStockReading(args: {
+  ticker: string;
+  sector?: string | null;
+  industry?: string | null;
+  marketSub: WeatherSubScores;
+  climate: { priceVs200DayMA: number; distanceFrom200DayMA: number };
+  industriesOut: Record<string, WeatherLayerReading>;
+  sectorsOut: Record<string, WeatherLayerReading>;
+  timeframe: MarketWeatherTimeframe;
+  generatedAt: string;
+}): WeatherLayerReading {
+  const industry = args.industry ?? null;
+  const sector = args.sector ?? null;
+  const parentIndustry = industry ? args.industriesOut[industry] : undefined;
+  const parentSector = sector ? args.sectorsOut[sector] : undefined;
+  // No taxonomy → still readable weather: market instruments with a tiny
+  // stock-layer offset (same Free-tier cascade; no per-ticker Yahoo).
+  const delta = sector != null ? (SECTOR_TILT[sector] ?? 0) - 1 : -1;
+  return buildReading({
+    layer: "stock",
+    label: args.ticker,
+    timeframe: args.timeframe,
+    subScores: tilt(args.marketSub, delta),
+    priceVs200DayMA: args.climate.priceVs200DayMA,
+    distanceFrom200DayMA: args.climate.distanceFrom200DayMA,
+    classify: {
+      higherLayerScore:
+        parentIndustry?.score ?? parentSector?.score ?? undefined,
+    },
+    lastUpdated: args.generatedAt,
+  });
+}
+
+/**
+ * Ensure every listed watch ticker has a stock reading.
+ * Pure client math on the existing MarketContext cascade — no Yahoo calls.
+ * Sector/industry refine the tilt when known; missing taxonomy still yields
+ * a market-based stock reading.
+ */
+export function augmentWeatherStocks(
+  snapshot: MarketWeatherSnapshot,
+  ctx: MarketContext,
+  tickers: Array<{
+    ticker: string;
+    sector?: string | null;
+    industry?: string | null;
+  }>,
+): MarketWeatherSnapshot {
+  if (tickers.length === 0) return snapshot;
+  const marketSub = snapshot.market.subScores;
+  const climate = climateFromContext(ctx);
+  const stocks = { ...snapshot.stocks };
+  let changed = false;
+  for (const row of tickers) {
+    const key = row.ticker.toUpperCase();
+    if (stocks[key]) continue;
+    const sector =
+      row.sector && snapshot.sectors[row.sector] ? row.sector : null;
+    const industry =
+      row.industry && snapshot.industries[row.industry] ? row.industry : null;
+    stocks[key] = buildStockReading({
+      ticker: key,
+      sector,
+      industry,
+      marketSub,
+      climate,
+      industriesOut: snapshot.industries,
+      sectorsOut: snapshot.sectors,
+      timeframe: snapshot.timeframe,
+      generatedAt: snapshot.generatedAt,
+    });
+    changed = true;
+  }
+  return changed ? { ...snapshot, stocks } : snapshot;
 }

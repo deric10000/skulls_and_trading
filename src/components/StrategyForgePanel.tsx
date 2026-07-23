@@ -755,7 +755,8 @@ export function StrategyForgePanel({ strategy }: { strategy: Strategy | undefine
                       <>
                         {info ? (
                           <p className="tooltip-line">
-                            {info.category} · {info.sector}
+                            {info.category}
+                            {info.sector ? ` · ${info.sector}` : ""}
                           </p>
                         ) : null}
                         <p className="tooltip-line">

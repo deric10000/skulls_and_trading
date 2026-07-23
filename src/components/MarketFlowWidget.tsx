@@ -1,7 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAppState } from "../state/AppState";
 import { dataSource } from "../lib/datasource";
+import { getWatchMarketWeather } from "../lib/datasource/freeTier";
+import {
+  getLiveCacheGeneration,
+  subscribeLiveCache,
+} from "../lib/market/liveCache";
 import { SearchableSelect } from "./SearchableSelect";
+import { NeedsDataReviewFlag } from "./NeedsDataReviewFlag";
 import { CaretLeft, CaretRight } from "../lib/icons";
 import {
   getMarketSession,
@@ -139,27 +145,34 @@ export function MarketFlowWidget({
   focusTicker?: string | null;
 }) {
   const { watchlist, markWeatherReaderLayer } = useAppState();
+  const [liveGeneration, setLiveGeneration] = useState(getLiveCacheGeneration);
+  useEffect(() => subscribeLiveCache(() => setLiveGeneration(getLiveCacheGeneration())), []);
 
-  // Session detection picks which weather to read. The snapshot is fetched (mock)
-  // ONCE per session, app-wide, and filtered to the user's watch here.
-  // >>> FUTURE API WIRING <<< swap dataSource.getMarketWeather for a real feed
-  // that refreshes at each session boundary (see weather/mock.ts).
+  // Session detection picks which weather to read. The snapshot is fetched
+  // ONCE per session, then stock readings are augmented for every watched
+  // name that has mapped GICS sector/industry (client-side; no Yahoo fan-out).
   const session = getMarketSession();
-  const snapshot = dataSource.getMarketWeather(session);
+  const snapshot = useMemo(
+    () =>
+      getWatchMarketWeather(
+        session,
+        watchlist.map((item) => item.ticker),
+      ),
+    // liveGeneration: taxonomy / context refresh
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [session, watchlist, liveGeneration],
+  );
 
-  // The stock universe = names in the current watch that have stock-level
-  // weather, sorted ALPHABETICALLY (the order Previous/Next steps through).
+  // The stock universe = every name in the current watch (alpha order for
+  // Previous/Next), whether or not weather data is mapped yet.
   const watchTickers = useMemo(
-    () => watchlist.map((item) => item.ticker).filter((t) => dataSource.getTickerInfo(t)),
+    () =>
+      [...new Set(watchlist.map((item) => item.ticker.toUpperCase()))].sort(
+        (a, b) => a.localeCompare(b),
+      ),
     [watchlist],
   );
-  const stockList = useMemo(
-    () =>
-      watchTickers
-        .filter((ticker) => snapshot.stocks[ticker])
-        .sort((a, b) => a.localeCompare(b)),
-    [watchTickers, snapshot],
-  );
+  const stockList = watchTickers;
 
   // Sector / Industry list the full GICS universe from the weather snapshot
   // (not the watch) so any slice is browsable. Industry options are scoped to
@@ -198,12 +211,17 @@ export function MarketFlowWidget({
   };
   const selectionForStock = useCallback((ticker: string | null): Selection => {
     const info = ticker ? dataSource.getTickerInfo(ticker) : undefined;
-    if (info?.sector || info?.industry) {
+    if (ticker && (info?.sector || info?.industry)) {
       return {
-        sector: info.sector ?? null,
-        industry: info.industry ?? null,
+        sector: info?.sector ?? null,
+        industry: info?.industry ?? null,
         stock: ticker,
       };
+    }
+    // Focused / watched name with no GICS mapping yet — keep the ticker on
+    // Stock; do not invent a catalog sector.
+    if (ticker) {
+      return { sector: null, industry: null, stock: ticker };
     }
     // Empty watch: still open Market → Sector → Industry from catalog taxonomy.
     const sector = Object.keys(snapshot.sectors).sort((a, b) =>
@@ -221,13 +239,10 @@ export function MarketFlowWidget({
     return { sector, industry, stock: null };
   }, [snapshot]);
 
-  // The watch-driven base = the focused name (or the first watch name, in watch
-  // order — only Prev/Next stepping is alphabetical). Selecting a name in Current
-  // Watch refocuses every layer; local dropdown / Prev-Next overrides then
-  // persist until the base changes again. With no watch names, base stays null
-  // and selectionForStock picks the first catalog sector/industry.
-  const baseTicker =
-    focusTicker ?? watchTickers.find((ticker) => snapshot.stocks[ticker]) ?? null;
+  // The watch-driven base = the focused name (or the first watch name).
+  // Selecting a name in Current Watch refocuses every layer; local dropdown /
+  // Prev-Next overrides then persist until the base changes again.
+  const baseTicker = focusTicker?.toUpperCase() ?? watchTickers[0] ?? null;
   const [sel, setSel] = useState<Selection>(() => selectionForStock(baseTicker));
   useEffect(() => {
     setSel(selectionForStock(baseTicker));
@@ -388,7 +403,9 @@ export function MarketFlowWidget({
           // The card label: the entity name (NVDA) for the stock card, else the
           // layer name (Market / Sector / Industry).
           const cardLabel =
-            card.layer === "stock" && reading ? reading.label : LAYER_LABEL[card.layer];
+            card.layer === "stock" && (reading?.label || card.active)
+              ? (reading?.label ?? card.active!)
+              : LAYER_LABEL[card.layer];
           return (
             <li
               key={card.layer}
@@ -426,11 +443,23 @@ export function MarketFlowWidget({
                   {reading ? <ConditionChip reading={reading} /> : null}
                 </div>
                 {!reading ? (
-                  <p className="weather-empty">
-                    {card.layer === "stock" && options.length > 0
-                      ? "No watched name in this group — use Previous / Next to jump to one."
-                      : "Add a name to Current Watch to read its weather."}
-                  </p>
+                  <div className="weather-empty">
+                    {card.layer === "stock" && card.active ? (
+                      <NeedsDataReviewFlag label="No Stock Weather available" />
+                    ) : card.layer === "sector" && sel.stock && !sel.sector ? (
+                      <NeedsDataReviewFlag label="No Sector associated" />
+                    ) : card.layer === "industry" &&
+                      sel.stock &&
+                      !sel.industry ? (
+                      <NeedsDataReviewFlag label="No Industry associated" />
+                    ) : (
+                      <p className="weather-empty-copy">
+                        {card.layer === "stock" && options.length > 0
+                          ? "No watched name in this group — use Previous / Next to jump to one."
+                          : "Add a name to Current Watch to read its weather."}
+                      </p>
+                    )}
+                  </div>
                 ) : null}
                 {showDropdown ? (
                   <div className="weather-select">
