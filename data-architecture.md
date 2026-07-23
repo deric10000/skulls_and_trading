@@ -510,7 +510,9 @@ change. **Postgres is source of truth** (not `localStorage`).
     already true at hydrate). Earn display still **derives** from live
     portfolios/strategies (+ weather visits) via
     `src/lib/forge/onboardingBadges.ts`; do not persist earn state here.
-    `AppState.markBadgeToastsSeen`.
+    Visible starters: First Portfolio / Watchlist / Strategy Applied / Custom
+    Strategy / Weather Reader; **Onboarding Complete** (`MapTrifold`) earns
+    when all five starters are true. `AppState.markBadgeToastsSeen`.
   - `weatherReaderLayers` — Market Weather layers the Captain has opened in
     detail (card click): `market` / `sector` / `industry` / `stock`. When all
     four are present, the Weather Reader badge earns. Written by

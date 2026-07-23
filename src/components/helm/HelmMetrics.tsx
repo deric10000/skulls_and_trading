@@ -516,13 +516,24 @@ export function HelmMetrics() {
     : null;
 
   // Portfolio resolved status can still reflect pending/fake alignment. Only
-  // show StatusStack / compass when that primary tone appears among
-  // cadence-ready Plan Alignment counts (e.g. hide Review when nothing is
-  // actually due for review after the last check).
+  // show compass / Plan Alignment overall chip when that primary tone appears
+  // among cadence-ready Plan Alignment counts.
   const primaryTone = STATUS_TONE[alignment.portfolio.resolved.primary];
-  const showConvictionStatus = metrics.statusMix.some(
+  const showPlanAlignmentOverall = metrics.statusMix.some(
     (slice) => slice.tone === primaryTone,
   );
+  // Count chips priority: On Plan → Review → Off Plan; Watch last when present.
+  const planCountTones: SignalTone[] = [
+    "positive",
+    "warning",
+    "negative",
+    "neutral",
+  ];
+  const planCountSlices = planCountTones
+    .map((tone) => metrics.statusMix.find((slice) => slice.tone === tone))
+    .filter((slice): slice is (typeof metrics.statusMix)[number] =>
+      Boolean(slice),
+    );
 
   return (
     <section className="helm-metrics" aria-labelledby="helm-metrics-title">
@@ -548,7 +559,7 @@ export function HelmMetrics() {
           </div>
           <div className="helm-conviction-top">
             <div className="helm-conviction-score-row">
-              {showConvictionStatus ? (
+              {showPlanAlignmentOverall ? (
                 <PortfolioCompass
                   status={alignment.portfolio.resolved.primary}
                 />
@@ -601,9 +612,6 @@ export function HelmMetrics() {
               ) : null}
             </div>
           </div>
-          {showConvictionStatus ? (
-            <StatusStack resolved={alignment.portfolio.resolved} />
-          ) : null}
           {showConvictionSpark ? (
             <>
               <Suspense fallback={null}>
@@ -663,6 +671,46 @@ export function HelmMetrics() {
           )}
         </div>
 
+        <div className="select-card helm-metric helm-metric--alignment">
+          <span className="helm-metric-label">Plan Alignment</span>
+          <div className="helm-metric-body">
+            {showPlanAlignmentOverall ||
+            planCountSlices.length > 0 ||
+            metrics.pendingScoreCount > 0 ? (
+              <div className="helm-metric-chips helm-metric-chips--stack">
+                {showPlanAlignmentOverall ? (
+                  <StatusStack resolved={alignment.portfolio.resolved} />
+                ) : null}
+                {planCountSlices.map((slice) => (
+                  <span
+                    key={slice.tone}
+                    className={`chip status--${slice.tone}`}
+                  >
+                    {TONE_LABEL[slice.tone]} | {slice.count}
+                  </span>
+                ))}
+                {metrics.pendingScoreCount > 0 ? (
+                  <span className="chip status--neutral">
+                    Pending Score | {metrics.pendingScoreCount}
+                  </span>
+                ) : null}
+              </div>
+            ) : (
+              <span className="helm-metric-note">No scored holdings yet</span>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="forge-section-head">
+        <h3 id="helm-composition-title" className="forge-section-title">
+          Composition
+        </h3>
+      </div>
+      <div
+        className="helm-metrics-grid"
+        aria-labelledby="helm-composition-title"
+      >
         <div className="select-card helm-metric helm-metric--text">
           <span className="helm-metric-label">Strategy Coverage</span>
           <div className="helm-metric-body">
@@ -675,59 +723,27 @@ export function HelmMetrics() {
             </span>
           </div>
         </div>
-
-        <div className="select-card helm-metric helm-metric--wide">
-          <span className="helm-metric-label">Plan Alignment</span>
-          {metrics.statusMix.length > 0 || metrics.pendingScoreCount > 0 ? (
-            <div className="helm-metric-chips">
-              {metrics.pendingScoreCount > 0 ? (
-                <span className="chip status--neutral">
-                  Pending Score | {metrics.pendingScoreCount}
-                </span>
-              ) : null}
-              {metrics.statusMix.map((slice) => (
-                <span key={slice.tone} className={`chip status--${slice.tone}`}>
-                  {TONE_LABEL[slice.tone]} | {slice.count}
-                </span>
-              ))}
+        {metrics.composition.map((slice) => (
+          <div
+            key={slice.label}
+            className="select-card helm-metric helm-metric--text"
+          >
+            <span className="helm-metric-label">{slice.label}</span>
+            <div className="helm-metric-body">
+              <span className="helm-metric-value">
+                {slice.count}
+                <span className="helm-metric-unit">/{slice.count}</span>
+              </span>
+              <span className="helm-metric-note">
+                100% of position holdings
+              </span>
             </div>
-          ) : (
-            <span className="helm-metric-note">No scored holdings yet</span>
-          )}
-        </div>
+          </div>
+        ))}
       </div>
-
-      <div className="forge-section-head">
-        <h3 id="helm-composition-title" className="forge-section-title">
-          Composition
-        </h3>
-      </div>
-      {metrics.composition.length > 0 ? (
-        <div
-          className="helm-metrics-grid"
-          aria-labelledby="helm-composition-title"
-        >
-          {metrics.composition.map((slice) => (
-            <div
-              key={slice.label}
-              className="select-card helm-metric helm-metric--text"
-            >
-              <span className="helm-metric-label">{slice.label}</span>
-              <div className="helm-metric-body">
-                <span className="helm-metric-value">
-                  {slice.count}
-                  <span className="helm-metric-unit">/{slice.count}</span>
-                </span>
-                <span className="helm-metric-note">
-                  100% of position holdings
-                </span>
-              </div>
-            </div>
-          ))}
-        </div>
-      ) : (
+      {metrics.composition.length === 0 ? (
         <p className="helm-metrics-empty">No scored holdings yet</p>
-      )}
+      ) : null}
 
       <div className="forge-section-head">
         <h3 id="helm-adherence-title" className="forge-section-title">

@@ -1936,7 +1936,8 @@ export function WatchlistWidget({
   ]);
 
   // Snapshot strategy cycling uses appliedStrategies / focusedStrategy above.
-  // Portfolio-level StatusStack + compass moved to The Helm Conviction tile.
+  // Portfolio-level StatusStack lives on The Helm Plan Alignment tile;
+  // compass stays on Total Conviction.
 
   const pullStamp = getWatchPullStamp(
     appliedStrategies.map((strategy) => strategy.id),
