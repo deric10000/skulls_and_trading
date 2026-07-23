@@ -7,12 +7,14 @@ import {
   getLiveFundamentals,
   getLiveMarketContext,
   getLiveQuote,
+  getLiveTaxonomy,
   getLiveTechnicals,
   getLiveTechnicalsByTimeframe,
   registerBootstrapTickers,
 } from "../market/liveCache";
 import { fetchMarketSearch } from "../market/client";
-import { buildLiveWeatherSnapshot } from "../weather/live";
+import { augmentWeatherStocks, buildLiveWeatherSnapshot } from "../weather/live";
+import { reportTaxonomyGap } from "../userStore/taxonomyGaps";
 import type { MarketContext, TickerInfo, FundamentalSnapshot, TechnicalSnapshot } from "../../types";
 import type {
   MarketWeatherSnapshot,
@@ -97,13 +99,15 @@ function emptyTechnicalShape(): TechnicalSnapshot {
 
 function bootstrapTickerInfo(ticker: string): TickerInfo | undefined {
   const name = getBootstrapName(ticker);
-  if (!name) return undefined;
   const live = getLiveQuote(ticker);
+  // Live holdings may exist after reload without a search-hit name — still
+  // surface a stub so Weather / Watch can resolve the symbol.
+  if (!name && !live) return undefined;
   return {
-    company: name,
+    company: name ?? ticker.toUpperCase(),
     category: "Pending research",
-    sector: "Information Technology",
-    industry: "Software",
+    sector: null,
+    industry: null,
     lastPrice: live?.lastPrice ?? 0,
     priceAsOf: live?.asOf ?? EMPTY_LIVE_CONTEXT.asOf,
     analysis: {
@@ -128,13 +132,28 @@ export const freeTierDataSource: DataSource = {
     mockDataSource.getTickerAnalysis(ticker) ??
     bootstrapTickerInfo(ticker)?.analysis,
   getTickerInfo: (ticker) => {
-    const info =
-      mockDataSource.getTickerInfo(ticker) ?? bootstrapTickerInfo(ticker);
+    const seeded = mockDataSource.getTickerInfo(ticker);
+    const info = seeded ?? bootstrapTickerInfo(ticker);
     if (!info) return undefined;
     const live = getLiveQuote(ticker);
+    const tax = seeded ? null : getLiveTaxonomy(ticker);
+    const sector = seeded?.sector ?? tax?.sector ?? null;
+    const industry = seeded?.industry ?? tax?.industry ?? null;
+    if (!seeded && (!sector || !industry)) {
+      void reportTaxonomyGap({
+        ticker,
+        reason: tax?.providerSector || tax?.providerIndustry
+          ? "unmapped_yahoo"
+          : "missing_provider",
+        yahooSector: tax?.providerSector,
+        yahooIndustry: tax?.providerIndustry,
+      });
+    }
     // Live-only price: never dual-read mock lastPrice once FreeTier is bound.
     return {
       ...info,
+      sector,
+      industry,
       lastPrice: live?.lastPrice ?? 0,
       priceAsOf: live?.asOf ?? info.priceAsOf ?? EMPTY_LIVE_CONTEXT.asOf,
     };
@@ -173,6 +192,34 @@ export const freeTierDataSource: DataSource = {
     return searchCache?.hits ?? [];
   },
 };
+
+/**
+ * Weather snapshot for a watch list: base session cascade + a stock reading
+ * for every watched name (taxonomy refines the tilt when known).
+ */
+export function getWatchMarketWeather(
+  timeframe: MarketWeatherTimeframe,
+  watchTickers: string[],
+): MarketWeatherSnapshot {
+  const base = freeTierDataSource.getMarketWeather(timeframe);
+  const ctx = getLiveMarketContext() ?? EMPTY_LIVE_CONTEXT;
+  const extras: Array<{
+    ticker: string;
+    sector?: string | null;
+    industry?: string | null;
+  }> = [];
+  for (const raw of watchTickers) {
+    const ticker = raw.toUpperCase();
+    if (base.stocks[ticker]) continue;
+    const info = freeTierDataSource.getTickerInfo(ticker);
+    extras.push({
+      ticker,
+      sector: info?.sector ?? null,
+      industry: info?.industry ?? null,
+    });
+  }
+  return augmentWeatherStocks(base, ctx, extras);
+}
 
 /** Invalidate weather session cache when live context refreshes. */
 export function clearLiveWeatherCache(): void {

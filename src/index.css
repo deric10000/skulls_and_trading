@@ -6851,6 +6851,19 @@ select.forge-cell-input {
   background: rgb(5 7 13 / 0.75);
   font-size: 0.85rem;
   color: var(--text-muted);
+  /* Overlay is click-through; re-enable so Needs Data Review tooltip works. */
+  pointer-events: auto;
+}
+
+.weather-empty-copy {
+  margin: 0;
+  font-size: inherit;
+  color: inherit;
+}
+
+/* Null-gap flags on weather cards keep warning tone over the dark capsule. */
+.weather-empty .needs-data-review {
+  font-size: 0.85rem;
 }
 
 /* Sector / Industry selector: SearchableSelect (`on-graphics` trigger + typeahead

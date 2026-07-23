@@ -229,8 +229,10 @@ export interface LogEntry {
 export interface TickerInfo {
   company: string; // "Nvidia"
   category: string; // "AI Infrastructure"
-  sector: string; // GICS sector key, e.g. "Information Technology"
-  industry: string; // GICS industry key, e.g. "Semiconductors & Semiconductor Equipment"
+  /** GICS sector key, or null when live taxonomy is not mapped yet. */
+  sector: string | null;
+  /** GICS industry key, or null when live taxonomy is not mapped yet. */
+  industry: string | null;
   lastPrice: number;
   /**
    * When `lastPrice` was captured (ISO). MOCK: one-time seed (e.g. 2026-07-14).
@@ -711,6 +713,13 @@ export interface FundamentalSnapshot {
    * metric itself — the live refresh derives technicals.daysUntilEarnings from it.
    */
   nextEarningsDate?: string | null;
+  /**
+   * Raw Yahoo assetProfile strings (same quoteSummary call as fundamentals —
+   * no extra Yahoo request). Mapped client-side to GICS via weather/yahooTaxonomy.
+   * Not scored by Forge.
+   */
+  providerSector?: string | null;
+  providerIndustry?: string | null;
   asOf: string; // ISO date the snapshot reflects
   source: MarketDataSource;
   // Where this snapshot's figures came from and any per-field caveats (e.g.

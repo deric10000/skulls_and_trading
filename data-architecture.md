@@ -175,7 +175,11 @@ then committed atomically to `src/lib/market/liveCache.ts` by `AppState`.
    `weather/live.ts` (mock seeds quarantined for `mockDataSource` only).
    Sector/industry keys come from `weather/taxonomy.ts` (GICS 11 / 74 SSOT).
    `TICKERS[].sector` / `.industry` must map into that taxonomy (asserted at
-   snapshot build) — do not invent parallel nicknames in `live.ts` / `mock.ts`.
+   snapshot build). Live holdings map via Yahoo `assetProfile` on the same
+   fundamentals `quoteSummary` (no extra Yahoo unit) through
+   `weather/yahooTaxonomy.ts` — never fabricate IT/Software. Unmapped gaps
+   upsert `taxonomy_gap_events`. Do not invent parallel nicknames in
+   `live.ts` / `mock.ts`.
 
 ```ts
 // Active binding today:
@@ -217,8 +221,9 @@ Module map:
 | `scoring.ts` | Pure engine: trend score, weather score, priority classification, confidence (+ session caps), 200-day climate context, "why" copy. |
 | `session.ts` | ET-clock session detection (premarket / live / afterhours), DST-safe via `Intl`. |
 | `taxonomy.ts` | Canonical GICS 11 sectors + 74 industries (Weather browse SSOT). |
+| `yahooTaxonomy.ts` | Maps Yahoo `assetProfile` sector/industry → GICS keys (null when unmapped — never invent IT/Software). |
 | `mock.ts` | Authored sub-score seeds for `mockDataSource` only (quarantined); emits full taxonomy. |
-| `live.ts` | FreeTier Weather from live `MarketContext`; sector/industry keys from `taxonomy.ts`. |
+| `live.ts` | FreeTier Weather from live `MarketContext`; sector/industry keys from `taxonomy.ts`; `augmentWeatherStocks` for live holdings. |
 | `graphics.ts` | Resolves a `dynamicGraphicKey` to a background treatment (gradient fallback now, image/video later). |
 
 Scoring is **provider-agnostic** — `buildReading()` takes normalized 0–100
@@ -230,19 +235,25 @@ sub-scores and climate inputs, so the same engine runs on mock and live data.
 `MarketContext` (Worker: SPY / VIX / FRED) and caches per timeframe until the
 next context refresh clears it. Macro inputs refresh with market context
 (session / daily TTL on the Worker). The snapshot always includes **every**
-GICS sector and industry reading (one key → one projection). Filter per user
-**client-side** by mapping watch tickers → `TICKERS[ticker].sector` /
-`.industry` (must equal taxonomy keys).
+GICS sector and industry reading (one key → one projection), plus stock
+readings for seeded `TICKERS`. Live watch holdings get stock readings via
+`getWatchMarketWeather` → `augmentWeatherStocks` (same cascade tilt math —
+**no extra Yahoo calls**). GICS keys come from seeded `TICKERS` or from Yahoo
+`assetProfile` on the **existing** fundamentals `quoteSummary` request
+Live holdings map via Yahoo `assetProfile` on the **existing** fundamentals `quoteSummary` request
+(`providerSector` / `providerIndustry` → `mapYahooTaxonomy`). Sector and industry
+map independently when possible. Every watched ticker gets a stock reading
+(market cascade tilt, refined by sector/industry when known — **no extra Yahoo
+calls**). Missing sector/industry cards say so honestly; gaps upsert into
+Supabase `taxonomy_gap_events` for later alias normalization.
 
 The widget (`MarketFlowWidget`) is read-only on the home page: it detects the
-session, pulls the snapshot through the `dataSource` seam, and focuses
-sector/industry/stock on the name selected in Current Watch (or the first watch
-name by default). Sector/Industry use `SearchableSelect` typeahead over the
-full GICS universe (industry list filtered to the selected sector); the Stock
-layer is scoped to the watch. The three **cascade** (Sector → first Industry →
-first watch stock, with the Stock card disabled when the watch holds no name in
-that slice). All of it is local to the widget — it never writes back to the
-Current Watch selection.
+session, pulls the watch-augmented snapshot, and focuses sector/industry/stock
+on the name selected in Current Watch (or the first watch name by default).
+Previous/Next steps every watched ticker (not only seeded ones). Sector/Industry
+use `SearchableSelect` over the full GICS universe when mapped; unmapped focus
+keeps sector/industry empty instead of inventing a catalog fallback. All of it
+is local to the widget — it never writes back to the Current Watch selection.
 
 ## 6. Strategy Forge (`src/lib/forge/`)
 

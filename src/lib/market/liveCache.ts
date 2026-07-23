@@ -13,6 +13,8 @@ import type {
 } from "../../types";
 import type { MarketCyclePayload } from "./client";
 import { sanitizeFundamentals } from "../forge/metricSanity";
+import { mapYahooTaxonomy } from "../weather/yahooTaxonomy";
+import { reportTaxonomyGap } from "../userStore/taxonomyGaps";
 
 export type ProviderId = "yahoo" | "finnhub" | "fred" | "stooq";
 
@@ -23,8 +25,17 @@ export interface ProviderBudget {
   resetAt: number;
 }
 
+/** Live GICS mapping for a ticker (from Yahoo assetProfile → yahooTaxonomy). */
+export interface LiveTickerTaxonomy {
+  sector: string | null;
+  industry: string | null;
+  providerSector: string | null;
+  providerIndustry: string | null;
+}
+
 const quotes = new Map<string, TickerQuote>();
 const fundamentals = new Map<string, FundamentalSnapshot>();
+const taxonomyByTicker = new Map<string, LiveTickerTaxonomy>();
 const technicals = new Map<string, TechnicalSnapshot>();
 const technicalsByTimeframe = new Map<
   string,
@@ -53,6 +64,31 @@ function bump(): void {
   listeners.forEach((listener) => listener());
 }
 
+function ingestTaxonomyFromFundamentals(
+  ticker: string,
+  snapshot: FundamentalSnapshot,
+): void {
+  const mapped = mapYahooTaxonomy(
+    snapshot.providerSector,
+    snapshot.providerIndustry,
+  );
+  const key = ticker.toUpperCase();
+  taxonomyByTicker.set(key, {
+    sector: mapped.sector,
+    industry: mapped.industry,
+    providerSector: mapped.providerSector,
+    providerIndustry: mapped.providerIndustry,
+  });
+  if (mapped.gapReason) {
+    void reportTaxonomyGap({
+      ticker: key,
+      reason: mapped.gapReason,
+      yahooSector: mapped.providerSector,
+      yahooIndustry: mapped.providerIndustry,
+    });
+  }
+}
+
 export function subscribeLiveCache(listener: () => void): () => void {
   listeners.add(listener);
   return () => listeners.delete(listener);
@@ -66,6 +102,7 @@ export function getLiveCacheGeneration(): number {
 export function resetLiveCache(): void {
   quotes.clear();
   fundamentals.clear();
+  taxonomyByTicker.clear();
   technicals.clear();
   technicalsByTimeframe.clear();
   lastPullByStrategy.clear();
@@ -83,7 +120,9 @@ export function applyMarketCycle(cycle: MarketCyclePayload): void {
     quotes.set(ticker.toUpperCase(), { ...quote, source: "live" });
   }
   for (const [ticker, snapshot] of Object.entries(cycle.fundamentals)) {
-    fundamentals.set(ticker.toUpperCase(), sanitizeFundamentals(snapshot));
+    const clean = sanitizeFundamentals(snapshot);
+    fundamentals.set(ticker.toUpperCase(), clean);
+    ingestTaxonomyFromFundamentals(ticker, clean);
   }
   for (const [ticker, snapshot] of Object.entries(cycle.technicals)) {
     technicals.set(ticker.toUpperCase(), snapshot);
@@ -128,7 +167,9 @@ export function setLiveFundamentals(
   ticker: string,
   snapshot: FundamentalSnapshot,
 ): void {
-  fundamentals.set(ticker.toUpperCase(), sanitizeFundamentals(snapshot));
+  const clean = sanitizeFundamentals(snapshot);
+  fundamentals.set(ticker.toUpperCase(), clean);
+  ingestTaxonomyFromFundamentals(ticker, clean);
   bump();
 }
 
@@ -136,6 +177,10 @@ export function getLiveFundamentals(
   ticker: string,
 ): FundamentalSnapshot | undefined {
   return fundamentals.get(ticker.toUpperCase());
+}
+
+export function getLiveTaxonomy(ticker: string): LiveTickerTaxonomy | undefined {
+  return taxonomyByTicker.get(ticker.toUpperCase());
 }
 
 export function setLiveTechnicals(
