@@ -1,7 +1,7 @@
 import type { SignalTone, StatusType } from "../types";
 
 // Single source for alignment-status → tone. Drives the status chip
-// (StatusBadge / StatusStack — Helm Conviction tile + ticker surfaces), the
+// (StatusBadge / StatusStack — Helm Plan Alignment + ticker surfaces), the
 // inline watch-align labels (WatchAlignLabel / WatchAlignStack — ticker rows),
 // so they always agree. Tone names map to the chip/text tone classes in index.css.
 export const STATUS_TONE: Record<StatusType, SignalTone> = {

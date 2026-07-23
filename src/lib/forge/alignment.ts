@@ -1,6 +1,8 @@
 import type { Bucket, Portfolio, PortfolioHolding, ResolvedStatus, StatusType, Strategy } from "../../types";
 import { dataSource } from "../datasource";
 import { openPnlPercent } from "../finance/averageCost";
+import { portfolioWeightPct } from "../finance/portfolioWeight";
+import { getLiveQuote, isConvictionScoreReady } from "../market/liveCache";
 import {
   evaluateZoneFlags,
   scoreStock,
@@ -68,9 +70,16 @@ function openPnlPctFromMark(
   holding: PortfolioHolding | undefined,
 ): number | undefined {
   if (!holding || holding.avgPrice <= 0) return undefined;
-  const last = dataSource.getTickerInfo(ticker)?.lastPrice ?? 0;
+  const last = markPriceOf(ticker);
   if (last <= 0) return undefined;
   return openPnlPercent(last, holding.avgPrice);
+}
+
+function markPriceOf(ticker: string): number {
+  const live = getLiveQuote(ticker);
+  if (live && live.lastPrice > 0) return live.lastPrice;
+  const info = dataSource.getTickerInfo(ticker)?.lastPrice;
+  return info && info > 0 ? info : 0;
 }
 
 function strategyAppliesToPortfolio(
@@ -88,21 +97,13 @@ export function computePortfolioAlignment(
   if (!portfolio) return EMPTY;
   const activePortfolio = portfolio;
 
-  const lastPrice = (ticker: string): number =>
-    dataSource.getTickerInfo(ticker)?.lastPrice ?? 0;
+  const lastPrice = markPriceOf;
 
-  const bookValue = activePortfolio.holdings.reduce(
-    (sum, holding) => sum + holding.shares * lastPrice(holding.ticker),
-    0,
-  );
   const holdingByTicker = new Map(
     activePortfolio.holdings.map((holding) => [holding.ticker, holding]),
   );
-  const weightPctFor = (ticker: string): number => {
-    const holding = holdingByTicker.get(ticker);
-    if (!holding || bookValue <= 0) return 0;
-    return (holding.shares * lastPrice(ticker) * 100) / bookValue;
-  };
+  const weightPctFor = (ticker: string): number | undefined =>
+    portfolioWeightPct(activePortfolio.holdings, ticker, lastPrice);
 
   const portfolioBuckets = buckets.filter(
     (bucket) => bucket.portfolioId === activePortfolio.id,
@@ -162,12 +163,23 @@ export function computePortfolioAlignment(
   ): void {
     const holding = holdingByTicker.get(ticker);
     const hasStrategy = tickerHasAssignedStrategy(ticker, activePortfolio, strategies);
-    const scored = scoreStock(strategy, ctx, { hasStrategy });
+    const allowRuleOverlays = isConvictionScoreReady(
+      activePortfolio.id,
+      ticker,
+      [strategy.id],
+    );
+    const scored = scoreStock(strategy, ctx, {
+      hasStrategy,
+      allowRuleOverlays,
+    });
     const conviction = scored.hasRules ? scored.conviction : holding?.conviction ?? 0;
     const categories = scored.hasRules ? scored.categories : [];
     const resolved = scored.hasRules
       ? scored.resolved
-      : resolveStatus(conviction, categories, { hasStrategy });
+      : resolveStatus(conviction, categories, {
+          hasStrategy,
+          allowRuleOverlays,
+        });
     const alignment: StockAlignment = {
       ...scored,
       conviction,
@@ -267,16 +279,28 @@ export function computePortfolioAlignment(
     applicable: Strategy[],
     ctx: MetricContext,
     hasStrategy: boolean,
+    ticker: string,
   ): StockAlignment {
+    const allowRuleOverlays = isConvictionScoreReady(
+      activePortfolio.id,
+      ticker,
+      applicable.map((strategy) => strategy.id),
+    );
     const scored =
       applicable.length === 1
-        ? scoreStock(applicable[0], ctx, { hasStrategy })
-        : scoreStock(mergeStrategiesForScoring(applicable), ctx, { hasStrategy });
+        ? scoreStock(applicable[0], ctx, { hasStrategy, allowRuleOverlays })
+        : scoreStock(mergeStrategiesForScoring(applicable), ctx, {
+            hasStrategy,
+            allowRuleOverlays,
+          });
     const conviction = scored.hasRules ? scored.conviction : 0;
     const categories = scored.hasRules ? scored.categories : [];
     const resolved = scored.hasRules
       ? scored.resolved
-      : resolveStatus(conviction, categories, { hasStrategy });
+      : resolveStatus(conviction, categories, {
+          hasStrategy,
+          allowRuleOverlays,
+        });
     return {
       ...scored,
       conviction,
@@ -295,7 +319,12 @@ export function computePortfolioAlignment(
     if (applicable.length === 0) continue;
 
     const ctx = buildMetricContext(ticker, holding);
-    const alignment = scoreAlignmentForStrategies(applicable, ctx, true);
+    const alignment = scoreAlignmentForStrategies(
+      applicable,
+      ctx,
+      true,
+      ticker,
+    );
     const existing = byTicker[ticker];
     byTicker[ticker] = {
       ticker,
@@ -339,11 +368,21 @@ export function computePortfolioAlignment(
 
   // Go to Cash is portfolio-only: fire if any applied holding's go-to-cash
   // overlay fails (market chips fail the same on every ticker; P&L chips OR).
+  // Skip until a conviction check has completed for that holding's strategies.
   const portfolioZoneFlags: StatusType[] = [];
   for (const holding of activePortfolio.holdings) {
     if (holding.shares <= 0) continue;
     const applicable = strategiesForHolding(holding, activePortfolio.id, strategies);
     if (applicable.length === 0) continue;
+    if (
+      !isConvictionScoreReady(
+        activePortfolio.id,
+        holding.ticker,
+        applicable.map((strategy) => strategy.id),
+      )
+    ) {
+      continue;
+    }
     const strategy =
       applicable.length === 1
         ? applicable[0]

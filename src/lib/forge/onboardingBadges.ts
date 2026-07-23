@@ -4,6 +4,7 @@ import {
   ChartBar,
   Hammer,
   ListBullets,
+  MapTrifold,
   Strategy,
   UserCircle,
   Waves,
@@ -24,8 +25,18 @@ export type OnboardingBadgeId =
   | "first-strategy-applied"
   | "first-custom-strategy"
   | "weather-reader"
+  | "onboarding-complete"
   | "first-dashboard"
   | "first-captain-profile";
+
+/** The five starter milestones — Onboarding Complete unlocks when all are earned. */
+export const STARTER_ONBOARDING_BADGE_IDS: readonly OnboardingBadgeId[] = [
+  "first-portfolio",
+  "first-watchlist",
+  "first-strategy-applied",
+  "first-custom-strategy",
+  "weather-reader",
+] as const;
 
 export type WeatherReaderLayer = "market" | "sector" | "industry" | "stock";
 
@@ -57,6 +68,13 @@ export interface OnboardingBadgeDef {
 function hasWeatherReader(ctx: OnboardingBadgeContext): boolean {
   const visited = new Set(ctx.weatherReaderLayers ?? []);
   return WEATHER_READER_LAYERS.every((layer) => visited.has(layer));
+}
+
+function hasOnboardingComplete(ctx: OnboardingBadgeContext): boolean {
+  return STARTER_ONBOARDING_BADGE_IDS.every((id) => {
+    const badge = ONBOARDING_BADGES.find((entry) => entry.id === id);
+    return badge != null && !badge.underConstruction && badge.isEarned(ctx);
+  });
 }
 
 export const ONBOARDING_BADGES: OnboardingBadgeDef[] = [
@@ -107,6 +125,16 @@ export const ONBOARDING_BADGES: OnboardingBadgeDef[] = [
       "Congratulations — Weather Reader earned. You read the full stack from Market to Stock.",
     icon: Waves,
     isEarned: hasWeatherReader,
+  },
+  {
+    id: "onboarding-complete",
+    name: "Onboarding Complete",
+    description:
+      "Earn all five starter badges — First Portfolio, Watchlist, Strategy Applied, Custom Strategy, and Weather Reader.",
+    congratulate:
+      "Congratulations — Onboarding Complete. The five starters are yours; keep the voyage steady.",
+    icon: MapTrifold,
+    isEarned: hasOnboardingComplete,
   },
   {
     id: "first-dashboard",

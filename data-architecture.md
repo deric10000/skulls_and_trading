@@ -510,7 +510,9 @@ change. **Postgres is source of truth** (not `localStorage`).
     already true at hydrate). Earn display still **derives** from live
     portfolios/strategies (+ weather visits) via
     `src/lib/forge/onboardingBadges.ts`; do not persist earn state here.
-    `AppState.markBadgeToastsSeen`.
+    Visible starters: First Portfolio / Watchlist / Strategy Applied / Custom
+    Strategy / Weather Reader; **Onboarding Complete** (`MapTrifold`) earns
+    when all five starters are true. `AppState.markBadgeToastsSeen`.
   - `weatherReaderLayers` — Market Weather layers the Captain has opened in
     detail (card click): `market` / `sector` / `industry` / `stock`. When all
     four are present, the Weather Reader badge earns. Written by
@@ -519,6 +521,10 @@ change. **Postgres is source of truth** (not `localStorage`).
   - `lastDataPullAtByStrategyId` — the last successful real check boundary per
     strategy. It hydrates `liveCache` across local/deployed clients and is the
     persisted readiness stamp behind Score Pending Next Check.
+  - `tickerConvictionDirtyAt` — `portfolioId:TICKER` → ISO dirty-at after add
+    or enable. Hydrates with the workspace so a refresh cannot treat a new name
+    as checked just because the strategy’s last pull is older. Cleared when a
+    real check includes that ticker.
   Flags ride the normal workspace load/save path; they are markers, not
   workspace data — do not stash content there. QA reset:
   `update user_state set flags = '{}'::jsonb where user_id = …` re-triggers

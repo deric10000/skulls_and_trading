@@ -22,6 +22,8 @@ import {
   getLastDataPullAt,
   getLastDataPullAtMap,
   getMarketCycleMeta,
+  getTickerConvictionDirtyMap,
+  hydrateTickerConvictionDirty,
   isConvictionScoreReady,
   markStrategyConvictionDirty,
   markTickerConvictionDirty,
@@ -100,6 +102,7 @@ import {
   nextAverageCost,
   openPnlPercent,
 } from "../lib/finance/averageCost";
+import { portfolioWeightPct } from "../lib/finance/portfolioWeight";
 import { persistBookAndConvictionMarks } from "../lib/finance/persistMarketMarks";
 import { persistForgeCheckEvents } from "../lib/forge/persistCheckEvents";
 import {
@@ -511,15 +514,17 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     resetLiveCache();
     setLiveQuotes(
       Object.fromEntries(
-        tickerMarks.map((mark) => [
-          mark.ticker,
-          {
-            ticker: mark.ticker,
-            lastPrice: mark.lastPrice,
-            asOf: mark.asOf,
-            source: "live" as const,
-          },
-        ]),
+        tickerMarks
+          .filter((mark) => Number.isFinite(mark.lastPrice) && mark.lastPrice > 0)
+          .map((mark) => [
+            mark.ticker,
+            {
+              ticker: mark.ticker,
+              lastPrice: mark.lastPrice,
+              asOf: mark.asOf,
+              source: "live" as const,
+            },
+          ]),
       ),
     );
     for (const [strategyId, stamp] of Object.entries(
@@ -529,6 +534,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         setLastDataPullAt(strategyId, stamp);
       }
     }
+    hydrateTickerConvictionDirty(workspace.flags.tickerConvictionDirtyAt);
     const timeframeMigrations = consumeTimeframeMigrations();
     applyWorkspaceToSetters(workspace, {
       setPortfolios,
@@ -621,6 +627,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     setFlags((current) => ({
       ...current,
       lastDataPullAtByStrategyId: getLastDataPullAtMap(),
+      tickerConvictionDirtyAt: getTickerConvictionDirtyMap(),
     }));
     return upsertTickerMarks(marks);
   }, []);
@@ -1113,10 +1120,21 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         ];
       });
       markTickerConvictionDirty(portfolioId, ticker);
+      setFlags((current) => ({
+        ...current,
+        tickerConvictionDirtyAt: getTickerConvictionDirtyMap(),
+      }));
       void fetchMarketQuotes([ticker]).then((result) => {
         const quote = result?.quotes[ticker];
-        if (!quote) return;
+        if (!quote || !(quote.lastPrice > 0)) return;
         setLiveQuotes({ [ticker]: quote });
+        setWatchlist((current) =>
+          current.map((item) =>
+            item.ticker === ticker
+              ? { ...item, price: quote.lastPrice }
+              : item,
+          ),
+        );
         void upsertTickerMarks([
           {
             ticker,
@@ -1699,6 +1717,10 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       if (enabled) {
         markTickerConvictionDirty(portfolioId, ticker);
         markStrategyConvictionDirty(strategyId);
+        setFlags((current) => ({
+          ...current,
+          tickerConvictionDirtyAt: getTickerConvictionDirtyMap(),
+        }));
       }
     },
     [],
@@ -1848,33 +1870,38 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         ? portfolios.find((item) => item.id === portfolioId)
         : undefined;
       const holding = portfolio?.holdings.find((item) => item.ticker === ticker);
-      const lastPrice = (symbol: string): number =>
-        dataSource.getTickerInfo(symbol)?.lastPrice ?? 0;
-      const bookValue =
-        portfolio?.holdings.reduce(
-          (sum, item) => sum + item.shares * lastPrice(item.ticker),
-          0,
-        ) ?? 0;
-      // Match alignment.ts: 0 when unheld / empty book so weight chips evaluate
-      // (undefined would read as "no data" and never trip Add/Trim zones).
-      const weightPct =
-        holding && bookValue > 0
-          ? (holding.shares * lastPrice(ticker) * 100) / bookValue
-          : 0;
+      const priceOf = (symbol: string): number => {
+        const live = getLiveQuote(symbol);
+        if (live && live.lastPrice > 0) return live.lastPrice;
+        const info = dataSource.getTickerInfo(symbol)?.lastPrice;
+        return info && info > 0 ? info : 0;
+      };
+      const weightPct = portfolio
+        ? portfolioWeightPct(portfolio.holdings, ticker, priceOf)
+        : undefined;
+      const mark = priceOf(ticker);
       const ctx: MetricContext = {
         fundamentals: dataSource.getFundamentals(ticker),
         technicals: dataSource.getTechnicals(ticker),
         technicalsByTimeframe: dataSource.getTechnicalsByTimeframe(ticker),
         market: dataSource.getMarketContext(),
         openPnlPct:
-          holding && holding.avgPrice > 0
-            ? openPnlPercent(lastPrice(ticker), holding.avgPrice)
+          holding && holding.avgPrice > 0 && mark > 0
+            ? openPnlPercent(mark, holding.avgPrice)
             : undefined,
         weightPct,
       };
-      return scoreStock(strategy, ctx);
+      const allowRuleOverlays =
+        portfolioId != null &&
+        isConvictionScoreReady(portfolioId, ticker, [strategyId]);
+      return scoreStock(strategy, ctx, {
+        hasStrategy: true,
+        allowRuleOverlays,
+      });
     },
-    [strategies, portfolios],
+    // marketGeneration: live quotes change weightPct / openPnlPct / overlays
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [strategies, portfolios, marketGeneration],
   );
 
   // Overlay computed conviction/status onto the default portfolio's watchlist so

@@ -116,6 +116,14 @@ export function getLiveQuote(ticker: string): TickerQuote | undefined {
   return quotes.get(ticker.toUpperCase());
 }
 
+/** True when a live mark exists with a real positive last price (not a zero stub). */
+export function hasUsableLiveQuote(ticker: string): boolean {
+  const quote = getLiveQuote(ticker);
+  return Boolean(
+    quote && Number.isFinite(quote.lastPrice) && quote.lastPrice > 0,
+  );
+}
+
 export function setLiveFundamentals(
   ticker: string,
   snapshot: FundamentalSnapshot,
@@ -199,6 +207,27 @@ export function markTickerConvictionDirty(
 ): void {
   tickerDirtyAt.set(tickerDirtyKey(portfolioId, ticker), Date.now());
   bump();
+}
+
+/** Restore persisted dirty stamps after hydrate (ISO → epoch ms). */
+export function hydrateTickerConvictionDirty(
+  stamps: Record<string, string> | undefined,
+): void {
+  tickerDirtyAt.clear();
+  for (const [key, iso] of Object.entries(stamps ?? {})) {
+    const ms = Date.parse(iso);
+    if (!Number.isNaN(ms)) tickerDirtyAt.set(key, ms);
+  }
+  bump();
+}
+
+/** Persistable map of dirty keys → ISO timestamps. */
+export function getTickerConvictionDirtyMap(): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [key, ms] of tickerDirtyAt.entries()) {
+    out[key] = new Date(ms).toISOString();
+  }
+  return out;
 }
 
 /** A real scoped check completed for this strategy body. */

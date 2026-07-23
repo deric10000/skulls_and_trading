@@ -29,6 +29,12 @@ export interface UserFlags {
   weatherReaderLayers?: Array<"market" | "sector" | "industry" | "stock">;
   /** Last successful real strategy-check boundary, shared across clients. */
   lastDataPullAtByStrategyId?: Record<string, string>;
+  /**
+   * Tickers waiting on a check after add/enable. Keys are `portfolioId:TICKER`,
+   * values are ISO dirty-at stamps. Hydrates liveCache so Score Pending survives
+   * reload (in-memory dirty alone was lost and falsely showed High Alignment).
+   */
+  tickerConvictionDirtyAt?: Record<string, string>;
 }
 
 export interface UserWorkspace {
