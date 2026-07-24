@@ -164,17 +164,18 @@ covered by that strategy's `appliedPortfolioIds` for the same source.
   Forge preview local only). Single-strategy scope filters every Progress metric
   (incl. Open P&L) via `tickerInScope` / `shouldScoreTickerWithStrategy`.
   **Conviction Change** uses `metrics.conviction` on book snapshots + ticker
-  `conviction_snapshots` for drivers (no fabricated history). **Open P&L
-  sparkline** reads additive `portfolio_snapshots` (`strategy_id ''` = whole
-  book; cash on every scope). Write path: `persistBookAndConvictionMarks` after
-  **Open P&L sparkline** reads additive `portfolio_snapshots` (`strategy_id ''` =
-  whole book; cash on every scope). Write path: `persistBookAndConvictionMarks`
-  after live refresh — `as_of` is America/New_York market session day (capped to
-  Last Conviction Check on non-check writes so Open P&L cannot invent a spark day
-  ahead of the toast); Open P&L upserts on that day, but `metrics.conviction`
-  stamps only on check days (or check-driven writes); enriches ticker conviction
-  payload; does **not** change Forge / zone / `portfolioRunningTotals` math. Also
-  writes `metrics.cashAdded` / `cashWithdrawn` from same-day cash ledger rows.
+  `conviction_snapshots` for drivers (no fabricated history). **Open P&L**
+  Helm headline = all-time `portfolio_snapshots.open_pnl_pct` delta
+  (`pnlDeltaPct`); range under the shared Helm timeframe tag = same delta over
+  the spark window; sparkline reads the full additive series (`strategy_id ''` =
+  whole book; cash on every scope). Current Watch footer stays live open-book %.
+  Write path: `persistBookAndConvictionMarks` after live refresh — `as_of` is
+  America/New_York market session day (capped to Last Conviction Check on
+  non-check writes so Open P&L cannot invent a spark day ahead of the toast);
+  Open P&L upserts on that day, but `metrics.conviction` stamps only on check
+  days (or check-driven writes); enriches ticker conviction payload; does **not**
+  change Forge / zone / `portfolioRunningTotals` math. Also writes
+  `metrics.cashAdded` / `cashWithdrawn` from same-day cash ledger rows.
   Check-driven path also appends `forge_check_events` (status + hold-inaction)
   for Plan Adherence. Editable portfolio cash (`updatePortfolioCash`) +
   `PortfolioTransaction` ledger in `share_fills` (qty + cash; cash rows are

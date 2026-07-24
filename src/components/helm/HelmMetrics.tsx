@@ -24,6 +24,7 @@ import {
   helmCadenceFloorForScope,
   helmTimeframeBounds,
   mergeConvictionSparkByDay,
+  pnlDeltaPct,
   seriesToConvictionSparkPoints,
   seriesToSparkPoints,
   sparkRangeShowsPointMarkers,
@@ -114,7 +115,9 @@ function resolveCssColor(varName: string, fallback: string): string {
  * Watch (mirrored via shared AppState). Strategy scope is shared Home state
  * (`watchStrategyScopeId`) so Progress and Current Watch filter together.
  * Open P&L and Total Conviction history load from portfolio_snapshots
- * (additive; scoring unchanged). Shared spark range defaults to 1 week.
+ * (additive; scoring unchanged). Open P&L headline = all-time snapshot
+ * `openPnlPct` delta; range under the timeframe tag uses the shared Helm
+ * window. Shared spark range defaults to 1 week (toggle UI later).
  */
 export function HelmMetrics() {
   const {
@@ -252,6 +255,8 @@ export function HelmMetrics() {
     setSparkLoaded(false);
     setAdherenceLoaded(false);
 
+    // Conviction / ticker / adherence stay near-term; Open P&L needs full
+    // history for the all-time headline delta (omit `from`).
     const from = new Date();
     from.setUTCDate(from.getUTCDate() - 21);
     const fromStr = from.toISOString().slice(0, 10);
@@ -266,7 +271,6 @@ export function HelmMetrics() {
       fetchPortfolioSnapshots({
         portfolioId: portfolio.id,
         strategyId: watchStrategyScopeId,
-        from: fromStr,
       }),
       // Per-strategy marks: All-strategies conviction spark + adherence proxies.
       Promise.all(
@@ -419,12 +423,6 @@ export function HelmMetrics() {
     );
   }
 
-  const pnlUp = metrics.openPnlPct >= 0;
-  const pnlLineColor = resolveCssColor(
-    pnlUp ? "--positive" : "--negative",
-    pnlUp ? "#3d9a6a" : "#c45c4a",
-  );
-
   // Spark history ends on Last Conviction Check's ET day — never invent "today"
   // ahead of the toast (Open P&L and Total Conviction share this bound).
   const historyEndDay = lastCheckSeedTime(
@@ -433,14 +431,31 @@ export function HelmMetrics() {
     appliedStrategies.map((s) => s.id),
   );
 
+  const pnlHistoryPoints = clipSparkPointsThrough(
+    pnlSparkPoints,
+    historyEndDay,
+  );
+  const latestSnapshotPnlPct =
+    pnlHistoryPoints.length > 0
+      ? pnlHistoryPoints[pnlHistoryPoints.length - 1]!.value
+      : null;
+
   const pnlDisplayPoints = displaySparkPointsForRange(
-    clipSparkPointsThrough(pnlSparkPoints, historyEndDay),
+    pnlHistoryPoints,
     sparkRange,
     {
       loaded: sparkLoaded,
-      seedValue: metrics.openPnlPct,
+      // Seed from latest snapshot level only — never live open-book %.
+      seedValue: latestSnapshotPnlPct,
       seedTime: historyEndDay,
     },
+  );
+  const allTimePnlPct = pnlDeltaPct(pnlHistoryPoints);
+  const rangePnlPct = pnlDeltaPct(pnlDisplayPoints);
+  const pnlUp = (allTimePnlPct ?? rangePnlPct ?? 0) >= 0;
+  const pnlLineColor = resolveCssColor(
+    pnlUp ? "--positive" : "--negative",
+    pnlUp ? "#3d9a6a" : "#c45c4a",
   );
   const showPnlSpark = pnlDisplayPoints.length >= 1;
   const drawPnlLine = pnlDisplayPoints.length >= 2;
@@ -638,14 +653,31 @@ export function HelmMetrics() {
         <div className="select-card helm-metric helm-metric--pnl">
           <div className="helm-metric-head">
             <span className="helm-metric-label">Open P&amp;L</span>
-            <span className="panel-tag session-tag">{sparkRangeLabel}</span>
+            <span className="helm-metric-tag-stack">
+              <span className="panel-tag session-tag">{sparkRangeLabel}</span>
+              {rangePnlPct != null ? (
+                <span
+                  className={`helm-metric-range-pnl ${
+                    rangePnlPct >= 0
+                      ? "helm-metric-value--up"
+                      : "helm-metric-value--down"
+                  }`}
+                >
+                  {formatChange(rangePnlPct)}
+                </span>
+              ) : null}
+            </span>
           </div>
           <span
             className={`helm-metric-value ${
-              pnlUp ? "helm-metric-value--up" : "helm-metric-value--down"
+              allTimePnlPct == null
+                ? ""
+                : allTimePnlPct >= 0
+                  ? "helm-metric-value--up"
+                  : "helm-metric-value--down"
             }`}
           >
-            {formatChange(metrics.openPnlPct)}
+            {allTimePnlPct != null ? formatChange(allTimePnlPct) : "—"}
           </span>
           {showPnlSpark ? (
             <div className="helm-metric-spark-block">

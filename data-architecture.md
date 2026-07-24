@@ -408,12 +408,14 @@ Metrics reduce an existing `PortfolioAlignment` (all-strategy memoized
 `getPortfolioAlignment`, or scoped to `[focusedStrategy]` via
 `computePortfolioAlignment` when one strategy is picked) through the pure
 `src/lib/forge/helmMetrics.ts` (`computeHelmMetrics`): MV-weighted conviction,
-aggregate open P&L (open P&L / cost basis via `portfolioRunningTotals`), strategy
-coverage, status mix (by `STATUS_TONE`, shown as Plan Alignment chips), and
-composition by headline bucket/lens (rendered as its own Progress-style section
-of metric cards — placeholder `held/held` until Forge position-holdings rules
-supply a target). When a single strategy is picked, every Progress metric —
-**including Open P&L** — reduces only over holdings enabled for that strategy
+aggregate open P&L for live reads (open P&L / cost basis via
+`portfolioRunningTotals` — used by Current Watch; Helm Open P&L headline uses
+snapshot deltas instead), strategy coverage, status mix (by `STATUS_TONE`,
+shown as Plan Alignment chips), and composition by headline bucket/lens
+(rendered as its own Progress-style section of metric cards — placeholder
+`held/held` until Forge position-holdings rules supply a target). When a single
+strategy is picked, every Progress metric — **including Open P&L scope** —
+reduces only over holdings enabled for that strategy
 (`shouldScoreTickerWithStrategy` / `tickerInScope`, same rule as Current Watch's
 strategy filter); "All strategies" uses the whole book.
 
@@ -427,17 +429,27 @@ a lone older mark is not labeled “today”. Ticker drivers come from
 `conviction_snapshots` deltas + live weakest category labels (Thesis Fit /
 Technical Setup, etc.). No fabricated history when marks are missing.
 
-**Open P&L history** (additive): daily rows in `portfolio_snapshots` (see below).
-Helm fetches the series for the mirrored portfolio + scope and renders a lazy
-`SparklineChart` when ≥2 distinct `as_of` days exist. Spark tips/axis are clipped
-through the Last Conviction Check ET day so a mid-day refresh cannot show a
-calendar day ahead of the toast. No fabricated backfill.
+**Open P&L** (additive, dual display): daily rows in `portfolio_snapshots` (see
+below). Helm fetches the **full** series for the mirrored portfolio + scope
+(`strategy_id` or `''` for All) — no short day cap — and derives:
+
+- **Headline** = all-time period change: `openPnlPct(last) − openPnlPct(first)`
+  via `pnlDeltaPct` (honest empty / em dash when fewer than two snapshot days).
+- **Under the timeframe tag** (default “1 WEEK”; toggle UI later) = the same
+  delta over the shared Helm spark window (`helmTimeframe` / `sparkRange`).
+
+Spark tips/axis are clipped through the Last Conviction Check ET day so a
+mid-day refresh cannot show a calendar day ahead of the toast. Seed for a
+missing window day uses the **latest snapshot level**, never live open-book %.
+Current Watch footer Total / Open P&L remains live open-book % via
+`portfolioRunningTotals` — different meaning by design.
 
 **Shared Helm timeframe** (`src/lib/finance/helmTimeframe.ts`): default `1w`
 (indicator only; toggle UI later). Also plumbs `1m` / `1y` / `ytd` plus cadence
 floors `1h` / `2h` / `4h` when the focused strategy allows; **All strategies**
 uses the coarsest (slowest) floor among applied strategies. Total Conviction,
-Open P&L, and Plan Adherence all read the same clamped timeframe.
+Open P&L (range under tag), and Plan Adherence all read the same clamped
+timeframe.
 
 **Plan Adherence** (below Composition): Notifications (check-event flag counts,
 with proxies from `conviction_snapshots` / book `metrics.conviction` check days

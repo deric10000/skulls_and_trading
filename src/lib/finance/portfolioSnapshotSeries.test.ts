@@ -5,6 +5,7 @@ import {
   etIsoDate,
   latestEtDay,
   mergeConvictionSparkByDay,
+  pnlDeltaPct,
   seriesToConvictionSparkPoints,
   sparkPointsForRange,
   sparkRangeShowsPointMarkers,
@@ -149,6 +150,15 @@ describe("displaySparkPointsForRange", () => {
       }),
     ).toEqual([{ time: "2026-07-22", value: 86 }]);
   });
+
+  it("omits seed when seedValue is missing", () => {
+    expect(
+      displaySparkPointsForRange([], "1w", {
+        loaded: true,
+        seedValue: null,
+      }),
+    ).toEqual([]);
+  });
 });
 
 describe("etIsoDate", () => {
@@ -181,5 +191,31 @@ describe("clipSparkPointsThrough", () => {
         (p) => p.time,
       ),
     ).toEqual(["2026-07-20", "2026-07-21"]);
+  });
+});
+
+describe("pnlDeltaPct", () => {
+  it("returns last minus first percentage points", () => {
+    expect(
+      pnlDeltaPct([
+        { time: "2026-07-20", value: 5 },
+        { time: "2026-07-21", value: 8 },
+        { time: "2026-07-22", value: 12.5 },
+      ]),
+    ).toBe(7.5);
+  });
+
+  it("sorts by time before differencing", () => {
+    expect(
+      pnlDeltaPct([
+        { time: "2026-07-22", value: 10 },
+        { time: "2026-07-20", value: 4 },
+      ]),
+    ).toBe(6);
+  });
+
+  it("returns null with fewer than two points", () => {
+    expect(pnlDeltaPct([])).toBeNull();
+    expect(pnlDeltaPct([{ time: "2026-07-20", value: 5 }])).toBeNull();
   });
 });
