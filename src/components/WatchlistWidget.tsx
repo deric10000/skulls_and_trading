@@ -2011,7 +2011,12 @@ export function WatchlistWidget({
         items.map((item) => ({
           // Only cycle marks — new / unpriced names stay out of MV and P&L.
           price: usableMarkPrice(item.ticker) ?? 0,
-          shares: item.shares,
+          // Edit mode must use draft qty with cashDraft so Total stays flat when
+          // reallocating stocks ↔ cash (only a Cash cell edit changes Total).
+          shares:
+            editMode && !isWatchlistSource
+              ? (qtyDrafts[item.ticker] ?? item.shares)
+              : item.shares,
           avgPrice: item.avgPrice,
         })),
         editMode && !isWatchlistSource
@@ -2024,6 +2029,7 @@ export function WatchlistWidget({
       editMode,
       isWatchlistSource,
       cashDraft,
+      qtyDrafts,
       lastDataPullAtByStrategyId,
     ],
   );
