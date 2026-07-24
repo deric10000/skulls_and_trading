@@ -39,7 +39,30 @@ export function seriesToSparkPoints(
     .map((row) => ({
       time: row.asOf,
       value: row.openPnlPct,
-    }));
+    }))
+    .sort((a, b) => a.time.localeCompare(b.time));
+}
+
+/**
+ * Period Open P&L % from a spark series: last − first (percentage points).
+ * Null when fewer than two finite points — never fabricate history.
+ */
+export function pnlDeltaPct(points: SparkPoint[]): number | null {
+  const sorted = points
+    .filter((point) => Number.isFinite(point.value))
+    .slice()
+    .sort((a, b) => a.time.localeCompare(b.time));
+  if (sorted.length < 2) return null;
+  const first = sorted[0]!.value;
+  const last = sorted[sorted.length - 1]!.value;
+  return last - first;
+}
+
+/** Convenience: period delta from raw portfolio snapshot rows. */
+export function pnlDeltaPctFromRows(
+  rows: PortfolioSnapshotRecord[],
+): number | null {
+  return pnlDeltaPct(seriesToSparkPoints(rows));
 }
 
 /** Pure: map snapshot `metrics.conviction` to sparkline points (0–100). */
@@ -146,11 +169,19 @@ export function sparkPointsForRange(
 export function displaySparkPointsForRange(
   points: SparkPoint[],
   range: HelmTimeframe,
-  options: { loaded: boolean; seedValue: number; seedTime?: string },
+  options: {
+    loaded: boolean;
+    /** Omit / non-finite = no fabricated single-day seed. */
+    seedValue?: number | null;
+    seedTime?: string;
+  },
 ): SparkPoint[] {
   const ranged = sparkPointsForRange(points, range);
   if (ranged.length > 0) return ranged;
   if (!options.loaded) return [];
+  if (options.seedValue == null || !Number.isFinite(options.seedValue)) {
+    return [];
+  }
   return [
     {
       time: options.seedTime ?? localIsoDate(),

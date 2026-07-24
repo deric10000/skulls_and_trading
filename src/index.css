@@ -998,6 +998,8 @@ button {
   font-family: inherit;
   line-height: 1.55;
   cursor: pointer;
+  /* Square like .input / multiselect triggers — not chip pill (999px). */
+  border-radius: var(--radius-sm);
   border: 1px solid rgb(241 178 74 / 0.45);
   background: var(--accent-soft);
   color: var(--accent-strong);
@@ -1076,6 +1078,20 @@ button {
   flex-shrink: 0;
 }
 
+.helm-metric-tag-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.12rem;
+  flex-shrink: 0;
+}
+
+.helm-metric-range-pnl {
+  font-size: 0.85rem;
+  font-weight: 600;
+  line-height: 1.1;
+}
+
 .helm-metric-value {
   display: inline-block;
   width: fit-content;
@@ -1147,19 +1163,26 @@ button {
   width: auto;
 }
 
-/* Open P&L: keep head + value top-anchored; center sparkline + dates in leftover height. */
+/* Open P&L: head + value stay top; spark + dates pin to the bottom when the
+   card stretches (multi-column). Use margin-top:auto — not flex:1/min-height:0 —
+   so Safari cannot shrink the block below chart+dates and spill axis labels
+   outside the card border (seen on real iOS; desktop mobile viewport often misses it). */
 .helm-metric--pnl .helm-metric-spark-block {
-  flex: 1;
+  margin-top: auto;
   display: flex;
   flex-direction: column;
-  justify-content: center;
   gap: 0.15rem;
-  min-height: 0;
+  flex: 0 0 auto;
   width: 100%;
 }
 
 .helm-metric--pnl .helm-metric-spark-block .helm-metric-spark {
   margin-top: 0;
+  flex-shrink: 0;
+}
+
+.helm-metric--pnl .helm-metric-spark-block .helm-metric-spark-dates {
+  flex-shrink: 0;
 }
 
 .helm-metric--conviction {
@@ -1210,10 +1233,6 @@ button {
 .helm-metric--conviction .compass {
   width: clamp(40px, 4.5vw, 48px);
   flex-shrink: 0;
-}
-
-.helm-metric--pnl {
-  min-height: 0;
 }
 
 .helm-metric-spark,
@@ -1297,6 +1316,7 @@ button {
   font-size: 0.68rem;
   color: var(--text-faint);
   font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
 }
 
 .helm-metric-spark-dates span:last-child {

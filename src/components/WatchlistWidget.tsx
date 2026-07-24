@@ -1985,9 +1985,15 @@ export function WatchlistWidget({
     if (!checkSchedule) return;
     const timer = window.setInterval(() => setCountdownNow(Date.now()), 1000);
     return () => window.clearInterval(timer);
-  }, [checkSchedule?.nextAt]);
+  }, [checkSchedule?.nextAt, checkSchedule?.applyAt, checkSchedule?.checkInProgress]);
   const countdown = checkSchedule
-    ? formatCheckCountdown(Date.parse(checkSchedule.nextAt) - countdownNow)
+    ? formatCheckCountdown(
+        Date.parse(
+          checkSchedule.checkInProgress
+            ? checkSchedule.applyAt
+            : checkSchedule.nextAt,
+        ) - countdownNow,
+      )
     : null;
   // Always show schedule chrome when strategies are applied — last-known stamp
   // when available, otherwise an explicit waiting label so the clock is visible.
@@ -2001,9 +2007,11 @@ export function WatchlistWidget({
       ? marketLoading
         ? "Checking now…"
         : "Due · running first check"
-      : showScheduleChrome && checkSchedule && countdown
-        ? `${formatCheckTime(checkSchedule.nextAt)} (${countdown})`
-        : null;
+      : showScheduleChrome && checkSchedule?.checkInProgress
+        ? `Check in-progress (${countdown})`
+        : showScheduleChrome && checkSchedule && countdown
+          ? `${formatCheckTime(checkSchedule.nextAt)} (${countdown})`
+          : null;
 
   const runningTotals = useMemo(
     () =>
@@ -2011,7 +2019,12 @@ export function WatchlistWidget({
         items.map((item) => ({
           // Only cycle marks — new / unpriced names stay out of MV and P&L.
           price: usableMarkPrice(item.ticker) ?? 0,
-          shares: item.shares,
+          // Edit mode must use draft qty with cashDraft so Total stays flat when
+          // reallocating stocks ↔ cash (only a Cash cell edit changes Total).
+          shares:
+            editMode && !isWatchlistSource
+              ? (qtyDrafts[item.ticker] ?? item.shares)
+              : item.shares,
           avgPrice: item.avgPrice,
         })),
         editMode && !isWatchlistSource
@@ -2024,6 +2037,7 @@ export function WatchlistWidget({
       editMode,
       isWatchlistSource,
       cashDraft,
+      qtyDrafts,
       lastDataPullAtByStrategyId,
     ],
   );

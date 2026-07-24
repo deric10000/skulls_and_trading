@@ -7,6 +7,9 @@ import {
   clampCadenceInterval,
   clampCandleInterval,
   nextCadenceAt,
+  nextCheckAt,
+  overdueCheckAt,
+  overdueStrategyCheckAt,
   sessionCycleBoundary,
   tickersForStrategy,
 } from "./scheduler";
@@ -155,5 +158,47 @@ describe("reliable cadence floor", () => {
       },
     ] satisfies Portfolio[];
     expect(tickersForStrategy(strategy, portfolios)).toEqual(["AAPL"]);
+  });
+});
+
+describe("overdue check walls", () => {
+  it("returns the due close once it has passed without a stamp", () => {
+    // Last check Thu 2026-07-23 16:00 ET = 20:00Z. Now Fri 16:07 ET = 20:07Z.
+    const lastAt = "2026-07-23T20:00:00.000Z";
+    const nowMs = Date.parse("2026-07-24T20:07:00.000Z");
+    expect(overdueCheckAt("close-regular", lastAt, nowMs)).toBe(
+      "2026-07-24T20:00:00.000Z",
+    );
+    // Future wall skips the weekend → Monday.
+    expect(nextCheckAt("close-regular", lastAt, nowMs)).toBe(
+      "2026-07-27T20:00:00.000Z",
+    );
+  });
+
+  it("is null when the next wall is still ahead", () => {
+    const lastAt = "2026-07-23T20:00:00.000Z";
+    const nowMs = Date.parse("2026-07-24T15:00:00.000Z"); // Fri 11:00 ET
+    expect(overdueCheckAt("close-regular", lastAt, nowMs)).toBeNull();
+  });
+
+  it("picks the earliest overdue across strategy intervals", () => {
+    const strategy = {
+      id: "agg",
+      name: "Agg",
+      description: "",
+      isDefault: false,
+      enabled: true,
+      timeframe: [],
+      tags: [],
+      decisionSignals: [],
+      exitLogic: [],
+      checkInterval: "1D",
+      sessionCloseChecks: ["close-regular"],
+    } satisfies Strategy;
+    const lastAt = "2026-07-23T20:00:00.000Z";
+    const nowMs = Date.parse("2026-07-24T20:07:00.000Z");
+    expect(overdueStrategyCheckAt(strategy, lastAt, nowMs)).toBe(
+      "2026-07-24T20:00:00.000Z",
+    );
   });
 });

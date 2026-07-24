@@ -330,6 +330,45 @@ export function nextStrategyCheckAt(
   return new Date(Math.min(...times)).toISOString();
 }
 
+/**
+ * Latest cadence boundary that is already due (after lastAt, at or before now)
+ * but not yet in the future. Null when nothing is overdue — the UI should then
+ * show the next future wall via `nextCheckAt`.
+ */
+export function overdueCheckAt(
+  interval: CheckInterval,
+  lastAt: string | null | undefined,
+  nowMs: number = Date.now(),
+): string | null {
+  const cursor =
+    lastAt && !Number.isNaN(Date.parse(lastAt))
+      ? Date.parse(lastAt)
+      : nowMs - 1;
+  let next = nextCadenceAt(interval, new Date(cursor));
+  let overdue: string | null = null;
+  let guard = 0;
+  while (Date.parse(next) <= nowMs && guard < 64) {
+    overdue = next;
+    next = nextCadenceAt(interval, new Date(Date.parse(next)));
+    guard += 1;
+  }
+  return overdue;
+}
+
+/** Earliest overdue boundary across a strategy's scheduled intervals. */
+export function overdueStrategyCheckAt(
+  strategy: Strategy,
+  lastAt: string | null | undefined,
+  nowMs: number = Date.now(),
+): string | null {
+  const dues = scheduledIntervalsForStrategy(strategy)
+    .map((interval) => overdueCheckAt(interval, lastAt, nowMs))
+    .filter((iso): iso is string => Boolean(iso))
+    .map((iso) => Date.parse(iso));
+  if (dues.length === 0) return null;
+  return new Date(Math.min(...dues)).toISOString();
+}
+
 /** US regular hours in ET approximated via America/New_York parts. */
 export function isUsRegularMarketHours(date = new Date()): boolean {
   const { mins, weekday } = etParts(date);
