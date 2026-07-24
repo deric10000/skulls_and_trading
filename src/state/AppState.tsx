@@ -49,6 +49,7 @@ import {
   INTERVAL_LABEL,
   createRefreshScheduler,
   nextStrategyCheckAt,
+  overdueStrategyCheckAt,
 } from "../lib/forge/scheduler";
 import { strategiesForHolding, isDefaultStrategyId } from "../lib/forge/tickerStrategy";
 import { canAddChips, canAddTicker, getBudgetUsage } from "../lib/forge/budgets";
@@ -362,7 +363,16 @@ interface AppStateValue {
   ) => {
     lastAt: string | null;
     nextAt: string;
+    /** True when no strategy has stamped a check yet (first-run). */
     waitingOnCycle: boolean;
+    /**
+     * True when a cadence wall has already passed since lastAt but the check
+     * has not stamped yet — show "Check in-progress" instead of jumping to the
+     * next future wall (e.g. Monday after Friday close).
+     */
+    checkInProgress: boolean;
+    /** Countdown target while a check is due / applying (next cycle hour — not the next cadence wall). */
+    applyAt: string;
   } | null;
   /** False → Current Watch shows No Score until the next successful check. */
   isConvictionScoreReady: (
@@ -1775,6 +1785,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       lastAt: string | null;
       nextAt: string;
       waitingOnCycle: boolean;
+      checkInProgress: boolean;
+      applyAt: string;
     } | null => {
       const ids = focusedStrategyId
         ? [focusedStrategyId]
@@ -1793,6 +1805,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
           {
             lastAt,
             nextAt: nextStrategyCheckAt(strategy, lastAt, now),
+            overdueAt: overdueStrategyCheckAt(strategy, lastAt, now),
           },
         ];
       });
@@ -1809,10 +1822,26 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       const nextAt = new Date(
         Math.min(...rows.map((row) => Date.parse(row.nextAt))),
       ).toISOString();
+      const overdueStamps = rows
+        .map((row) => row.overdueAt)
+        .filter((iso): iso is string => Boolean(iso))
+        .map((iso) => Date.parse(iso));
+      const checkInProgress = overdueStamps.length > 0;
       const waitingOnCycle = ids.some(
         (strategyId) => !getLastDataPullAt(strategyId),
       );
-      return { lastAt, nextAt, waitingOnCycle };
+      const cycleApplyMs = cycleMeta?.nextCycleAt
+        ? Date.parse(cycleMeta.nextCycleAt)
+        : NaN;
+      const HOUR_MS = 60 * 60_000;
+      // In-progress countdown = when this due check should apply (next market
+      // cycle publish), never the next future cadence wall (e.g. Monday).
+      const applyAt = checkInProgress
+        ? Number.isFinite(cycleApplyMs) && cycleApplyMs > now
+          ? new Date(cycleApplyMs).toISOString()
+          : new Date(Math.floor(now / HOUR_MS) * HOUR_MS + HOUR_MS).toISOString()
+        : nextAt;
+      return { lastAt, nextAt, waitingOnCycle, checkInProgress, applyAt };
     },
     [marketGeneration, strategies],
   );

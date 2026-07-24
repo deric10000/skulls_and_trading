@@ -998,6 +998,8 @@ button {
   font-family: inherit;
   line-height: 1.55;
   cursor: pointer;
+  /* Square like .input / multiselect triggers — not chip pill (999px). */
+  border-radius: var(--radius-sm);
   border: 1px solid rgb(241 178 74 / 0.45);
   background: var(--accent-soft);
   color: var(--accent-strong);
