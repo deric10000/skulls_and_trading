@@ -1,5 +1,5 @@
 import { Clock } from "../../lib/icons";
-import { useAppState } from "../../state/AppState";
+import { useWorkspaceState } from "../../state/AppState";
 import type { PortfolioLinkStatus } from "../../types";
 
 const STATUS_TONE: Record<PortfolioLinkStatus, string> = {
@@ -17,7 +17,7 @@ const OPTIONS: { value: PortfolioLinkStatus; label: string; soon?: boolean }[] =
 ];
 
 export function PortfolioLinkStatusCard() {
-  const { captain, updateCaptain } = useAppState();
+  const { captain, updateCaptain } = useWorkspaceState();
 
   return (
     <section className="panel link-card" aria-labelledby="link-title">

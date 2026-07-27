@@ -1,7 +1,11 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
-import { useAppState } from "../../state/AppState";
+import {
+  useAuthState,
+  useMarketState,
+  useWorkspaceState,
+} from "../../state/AppState";
 import { dataSource } from "../../lib/datasource";
-import { computePortfolioAlignment } from "../../lib/forge/alignment";
+import { getPortfolioAlignmentCached } from "../../lib/forge/alignmentCache";
 import {
   buildConvictionChangeView,
   formatConvictionDelta,
@@ -11,6 +15,7 @@ import {
 } from "../../lib/forge/convictionChange";
 import { computeHelmMetrics } from "../../lib/forge/helmMetrics";
 import {
+  isUntrackedHolding,
   shouldScoreTickerWithStrategy,
   strategiesForHolding,
 } from "../../lib/forge/tickerStrategy";
@@ -27,6 +32,7 @@ import {
   pnlDeltaPct,
   seriesToConvictionSparkPoints,
   seriesToSparkPoints,
+  seriesToTrackedOpenPnlSparkPoints,
   sparkRangeShowsPointMarkers,
   type HelmTimeframe,
   type SparkPoint,
@@ -39,11 +45,7 @@ import {
   type ForgeCheckEvent,
   type TickerPriceMark,
 } from "../../lib/forge/planAdherence";
-import {
-  fetchConvictionSnapshots,
-  fetchForgeCheckEvents,
-  fetchPortfolioSnapshots,
-} from "../../lib/userStore";
+import { fetchProgressHistory } from "../../lib/helm/progressHistory";
 import { formatChange, formatDecimals } from "../../lib/format";
 import { STATUS_TONE } from "../../lib/status";
 import type { SignalTone } from "../../types";
@@ -124,14 +126,17 @@ export function HelmMetrics() {
     portfolios,
     strategies,
     buckets,
-    getPortfolioAlignment,
     selectedPortfolioId,
     watchStrategyScopeId,
     setWatchStrategyScopeId,
+    shareFills,
+  } = useWorkspaceState();
+  const {
+    getPortfolioAlignment,
     isConvictionScoreReady,
     lastDataPullAtByStrategyId,
-    shareFills,
-  } = useAppState();
+  } = useMarketState();
+  const { userProfile } = useAuthState();
 
   const portfolio = useMemo(
     () =>
@@ -148,6 +153,17 @@ export function HelmMetrics() {
         : [],
     [strategies, portfolio],
   );
+  const trackedTickerSet = useMemo(() => {
+    if (!portfolio) return new Set<string>();
+    return new Set(
+      portfolio.holdings
+        .filter(
+          (holding) =>
+            !isUntrackedHolding(holding, portfolio.id, strategies),
+        )
+        .map((holding) => holding.ticker.toUpperCase()),
+    );
+  }, [portfolio, strategies]);
 
   const [pnlSparkPoints, setPnlSparkPoints] = useState<SparkPoint[]>([]);
   const [convictionSparkPoints, setConvictionSparkPoints] = useState<
@@ -197,7 +213,9 @@ export function HelmMetrics() {
   const alignment = useMemo(() => {
     if (!portfolio) return undefined;
     return focusedStrategy
-      ? computePortfolioAlignment(portfolio, buckets, [focusedStrategy])
+      ? getPortfolioAlignmentCached(portfolio, buckets, [focusedStrategy], {
+          caller: "helm",
+        })
       : getPortfolioAlignment(portfolio.id);
   }, [portfolio, focusedStrategy, buckets, getPortfolioAlignment]);
 
@@ -218,6 +236,7 @@ export function HelmMetrics() {
             );
           }
         : undefined,
+      isTracked: (ticker) => trackedTickerSet.has(ticker.toUpperCase()),
       isScoreReady: (ticker) => {
         const holding = portfolio.holdings.find((h) => h.ticker === ticker);
         if (!holding) return true;
@@ -236,12 +255,13 @@ export function HelmMetrics() {
     alignment,
     focusedStrategy,
     strategies,
+    trackedTickerSet,
     isConvictionScoreReady,
     lastDataPullAtByStrategyId,
   ]);
 
   useEffect(() => {
-    if (!portfolio || !alignment) {
+    if (!portfolio || !alignment || !userProfile?.id) {
       setPnlSparkPoints([]);
       setConvictionSparkPoints([]);
       setSparkLoaded(false);
@@ -260,49 +280,28 @@ export function HelmMetrics() {
     const from = new Date();
     from.setUTCDate(from.getUTCDate() - 21);
     const fromStr = from.toISOString().slice(0, 10);
-    const strategyIds = watchStrategyScopeId
-      ? [watchStrategyScopeId]
-      : appliedStrategies.map((s) => s.id);
     const tickers = portfolio.holdings
-      .filter((h) => h.shares > 0)
+      .filter(
+        (h) => h.shares > 0 && trackedTickerSet.has(h.ticker.toUpperCase()),
+      )
       .map((h) => h.ticker.toUpperCase());
 
-    void Promise.all([
-      fetchPortfolioSnapshots({
-        portfolioId: portfolio.id,
-        strategyId: watchStrategyScopeId,
-      }),
-      // Per-strategy marks: All-strategies conviction spark + adherence proxies.
-      Promise.all(
-        (watchStrategyScopeId
-          ? appliedStrategies.filter((s) => s.id === watchStrategyScopeId)
-          : appliedStrategies
-        ).map((strategy) =>
-          fetchPortfolioSnapshots({
-            portfolioId: portfolio.id,
-            strategyId: strategy.id,
-            from: fromStr,
-          }),
-        ),
-      ).then((rows) => rows.flat()),
-      strategyIds.length > 0 && tickers.length > 0
-        ? fetchConvictionSnapshots({
-            strategyIds,
-            tickers,
-            from: fromStr,
-          })
-        : Promise.resolve([]),
-      fetchForgeCheckEvents({
-        portfolioId: portfolio.id,
-        strategyIds: watchStrategyScopeId
-          ? [watchStrategyScopeId]
-          : strategyIds,
-        fromIso: timeframeBounds.fromIso,
-        toIso: timeframeBounds.toIso,
-      }),
-    ]).then(([bookRows, scopedBookRows, tickerRows, events]) => {
+    void fetchProgressHistory({
+      userId: userProfile.id,
+      portfolioId: portfolio.id,
+      strategyId: watchStrategyScopeId,
+      appliedStrategyIds: appliedStrategies.map((strategy) => strategy.id),
+      tickers,
+      recentFrom: fromStr,
+      eventsFromIso: timeframeBounds.fromIso,
+      eventsToIso: timeframeBounds.toIso,
+    }).then(({ bookRows, scopedBookRows, tickerRows, events }) => {
       if (cancelled) return;
-      setPnlSparkPoints(seriesToSparkPoints(bookRows));
+      setPnlSparkPoints(
+        watchStrategyScopeId
+          ? seriesToSparkPoints(bookRows)
+          : seriesToTrackedOpenPnlSparkPoints(bookRows),
+      );
       // Conviction: scoped strategy rows (or merged across strategies for All).
       // Never rely only on whole-book '' rows — those often lack conviction.
       setConvictionSparkPoints(
@@ -346,7 +345,9 @@ export function HelmMetrics() {
           bookCheckDays,
           tickers,
           ledger: shareFills,
-        }),
+        }).filter((event) =>
+          trackedTickerSet.has(event.ticker.toUpperCase()),
+        ),
       );
       const marks: TickerPriceMark[] = [];
       for (const row of tickerRows) {
@@ -403,9 +404,11 @@ export function HelmMetrics() {
     watchStrategyScopeId,
     appliedStrategies,
     alignment,
+    trackedTickerSet,
     timeframeBounds.fromIso,
     timeframeBounds.toIso,
     shareFills,
+    userProfile?.id,
   ]);
 
   if (!portfolio || !metrics || !alignment) {
@@ -511,7 +514,11 @@ export function HelmMetrics() {
     : null;
   const actionCounts = adherenceLoaded
     ? countActions(
-        shareFills,
+        shareFills.filter(
+          (transaction) =>
+            transaction.kind === "cash" ||
+            trackedTickerSet.has(transaction.ticker.toUpperCase()),
+        ),
         checkEvents,
         portfolio.id,
         adherenceStrategyIds,
@@ -520,7 +527,11 @@ export function HelmMetrics() {
     : null;
   const zoneImpact = adherenceLoaded
     ? computeZoneFollowedImpact(
-        shareFills,
+        shareFills.filter(
+          (transaction) =>
+            transaction.kind === "cash" ||
+            trackedTickerSet.has(transaction.ticker.toUpperCase()),
+        ),
         priceMarks,
         portfolio.id,
         adherenceStrategyIds,

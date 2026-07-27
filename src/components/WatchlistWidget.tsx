@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { useAppState, type WatchEditSnapshot } from "../state/AppState";
+import {
+  useMarketState,
+  useWorkspaceState,
+  type WatchEditSnapshot,
+} from "../state/AppState";
 import { asyncSearchTickers, dataSource } from "../lib/datasource";
 import { getLiveQuote, subscribeLiveCache } from "../lib/market/liveCache";
 import { formatChange, formatPrice } from "../lib/format";
@@ -17,8 +21,10 @@ import {
   resolveStatus,
 } from "../lib/forge/status";
 import {
+  isUntrackedHolding,
   isTickerEnabledForStrategy,
   shouldScoreTickerWithStrategy,
+  untrackedHoldings,
 } from "../lib/forge/tickerStrategy";
 import { STATUS_TONE } from "../lib/status";
 import { WatchAlignLabel, WatchConvictionHead, WatchConvictionMeter } from "./StatusBadge";
@@ -68,6 +74,7 @@ import { ForgePill } from "./ForgePill";
 import {
   CaretDown,
   CaretLeft,
+  Info,
   MagnifyingGlass,
   PencilSimple,
   Plus,
@@ -109,11 +116,27 @@ import { ForgeToast } from "./forge/ForgeToast";
 import { ForgeTableModal } from "./forge/ForgeTableModal";
 import { ActionFooter } from "./ActionFooter";
 import { StrategyScopeSelect } from "./StrategyScopeSelect";
+import { Tooltip } from "./Tooltip";
 
 /** Closed Beta: hide under-conviction Watch Summary detail until Dashboard ships. */
 const SHOW_WATCH_SUMMARY_DETAIL = false;
 
 const EMPTY_GUIDE_STORAGE_PREFIX = "st-empty-watch-guide:";
+
+function untrackedHoldingLabel() {
+  return (
+    <Tooltip
+      title="Untracked"
+      body="This name is not assigned to an applied strategy. It stays in Current Watch, but is excluded from Helm performance and alignment metrics."
+      wide
+    >
+      <span className="watch-align watch-align--neutral">
+        <Info aria-hidden />
+        Untracked
+      </span>
+    </Tooltip>
+  );
+}
 
 function emptyGuideStorageKey(sourceId: string) {
   return `${EMPTY_GUIDE_STORAGE_PREFIX}${sourceId}`;
@@ -707,15 +730,7 @@ function WatchSummary({
                 ))
               ) : (
                 <div className="watch-conviction-box">
-                  <WatchConvictionHead
-                    resolved={item.resolved}
-                    fallbackStatus={item.status}
-                    hideStatuses
-                  />
-                  <WatchConvictionMeter
-                    conviction={item.conviction}
-                    scoreReady={false}
-                  />
+                  {untrackedHoldingLabel()}
                 </div>
               )}
             </div>
@@ -1085,12 +1100,7 @@ function WatchItemPreviewCard({ item }: { item: WatchlistItem }) {
           </span>
 
           <span className="watch-conviction-box">
-            <WatchConvictionHead
-              resolved={item.resolved}
-              fallbackStatus={item.status}
-              hideStatuses
-            />
-            <WatchConvictionMeter conviction={item.conviction} scoreReady={false} />
+            {untrackedHoldingLabel()}
           </span>
         </span>
       </div>
@@ -1357,7 +1367,6 @@ export function WatchlistWidget({
     logsByTicker,
     portfolios,
     strategies,
-    getPortfolioAlignment,
     getAppliedStrategiesForTicker,
     getStrategyChipBreakdown,
     addTickerToPortfolio,
@@ -1369,16 +1378,19 @@ export function WatchlistWidget({
     captureWatchEditSnapshot,
     restoreWatchEditSnapshot,
     createPortfolioSource,
+    setSelectedPortfolioId,
+    watchStrategyScopeId,
+    setWatchStrategyScopeId,
+  } = useWorkspaceState();
+  const {
+    getPortfolioAlignment,
     getWatchPullStamp,
     getWatchCheckSchedule,
     isConvictionScoreReady,
     lastDataPullAtByStrategyId,
-    setSelectedPortfolioId,
-    watchStrategyScopeId,
-    setWatchStrategyScopeId,
     requestImmediateStrategyCheck,
     marketLoading,
-  } = useAppState();
+  } = useMarketState();
   const isPreview = Boolean(previewStrategyId);
   const panelTitle = isPreview ? "Watch Preview" : "Current Watch";
   const previewStrategy = previewStrategyId
@@ -1405,6 +1417,12 @@ export function WatchlistWidget({
   const [editMode, setEditMode] = useState(false);
   const [editDraft, setEditDraft] = useState("");
   const [editToast, setEditToast] = useState<string | null>(null);
+  const [addedTickersDuringEdit, setAddedTickersDuringEdit] = useState<string[]>(
+    [],
+  );
+  const [untrackedToastTickers, setUntrackedToastTickers] = useState<string[]>(
+    [],
+  );
   const [emptyGuideDismissed, setEmptyGuideDismissed] = useState(false);
   const [scheduleToastCollapsed, setScheduleToastCollapsed] = useState(false);
   const [tickerSuggestionsOpen, setTickerSuggestionsOpen] = useState(false);
@@ -1534,6 +1552,8 @@ export function WatchlistWidget({
     setEditMode(false);
     setEditDraft("");
     setEditToast(null);
+    setAddedTickersDuringEdit([]);
+    setUntrackedToastTickers([]);
     setTickerSuggestionsOpen(false);
     setAddPreview(null);
     setQtyBaseline({});
@@ -1678,6 +1698,7 @@ export function WatchlistWidget({
     setCashOffset(0);
     setEditSnapshot(captureWatchEditSnapshot(selectedSource.id));
     setDiscardConfirmOpen(false);
+    setAddedTickersDuringEdit([]);
     setEditMode(true);
   }
 
@@ -1685,6 +1706,7 @@ export function WatchlistWidget({
     setEditMode(false);
     setEditDraft("");
     setEditToast(null);
+    setAddedTickersDuringEdit([]);
     setTickerSuggestionsOpen(false);
     setAddPreview(null);
     setQtyBaseline({});
@@ -1694,6 +1716,22 @@ export function WatchlistWidget({
     setPendingReview(null);
     setEditSnapshot(null);
     setDiscardConfirmOpen(false);
+  }
+
+  function finishSuccessfulEdit() {
+    const shouldReportUntracked = addedTickersDuringEdit.length > 0;
+    const currentSource = portfolios.find(
+      (source) => source.id === selectedSource.id,
+    );
+    const currentUntracked = currentSource
+      ? untrackedHoldings(currentSource, strategies)
+          .map((holding) => holding.ticker.toUpperCase())
+          .sort()
+      : [];
+    cancelEditMode();
+    if (shouldReportUntracked && currentUntracked.length > 0) {
+      setUntrackedToastTickers(currentUntracked);
+    }
   }
 
   function hasStructuralEdits(snapshot: WatchEditSnapshot): boolean {
@@ -1828,7 +1866,7 @@ export function WatchlistWidget({
     if (orders.length === 0 && !cash) {
       // Structural edits only — no simulated order review.
       commitCashIfDirty({ recordManual: false });
-      cancelEditMode();
+      finishSuccessfulEdit();
       return;
     }
     setPendingReview({ orders, cash });
@@ -1851,7 +1889,7 @@ export function WatchlistWidget({
       });
     }
     setPendingReview(null);
-    cancelEditMode();
+    finishSuccessfulEdit();
     persistWatchEditMarks();
   }
 
@@ -1901,6 +1939,11 @@ export function WatchlistWidget({
       showEditToast("Ticker budget reached");
       return;
     }
+    setAddedTickersDuringEdit((current) =>
+      current.includes(addPreview.ticker)
+        ? current
+        : [...current, addPreview.ticker],
+    );
     setEditDraft("");
     setTickerSuggestionsOpen(false);
   }
@@ -2350,6 +2393,21 @@ export function WatchlistWidget({
           </ForgeToast>
         </div>
       ) : null}
+      {untrackedToastTickers.length > 0 ? (
+        <div className="forge-toast-stack">
+          <ForgeToast
+            tone="info"
+            onDismiss={() => setUntrackedToastTickers([])}
+            dismissLabel="Dismiss untracked tickers"
+          >
+            <p>
+              Untracked: {untrackedToastTickers.join(", ")}. These names remain
+              in Current Watch but stay out of Helm performance and alignment
+              until you assign an applied strategy.
+            </p>
+          </ForgeToast>
+        </div>
+      ) : null}
       {readOnly && !editMode && showScopeChip ? (
         // Mobile Current Watch + Forge Watch Preview: gold scope chip.
         // Desktop Home: filter via Helm Progress chip (shared watchStrategyScopeId).
@@ -2570,6 +2628,10 @@ export function WatchlistWidget({
             rowStrategies.map((strategy) => strategy.id),
           );
 
+          const untracked =
+            holding != null
+              ? isUntrackedHolding(holding, selectedSource.id, strategies)
+              : rowStrategies.length === 0;
           const convictionOrStrategies = editMode ? (
             <WatchStrategyEditPicker
               ticker={item.ticker}
@@ -2585,6 +2647,10 @@ export function WatchlistWidget({
                 )
               }
             />
+          ) : untracked ? (
+            <span className="watch-conviction-box">
+              {untrackedHoldingLabel()}
+            </span>
           ) : (
             <span className="watch-conviction-box">
               <WatchConvictionHead

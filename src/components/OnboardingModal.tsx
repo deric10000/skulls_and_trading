@@ -17,7 +17,7 @@ import {
   LEGAL_DISCLAIMER_BODY,
   LEGAL_DISCLAIMER_TITLE,
 } from "../lib/legal/disclaimer";
-import { useAppState } from "../state/AppState";
+import { useUiState } from "../state/AppState";
 import { Stepper } from "./Stepper";
 
 /**
@@ -235,7 +235,7 @@ function StepBody({
 }
 
 export function OnboardingModal() {
-  const { dismissOnboardingModal, acknowledgeLegal } = useAppState();
+  const { dismissOnboardingModal, acknowledgeLegal } = useUiState();
   const steps = ONBOARDING_STEPS.filter((step) => !step.underConstruction);
   const [stepIndex, setStepIndex] = useState(0);
   const step = steps[stepIndex];

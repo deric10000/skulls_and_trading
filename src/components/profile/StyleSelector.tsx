@@ -1,10 +1,10 @@
 import { HORIZON_OPTIONS, FOCUS_OPTIONS, STYLE_OPTIONS } from "../../data";
-import { useAppState } from "../../state/AppState";
+import { useWorkspaceState } from "../../state/AppState";
 import type { TimeHorizon, TradingStyle } from "../../types";
 import { ChoiceGroup } from "../ChoiceGroup";
 
 export function StyleSelector() {
-  const { captain, updateCaptain } = useAppState();
+  const { captain, updateCaptain } = useWorkspaceState();
 
   function toggleFocus(option: string) {
     const exists = captain.focus.includes(option);

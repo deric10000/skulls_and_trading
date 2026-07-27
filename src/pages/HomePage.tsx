@@ -4,7 +4,8 @@ import { HeroCard } from "../components/HeroCard";
 import { MarketFlowWidget } from "../components/MarketFlowWidget";
 import { Tabs, type TabItem } from "../components/Tabs";
 import { WatchlistWidget } from "../components/WatchlistWidget";
-import { useAppState } from "../state/AppState";
+import { useWorkspaceState } from "../state/AppState";
+import { PERF_MARK, perfMark } from "../lib/performance/marks";
 
 type HomeTabId = "helm" | "market-weather" | "current-watch";
 
@@ -29,7 +30,7 @@ const MOBILE_HOME_TABS: TabItem[] = [
 const SLIDE_ORDER: HomeTabId[] = ["current-watch", "market-weather", "helm"];
 
 export function HomePage() {
-  const { selectedTicker } = useAppState();
+  const { selectedTicker } = useWorkspaceState();
   // Default selection differs by viewport: Current Watch leads on mobile, Helm
   // on desktop/tablet (unchanged). Set at mount from the same 767px breakpoint
   // that drives the carousel so the first paint matches.
@@ -55,6 +56,10 @@ export function HomePage() {
     dragFree: false,
     loop: false,
   });
+
+  useEffect(() => {
+    perfMark(PERF_MARK.homeMounted);
+  }, []);
 
   function scrollToTab(tabId: HomeTabId) {
     setActiveTab(tabId);

@@ -4,7 +4,7 @@ import { ComingSoonOverlay } from "./components/ComingSoonOverlay";
 import { MarketBudgetToasts } from "./components/MarketBudgetToasts";
 import { ForgeToast } from "./components/forge/ForgeToast";
 import { HomePage } from "./pages/HomePage";
-import { useAppState } from "./state/AppState";
+import { useUiState } from "./state/AppState";
 
 // Pages are lazy by default (performance-budget.md). Home stays eager: it is
 // the default landing, so it ships with this authed chunk and needs no second
@@ -34,7 +34,7 @@ const OnboardingModal = lazy(() =>
 );
 
 function ActivePage() {
-  const { activePage } = useAppState();
+  const { activePage } = useUiState();
 
   if (activePage === "dashboard") return <DashboardPage />;
   if (activePage === "strategy-forge") return <StrategyForgePage />;
@@ -58,7 +58,7 @@ export default function AuthedApp() {
     cadenceToast,
     clearCadenceToast,
     previewStrategyCheckToast,
-  } = useAppState();
+  } = useUiState();
 
   // One-shot preview: ?previewCadenceToast=1 (or DEV window hook).
   useEffect(() => {

@@ -1,12 +1,12 @@
 import { dataSource } from "../../lib/datasource";
-import { useAppState } from "../../state/AppState";
+import { useWorkspaceState } from "../../state/AppState";
 import { AllocationCard } from "./AllocationCard";
 import { PortfolioMetricCard } from "./PortfolioMetricCard";
 import { PositionCard } from "./PositionCard";
 import { RiskRuleCard } from "./RiskRuleCard";
 
 export function TreasureLedger() {
-  const { captain } = useAppState();
+  const { captain } = useWorkspaceState();
   const valuesHidden = captain.privacy === "Private" || captain.privacy === "Ghost";
   const portfolioMetrics = dataSource.getPortfolioMetrics();
   const positions = dataSource.getPositions();

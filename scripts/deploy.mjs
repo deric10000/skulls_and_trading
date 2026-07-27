@@ -49,6 +49,9 @@ function run(cmd, args) {
   if (result.status !== 0) process.exit(result.status ?? 1);
 }
 
+run("npm", ["run", "typecheck"]);
+run("npm", ["test"]);
+run("npm", ["run", "check:performance"]);
 run("npm", ["run", "build"]);
 // Performance budget gate (performance-budget.md) — blocks the deploy if an
 // image or JS chunk regressed past its limit.

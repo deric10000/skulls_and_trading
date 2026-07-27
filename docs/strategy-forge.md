@@ -183,9 +183,23 @@ until every check passes:
   rule chips; each chip can override Time in the rule table (1h–1M). Cadence
   (when checks run) is separate from chip Time (which candles an indicator uses).
   Every Time uses its last fully closed candle. Fundamentals refresh daily.
-- **Checks are scheduled core behavior:** Worker cron builds completed hourly
-  data cycles even while users are logged out; the browser scheduler only
-  re-scores from those cycles. Login/manual refresh never query upstream.
+- **Checks are scheduled core behavior:** Worker cron builds immutable,
+  completed hourly data cycles even while users are logged out. A cycle
+  reference passes through Cloudflare Queue to the idempotent Supabase Edge
+  scorer, which claims each due strategy/cadence independently and persists
+  normalized results under RLS. The browser scheduler is display + rollback
+  only when `SERVER_SCORING_ENABLED` is authoritative; login/manual refresh
+  still read completed data and never fan out upstream.
+- Multi-strategy ticker headlines use the same
+  `mergeStrategiesForScoring(applicable)` algorithm as the browser—one merged
+  score, never an average. The server result records the exact sorted strategy
+  set, all definition hashes, workspace revision, cycle, and run. Assignment
+  changes invalidate the prior combined row and keep the ticker Score Pending
+  until a matching completed check arrives.
+- New symbols register immediately and receive one current quote for Current
+  Watch P&L. A newly assigned ticker remains Score Pending; apply/update
+  reconciles a server first check against the next completed cycle, so closing
+  the app does not cancel it.
 - **Enable Notifications** is a preference label only. Email / Text / Browser
   remain disabled placeholders ("Future Capability"); auto-refresh is no longer
   a user toggle.
@@ -216,6 +230,16 @@ readings — **do not** re-query Yahoo for scoring at click time.
 - **Incomplete cycles:** if fundamentals or market context are missing from the
   published cycle, conviction stays Score Pending for that ticker — do not
   silently renormalize over technicals-only as if the plan were fully checked.
+
+### Untracked holdings
+
+A holding with no applicable assigned strategy is **Untracked**, not a 0%
+conviction score. It appears only in All Strategies Current Watch, is hidden
+under a specific strategy, and remains in Current Watch whole-book Open P&L.
+Helm excludes it from All-Strategies conviction/alignment/composition and from
+tracked Open P&L history, while Strategy Coverage keeps it in the denominator.
+No historical assignment is fabricated: `metrics.trackedOpenPnlPct` begins
+forward-only and Helm stays pending until two honest points exist.
 
 ## 8. Deferred (later passes)
 

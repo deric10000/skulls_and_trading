@@ -1,4 +1,4 @@
-import { useAppState } from "../state/AppState";
+import { useUiState, useWorkspaceState } from "../state/AppState";
 import { dataSource } from "../lib/datasource";
 
 const DEFAULT_PORTFOLIO_ID = dataSource.getPortfolios()[0]?.id ?? "deric";
@@ -8,8 +8,8 @@ export function StrategyAssignmentWidget() {
     selectedItem,
     selectedTicker,
     getAppliedStrategiesForTicker,
-    setActivePage,
-  } = useAppState();
+  } = useWorkspaceState();
+  const { setActivePage } = useUiState();
 
   if (!selectedItem) {
     return (

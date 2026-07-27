@@ -44,6 +44,23 @@ export function seriesToSparkPoints(
 }
 
 /**
+ * Forward-only All Strategies Open P&L series. Old rows without
+ * `metrics.trackedOpenPnlPct` are intentionally omitted (no backfill).
+ */
+export function seriesToTrackedOpenPnlSparkPoints(
+  rows: PortfolioSnapshotRecord[],
+): SparkPoint[] {
+  const out: SparkPoint[] = [];
+  for (const row of rows) {
+    const raw = row.metrics?.trackedOpenPnlPct;
+    const value = typeof raw === "number" ? raw : Number(raw);
+    if (!Number.isFinite(value)) continue;
+    out.push({ time: row.asOf, value });
+  }
+  return out.sort((a, b) => a.time.localeCompare(b.time));
+}
+
+/**
  * Period Open P&L % from a spark series: last − first (percentage points).
  * Null when fewer than two finite points — never fabricate history.
  */

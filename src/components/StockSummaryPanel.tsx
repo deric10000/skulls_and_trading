@@ -1,6 +1,6 @@
 import { dataSource } from "../lib/datasource";
 import { Clock } from "../lib/icons";
-import { useAppState } from "../state/AppState";
+import { useWorkspaceState } from "../state/AppState";
 import { formatChange, formatPrice } from "../lib/format";
 import type { SignalChip } from "../types";
 import { WatchAlignLabel, WatchAlignStack } from "./StatusBadge";
@@ -18,7 +18,7 @@ function SignalChips({ signals }: { signals: SignalChip[] }) {
 }
 
 export function StockSummaryPanel() {
-  const { selectedItem } = useAppState();
+  const { selectedItem } = useWorkspaceState();
 
   if (!selectedItem) {
     return (

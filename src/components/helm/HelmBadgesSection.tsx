@@ -5,7 +5,7 @@ import {
   visibleOnboardingBadges,
   type OnboardingBadgeId,
 } from "../../lib/forge/onboardingBadges";
-import { useAppState } from "../../state/AppState";
+import { useWorkspaceState } from "../../state/AppState";
 import { OnboardingBadge } from "../badges/OnboardingBadge";
 import { ForgeToast } from "../forge/ForgeToast";
 import { HelmMetrics } from "./HelmMetrics";
@@ -18,7 +18,8 @@ const TOAST_MS = 6000;
  * Metrics slot below is reserved empty for a later pass.
  */
 export function HelmBadgesSection() {
-  const { portfolios, strategies, flags, markBadgeToastsSeen } = useAppState();
+  const { portfolios, strategies, flags, markBadgeToastsSeen } =
+    useWorkspaceState();
   const [toastQueue, setToastQueue] = useState<string[]>([]);
   const prevEarnedRef = useRef<Set<string> | null>(null);
 

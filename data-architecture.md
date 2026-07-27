@@ -123,6 +123,42 @@ education cards, ships/badges, score copy.
 `DEFAULT_CAPTAIN` and `DEFAULT_STRATEGIES` as direct imports (config, not feed
 data).
 
+### Runtime performance domains (behavior-preserving)
+
+`AppStateProvider` remains the orchestration owner, but consumers subscribe
+through narrow domain selectors: `useAuthState`, `useWorkspaceState`,
+`useMarketState`, and `useUiState`. The stable external-store context compares
+selected fields shallowly, so a toast/navigation change does not invalidate
+workspace or scoring consumers, and a market metadata change does not rerender
+auth UI. New consumers must use the narrowest domain hook; the former broad
+`useAppState` hook is intentionally removed.
+
+`liveCache` revisions are similarly split:
+
+- `scoreInputs` — quote/fundamental/technical/context mutations
+- `scoreReadiness` — pull/dirty stamps
+- `taxonomy` — Weather taxonomy
+- `metadata` — provider budgets/cycle metadata
+
+Portfolio alignment keys off only `scoreInputs:scoreReadiness`.
+`alignmentCache.ts` reuses portfolio/bucket/strategy/revision-consistent
+alignment in render, snapshot, and check-event paths. The pure scoring engine is
+unchanged; telemetry counts bridge and `scoreStock` invocations by caller.
+
+Returning-session hydrate resolves the trusted Supabase session user once, then
+loads profile, `user_state`, and ticker marks concurrently under the same RLS
+policies. Pending invite redemption remains ahead of workspace persistence.
+Post-auth market bootstrap uses a stable holdings/applied-strategy fingerprint:
+duplicate effects share one promise, while symbol registry and completed-cycle
+reads overlap. Existing quote/first-check warming fallbacks, endpoints,
+providers, payloads, completeness gates, and cadence remain unchanged.
+
+Helm Progress history reads go through `lib/helm/progressHistory.ts`, which
+dedupes identical in-flight query groups and records row counts/duration.
+Workspace writes retain the `user_state` schema and debounce, but serialize per
+trusted user so an older response cannot win; serialized payloads have a
+256 KiB growth ceiling. Append-only histories remain in normalized RLS tables.
+
 ## 3. Going live (Pass 2 — FreeTier live market data)
 
 Active binding: `src/lib/datasource/index.ts` exports `freeTierDataSource`.
@@ -134,7 +170,11 @@ then committed atomically to `src/lib/market/liveCache.ts` by `AppState`.
 1. **FreeTierDataSource** implements `DataSource` for live fields; portfolios /
    holdings / logs remain mock seeds until brokerage Pass 2+.
 2. Authenticated clients only register their unique watch symbols (40/user,
-   800 globally across active registries) and
+   800 globally across active registries). Postgres projection refresh holds a
+   transaction advisory lock and rejects, never truncates, a proposed 801st
+   distinct symbol. Worker KV remains a rebuildable/racy delivery cache: clients
+   re-register the SQL-accepted persisted workspace on hydration/change, and the
+   cycle aggregate rejects (never truncates or fetches) any transient >800 view. Clients
    read the latest completed cycle. **Login, manual refresh, and portfolio edits
    never query an upstream market provider.** A one-minute Worker cron shards
    each hourly sweep under Free-plan limits (50 external subrequests/invocation,
@@ -515,7 +555,18 @@ change. **Postgres is source of truth** (not `localStorage`).
 - `conviction_snapshots` upsert on market / cadence refresh with enriched
   position `payload` (charts / marks; scoring unchanged).
 - `portfolio_snapshots` upsert on the same refresh paths (whole-book +
-  per-applied-strategy; cash always included).
+  per-applied-strategy; cash always included). Authoritative Edge completion
+  writes `strategy_id=''` on every completed cycle using the full priced book,
+  merged all-strategy conviction, and `trackedOpenPnlPct` excluding untracked
+  holdings. It does not backfill missing days.
+- `strategy_check_combined_latest_results` is the authoritative ticker headline
+  projection. Each row stores the exact sorted strategy set, every current
+  definition hash, workspace revision, cycle key/time, and triggering `run_id`.
+  Any applicable due strategy recomputes the merged virtual strategy once (never
+  averages individual scores). The client accepts only an exact current
+  strategy-set/revision match, so assignment edits remain Score Pending until a
+  new combined row completes. Individual strategy results, cadence schedules,
+  stamps, check events, and strategy snapshots remain independent.
 - `ticker_marks` stores each account's latest real quote (`ticker`,
   `last_price`, `as_of`, `source`) under RLS. Auth hydration commits these
   marks to `liveCache` before the first market-cycle read, so local and deployed
@@ -564,19 +615,23 @@ offline only — do not use as SoT for Beta accounts.
 - Data plane: `worker/marketCycle.ts` — one-minute cron shards build a globally
   coalesced hourly cycle from the durable per-user symbol registry. A cycle is
   published only after all ticker batches finish; clients never see partial data.
-- Scoring plane: `src/lib/forge/scheduler.ts` — **per-strategy** dues read the
-  latest completed cycle and run pure scoring. Notification preferences do not
+- Scoring plane: each immutable completed cycle enqueues a reference for
+  `supabase/functions/process-conviction-cycle`. The Edge scorer claims
+  normalized `strategy_check_schedules` by independent cadence wall, calls the
+  unchanged pure Forge engine through `strategyAlignmentAdapter`, and commits
+  run/results/snapshots/events transactionally. `pg_cron` recovers missed
+  dispatches and expired leases. `src/lib/forge/scheduler.ts` is bounded
+  display/countdown + rollback logic, not the authoritative writer when
+  `SERVER_SCORING_ENABLED` is authoritative. Notification preferences do not
   gate checks; login/manual refresh only read KV-backed cycle data.
 - Setup exception: adding one ticker requests one quote for immediate P&L but
-  keeps conviction pending. Apply/update/Forge Preview runs one debounced,
-  strategy-scoped first check: prefer a complete published cycle, otherwise use
-  the existing quote/fundamental/technical Worker routes only for that
-  strategy's tickers. On login, if the published cycle is missing/incomplete,
-  book quotes are pulled for P&L and each unstamped applied strategy gets one
-  scoped first check (session-gated to avoid Yahoo spam). A successful setup
-  check persists ticker marks, the strategy stamp, and the existing
-  conviction/book snapshots. It does not restore a full-book upstream fan-out
-  on ordinary refresh.
+  keeps conviction pending. Apply/update/Forge Preview reconciles the normalized
+  strategy schedule as due, so the next completed cycle performs the first
+  check even if the browser closes. In client rollback mode, the existing
+  debounced scoped check remains available. A successful server check persists
+  exact strategy-set results, independent cadence stamps, ticker marks,
+  strategy/whole-book snapshots, and check events; it does not restore a
+  full-book upstream fan-out on ordinary refresh.
 - Steady-state cycle reads also persist `ticker_marks` and
   `flags.lastDataPullAtByStrategyId`; Supabase is the account bridge, not an
   assertion that local Wrangler KV and deployed KV are shared.

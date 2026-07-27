@@ -21,7 +21,7 @@ import { isExamplePlan, normalizePlanEdit } from "../../lib/forge/myPlan";
 import { systemChipsForCategory } from "../../lib/forge/chipSources";
 import { ForgeToast } from "./ForgeToast";
 import { ForgeSectionTabs } from "./ForgeSectionTabs";
-import { useAppState } from "../../state/AppState";
+import { useWorkspaceState } from "../../state/AppState";
 import { useIsMobile } from "../../lib/useIsMobile";
 import { isSubHourTime } from "../../lib/forge/timeframeFloor";
 import {
@@ -249,7 +249,7 @@ export function RuleChipsTableModal({
   defaultTime?: CandleInterval;
 }) {
   const { chipLibrary, saveChipToLibrary, removeChipFromLibrary, updateChipInLibrary } =
-    useAppState();
+    useWorkspaceState();
   const isMobile = useIsMobile();
   const meta = CATEGORY_META[category];
   // My Plan is available on every category — Watch Summary surfaces failing

@@ -28,6 +28,13 @@ import {
   tickersForStrategy,
 } from "../forge/scheduler";
 import { neededTimeframesForStrategies } from "./neededTimeframes";
+import {
+  PERF_MARK,
+  measureAsync,
+  perfCount,
+  perfMark,
+  perfValue,
+} from "../performance/marks";
 
 export async function registerPortfolioMarketSymbols(
   tickers: string[],
@@ -42,8 +49,13 @@ export async function readLatestMarketCycle(
 ): Promise<string | null> {
   const unique = [...new Set(tickers.map((t) => t.toUpperCase()).filter(Boolean))];
   if (unique.length === 0) return null;
-  const cycle = await fetchLatestMarketCycle();
+  perfCount("market-cycle-read");
+  const cycle = await measureAsync("market-cycle-read", fetchLatestMarketCycle);
   if (!cycle) return null;
+  perfValue(
+    "market-cycle-response-bytes",
+    new TextEncoder().encode(JSON.stringify(cycle)).byteLength,
+  );
   if (
     requiredCycleAt &&
     Date.parse(cycle.cycleAsOf) < Date.parse(requiredCycleAt)
@@ -58,7 +70,10 @@ export async function readLatestMarketCycle(
   );
   if (!complete) return null;
   const current = getMarketCycleMeta();
-  if (current?.cycleAsOf !== cycle.cycleAsOf) applyMarketCycle(cycle);
+  if (current?.cycleAsOf !== cycle.cycleAsOf) {
+    applyMarketCycle(cycle);
+    perfMark(PERF_MARK.marketCycleApplied);
+  }
   for (const strategy of appliedStrategies) {
     setLastDataPullAt(
       strategy.id,

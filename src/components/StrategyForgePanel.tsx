@@ -38,7 +38,7 @@ import {
   ForgeSectionTabs,
   type ForgeSectionTab,
 } from "./forge/ForgeSectionTabs";
-import { useAppState } from "../state/AppState";
+import { useWorkspaceState } from "../state/AppState";
 import { ActionFooter } from "./ActionFooter";
 import { Checkbox } from "./Checkbox";
 import { Dropdown } from "./Dropdown";
@@ -233,7 +233,7 @@ interface TableEditor {
 
 export function StrategyForgePanel({ strategy }: { strategy: Strategy | undefined }) {
   const { updateStrategy, resetStrategy, deleteStrategy, portfolios, setTickerEnabledForStrategy } =
-    useAppState();
+    useWorkspaceState();
 
   const portfolioOptions = useMemo(
     () => portfolios.map((portfolio) => ({ value: portfolio.id, label: portfolio.label })),

@@ -6,6 +6,10 @@ import {
   type MarketEnv,
   type QuotePayload,
 } from "./market";
+import {
+  COMPLETE_CYCLE_PREFIX,
+  type ConvictionCycleReference,
+} from "./convictionDispatch";
 
 const REGISTRY_PREFIX = "market:registry:";
 const CYCLE_MANIFEST_PREFIX = "market:cycle:manifest:";
@@ -14,17 +18,18 @@ const CONTEXT_PREFIX = "market:cycle:context:";
 const FUNDY_MANIFEST_PREFIX = "market:fundy:manifest:";
 const FUNDY_SHARD_PREFIX = "market:fundy:shard:";
 const PUBLISHED_CYCLE_KEY = "market:cycle:published";
-const MAX_SYMBOLS_PER_USER = 40;
-const MAX_GLOBAL_SYMBOLS = 800;
-const SHARD_SIZE = 28;
+const PUBLISHED_CYCLE_REFERENCE_KEY = "market:cycle:published:key";
+export const MAX_SYMBOLS_PER_USER = 40;
+export const MAX_GLOBAL_SYMBOLS = 800;
+export const SHARD_SIZE = 30;
+export const SHARD_MINUTES_PER_PHASE = 29;
 const MAX_CONCURRENCY = 6;
 const HOUR_MS = 60 * 60_000;
 const SHARD_TTL_SECONDS = 3 * 24 * 60 * 60;
-const REGISTRY_TTL_SECONDS = 35 * 24 * 60 * 60;
-const REGISTRY_ACTIVE_MS = 30 * 24 * 60 * 60_000;
 
 export interface MarketCycleEnv extends MarketEnv {
   MARKET_CACHE: KVNamespace;
+  CONVICTION_CYCLE_QUEUE: Queue<ConvictionCycleReference>;
 }
 
 interface RegistryEntry {
@@ -70,7 +75,51 @@ interface FundamentalsShard {
   errors: string[];
 }
 
+export function hasCompleteTechnicalShard(
+  expected: string[],
+  shard: Pick<TechnicalShard, "quotes" | "technicals" | "byTimeframe"> | null,
+): boolean {
+  return (
+    shard != null &&
+    expected.every(
+      (symbol) =>
+        shard.quotes[symbol] &&
+        shard.technicals[symbol] &&
+        shard.byTimeframe[symbol],
+    )
+  );
+}
+
+export function hasCompleteFundamentalsShard(
+  expected: string[],
+  shard: Pick<FundamentalsShard, "values"> | null,
+): boolean {
+  return shard != null && expected.every((symbol) => shard.values[symbol]);
+}
+
+export function hasCompleteFundamentals(
+  symbols: string[],
+  manifest: Pick<FundamentalsManifest, "symbols"> | null,
+  values: Record<string, Record<string, unknown>>,
+): boolean {
+  return (
+    symbols.length === 0 ||
+    (manifest != null &&
+      symbols.every((symbol) => {
+        const value = values[symbol];
+        return (
+          manifest.symbols.includes(symbol) &&
+          value != null &&
+          typeof value === "object"
+        );
+      }))
+  );
+}
+
 export interface MarketCyclePayload {
+  schemaVersion: 1;
+  complete: true;
+  cycleKey: string;
   cycleAsOf: string;
   completedAt: string;
   publishedAt: string;
@@ -85,6 +134,31 @@ export interface MarketCyclePayload {
   >;
   context: Record<string, unknown> | null;
   errors: string[];
+}
+
+export async function commitPublishedCycle(
+  env: Pick<MarketCycleEnv, "MARKET_CACHE" | "CONVICTION_CYCLE_QUEUE">,
+  payload: MarketCyclePayload,
+  immutableAlreadyExists: boolean,
+): Promise<void> {
+  const serialized = JSON.stringify(payload);
+  if (!immutableAlreadyExists) {
+    await env.MARKET_CACHE.put(payload.cycleKey, serialized, {
+      expirationTtl: SHARD_TTL_SECONDS,
+    });
+  }
+  await Promise.all([
+    env.MARKET_CACHE.put(PUBLISHED_CYCLE_KEY, serialized),
+    env.MARKET_CACHE.put(PUBLISHED_CYCLE_REFERENCE_KEY, payload.cycleKey),
+  ]);
+  await env.CONVICTION_CYCLE_QUEUE.send(
+    {
+      version: 1,
+      cycleKey: payload.cycleKey,
+      cycleAsOf: payload.cycleAsOf,
+    },
+    { contentType: "json" },
+  );
 }
 
 function json(body: unknown, status = 200): Response {
@@ -106,7 +180,7 @@ function normalizeSymbols(input: unknown): string[] {
         .map((value) => value.trim().toUpperCase())
         .filter((value) => /^[A-Z^][A-Z0-9.^-]{0,14}$/.test(value)),
     ),
-  ].slice(0, MAX_SYMBOLS_PER_USER);
+  ];
 }
 
 function hourBoundary(time: number): number {
@@ -185,19 +259,42 @@ async function registeredSymbols(env: MarketCycleEnv): Promise<string[]> {
       env.MARKET_CACHE.get<RegistryEntry>(key.name, "json"),
     ),
   );
-  const activeAfter = Date.now() - REGISTRY_ACTIVE_MS;
-  return [
+  return selectActiveGlobalSymbols(
+    entries.filter((entry): entry is RegistryEntry => entry != null),
+  );
+}
+
+export function selectActiveGlobalSymbols(
+  entries: RegistryEntry[],
+): string[] {
+  const symbols = [
     ...new Set(
       entries
-        .filter(
-          (entry) => entry && Date.parse(entry.updatedAt) >= activeAfter,
-        )
-        .flatMap((entry) => entry?.symbols ?? [])
+        .flatMap((entry) => entry.symbols)
         .map((symbol) => symbol.toUpperCase()),
     ),
-  ]
-    .sort()
-    .slice(0, MAX_GLOBAL_SYMBOLS);
+  ].sort();
+  if (symbols.length > MAX_GLOBAL_SYMBOLS) {
+    throw new RangeError(
+      `Global market symbol capacity exceeded (${symbols.length}/${MAX_GLOBAL_SYMBOLS})`,
+    );
+  }
+  return symbols;
+}
+
+export function shardCapacityPlan(symbolCount: number): {
+  shardSize: number;
+  shardCount: number;
+  retrySlotsPerPhase: number;
+  maxExternalSubrequestsPerShard: number;
+} {
+  const shardCount = Math.ceil(symbolCount / SHARD_SIZE);
+  return {
+    shardSize: SHARD_SIZE,
+    shardCount,
+    retrySlotsPerPhase: Math.max(0, SHARD_MINUTES_PER_PHASE - shardCount),
+    maxExternalSubrequestsPerShard: SHARD_SIZE,
+  };
 }
 
 async function registerSymbols(
@@ -212,10 +309,59 @@ async function registerSymbols(
     return json({ error: "invalid json" }, 400);
   }
   const symbols = normalizeSymbols(body.symbols);
+  if (symbols.length > MAX_SYMBOLS_PER_USER) {
+    console.error(
+      JSON.stringify({
+        event: "market_subscription_cap_rejection",
+        scope: "user",
+        userId,
+        requested: symbols.length,
+        limit: MAX_SYMBOLS_PER_USER,
+      }),
+    );
+    return json(
+      {
+        error: "symbol subscription capacity exceeded",
+        requested: symbols.length,
+        limit: MAX_SYMBOLS_PER_USER,
+      },
+      409,
+    );
+  }
+  const existingKeys = await env.MARKET_CACHE.list({
+    prefix: REGISTRY_PREFIX,
+    limit: 1_000,
+  });
+  const existingEntries = await Promise.all(
+    existingKeys.keys
+      .filter((key) => key.name !== `${REGISTRY_PREFIX}${userId}`)
+      .map((key) => env.MARKET_CACHE.get<RegistryEntry>(key.name, "json")),
+  );
+  try {
+    selectActiveGlobalSymbols([
+      ...existingEntries.filter((entry): entry is RegistryEntry => entry != null),
+      { symbols, updatedAt: new Date().toISOString() },
+    ]);
+  } catch {
+    console.error(
+      JSON.stringify({
+        event: "market_subscription_cap_rejection",
+        scope: "global",
+        userId,
+        limit: MAX_GLOBAL_SYMBOLS,
+      }),
+    );
+    return json(
+      {
+        error: "global symbol subscription capacity exceeded",
+        limit: MAX_GLOBAL_SYMBOLS,
+      },
+      409,
+    );
+  }
   await env.MARKET_CACHE.put(
     `${REGISTRY_PREFIX}${userId}`,
     JSON.stringify({ symbols, updatedAt: new Date().toISOString() }),
-    { expirationTtl: REGISTRY_TTL_SECONDS },
   );
   return json({ registered: symbols.length, symbols });
 }
@@ -389,17 +535,24 @@ async function writeTechnicalShard(
   );
 }
 
-async function firstMissingTechnicalShard(
+async function firstIncompleteTechnicalShard(
   env: MarketCycleEnv,
   manifest: CycleManifest,
   throughIndex: number,
 ): Promise<number | null> {
   const end = Math.min(throughIndex, manifest.shardCount - 1);
   for (let index = 0; index <= end; index += 1) {
-    const exists = await env.MARKET_CACHE.get(
+    const shard = await env.MARKET_CACHE.get<TechnicalShard>(
       techShardKey(manifest.cycleAsOf, index),
+      "json",
     );
-    if (!exists) return index;
+    const expected = manifest.symbols.slice(
+      index * SHARD_SIZE,
+      (index + 1) * SHARD_SIZE,
+    );
+    if (!hasCompleteTechnicalShard(expected, shard)) {
+      return index;
+    }
   }
   return null;
 }
@@ -440,7 +593,8 @@ async function writeFundamentalsShard(
   if (
     existing &&
     existing.symbols.length === symbols.length &&
-    existing.symbols.every((symbol, offset) => symbol === symbols[offset])
+    existing.symbols.every((symbol, offset) => symbol === symbols[offset]) &&
+    hasCompleteFundamentalsShard(symbols, existing)
   ) {
     return;
   }
@@ -480,6 +634,28 @@ async function writeFundamentalsShard(
   );
 }
 
+async function firstIncompleteFundamentalsShard(
+  env: MarketCycleEnv,
+  manifest: FundamentalsManifest,
+  throughIndex: number,
+): Promise<number | null> {
+  const end = Math.min(throughIndex, manifest.shardCount - 1);
+  for (let index = 0; index <= end; index += 1) {
+    const shard = await env.MARKET_CACHE.get<FundamentalsShard>(
+      fundyShardKey(manifest.dayKey, index),
+      "json",
+    );
+    const expected = manifest.symbols.slice(
+      index * SHARD_SIZE,
+      (index + 1) * SHARD_SIZE,
+    );
+    if (!hasCompleteFundamentalsShard(expected, shard)) {
+      return index;
+    }
+  }
+  return null;
+}
+
 async function readAllShards<T extends object>(
   count: number,
   keyFor: (index: number) => string,
@@ -499,11 +675,24 @@ async function publishCycle(
   cycleAsOfMs: number,
   now: number,
 ): Promise<void> {
+  const startedAt = Date.now();
+  const logIncomplete = (reason: string, details: Record<string, unknown> = {}) =>
+    console.warn(
+      JSON.stringify({
+        event: "market_cycle_incomplete",
+        cycleAsOf: new Date(cycleAsOfMs).toISOString(),
+        reason,
+        ...details,
+      }),
+    );
   const manifest = await env.MARKET_CACHE.get<CycleManifest>(
     `${CYCLE_MANIFEST_PREFIX}${keyTime(cycleAsOfMs)}`,
     "json",
   );
-  if (!manifest) return;
+  if (!manifest) {
+    logIncomplete("manifest_missing");
+    return;
+  }
   const techShards = await readAllShards<TechnicalShard>(
     manifest.shardCount,
     (index) => techShardKey(manifest.cycleAsOf, index),
@@ -513,12 +702,31 @@ async function publishCycle(
     contextKey(manifest.cycleAsOf),
     "json",
   );
-  if (!techShards || !context?.context) return;
-
-  const previous = await env.MARKET_CACHE.get<MarketCyclePayload>(
-    PUBLISHED_CYCLE_KEY,
-    "json",
+  if (!techShards || !context?.context) {
+    logIncomplete(!techShards ? "technical_shards_missing" : "context_missing", {
+      expectedTechnicalShards: manifest.shardCount,
+    });
+    return;
+  }
+  const technicalsReady = techShards.every((shard, index) =>
+    hasCompleteTechnicalShard(
+      manifest.symbols.slice(
+        index * SHARD_SIZE,
+        (index + 1) * SHARD_SIZE,
+      ),
+      shard,
+    ),
   );
+  if (!technicalsReady) {
+    logIncomplete("technical_symbols_missing", {
+      expectedSymbols: manifest.symbols.length,
+      actualSymbols: Object.keys(
+        Object.assign({}, ...techShards.map((shard) => shard.quotes)),
+      ).length,
+    });
+    return;
+  }
+
   const dayKey = etDayKey(cycleAsOfMs);
   const fundyManifest = await env.MARKET_CACHE.get<FundamentalsManifest>(
     `${FUNDY_MANIFEST_PREFIX}${dayKey}`,
@@ -531,18 +739,35 @@ async function publishCycle(
         env,
       )
     : null;
+  const fundamentalValues = Object.assign(
+    {},
+    ...(fundyShards?.map((shard) => shard.values) ?? []),
+  ) as Record<string, Record<string, unknown>>;
   const fundamentalsReady =
     manifest.symbols.length === 0 ||
-    (fundyManifest != null &&
-      fundyShards != null &&
-      manifest.symbols.every(
-        (symbol) =>
-          fundyManifest.symbols.includes(symbol) &&
-          fundyShards.some((shard) => shard.symbols.includes(symbol)),
+    (fundyShards != null &&
+      hasCompleteFundamentals(
+        manifest.symbols,
+        fundyManifest,
+        fundamentalValues,
       ));
-  if (!fundamentalsReady) return;
+  if (!fundamentalsReady) {
+    logIncomplete("fundamentals_missing", {
+      expectedSymbols: manifest.symbols.length,
+      actualSymbols: Object.keys(fundamentalValues).length,
+    });
+    return;
+  }
 
+  const cycleKey = `${COMPLETE_CYCLE_PREFIX}${keyTime(manifest.cycleAsOf)}`;
+  const existing = await env.MARKET_CACHE.get<MarketCyclePayload>(
+    cycleKey,
+    "json",
+  );
   const payload: MarketCyclePayload = {
+    schemaVersion: 1,
+    complete: true,
+    cycleKey,
     cycleAsOf: manifest.cycleAsOf,
     completedAt: [
       ...techShards.map((shard) => shard.completedAt),
@@ -554,8 +779,7 @@ async function publishCycle(
     quotes: Object.assign({}, ...techShards.map((shard) => shard.quotes)),
     fundamentals: Object.assign(
       {},
-      previous?.fundamentals ?? {},
-      ...(fundyShards?.map((shard) => shard.values) ?? []),
+      fundamentalValues,
     ),
     technicals: Object.assign(
       {},
@@ -572,18 +796,32 @@ async function publishCycle(
       ...(fundyShards?.flatMap((shard) => shard.errors) ?? []),
     ],
   };
-  await env.MARKET_CACHE.put(PUBLISHED_CYCLE_KEY, JSON.stringify(payload));
+  const completeCycle = existing ?? payload;
+  const serialized = JSON.stringify(completeCycle);
+  await commitPublishedCycle(env, completeCycle, existing != null);
+  console.log(
+    JSON.stringify({
+      event: "market_cycle_phase",
+      phase: "publish",
+      durationMs: Date.now() - startedAt,
+      payloadBytes: new TextEncoder().encode(serialized).byteLength,
+      symbolCount: manifest.symbols.length,
+      completed: true,
+    }),
+  );
 }
 
 /**
  * Deterministic minute ownership avoids mutable KV locks:
  * 00–28 technical shards, then context, then 30–58 daily fundamentals.
- * The next hour publishes only when every expected technical shard exists.
+ * The next hour publishes only when every expected shard and every symbol's
+ * fundamentals value exist.
  */
 export async function runScheduledMarketCycle(
   env: MarketCycleEnv,
   scheduledTime: number,
 ): Promise<void> {
+  const invocationStartedAt = Date.now();
   if (!isMarketWeek(scheduledTime)) return;
   const boundary = hourBoundary(scheduledTime);
   const minute = new Date(scheduledTime).getUTCMinutes();
@@ -608,13 +846,22 @@ export async function runScheduledMarketCycle(
     manifest.symbols,
   );
 
-  const missingTechnical = await firstMissingTechnicalShard(
+  const missingTechnical = await firstIncompleteTechnicalShard(
     env,
     manifest,
     minute <= 28 ? minute : manifest.shardCount - 1,
   );
   if (missingTechnical != null) {
     await writeTechnicalShard(env, manifest, missingTechnical);
+    console.log(
+      JSON.stringify({
+        event: "market_cycle_phase",
+        phase: "technical",
+        durationMs: Date.now() - invocationStartedAt,
+        symbolCount: manifest.symbols.length,
+        completed: true,
+      }),
+    );
     return;
   }
   if (minute >= 29) {
@@ -623,10 +870,40 @@ export async function runScheduledMarketCycle(
     );
     if (!existing) {
       await writeContextShard(env, manifest);
+      console.log(
+        JSON.stringify({
+          event: "market_cycle_phase",
+          phase: "context",
+          durationMs: Date.now() - invocationStartedAt,
+          symbolCount: manifest.symbols.length,
+          completed: true,
+        }),
+      );
       return;
     }
   }
   if (minute >= 30 && minute <= 58) {
-    await writeFundamentalsShard(env, fundyManifest, minute - 30);
+    const incompleteFundamentals = await firstIncompleteFundamentalsShard(
+      env,
+      fundyManifest,
+      minute - 30,
+    );
+    if (incompleteFundamentals != null) {
+      await writeFundamentalsShard(
+        env,
+        fundyManifest,
+        incompleteFundamentals,
+      );
+      console.log(
+        JSON.stringify({
+          event: "market_cycle_phase",
+          phase: "fundamentals",
+          shardIndex: incompleteFundamentals,
+          durationMs: Date.now() - invocationStartedAt,
+          symbolCount: fundyManifest.symbols.length,
+          completed: true,
+        }),
+      );
+    }
   }
 }

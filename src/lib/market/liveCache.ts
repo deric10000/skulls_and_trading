@@ -54,14 +54,31 @@ const strategyDirtyAt = new Map<string, number>();
 const tickerDirtyAt = new Map<string, number>();
 let budgets: ProviderBudget[] = [];
 let generation = 0;
+export type LiveCacheRevisionDomain =
+  | "scoreInputs"
+  | "scoreReadiness"
+  | "taxonomy"
+  | "metadata";
+const revisions: Record<LiveCacheRevisionDomain, number> = {
+  scoreInputs: 0,
+  scoreReadiness: 0,
+  taxonomy: 0,
+  metadata: 0,
+};
 /** Search hits / session bootstrap for symbols not yet in TICKERS. */
 const bootstrapNames = new Map<string, string>();
 
-const listeners = new Set<() => void>();
+const listeners = new Map<
+  () => void,
+  LiveCacheRevisionDomain | undefined
+>();
 
-function bump(): void {
+function bump(...domains: LiveCacheRevisionDomain[]): void {
   generation += 1;
-  listeners.forEach((listener) => listener());
+  for (const domain of new Set(domains)) revisions[domain] += 1;
+  listeners.forEach((domain, listener) => {
+    if (!domain || domains.includes(domain)) listener();
+  });
 }
 
 function ingestTaxonomyFromFundamentals(
@@ -89,13 +106,22 @@ function ingestTaxonomyFromFundamentals(
   }
 }
 
-export function subscribeLiveCache(listener: () => void): () => void {
-  listeners.add(listener);
-  return () => listeners.delete(listener);
+export function subscribeLiveCache(
+  listener: () => void,
+  domain?: LiveCacheRevisionDomain,
+): () => void {
+  listeners.set(listener, domain);
+  return () => {
+    listeners.delete(listener);
+  };
 }
 
 export function getLiveCacheGeneration(): number {
   return generation;
+}
+
+export function getLiveCacheRevision(domain: LiveCacheRevisionDomain): number {
+  return revisions[domain];
 }
 
 /** Clear account-scoped market state before account switches/hydration. */
@@ -111,7 +137,7 @@ export function resetLiveCache(): void {
   marketContext = null;
   marketCycle = null;
   budgets = [];
-  bump();
+  bump("scoreInputs", "scoreReadiness", "taxonomy", "metadata");
 }
 
 /** Commit a completed Worker cycle in one generation so UI never half-paints. */
@@ -137,7 +163,7 @@ export function applyMarketCycle(cycle: MarketCyclePayload): void {
     publishedAt: cycle.publishedAt,
     nextCycleAt: cycle.nextCycleAt,
   };
-  bump();
+  bump("scoreInputs", "taxonomy", "metadata");
 }
 
 export function getMarketCycleMeta(): typeof marketCycle {
@@ -148,7 +174,7 @@ export function setLiveQuotes(next: Record<string, TickerQuote>): void {
   for (const [ticker, quote] of Object.entries(next)) {
     quotes.set(ticker.toUpperCase(), { ...quote, source: "live" });
   }
-  bump();
+  bump("scoreInputs");
 }
 
 export function getLiveQuote(ticker: string): TickerQuote | undefined {
@@ -170,7 +196,7 @@ export function setLiveFundamentals(
   const clean = sanitizeFundamentals(snapshot);
   fundamentals.set(ticker.toUpperCase(), clean);
   ingestTaxonomyFromFundamentals(ticker, clean);
-  bump();
+  bump("scoreInputs", "taxonomy");
 }
 
 export function getLiveFundamentals(
@@ -188,7 +214,7 @@ export function setLiveTechnicals(
   snapshot: TechnicalSnapshot,
 ): void {
   technicals.set(ticker.toUpperCase(), snapshot);
-  bump();
+  bump("scoreInputs");
 }
 
 export function getLiveTechnicals(
@@ -204,7 +230,7 @@ export function setLiveTechnicalsByTimeframe(
   const key = ticker.toUpperCase();
   const prev = technicalsByTimeframe.get(key) ?? {};
   technicalsByTimeframe.set(key, { ...prev, ...byTimeframe });
-  bump();
+  bump("scoreInputs");
 }
 
 export function getLiveTechnicalsByTimeframe(
@@ -215,7 +241,7 @@ export function getLiveTechnicalsByTimeframe(
 
 export function setLiveMarketContext(context: MarketContext): void {
   marketContext = context;
-  bump();
+  bump("scoreInputs");
 }
 
 export function getLiveMarketContext(): MarketContext | undefined {
@@ -224,7 +250,7 @@ export function getLiveMarketContext(): MarketContext | undefined {
 
 export function setLastDataPullAt(strategyId: string, iso: string): void {
   lastPullByStrategy.set(strategyId, iso);
-  bump();
+  bump("scoreReadiness");
 }
 
 export function getLastDataPullAt(strategyId: string): string | undefined {
@@ -242,7 +268,7 @@ function tickerDirtyKey(portfolioId: string, ticker: string): string {
 /** Strategy edited or (re)applied — hide scores until the next successful check. */
 export function markStrategyConvictionDirty(strategyId: string): void {
   strategyDirtyAt.set(strategyId, Date.now());
-  bump();
+  bump("scoreReadiness");
 }
 
 /** Ticker added or newly enabled on a strategy — wait for the next check. */
@@ -251,7 +277,7 @@ export function markTickerConvictionDirty(
   ticker: string,
 ): void {
   tickerDirtyAt.set(tickerDirtyKey(portfolioId, ticker), Date.now());
-  bump();
+  bump("scoreReadiness");
 }
 
 /** Restore persisted dirty stamps after hydrate (ISO → epoch ms). */
@@ -263,7 +289,7 @@ export function hydrateTickerConvictionDirty(
     const ms = Date.parse(iso);
     if (!Number.isNaN(ms)) tickerDirtyAt.set(key, ms);
   }
-  bump();
+  bump("scoreReadiness");
 }
 
 /** Persistable map of dirty keys → ISO timestamps. */
@@ -278,7 +304,7 @@ export function getTickerConvictionDirtyMap(): Record<string, string> {
 /** A real scoped check completed for this strategy body. */
 export function clearStrategyConvictionDirty(strategyId: string): void {
   strategyDirtyAt.delete(strategyId);
-  bump();
+  bump("scoreReadiness");
 }
 
 /** A real check included this ticker in this portfolio. */
@@ -287,7 +313,7 @@ export function clearTickerConvictionDirty(
   ticker: string,
 ): void {
   tickerDirtyAt.delete(tickerDirtyKey(portfolioId, ticker));
-  bump();
+  bump("scoreReadiness");
 }
 
 /**
@@ -322,7 +348,7 @@ export function isConvictionScoreReady(
 
 export function setProviderBudgets(next: ProviderBudget[]): void {
   budgets = next;
-  bump();
+  bump("metadata");
 }
 
 export function getProviderBudgets(): ProviderBudget[] {
