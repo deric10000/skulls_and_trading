@@ -24,9 +24,17 @@ const BUDGETS = {
   // JS (checked in dist — gzip, as shipped)
   maxEntryChunkGzipKB: 80,
   maxAnyChunkGzipKB: 100,
+  // Aggregate route/delivery budgets (gzip unless noted).
+  maxSignedOutEagerJsGzipKB: 230,
+  maxAuthedHomeAdditionalJsGzipKB: 45,
+  maxCssGzipKB: 25,
+  maxFontBytesKB: 117,
+  maxInitialResourceTags: 6,
+  maxThirdPartyOrigins: 0,
 };
 
 const IMAGE_EXTS = new Set([".png", ".webp", ".jpg", ".jpeg", ".gif", ".svg", ".avif"]);
+const FONT_EXTS = new Set([".woff2", ".woff"]);
 const failures = [];
 const kb = (bytes) => Math.round(bytes / 102.4) / 10;
 
@@ -62,10 +70,12 @@ if (!existsSync(distAssets) || !existsSync(distIndex)) {
 const indexHtml = readFileSync(distIndex, "utf8");
 const entryMatch = indexHtml.match(/assets\/(index-[^"']+\.js)/);
 const entryName = entryMatch ? entryMatch[1] : null;
+const gzipByFile = new Map();
 
 for (const file of readdirSync(distAssets)) {
   if (!file.endsWith(".js")) continue;
   const gzip = kb(gzipSync(readFileSync(path.join(distAssets, file))).length);
+  gzipByFile.set(file, gzip);
   if (file === entryName && gzip > BUDGETS.maxEntryChunkGzipKB) {
     failures.push(
       `ENTRY CHUNK OVER BUDGET: ${file} is ${gzip} KB gzip (limit ${BUDGETS.maxEntryChunkGzipKB} KB). ` +
@@ -79,6 +89,90 @@ for (const file of readdirSync(distAssets)) {
   }
 }
 
+// ---- Aggregate eager routes, CSS, fonts, and request origins ----------------
+const eagerJsNames = [
+  ...indexHtml.matchAll(
+    /(?:src|href)=["']\/?assets\/([^"']+\.js)["']/g,
+  ),
+].map((match) => match[1]);
+const eagerJsGzip = [...new Set(eagerJsNames)].reduce(
+  (sum, file) => sum + (gzipByFile.get(file) ?? 0),
+  0,
+);
+if (eagerJsGzip > BUDGETS.maxSignedOutEagerJsGzipKB) {
+  failures.push(
+    `SIGNED-OUT EAGER JS OVER BUDGET: ${Math.round(eagerJsGzip * 10) / 10} KB gzip ` +
+      `(limit ${BUDGETS.maxSignedOutEagerJsGzipKB} KB).`,
+  );
+}
+
+const cssFiles = readdirSync(distAssets).filter((file) => file.endsWith(".css"));
+const cssGzip = cssFiles.reduce(
+  (sum, file) =>
+    sum + kb(gzipSync(readFileSync(path.join(distAssets, file))).length),
+  0,
+);
+if (cssGzip > BUDGETS.maxCssGzipKB) {
+  failures.push(
+    `CSS OVER BUDGET: ${Math.round(cssGzip * 10) / 10} KB gzip ` +
+      `(limit ${BUDGETS.maxCssGzipKB} KB).`,
+  );
+}
+
+const fontBytes = readdirSync(distAssets)
+  .filter((file) => FONT_EXTS.has(path.extname(file).toLowerCase()))
+  .reduce((sum, file) => sum + statSync(path.join(distAssets, file)).size, 0);
+if (kb(fontBytes) > BUDGETS.maxFontBytesKB) {
+  failures.push(
+    `FONTS OVER BUDGET: ${kb(fontBytes)} KB (limit ${BUDGETS.maxFontBytesKB} KB).`,
+  );
+}
+
+const resourceTags = [
+  ...indexHtml.matchAll(/<(?:script|link)\b[^>]+(?:src|href)=["'][^"']+["'][^>]*>/g),
+].length;
+if (resourceTags > BUDGETS.maxInitialResourceTags) {
+  failures.push(
+    `INITIAL REQUEST TAGS OVER BUDGET: ${resourceTags} ` +
+      `(limit ${BUDGETS.maxInitialResourceTags}).`,
+  );
+}
+const thirdPartyOrigins = new Set(
+  [...indexHtml.matchAll(/https?:\/\/([^/"']+)/g)].map((match) => match[1]),
+);
+if (thirdPartyOrigins.size > BUDGETS.maxThirdPartyOrigins) {
+  failures.push(
+    `THIRD-PARTY ORIGINS OVER BUDGET: ${[...thirdPartyOrigins].join(", ")} ` +
+      `(limit ${BUDGETS.maxThirdPartyOrigins}).`,
+  );
+}
+
+const manifestPath = path.join(root, "dist", ".vite", "manifest.json");
+let authedHomeGzip = 0;
+if (existsSync(manifestPath)) {
+  const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+  const authedKey = Object.keys(manifest).find((key) =>
+    key.endsWith("src/AuthedApp.tsx"),
+  );
+  const visited = new Set();
+  const collect = (key) => {
+    if (!key || visited.has(key) || !manifest[key]) return;
+    visited.add(key);
+    const item = manifest[key];
+    if (item.file?.endsWith(".js") && !eagerJsNames.includes(path.basename(item.file))) {
+      authedHomeGzip += gzipByFile.get(path.basename(item.file)) ?? 0;
+    }
+    for (const dependency of item.imports ?? []) collect(dependency);
+  };
+  collect(authedKey);
+}
+if (authedHomeGzip > BUDGETS.maxAuthedHomeAdditionalJsGzipKB) {
+  failures.push(
+    `AUTHED HOME ADDITIONAL JS OVER BUDGET: ${Math.round(authedHomeGzip * 10) / 10} KB gzip ` +
+      `(limit ${BUDGETS.maxAuthedHomeAdditionalJsGzipKB} KB).`,
+  );
+}
+
 // ---- Report -----------------------------------------------------------------
 if (failures.length > 0) {
   console.error("\nPerformance budget check FAILED:\n");
@@ -87,5 +181,7 @@ if (failures.length > 0) {
   process.exit(1);
 }
 console.log(
-  `Performance budgets OK — images ${kb(totalImageBytes)} KB total; all JS chunks within gzip limits.`,
+  `Performance budgets OK — images ${kb(totalImageBytes)} KB; signed-out JS ` +
+    `${Math.round(eagerJsGzip * 10) / 10} KB gzip; authed Home +${Math.round(authedHomeGzip * 10) / 10} KB; ` +
+    `CSS ${Math.round(cssGzip * 10) / 10} KB gzip; fonts ${kb(fontBytes)} KB.`,
 );

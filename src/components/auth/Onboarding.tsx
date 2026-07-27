@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useAppState } from "../../state/AppState";
+import { useAuthState } from "../../state/AppState";
 import { AuthButton } from "./AuthButton";
 
 const STYLES = ["Long-Term Investor", "Swing Trader", "Day Trader", "Mixed"];
@@ -65,7 +65,7 @@ const STEPS: Step[] = [
 ];
 
 export function Onboarding() {
-  const { captainName, completeOnboarding } = useAppState();
+  const { captainName, completeOnboarding } = useAuthState();
   const [stepIndex, setStepIndex] = useState(0);
   const [name, setName] = useState(captainName || "");
   const [choices, setChoices] = useState<Record<string, string>>({});

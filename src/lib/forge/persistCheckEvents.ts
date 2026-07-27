@@ -10,7 +10,7 @@ import {
   hadQtyFillInBucket,
   type ForgeCheckEvent,
 } from "../forge/planAdherence";
-import { computePortfolioAlignment } from "../forge/alignment";
+import { getPortfolioAlignmentCached } from "../forge/alignmentCache";
 import { INTERVAL_MS } from "../forge/scheduler";
 import { shouldScoreTickerWithStrategy } from "../forge/tickerStrategy";
 import { appendForgeCheckEvents } from "../userStore";
@@ -48,7 +48,12 @@ export function buildForgeCheckEvents(input: {
 
   for (const portfolio of input.portfolios) {
     if (!(strategy.appliedPortfolioIds ?? []).includes(portfolio.id)) continue;
-    const alignment = computePortfolioAlignment(portfolio, buckets, [strategy]);
+    const alignment = getPortfolioAlignmentCached(
+      portfolio,
+      buckets,
+      [strategy],
+      { caller: "check-events" },
+    );
     for (const holding of portfolio.holdings) {
       if (!shouldScoreTickerWithStrategy(holding, strategy, portfolio.id)) {
         continue;
@@ -103,8 +108,9 @@ export async function persistForgeCheckEvents(input: {
   strategyId: string;
   ledger: PortfolioTransaction[];
   checkedAt?: string;
+  userId?: string;
 }): Promise<{ ok: boolean; error?: string }> {
   const rows = buildForgeCheckEvents(input);
   if (rows.length === 0) return { ok: true };
-  return appendForgeCheckEvents(rows);
+  return appendForgeCheckEvents(rows, input.userId);
 }

@@ -5,7 +5,7 @@ import { StrategyList } from "../components/StrategyList";
 import { Tabs, type TabItem } from "../components/Tabs";
 import { WatchlistWidget } from "../components/WatchlistWidget";
 import { CaretLeft } from "../lib/icons";
-import { useAppState } from "../state/AppState";
+import { useWorkspaceState } from "../state/AppState";
 
 type ForgeDetailTab = "configure" | "watch";
 
@@ -16,7 +16,7 @@ const FORGE_DETAIL_TABS: TabItem[] = [
 
 export function StrategyForgePage() {
   const { strategies, createStrategy, duplicateStrategy, deleteStrategy } =
-    useAppState();
+    useWorkspaceState();
 
   const [selectedId, setSelectedId] = useState<string>(
     strategies[0]?.id ?? "",

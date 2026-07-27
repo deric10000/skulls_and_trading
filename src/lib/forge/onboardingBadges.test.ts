@@ -9,7 +9,7 @@ import {
 
 function portfolio(partial: Partial<Portfolio> & Pick<Portfolio, "id" | "type">): Portfolio {
   return {
-    name: partial.name ?? partial.id,
+    label: partial.label ?? partial.id,
     holdings: partial.holdings ?? [],
     ...partial,
   };

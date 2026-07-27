@@ -14,7 +14,11 @@ import {
   TrendUp,
 } from "../lib/icons";
 import { useIsMobile } from "../lib/useIsMobile";
-import { useAppState } from "../state/AppState";
+import {
+  useAuthState,
+  useUiState,
+  useWorkspaceState,
+} from "../state/AppState";
 import { ActionFooter } from "./ActionFooter";
 import { HelmBadgesSection } from "./helm/HelmBadgesSection";
 
@@ -80,13 +84,9 @@ export function HeroCard({
   onReviewWatch,
   mobileNavDock = false,
 }: HeroCardProps) {
-  const {
-    setActivePage,
-    portfolios,
-    openOnboardingModal,
-    captainName,
-    captain,
-  } = useAppState();
+  const { setActivePage, openOnboardingModal } = useUiState();
+  const { portfolios, captain } = useWorkspaceState();
+  const { captainName } = useAuthState();
   const isMobile = useIsMobile();
   // Default The Helm — setup + progress is the Home landing surface.
   const [pageId, setPageId] = useState<HelmPageId>("helm");

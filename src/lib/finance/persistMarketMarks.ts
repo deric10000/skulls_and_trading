@@ -11,8 +11,11 @@ import {
   etIsoDate,
   latestEtDay,
 } from "../finance/portfolioSnapshotSeries";
-import { computePortfolioAlignment } from "../forge/alignment";
-import { shouldScoreTickerWithStrategy } from "../forge/tickerStrategy";
+import { getPortfolioAlignmentCached } from "../forge/alignmentCache";
+import {
+  shouldScoreTickerWithStrategy,
+  untrackedHoldings,
+} from "../forge/tickerStrategy";
 import {
   getLastDataPullAt,
   getLiveQuote,
@@ -72,12 +75,17 @@ function bookMetrics(
   ledger: PortfolioTransaction[] | undefined,
   /** Live Forge book conviction — never the stale holding.conviction seed. */
   conviction: number | null,
+  /** Forward-only whole-book P&L over strategy-tracked holdings. */
+  trackedOpenPnlPct?: number,
 ): Record<string, unknown> {
   const metrics: Record<string, unknown> = {
     ...cashFlowMetrics(portfolioId, asOf, ledger),
   };
   if (conviction != null && Number.isFinite(conviction) && conviction !== 0) {
     metrics.conviction = conviction;
+  }
+  if (trackedOpenPnlPct != null && Number.isFinite(trackedOpenPnlPct)) {
+    metrics.trackedOpenPnlPct = trackedOpenPnlPct;
   }
   return metrics;
 }
@@ -159,7 +167,11 @@ export async function persistBookAndConvictionMarks(
   portfolios: Portfolio[],
   strategies: Strategy[],
   tickers: string[],
-  options?: { strategyId?: string; ledger?: PortfolioTransaction[] },
+  options?: {
+    strategyId?: string;
+    ledger?: PortfolioTransaction[];
+    userId?: string;
+  },
 ): Promise<void> {
   const checkDriven = Boolean(options?.strategyId);
   const appliedStrategyIds = strategies
@@ -175,6 +187,7 @@ export async function persistBookAndConvictionMarks(
   const buckets = dataSource.getBuckets();
   const bookRows: PortfolioSnapshotRow[] = [];
   const convictionRows: {
+    portfolioId: string;
     strategyId: string;
     ticker: string;
     asOf: string;
@@ -193,10 +206,11 @@ export async function persistBookAndConvictionMarks(
       (s.appliedPortfolioIds ?? []).includes(portfolio.id),
     );
     const appliedIds = applied.map((s) => s.id);
-    const wholeAlignment = computePortfolioAlignment(
+    const wholeAlignment = getPortfolioAlignmentCached(
       portfolio,
       buckets,
-      applied,
+      strategies,
+      { caller: "snapshots" },
     );
     const wholeConviction =
       Object.keys(wholeAlignment.byTicker).length > 0
@@ -205,6 +219,13 @@ export async function persistBookAndConvictionMarks(
 
     const whole = totalsFromHoldings(portfolio.holdings, cash);
     if (whole) {
+      const untracked = new Set(
+        untrackedHoldings(portfolio, strategies).map((holding) => holding.ticker),
+      );
+      const tracked = totalsFromHoldings(
+        portfolio.holdings.filter((holding) => !untracked.has(holding.ticker)),
+        0,
+      )?.openPnlPct;
       bookRows.push({
         portfolioId: portfolio.id,
         strategyId: "",
@@ -225,6 +246,7 @@ export async function persistBookAndConvictionMarks(
             appliedIds,
             checkDriven,
           ),
+          tracked,
         ),
       });
     }
@@ -236,10 +258,11 @@ export async function persistBookAndConvictionMarks(
       );
       const scoped = totalsFromHoldings(filtered, cash);
       if (!scoped) continue;
-      const scopedAlignment = computePortfolioAlignment(
+      const scopedAlignment = getPortfolioAlignmentCached(
         portfolio,
         buckets,
         [strategy],
+        { caller: "snapshots" },
       );
       const scopedConviction =
         Object.keys(scopedAlignment.byTicker).length > 0
@@ -304,10 +327,11 @@ export async function persistBookAndConvictionMarks(
         if (!holding) continue;
         matched = holding;
       }
-      const alignment = computePortfolioAlignment(
+      const alignment = getPortfolioAlignmentCached(
         matched.portfolio,
         buckets,
         [strategy],
+        { caller: "snapshots" },
       );
       const live = alignment.byTicker[ticker] ?? alignment.byTicker[matched.holding.ticker];
       if (!live || !Number.isFinite(live.conviction)) continue;
@@ -319,6 +343,7 @@ export async function persistBookAndConvictionMarks(
       }
       const mark = holdingMark(matched.holding);
       convictionRows.push({
+        portfolioId: matched.portfolio.id,
         strategyId: strategy.id,
         ticker,
         asOf,
@@ -345,7 +370,7 @@ export async function persistBookAndConvictionMarks(
   }
 
   await Promise.all([
-    appendPortfolioSnapshots(bookRows),
-    appendConvictionSnapshots(convictionRows),
+    appendPortfolioSnapshots(bookRows, options?.userId),
+    appendConvictionSnapshots(convictionRows, options?.userId),
   ]);
 }

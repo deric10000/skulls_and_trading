@@ -1,10 +1,10 @@
 import { RISK_OPTIONS } from "../../data";
-import { useAppState } from "../../state/AppState";
+import { useWorkspaceState } from "../../state/AppState";
 import type { RiskProfile } from "../../types";
 import { ChoiceGroup } from "../ChoiceGroup";
 
 export function RiskProfileSelector() {
-  const { captain, updateCaptain } = useAppState();
+  const { captain, updateCaptain } = useWorkspaceState();
 
   return (
     <section className="panel selector-card" aria-labelledby="risk-title">

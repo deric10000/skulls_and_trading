@@ -14,6 +14,25 @@
       "binding": "MARKET_CACHE"
     }
   ],
+  "queues": {
+    "producers": [
+      {
+        "binding": "CONVICTION_CYCLE_QUEUE",
+        "queue": "conviction-cycle"
+      }
+    ],
+    "consumers": [
+      {
+        "queue": "conviction-cycle",
+        // One Edge Function request per message. Ten stays well below the
+        // Free Worker limit of 50 external subrequests per invocation.
+        "max_batch_size": 10,
+        "max_batch_timeout": 5,
+        "max_retries": 5,
+        "dead_letter_queue": "conviction-cycle-dead-letter"
+      }
+    ]
+  },
   "observability": {
     "enabled": true,
     "head_sampling_rate": 1

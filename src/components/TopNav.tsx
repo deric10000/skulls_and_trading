@@ -13,7 +13,7 @@ import {
   CLOSED_BETA_LABEL,
   CLOSED_BETA_TRUST,
 } from "../lib/closedBeta";
-import { useAppState } from "../state/AppState";
+import { useAuthState, useUiState } from "../state/AppState";
 import type { PageId } from "../types";
 import { LinkButton } from "./LinkButton";
 import { Tooltip } from "./Tooltip";
@@ -29,8 +29,8 @@ const NAV_ITEMS: { id: PageId; label: string; icon: Icon }[] = [
 ];
 
 export function TopNav() {
-  const { activePage, setActivePage, demoMode, userProfile, signOut } =
-    useAppState();
+  const { activePage, setActivePage } = useUiState();
+  const { demoMode, userProfile, signOut } = useAuthState();
   const chipLabel = demoMode
     ? "Demo"
     : userProfile?.role === "admin"

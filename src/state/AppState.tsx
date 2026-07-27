@@ -6,6 +6,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   type ReactNode,
 } from "react";
 import {
@@ -18,6 +19,7 @@ import {
 import { dataSource } from "../lib/datasource";
 import {
   getLiveCacheGeneration,
+  getLiveCacheRevision,
   getLiveQuote,
   getLastDataPullAt,
   getLastDataPullAtMap,
@@ -40,10 +42,16 @@ import {
 } from "../lib/market/refresh";
 import { fetchMarketQuotes } from "../lib/market/client";
 import {
+  marketBootFingerprint,
+  resetMarketBootGate,
+  runMarketBootSingleFlight,
+} from "../lib/market/boot";
+import {
   computePortfolioAlignment,
   type PortfolioAlignment,
   type TickerAlignment,
 } from "../lib/forge/alignment";
+import { getPortfolioAlignmentCached } from "../lib/forge/alignmentCache";
 import { withPortfolioApplied } from "../lib/forge/appliedPortfolios";
 import {
   INTERVAL_LABEL,
@@ -58,7 +66,7 @@ import {
   consumeTimeframeMigrations,
   isSubHourTechnicalChip,
 } from "../lib/forge/timeframeFloor";
-import { resolveStatus } from "../lib/forge/status";
+import { resolveAggregatedStatus, resolveStatus } from "../lib/forge/status";
 import {
   scoreStock,
   type MetricContext,
@@ -72,17 +80,30 @@ import {
 } from "../lib/auth/session";
 import {
   getSupabase,
+  getServerScoringMode,
   ensureSupabaseReady,
   isSupabaseConfigured,
 } from "../lib/auth/supabaseClient";
 import type { UserProfile } from "../lib/auth/types";
 import { isAdmin } from "../lib/auth/types";
+import type { User } from "@supabase/supabase-js";
 import {
   emptyWorkspace,
+  combinedResultMatchesScope,
+  fetchStrategyCheckCombinedResults,
+  filterCurrentStrategyCheckResults,
+  fetchStrategyCheckLatestResults,
+  fetchStrategyCheckSchedules,
+  fetchStrategyCheckState,
   fetchTickerMarks,
   loadUserWorkspace,
-  saveUserWorkspace,
+  requestServerStrategyFirstCheck,
+  saveUserWorkspaceSerialized,
   upsertTickerMarks,
+  type StrategyCheckLatestResultRecord,
+  type StrategyCheckCombinedResultRecord,
+  type StrategyCheckScheduleRecord,
+  type StrategyCheckStateRecord,
   type UserFlags,
   type UserWorkspace,
 } from "../lib/userStore";
@@ -96,6 +117,7 @@ import type {
   Portfolio,
   PortfolioTransaction,
   RuleChip,
+  StatusType,
   Strategy,
   WatchlistItem,
 } from "../types";
@@ -112,6 +134,14 @@ import {
   zoneHintsFromStatuses,
 } from "../lib/finance/portfolioTransactions";
 import { estimateFillTimestamp } from "../lib/finance/timestamps";
+import {
+  PERF_MARK,
+  measureAsync,
+  measureSync,
+  perfCount,
+  perfMark,
+  perfMeasure,
+} from "../lib/performance/marks";
 
 const IMMEDIATE_CHECK_FIELDS = new Set<keyof Strategy>([
   "appliedPortfolioIds",
@@ -173,7 +203,7 @@ function clampCash(value: number): number {
 
 type LogDraft = Pick<LogEntry, "title" | "note" | "strategy">;
 
-interface AppStateValue {
+export interface AppStateValue {
   isAuthenticated: boolean;
   demoMode: boolean;
   needsOnboarding: boolean;
@@ -392,7 +422,11 @@ interface AppStateValue {
   deleteLog: (ticker: string, id: string) => void;
 }
 
-const AppStateContext = createContext<AppStateValue | null>(null);
+interface AppStateStore {
+  value: AppStateValue;
+  listeners: Set<() => void>;
+}
+const AppStateStoreContext = createContext<AppStateStore | null>(null);
 
 function currentTimestamp(): string {
   const time = new Date().toLocaleTimeString([], {
@@ -402,11 +436,14 @@ function currentTimestamp(): string {
   return logTimestamp(time);
 }
 
-const persistWorkspaceDebounced = debounce((workspace: UserWorkspace) => {
-  void saveUserWorkspace(workspace).catch((err) => {
-    console.warn("user_state save failed", err);
-  });
-}, 500);
+const persistWorkspaceDebounced = debounce(
+  (workspace: UserWorkspace, userId: string) => {
+    void saveUserWorkspaceSerialized(workspace, userId).catch((err) => {
+      console.warn("user_state save failed", err);
+    });
+  },
+  500,
+);
 
 function applyWorkspaceToSetters(
   workspace: UserWorkspace,
@@ -433,6 +470,35 @@ function applyWorkspaceToSetters(
     setters.setCaptainName(workspace.captain.handle);
   setters.setSelectedTicker(workspace.watchlist[0]?.ticker ?? "");
   setters.setFlags(workspace.flags);
+}
+
+function stockAlignmentFromServer(
+  row: Pick<
+    StrategyCheckLatestResultRecord,
+    "resolved" | "payload" | "conviction" | "status"
+  >,
+): StockAlignment | null {
+  const resolved = row.resolved;
+  if (!resolved || typeof resolved.primary !== "string") return null;
+  const payload = row.payload;
+  const categories = Array.isArray(payload.categories)
+    ? (payload.categories as StockAlignment["categories"])
+    : [];
+  const results = Array.isArray(payload.results)
+    ? (payload.results as StockAlignment["results"])
+    : [];
+  const zoneResults = Array.isArray(payload.zoneResults)
+    ? (payload.zoneResults as StockAlignment["zoneResults"])
+    : [];
+  return {
+    hasRules: payload.hasRules !== false,
+    conviction: row.conviction,
+    status: (row.status ?? resolved.primary) as StatusType,
+    resolved,
+    categories,
+    results,
+    zoneResults,
+  };
 }
 
 export function AppStateProvider({ children }: { children: ReactNode }) {
@@ -480,8 +546,22 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     {},
   );
   const [marketGeneration, setMarketGeneration] = useState(0);
+  const [scoreRevision, setScoreRevision] = useState("0:0");
   const [marketLoading, setMarketLoading] = useState(false);
   const [marketError, setMarketError] = useState<string | null>(null);
+  const serverScoringMode = getServerScoringMode();
+  const [serverCheckState, setServerCheckState] = useState<
+    StrategyCheckStateRecord[]
+  >([]);
+  const [serverCheckSchedules, setServerCheckSchedules] = useState<
+    StrategyCheckScheduleRecord[]
+  >([]);
+  const [serverLatestResults, setServerLatestResults] = useState<
+    StrategyCheckLatestResultRecord[]
+  >([]);
+  const [serverCombinedResults, setServerCombinedResults] = useState<
+    StrategyCheckCombinedResultRecord[]
+  >([]);
   const persistEnabled = useRef(false);
   const invalidTimeToastKey = useRef("");
   const immediateCheckTimers = useRef(
@@ -492,12 +572,19 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const portfoliosRef = useRef(portfolios);
   const strategiesRef = useRef(strategies);
   const shareFillsRef = useRef(shareFills);
+  const userIdRef = useRef(userProfile?.id);
   portfoliosRef.current = portfolios;
   strategiesRef.current = strategies;
   shareFillsRef.current = shareFills;
+  userIdRef.current = userProfile?.id;
 
   useEffect(() => {
-    return subscribeLiveCache(() => setMarketGeneration(getLiveCacheGeneration()));
+    return subscribeLiveCache(() => {
+      setMarketGeneration(getLiveCacheGeneration());
+      setScoreRevision(
+        `${getLiveCacheRevision("scoreInputs")}:${getLiveCacheRevision("scoreReadiness")}`,
+      );
+    });
   }, []);
 
   useEffect(
@@ -510,17 +597,54 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     [],
   );
 
-  const hydrateFromSession = useCallback(async () => {
-    const profile = await fetchProfile();
-    if (!profile) return;
+  const hydrateFromSession = useCallback(async (sessionUser?: User) => {
+    const user =
+      sessionUser ?? (await getSupabase().auth.getSession()).data.session?.user;
+    if (!user) return;
+    perfMark(PERF_MARK.authHydrateStart);
     const pending = takePendingInvite();
     if (pending) {
       await redeemInviteCode(pending).catch(() => false);
     }
-    const [workspace, tickerMarks] = await Promise.all([
-      loadUserWorkspace(profile.captainName),
-      fetchTickerMarks(),
+    const captainName =
+      (user.user_metadata?.captain_name as string | undefined) || "Captain";
+    const serverScoringEnabled = getServerScoringMode() !== "client";
+    const [
+      profile,
+      workspace,
+      tickerMarks,
+      checkState,
+      checkSchedules,
+      latestResults,
+      combinedResults,
+    ] = await Promise.all([
+      measureAsync("hydrate-profile", () => fetchProfile(user)),
+      measureAsync("hydrate-workspace", () =>
+        loadUserWorkspace(user.id, captainName),
+      ),
+      measureAsync("hydrate-ticker-marks", () => fetchTickerMarks(user.id)),
+      serverScoringEnabled
+        ? measureAsync("hydrate-check-state", () =>
+            fetchStrategyCheckState(user.id),
+          )
+        : Promise.resolve([]),
+      serverScoringEnabled
+        ? measureAsync("hydrate-check-schedules", () =>
+            fetchStrategyCheckSchedules(user.id),
+          )
+        : Promise.resolve([]),
+      serverScoringEnabled
+        ? measureAsync("hydrate-check-results", () =>
+            fetchStrategyCheckLatestResults(user.id),
+          )
+        : Promise.resolve([]),
+      serverScoringEnabled
+        ? measureAsync("hydrate-combined-results", () =>
+            fetchStrategyCheckCombinedResults(user.id),
+          )
+        : Promise.resolve([]),
     ]);
+    if (!profile) return;
     resetLiveCache();
     setLiveQuotes(
       Object.fromEntries(
@@ -537,13 +661,26 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
           ]),
       ),
     );
-    for (const [strategyId, stamp] of Object.entries(
-      workspace.flags.lastDataPullAtByStrategyId ?? {},
-    )) {
+    const normalizedStamps =
+      getServerScoringMode() === "authoritative"
+        ? checkState.reduce<Record<string, string>>((out, row) => {
+            if (!row.lastCycleAsOf) return out;
+            const prior = out[row.strategyId];
+            if (!prior || Date.parse(row.lastCycleAsOf) > Date.parse(prior)) {
+              out[row.strategyId] = row.lastCycleAsOf;
+            }
+            return out;
+          }, {})
+        : workspace.flags.lastDataPullAtByStrategyId ?? {};
+    for (const [strategyId, stamp] of Object.entries(normalizedStamps)) {
       if (!Number.isNaN(Date.parse(stamp))) {
         setLastDataPullAt(strategyId, stamp);
       }
     }
+    setServerCheckState(checkState);
+    setServerCheckSchedules(checkSchedules);
+    setServerLatestResults(latestResults);
+    setServerCombinedResults(combinedResults);
     hydrateTickerConvictionDirty(workspace.flags.tickerConvictionDirtyAt);
     const timeframeMigrations = consumeTimeframeMigrations();
     applyWorkspaceToSetters(workspace, {
@@ -576,6 +713,12 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       );
     }
     persistEnabled.current = true;
+    perfMark(PERF_MARK.authHydrateEnd);
+    perfMeasure(
+      "st:duration:auth-hydrate",
+      PERF_MARK.authHydrateStart,
+      PERF_MARK.authHydrateEnd,
+    );
   }, []);
 
   const completeBetaSignIn = useCallback(async () => {
@@ -586,27 +729,50 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
     let unsubscribe: (() => void) | undefined;
     void (async () => {
+      perfMark(PERF_MARK.authConfigStart);
       const configured = await ensureSupabaseReady();
+      perfMark(PERF_MARK.authConfigEnd);
+      perfMeasure(
+        "st:duration:auth-config",
+        PERF_MARK.authConfigStart,
+        PERF_MARK.authConfigEnd,
+      );
       if (cancelled) return;
       if (!configured) {
         setAuthReady(true);
+        perfMark(PERF_MARK.authReady);
         return;
       }
       try {
+        perfMark(PERF_MARK.authSessionStart);
         const { data } = await getSupabase().auth.getSession();
+        perfMark(PERF_MARK.authSessionEnd);
+        perfMeasure(
+          "st:duration:auth-session",
+          PERF_MARK.authSessionStart,
+          PERF_MARK.authSessionEnd,
+        );
         if (!cancelled && data.session) {
-          await hydrateFromSession();
+          await hydrateFromSession(data.session.user);
         }
       } catch (err) {
         console.warn("session restore failed", err);
       } finally {
-        if (!cancelled) setAuthReady(true);
+        if (!cancelled) {
+          setAuthReady(true);
+          perfMark(PERF_MARK.authReady);
+        }
       }
       const { data: sub } = getSupabase().auth.onAuthStateChange((event) => {
         if (event === "SIGNED_OUT") {
           persistEnabled.current = false;
           resetLiveCache();
+          resetMarketBootGate();
           bootstrappedFirstChecks.current.clear();
+          setServerCheckState([]);
+          setServerCheckSchedules([]);
+          setServerLatestResults([]);
+          setServerCombinedResults([]);
           setIsAuthenticated(false);
           setUserProfile(null);
           setNeedsLegalAck(false);
@@ -634,13 +800,52 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
           ]
         : [];
     });
-    setFlags((current) => ({
-      ...current,
-      lastDataPullAtByStrategyId: getLastDataPullAtMap(),
-      tickerConvictionDirtyAt: getTickerConvictionDirtyMap(),
-    }));
-    return upsertTickerMarks(marks);
+    if (getServerScoringMode() !== "authoritative") {
+      setFlags((current) => ({
+        ...current,
+        lastDataPullAtByStrategyId: getLastDataPullAtMap(),
+        tickerConvictionDirtyAt: getTickerConvictionDirtyMap(),
+      }));
+    }
+    return upsertTickerMarks(marks, userIdRef.current);
   }, []);
+
+  const refreshServerScoringState = useCallback(async () => {
+    const userId = userIdRef.current;
+    if (!userId || getServerScoringMode() === "client") return;
+    const [checkState, checkSchedules, latestResults, combinedResults] =
+      await Promise.all([
+      fetchStrategyCheckState(userId),
+      fetchStrategyCheckSchedules(userId),
+      fetchStrategyCheckLatestResults(userId),
+      fetchStrategyCheckCombinedResults(userId),
+    ]);
+    setServerCheckState(checkState);
+    setServerCheckSchedules(checkSchedules);
+    setServerLatestResults(latestResults);
+    setServerCombinedResults(combinedResults);
+    if (getServerScoringMode() === "authoritative") {
+      for (const row of checkState) {
+        if (!row.lastCycleAsOf) continue;
+        const prior = getLastDataPullAt(row.strategyId);
+        if (!prior || Date.parse(row.lastCycleAsOf) >= Date.parse(prior)) {
+          setLastDataPullAt(row.strategyId, row.lastCycleAsOf);
+        }
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!isAuthenticated || serverScoringMode === "client") return;
+    const refresh = () => {
+      void refreshServerScoringState().catch((error) => {
+        console.warn("server scoring refresh failed", error);
+      });
+    };
+    refresh();
+    const timer = window.setInterval(refresh, 60_000);
+    return () => window.clearInterval(timer);
+  }, [isAuthenticated, refreshServerScoringState, serverScoringMode]);
 
   const refreshLiveMarket = useCallback(async () => {
     const tickers = [
@@ -656,14 +861,22 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     setMarketLoading(true);
     setMarketError(null);
     try {
-      const cycleAsOf = await readLatestMarketCycle(tickers, applied);
+      const authoritative = getServerScoringMode() === "authoritative";
+      const cycleAsOf = await readLatestMarketCycle(
+        tickers,
+        authoritative ? [] : applied,
+      );
       if (cycleAsOf) {
-        void Promise.all([
-          persistSharedMarketState(tickers),
-          persistBookAndConvictionMarks(portfolios, strategies, tickers, {
-            ledger: shareFills,
-          }),
-        ]);
+        const writes: Promise<unknown>[] = [persistSharedMarketState(tickers)];
+        if (!authoritative) {
+          writes.push(
+            persistBookAndConvictionMarks(portfolios, strategies, tickers, {
+              ledger: shareFills,
+              userId: userIdRef.current,
+            }),
+          );
+        }
+        void Promise.all(writes);
       }
     } catch (error) {
       setMarketError(
@@ -694,6 +907,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
             persistBookAndConvictionMarks(portfolios, strategies, tickers, {
               strategyId,
               ledger: shareFills,
+              userId: userIdRef.current,
             }),
             persistForgeCheckEvents({
               portfolios,
@@ -701,6 +915,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
               strategyId,
               ledger: shareFills,
               checkedAt: cycleAsOf,
+              userId: userIdRef.current,
             }).then((result) => {
               if (!result.ok && result.error) {
                 setMarketError(`Check event save failed: ${result.error}`);
@@ -722,6 +937,19 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     if (existing) window.clearTimeout(existing);
     const timer = window.setTimeout(() => {
       immediateCheckTimers.current.delete(strategyId);
+      if (getServerScoringMode() === "authoritative") {
+        void requestServerStrategyFirstCheck(strategyId)
+          .then(refreshServerScoringState)
+          .catch((error) => {
+            bootstrappedFirstChecks.current.delete(strategyId);
+            setMarketError(
+              error instanceof Error
+                ? error.message
+                : "Server strategy check request failed",
+            );
+          });
+        return;
+      }
       const strategy = strategiesRef.current.find(
         (item) => item.id === strategyId,
       );
@@ -741,7 +969,11 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
               portfoliosRef.current,
               strategiesRef.current,
               result.tickers,
-              { strategyId, ledger: shareFillsRef.current },
+              {
+                strategyId,
+                ledger: shareFillsRef.current,
+                userId: userIdRef.current,
+              },
             ),
             persistForgeCheckEvents({
               portfolios: portfoliosRef.current,
@@ -749,6 +981,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
               strategyId,
               ledger: shareFillsRef.current,
               checkedAt: result.checkedAt,
+              userId: userIdRef.current,
             }).then((persistResult) => {
               if (!persistResult.ok && persistResult.error) {
                 setMarketError(
@@ -770,12 +1003,12 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
           );
         })
         .finally(() => setMarketLoading(false));
-    }, 300);
+    }, getServerScoringMode() === "authoritative" ? 800 : 300);
     immediateCheckTimers.current.set(strategyId, timer);
-  }, [persistSharedMarketState]);
+  }, [persistSharedMarketState, refreshServerScoringState]);
 
   useEffect(() => {
-    if (!isAuthenticated) return;
+    if (!isAuthenticated || serverScoringMode === "authoritative") return;
     const tickers = [
       ...new Set(
         portfolios.flatMap((portfolio) =>
@@ -786,27 +1019,47 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     const applied = strategies.filter(
       (strategy) => (strategy.appliedPortfolioIds ?? []).length > 0,
     );
-    void (async () => {
-      await registerPortfolioMarketSymbols(tickers);
-      await refreshLiveMarket();
-      // Cron may still be warming (cycle null). Pull book quotes so P&L paints,
-      // then run one scoped first check per unstamped applied strategy.
-      const missingQuotes = tickers.filter((ticker) => !getLiveQuote(ticker));
-      if (missingQuotes.length > 0) {
-        const quoteResult = await fetchMarketQuotes(missingQuotes);
-        if (quoteResult?.quotes && Object.keys(quoteResult.quotes).length > 0) {
-          setLiveQuotes(quoteResult.quotes);
-          await persistSharedMarketState(Object.keys(quoteResult.quotes));
+    const fingerprint = marketBootFingerprint(portfolios, strategies);
+    void runMarketBootSingleFlight(fingerprint, async () => {
+      perfCount("market-boot");
+      perfMark(PERF_MARK.marketBootStart);
+      try {
+        // Registry and KV cycle are independent; overlap their network waits.
+        await Promise.allSettled([
+          registerPortfolioMarketSymbols(tickers),
+          refreshLiveMarket(),
+        ]);
+        // Cron may still be warming (cycle null). Pull book quotes so P&L paints,
+        // then run one scoped first check per unstamped applied strategy.
+        const missingQuotes = tickers.filter((ticker) => !getLiveQuote(ticker));
+        if (missingQuotes.length > 0) {
+          perfCount("market-boot-quote-fallback");
+          const quoteResult = await fetchMarketQuotes(missingQuotes);
+          if (quoteResult?.quotes && Object.keys(quoteResult.quotes).length > 0) {
+            setLiveQuotes(quoteResult.quotes);
+            await persistSharedMarketState(Object.keys(quoteResult.quotes));
+          }
         }
+        for (const strategy of applied) {
+          if (getLastDataPullAt(strategy.id)) continue;
+          if (bootstrappedFirstChecks.current.has(strategy.id)) continue;
+          // Claim the slot while the debounced check runs; released on failure.
+          bootstrappedFirstChecks.current.add(strategy.id);
+          requestImmediateStrategyCheck(strategy.id);
+        }
+      } finally {
+        perfMark(PERF_MARK.marketBootEnd);
+        perfMeasure(
+          "st:duration:market-boot",
+          PERF_MARK.marketBootStart,
+          PERF_MARK.marketBootEnd,
+        );
       }
-      for (const strategy of applied) {
-        if (getLastDataPullAt(strategy.id)) continue;
-        if (bootstrappedFirstChecks.current.has(strategy.id)) continue;
-        // Claim the slot while the debounced check runs; released on failure.
-        bootstrappedFirstChecks.current.add(strategy.id);
-        requestImmediateStrategyCheck(strategy.id);
-      }
-    })();
+    }).catch((error) => {
+      setMarketError(
+        error instanceof Error ? error.message : "Market bootstrap failed",
+      );
+    });
   }, [
     isAuthenticated,
     portfolios,
@@ -837,7 +1090,13 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     );
     scheduler.start();
     return () => scheduler.stop();
-  }, [isAuthenticated, portfolios, strategies, refreshStrategyTickers]);
+  }, [
+    isAuthenticated,
+    portfolios,
+    strategies,
+    refreshStrategyTickers,
+    serverScoringMode,
+  ]);
 
   // Auto-dismiss the cadence info toast after a short read window.
   useEffect(() => {
@@ -847,7 +1106,12 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   }, [cadenceToast]);
 
   useEffect(() => {
-    if (!persistEnabled.current || !isAuthenticated || demoMode) return;
+    if (
+      !persistEnabled.current ||
+      !isAuthenticated ||
+      demoMode ||
+      !userProfile?.id
+    ) return;
     persistWorkspaceDebounced({
       portfolios,
       strategies,
@@ -857,7 +1121,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       captain,
       shareFills,
       flags,
-    });
+    }, userProfile.id);
   }, [
     portfolios,
     strategies,
@@ -869,6 +1133,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     flags,
     isAuthenticated,
     demoMode,
+    userProfile?.id,
   ]);
 
   useEffect(() => {
@@ -1134,6 +1399,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         ...current,
         tickerConvictionDirtyAt: getTickerConvictionDirtyMap(),
       }));
+      void registerPortfolioMarketSymbols([ticker]);
       void fetchMarketQuotes([ticker]).then((result) => {
         const quote = result?.quotes[ticker];
         if (!quote || !(quote.lastPrice > 0)) return;
@@ -1145,14 +1411,17 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
               : item,
           ),
         );
-        void upsertTickerMarks([
-          {
-            ticker,
-            lastPrice: quote.lastPrice,
-            asOf: quote.asOf,
-            source: quote.source,
-          },
-        ]);
+        void upsertTickerMarks(
+          [
+            {
+              ticker,
+              lastPrice: quote.lastPrice,
+              asOf: quote.asOf,
+              source: quote.source,
+            },
+          ],
+          userIdRef.current,
+        );
       });
       return "added";
     },
@@ -1194,7 +1463,14 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       );
       const appliedIds = applied.map((s) => s.id);
       const alignment = portfolio
-        ? computePortfolioAlignment(portfolio, buckets, applied)
+        ? measureSync(
+            "portfolio-alignment",
+            () =>
+              computePortfolioAlignment(portfolio, buckets, applied, {
+                caller: "order-fill",
+              }),
+            { caller: "order-fill" },
+          )
         : null;
 
       const fills: PortfolioTransaction[] = orders.map((order) => {
@@ -1372,7 +1648,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         nextPortfolios,
         nextStrategies,
         tickers,
-        { ledger: shareFillsRef.current },
+        { ledger: shareFillsRef.current, userId: userIdRef.current },
       );
     }, 0);
   }, []);
@@ -1731,22 +2007,160 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
           ...current,
           tickerConvictionDirtyAt: getTickerConvictionDirtyMap(),
         }));
+        void registerPortfolioMarketSymbols([ticker]);
+        requestImmediateStrategyCheck(strategyId);
       }
     },
-    [],
+    [requestImmediateStrategyCheck],
+  );
+
+  const validServerLatestResults = useMemo(
+    () =>
+      filterCurrentStrategyCheckResults(
+        serverLatestResults,
+        serverCheckSchedules,
+      ),
+    [serverCheckSchedules, serverLatestResults],
   );
 
   // Recomputed only when the strategies or buckets change (data snapshots are
   // static). Each portfolio's per-ticker + aggregate alignment in one pass.
   const alignmentByPortfolio = useMemo(() => {
     const map: Record<string, PortfolioAlignment> = {};
+    const combinedByScope = new Map(
+      serverCombinedResults.map((row) => [
+        `${row.portfolioId}|${row.ticker}`,
+        row,
+      ]),
+    );
     for (const portfolio of portfolios) {
-      map[portfolio.id] = computePortfolioAlignment(portfolio, buckets, strategies);
+      const clientAlignment = getPortfolioAlignmentCached(
+        portfolio,
+        buckets,
+        strategies,
+        { revision: scoreRevision, caller: "render" },
+      );
+      if (serverScoringMode !== "authoritative") {
+        map[portfolio.id] = clientAlignment;
+        continue;
+      }
+      const byTicker: PortfolioAlignment["byTicker"] = {};
+      const slices: Array<{
+        marketValue: number;
+        conviction: number;
+        categories: StockAlignment["categories"];
+      }> = [];
+      const portfolioFlags: StatusType[] = [];
+      for (const holding of portfolio.holdings) {
+        const applicable = strategiesForHolding(
+          holding,
+          portfolio.id,
+          strategies,
+        );
+        if (applicable.length === 0) continue;
+        const strategyIds = applicable.map((strategy) => strategy.id);
+        const row = combinedByScope.get(
+          `${portfolio.id}|${holding.ticker.toUpperCase()}`,
+        );
+        if (
+          !row ||
+          !combinedResultMatchesScope(row, strategyIds, serverCheckSchedules)
+        ) continue;
+        const alignment = stockAlignmentFromServer(row);
+        if (!alignment) continue;
+        byTicker[holding.ticker] = {
+          ticker: holding.ticker,
+          bucketId: `server-${strategyIds.join("+")}`,
+          bucketName: applicable.map((strategy) => strategy.name).join(" + "),
+          conviction: alignment.conviction,
+          status: alignment.status,
+          resolved: alignment.resolved,
+          alignment,
+        };
+        const marketValue = Number(row.payload.marketValue);
+        if (Number.isFinite(marketValue) && marketValue > 0) {
+          slices.push({
+            marketValue,
+            conviction: alignment.conviction,
+            categories: alignment.categories,
+          });
+        }
+        if (alignment.resolved.categoryFlags.includes("Go to Cash")) {
+          portfolioFlags.push("Go to Cash");
+        }
+      }
+      const portfolioResolved = resolveAggregatedStatus(slices, {
+        hasStrategy: Object.keys(byTicker).length > 0,
+        zoneFlags: portfolioFlags,
+        zoneSurface: "portfolio",
+      });
+      map[portfolio.id] = {
+        byTicker,
+        byBucket: clientAlignment.byBucket,
+        portfolio: {
+          conviction: portfolioResolved.conviction,
+          status: portfolioResolved.primary,
+          resolved: portfolioResolved,
+        },
+      };
     }
     return map;
-    // marketGeneration: liveCache quotes/fundies/techs changed
+    // scoreRevision: score inputs/readiness changed; taxonomy/budgets do not rescore.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [portfolios, buckets, strategies, marketGeneration]);
+  }, [
+    portfolios,
+    buckets,
+    strategies,
+    scoreRevision,
+    validServerLatestResults,
+    serverCombinedResults,
+    serverCheckSchedules,
+    serverScoringMode,
+  ]);
+
+  useEffect(() => {
+    if (serverScoringMode !== "shadow") return;
+    const cycleAsOf = getMarketCycleMeta()?.cycleAsOf;
+    if (!cycleAsOf) return;
+    for (const result of validServerLatestResults) {
+      if (result.cycleAsOf !== cycleAsOf) continue;
+      const portfolio = portfolios.find((item) => item.id === result.portfolioId);
+      const strategy = strategies.find((item) => item.id === result.strategyId);
+      if (!portfolio || !strategy) continue;
+      const local = getPortfolioAlignmentCached(
+        portfolio,
+        buckets,
+        [strategy],
+        { revision: scoreRevision, caller: "server-shadow" },
+      ).byTicker[result.ticker];
+      if (
+        !local ||
+        local.conviction !== result.conviction ||
+        local.status !== result.status
+      ) {
+        console.warn(
+          JSON.stringify({
+            event: "conviction_score_parity_mismatch",
+            portfolioId: result.portfolioId,
+            strategyId: result.strategyId,
+            ticker: result.ticker,
+            cycleAsOf,
+            server: { conviction: result.conviction, status: result.status },
+            client: local
+              ? { conviction: local.conviction, status: local.status }
+              : null,
+          }),
+        );
+      }
+    }
+  }, [
+    buckets,
+    portfolios,
+    scoreRevision,
+    serverScoringMode,
+    strategies,
+    validServerLatestResults,
+  ]);
 
   const lastDataPullAtByStrategyId = useMemo(
     () => getLastDataPullAtMap(),
@@ -1796,6 +2210,58 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       const cycleLast =
         cycleMeta?.cycleAsOf ?? cycleMeta?.publishedAt ?? undefined;
       const now = Date.now();
+      if (serverScoringMode === "authoritative") {
+        const schedules = serverCheckSchedules.filter((row) =>
+          ids.includes(row.strategyId),
+        );
+        if (schedules.length > 0) {
+          const rows = schedules.map((schedule) => {
+            const state = serverCheckState.find(
+              (row) =>
+                row.strategyId === schedule.strategyId &&
+                row.cadence === schedule.cadence,
+            );
+            return {
+              lastAt: state?.lastCycleAsOf ?? null,
+              nextAt: schedule.nextDueAt,
+            };
+          });
+          const lastStamps = rows
+            .flatMap((row) => (row.lastAt ? [Date.parse(row.lastAt)] : []))
+            .filter(Number.isFinite);
+          const nextStamps = rows
+            .map((row) => Date.parse(row.nextAt))
+            .filter(Number.isFinite);
+          const lastAt =
+            lastStamps.length > 0
+              ? new Date(Math.max(...lastStamps)).toISOString()
+              : null;
+          const nextAt =
+            nextStamps.length > 0
+              ? new Date(Math.min(...nextStamps)).toISOString()
+              : new Date(now + 60 * 60_000).toISOString();
+          const checkInProgress = nextStamps.some((stamp) => stamp <= now);
+          const cycleApplyMs = cycleMeta?.nextCycleAt
+            ? Date.parse(cycleMeta.nextCycleAt)
+            : NaN;
+          const applyAt =
+            checkInProgress && Number.isFinite(cycleApplyMs) && cycleApplyMs > now
+              ? new Date(cycleApplyMs).toISOString()
+              : checkInProgress
+                ? new Date(
+                    Math.floor(now / (60 * 60_000)) * 60 * 60_000 +
+                      60 * 60_000,
+                  ).toISOString()
+                : nextAt;
+          return {
+            lastAt,
+            nextAt,
+            waitingOnCycle: rows.some((row) => !row.lastAt),
+            checkInProgress,
+            applyAt,
+          };
+        }
+      }
       const rows = ids.flatMap((strategyId) => {
         const strategy = strategies.find((item) => item.id === strategyId);
         if (!strategy) return [];
@@ -1843,13 +2309,39 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         : nextAt;
       return { lastAt, nextAt, waitingOnCycle, checkInProgress, applyAt };
     },
-    [marketGeneration, strategies],
+    [
+      marketGeneration,
+      strategies,
+      serverCheckSchedules,
+      serverCheckState,
+      serverScoringMode,
+    ],
   );
 
   const isConvictionScoreReadyForWatch = useCallback(
-    (portfolioId: string, ticker: string, strategyIds: string[]) =>
-      isConvictionScoreReady(portfolioId, ticker, strategyIds),
-    [marketGeneration],
+    (portfolioId: string, ticker: string, strategyIds: string[]) => {
+      if (serverScoringMode === "authoritative") {
+        const symbol = ticker.toUpperCase();
+        const combined = serverCombinedResults.find(
+          (row) => row.portfolioId === portfolioId && row.ticker === symbol,
+        );
+        if (
+          !combined ||
+          !combinedResultMatchesScope(
+            combined,
+            strategyIds,
+            serverCheckSchedules,
+          )
+        ) return false;
+      }
+      return isConvictionScoreReady(portfolioId, ticker, strategyIds);
+    },
+    [
+      marketGeneration,
+      serverCombinedResults,
+      serverCheckSchedules,
+      serverScoringMode,
+    ],
   );
 
   const getPortfolioAlignment = useCallback(
@@ -1899,6 +2391,15 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         ? portfolios.find((item) => item.id === portfolioId)
         : undefined;
       const holding = portfolio?.holdings.find((item) => item.ticker === ticker);
+      if (serverScoringMode === "authoritative" && portfolioId) {
+        const row = validServerLatestResults.find(
+          (result) =>
+            result.portfolioId === portfolioId &&
+            result.strategyId === strategyId &&
+            result.ticker === ticker.toUpperCase(),
+        );
+        return row ? stockAlignmentFromServer(row) ?? undefined : undefined;
+      }
       const priceOf = (symbol: string): number => {
         const live = getLiveQuote(symbol);
         if (live && live.lastPrice > 0) return live.lastPrice;
@@ -1930,7 +2431,13 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     },
     // marketGeneration: live quotes change weightPct / openPnlPct / overlays
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [strategies, portfolios, marketGeneration],
+    [
+      strategies,
+      portfolios,
+      marketGeneration,
+      validServerLatestResults,
+      serverScoringMode,
+    ],
   );
 
   // Overlay computed conviction/status onto the default portfolio's watchlist so
@@ -2162,20 +2669,163 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       deleteLog,
     ],
   );
+  const stateStoreRef = useRef<AppStateStore | null>(null);
+  if (!stateStoreRef.current) {
+    stateStoreRef.current = { value, listeners: new Set() };
+  } else {
+    stateStoreRef.current.value = value;
+  }
+  useEffect(() => {
+    stateStoreRef.current?.listeners.forEach((listener) => listener());
+  }, [value]);
 
   if (!authReady) {
     return null;
   }
 
   return (
-    <AppStateContext.Provider value={value}>{children}</AppStateContext.Provider>
+    <AppStateStoreContext.Provider value={stateStoreRef.current}>
+      {children}
+    </AppStateStoreContext.Provider>
   );
 }
 
-export function useAppState(): AppStateValue {
-  const context = useContext(AppStateContext);
-  if (!context) {
-    throw new Error("useAppState must be used within an AppStateProvider");
+function shallowEqual<T>(left: T, right: T): boolean {
+  if (Object.is(left, right)) return true;
+  if (
+    typeof left !== "object" ||
+    left == null ||
+    typeof right !== "object" ||
+    right == null
+  ) {
+    return false;
   }
-  return context;
+  const leftRecord = left as Record<string, unknown>;
+  const rightRecord = right as Record<string, unknown>;
+  const keys = Object.keys(leftRecord);
+  return (
+    keys.length === Object.keys(rightRecord).length &&
+    keys.every((key) => Object.is(leftRecord[key], rightRecord[key]))
+  );
+}
+
+export function useAppStateSelector<T>(
+  selector: (state: AppStateValue) => T,
+): T {
+  const store = useContext(AppStateStoreContext);
+  if (!store) {
+    throw new Error("useAppStateSelector must be used within an AppStateProvider");
+  }
+  const selectorRef = useRef(selector);
+  const selectedRef = useRef<T | undefined>(undefined);
+  selectorRef.current = selector;
+  return useSyncExternalStore(
+    (listener) => {
+      store.listeners.add(listener);
+      return () => store.listeners.delete(listener);
+    },
+    () => {
+      const next = selectorRef.current(store.value);
+      if (
+        selectedRef.current !== undefined &&
+        shallowEqual(selectedRef.current, next)
+      ) {
+        return selectedRef.current;
+      }
+      selectedRef.current = next;
+      return next;
+    },
+  );
+}
+
+export function useAuthState() {
+  return useAppStateSelector((state) => ({
+    isAuthenticated: state.isAuthenticated,
+    demoMode: state.demoMode,
+    needsOnboarding: state.needsOnboarding,
+    captainName: state.captainName,
+    userProfile: state.userProfile,
+    completeBetaSignIn: state.completeBetaSignIn,
+    signIn: state.signIn,
+    signUp: state.signUp,
+    continueAsDemo: state.continueAsDemo,
+    completeOnboarding: state.completeOnboarding,
+    signOut: state.signOut,
+  }));
+}
+
+export function useUiState() {
+  return useAppStateSelector((state) => ({
+    activePage: state.activePage,
+    setActivePage: state.setActivePage,
+    needsLegalAck: state.needsLegalAck,
+    acknowledgeLegal: state.acknowledgeLegal,
+    needsOnboardingModal: state.needsOnboardingModal,
+    onboardingModalOpen: state.onboardingModalOpen,
+    openOnboardingModal: state.openOnboardingModal,
+    dismissOnboardingModal: state.dismissOnboardingModal,
+    budgetToast: state.budgetToast,
+    clearBudgetToast: state.clearBudgetToast,
+    cadenceToast: state.cadenceToast,
+    clearCadenceToast: state.clearCadenceToast,
+    previewStrategyCheckToast: state.previewStrategyCheckToast,
+  }));
+}
+
+export function useMarketState() {
+  return useAppStateSelector((state) => ({
+    getPortfolioAlignment: state.getPortfolioAlignment,
+    getStockAlignment: state.getStockAlignment,
+    lastDataPullAtByStrategyId: state.lastDataPullAtByStrategyId,
+    getWatchPullStamp: state.getWatchPullStamp,
+    getWatchCheckSchedule: state.getWatchCheckSchedule,
+    isConvictionScoreReady: state.isConvictionScoreReady,
+    marketLoading: state.marketLoading,
+    marketError: state.marketError,
+    refreshLiveMarket: state.refreshLiveMarket,
+    requestImmediateStrategyCheck: state.requestImmediateStrategyCheck,
+  }));
+}
+
+export function useWorkspaceState() {
+  return useAppStateSelector((state) => {
+    const {
+      isAuthenticated: _isAuthenticated,
+      demoMode: _demoMode,
+      needsOnboarding: _needsOnboarding,
+      captainName: _captainName,
+      userProfile: _userProfile,
+      needsLegalAck: _needsLegalAck,
+      acknowledgeLegal: _acknowledgeLegal,
+      needsOnboardingModal: _needsOnboardingModal,
+      onboardingModalOpen: _onboardingModalOpen,
+      openOnboardingModal: _openOnboardingModal,
+      dismissOnboardingModal: _dismissOnboardingModal,
+      completeBetaSignIn: _completeBetaSignIn,
+      signIn: _signIn,
+      signUp: _signUp,
+      continueAsDemo: _continueAsDemo,
+      completeOnboarding: _completeOnboarding,
+      signOut: _signOut,
+      budgetToast: _budgetToast,
+      clearBudgetToast: _clearBudgetToast,
+      cadenceToast: _cadenceToast,
+      clearCadenceToast: _clearCadenceToast,
+      previewStrategyCheckToast: _previewStrategyCheckToast,
+      activePage: _activePage,
+      setActivePage: _setActivePage,
+      getPortfolioAlignment: _getPortfolioAlignment,
+      getStockAlignment: _getStockAlignment,
+      lastDataPullAtByStrategyId: _lastDataPullAtByStrategyId,
+      getWatchPullStamp: _getWatchPullStamp,
+      getWatchCheckSchedule: _getWatchCheckSchedule,
+      isConvictionScoreReady: _isConvictionScoreReady,
+      marketLoading: _marketLoading,
+      marketError: _marketError,
+      refreshLiveMarket: _refreshLiveMarket,
+      requestImmediateStrategyCheck: _requestImmediateStrategyCheck,
+      ...workspace
+    } = state;
+    return workspace;
+  });
 }

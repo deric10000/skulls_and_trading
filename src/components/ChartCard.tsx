@@ -1,8 +1,8 @@
-import { useAppState } from "../state/AppState";
+import { useWorkspaceState } from "../state/AppState";
 import { IndicatorChips } from "./IndicatorChips";
 
 export function ChartCard() {
-  const { selectedItem } = useAppState();
+  const { selectedItem } = useWorkspaceState();
   const ticker = selectedItem?.ticker ?? "—";
   const name = selectedItem?.name ?? "No ticker selected";
 

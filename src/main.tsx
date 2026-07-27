@@ -3,6 +3,14 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
 import "./index.css";
+import {
+  PERF_MARK,
+  observeLongTasks,
+  perfMark,
+} from "./lib/performance/marks";
+
+perfMark(PERF_MARK.appStart);
+observeLongTasks();
 
 const rootElement = document.getElementById("root");
 

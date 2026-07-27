@@ -1,5 +1,6 @@
 import { getSupabase, isSupabaseConfigured } from "./supabaseClient";
 import type { UserProfile, UserRole } from "./types";
+import type { User } from "@supabase/supabase-js";
 
 export async function validateInviteCode(code: string): Promise<boolean> {
   const supabase = getSupabase();
@@ -72,40 +73,41 @@ export async function getAccessToken(): Promise<string | null> {
   return data.session?.access_token ?? null;
 }
 
-export async function fetchProfile(): Promise<UserProfile | null> {
+export async function fetchProfile(sessionUser?: User): Promise<UserProfile | null> {
   const supabase = getSupabase();
-  const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) return null;
+  const user =
+    sessionUser ?? (await supabase.auth.getUser()).data.user;
+  if (!user) return null;
   const { data, error } = await supabase
     .from("profiles")
     .select("id, email, captain_name, role")
-    .eq("id", auth.user.id)
+    .eq("id", user.id)
     .maybeSingle();
   // Fall back to auth metadata if RLS/grants briefly block profiles.
   if (error) {
     console.warn("profiles fetch failed; using auth metadata", error.message);
     return {
-      id: auth.user.id,
-      email: auth.user.email ?? null,
+      id: user.id,
+      email: user.email ?? null,
       captainName:
-        (auth.user.user_metadata?.captain_name as string | undefined) ||
+        (user.user_metadata?.captain_name as string | undefined) ||
         "Captain",
       role: "beta",
     };
   }
   if (!data) {
     return {
-      id: auth.user.id,
-      email: auth.user.email ?? null,
+      id: user.id,
+      email: user.email ?? null,
       captainName:
-        (auth.user.user_metadata?.captain_name as string | undefined) ||
+        (user.user_metadata?.captain_name as string | undefined) ||
         "Captain",
       role: "beta",
     };
   }
   return {
     id: data.id as string,
-    email: (data.email as string | null) ?? auth.user.email ?? null,
+    email: (data.email as string | null) ?? user.email ?? null,
     captainName: (data.captain_name as string) || "Captain",
     role: (data.role as UserRole) || "beta",
   };

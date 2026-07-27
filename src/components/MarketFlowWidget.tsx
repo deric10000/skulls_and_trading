@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useAppState } from "../state/AppState";
+import { useWorkspaceState } from "../state/AppState";
 import { dataSource } from "../lib/datasource";
 import { getWatchMarketWeather } from "../lib/datasource/freeTier";
 import {
@@ -144,7 +144,7 @@ export function MarketFlowWidget({
   /** Ticker selected in Current Watch; drives Sector/Industry/Stock focus. */
   focusTicker?: string | null;
 }) {
-  const { watchlist, markWeatherReaderLayer } = useAppState();
+  const { watchlist, markWeatherReaderLayer } = useWorkspaceState();
   const [liveGeneration, setLiveGeneration] = useState(getLiveCacheGeneration);
   useEffect(() => subscribeLiveCache(() => setLiveGeneration(getLiveCacheGeneration())), []);
 

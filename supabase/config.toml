@@ -1,0 +1,4 @@
+[functions.process-conviction-cycle]
+# This is machine-to-machine only. The function performs its own constant-time
+# INTERNAL_SCORING_SECRET check before any service-role access.
+verify_jwt = false

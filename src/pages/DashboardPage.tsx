@@ -9,7 +9,7 @@ import { SignalWidget } from "../components/SignalWidget";
 import { StockSummaryPanel } from "../components/StockSummaryPanel";
 import { StrategyAssignmentWidget } from "../components/StrategyAssignmentWidget";
 import { WatchlistWidget } from "../components/WatchlistWidget";
-import { useAppState } from "../state/AppState";
+import { useWorkspaceState } from "../state/AppState";
 
 function Scoreboard() {
   return (
@@ -21,7 +21,7 @@ function Scoreboard() {
 }
 
 function DashboardBody() {
-  const { selectedItem } = useAppState();
+  const { selectedItem } = useWorkspaceState();
 
   if (!selectedItem) {
     return (

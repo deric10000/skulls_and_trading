@@ -1,8 +1,8 @@
 import { SHIP_MEMBERSHIPS } from "../../data";
-import { useAppState } from "../../state/AppState";
+import { useUiState } from "../../state/AppState";
 
 export function ShipMembershipCard() {
-  const { setActivePage } = useAppState();
+  const { setActivePage } = useUiState();
 
   return (
     <section className="panel ship-membership" aria-labelledby="ship-membership-title">

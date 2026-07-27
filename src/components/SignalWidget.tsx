@@ -1,4 +1,4 @@
-import { useAppState } from "../state/AppState";
+import { useMarketState, useWorkspaceState } from "../state/AppState";
 import { dataSource } from "../lib/datasource";
 import { formatDecimals } from "../lib/format";
 import { statusCopy } from "../lib/forge/status";
@@ -8,12 +8,9 @@ import { WatchAlignStack } from "./StatusBadge";
 const DEFAULT_PORTFOLIO_ID = dataSource.getPortfolios()[0]?.id ?? "deric";
 
 export function SignalWidget() {
-  const {
-    selectedItem,
-    selectedTicker,
-    getStockAlignment,
-    getAppliedStrategiesForTicker,
-  } = useAppState();
+  const { selectedItem, selectedTicker, getAppliedStrategiesForTicker } =
+    useWorkspaceState();
+  const { getStockAlignment } = useMarketState();
 
   if (!selectedItem) {
     return (

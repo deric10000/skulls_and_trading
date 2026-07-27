@@ -20,6 +20,8 @@ import {
   strategiesForHolding,
   tickerHasAssignedStrategy,
 } from "./tickerStrategy";
+import { perfCount } from "../performance/marks";
+import { computeStrategyScopeAlignment } from "./strategyAlignmentAdapter";
 
 // ---------------------------------------------------------------------------
 // Alignment bridge — ties the dataSource seam + buckets + the live strategy set
@@ -93,6 +95,7 @@ export function computePortfolioAlignment(
   portfolio: Portfolio | undefined,
   buckets: Bucket[],
   strategies: Strategy[],
+  telemetry: { caller?: string } = {},
 ): PortfolioAlignment {
   if (!portfolio) return EMPTY;
   const activePortfolio = portfolio;
@@ -109,6 +112,46 @@ export function computePortfolioAlignment(
     (bucket) => bucket.portfolioId === activePortfolio.id,
   );
   const market = dataSource.getMarketContext();
+  if (strategies.length === 1) {
+    const strategy = strategies[0];
+    const scoped = computeStrategyScopeAlignment({
+      portfolio: activePortfolio,
+      strategy,
+      buckets,
+      marketInputs: {
+        market,
+        priceOf: markPriceOf,
+        fundamentalsOf: (ticker) => dataSource.getFundamentals(ticker),
+        technicalsOf: (ticker) => dataSource.getTechnicals(ticker),
+        technicalsByTimeframeOf: (ticker) =>
+          dataSource.getTechnicalsByTimeframe(ticker),
+      },
+      allowRuleOverlays: (ticker) =>
+        isConvictionScoreReady(activePortfolio.id, ticker, [strategy.id]),
+      onScore: () =>
+        perfCount("score-stock", 1, {
+          caller: telemetry.caller ?? "unknown",
+        }),
+    });
+    return {
+      byTicker: Object.fromEntries(
+        Object.entries(scoped.byTicker).map(([ticker, row]) => [
+          ticker,
+          {
+            ticker,
+            bucketId: row.bucketId,
+            bucketName: row.bucketName,
+            conviction: row.alignment.conviction,
+            status: row.alignment.status,
+            resolved: row.alignment.resolved,
+            alignment: row.alignment,
+          },
+        ]),
+      ),
+      byBucket: scoped.byBucket,
+      portfolio: scoped.portfolio,
+    };
+  }
 
   const asOfMs = Date.parse(market.asOf);
   const holdingDaysFor = (entryDate?: string): number | undefined => {
@@ -168,6 +211,7 @@ export function computePortfolioAlignment(
       ticker,
       [strategy.id],
     );
+    perfCount("score-stock", 1, { caller: telemetry.caller ?? "unknown" });
     const scored = scoreStock(strategy, ctx, {
       hasStrategy,
       allowRuleOverlays,
@@ -286,6 +330,7 @@ export function computePortfolioAlignment(
       ticker,
       applicable.map((strategy) => strategy.id),
     );
+    perfCount("score-stock", 1, { caller: telemetry.caller ?? "unknown" });
     const scored =
       applicable.length === 1
         ? scoreStock(applicable[0], ctx, { hasStrategy, allowRuleOverlays })

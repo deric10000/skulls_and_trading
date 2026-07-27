@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
-import { useAppState } from "../state/AppState";
+import { useWorkspaceState } from "../state/AppState";
 
 export function CaptainLogWidget() {
   const { selectedTicker, logsByTicker, addLog, updateLog, deleteLog } =
-    useAppState();
+    useWorkspaceState();
   const entries = selectedTicker ? logsByTicker[selectedTicker] ?? [] : [];
 
   const [isOpen, setIsOpen] = useState(false);

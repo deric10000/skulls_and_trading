@@ -7,6 +7,7 @@ import {
   mergeConvictionSparkByDay,
   pnlDeltaPct,
   seriesToConvictionSparkPoints,
+  seriesToTrackedOpenPnlSparkPoints,
   sparkPointsForRange,
   sparkRangeShowsPointMarkers,
   windowSparkPoints,
@@ -105,6 +106,33 @@ describe("seriesToConvictionSparkPoints", () => {
   });
 });
 
+describe("seriesToTrackedOpenPnlSparkPoints", () => {
+  it("uses only forward tracked metrics and does not backfill old rows", () => {
+    const rows = [
+      {
+        asOf: "2026-07-20",
+        openPnlPct: 99,
+        metrics: {},
+      },
+      {
+        asOf: "2026-07-21",
+        openPnlPct: 98,
+        metrics: { trackedOpenPnlPct: 4.5 },
+      },
+      {
+        asOf: "2026-07-22",
+        openPnlPct: 97,
+        metrics: { trackedOpenPnlPct: 7 },
+      },
+    ] as unknown as Parameters<typeof seriesToTrackedOpenPnlSparkPoints>[0];
+
+    expect(seriesToTrackedOpenPnlSparkPoints(rows)).toEqual([
+      { time: "2026-07-21", value: 4.5 },
+      { time: "2026-07-22", value: 7 },
+    ]);
+  });
+});
+
 describe("mergeConvictionSparkByDay", () => {
   it("averages per-strategy marks onto one point per day", () => {
     const rows = [
@@ -132,7 +160,7 @@ describe("mergeConvictionSparkByDay", () => {
         openPnlPct: 1,
         metrics: { conviction: 50 },
       },
-    ] as Parameters<typeof mergeConvictionSparkByDay>[0];
+    ] as unknown as Parameters<typeof mergeConvictionSparkByDay>[0];
     expect(mergeConvictionSparkByDay(rows)).toEqual([
       { time: "2026-07-21", value: 85 },
       { time: "2026-07-22", value: 100 },

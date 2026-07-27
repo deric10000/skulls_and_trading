@@ -1,10 +1,10 @@
 import { PRIVACY_NOTES, PRIVACY_OPTIONS } from "../../data";
-import { useAppState } from "../../state/AppState";
+import { useWorkspaceState } from "../../state/AppState";
 import type { PrivacyMode } from "../../types";
 import { ChoiceGroup } from "../ChoiceGroup";
 
 export function PrivacyModeSelector() {
-  const { captain, updateCaptain } = useAppState();
+  const { captain, updateCaptain } = useWorkspaceState();
 
   return (
     <section className="panel selector-card" aria-labelledby="privacy-title">

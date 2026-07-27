@@ -83,7 +83,7 @@ or dynamic `import()` anywhere; no vendor chunking configured.
 ## Code-splitting rules
 
 - **Pages are lazy by default.** Every page in the `ActivePage` switch in
-  `src/App.tsx` loads via `React.lazy` except Home (the default landing).
+  `src/AuthedApp.tsx` loads via `React.lazy` except Home (the default landing).
   New pages must follow suit.
 - **The signed-out path stays light.** `LoginScreen` must not pull the
   authenticated shell; the app shell is lazy behind the auth gate.
@@ -106,8 +106,71 @@ this file in the same change with the reason.
 | --- | --- | --- |
 | Any single image in `src/assets/` | 200 KB | largest 136 KB (login backdrop) |
 | Total `src/assets/` image weight | 1,300 KB | 1,019 KB |
-| Entry JS chunk (gzip) | 80 KB | 53 KB |
-| Any JS chunk (gzip) | 100 KB | largest 60 KB (react vendor) |
+| Entry JS chunk (gzip) | 80 KB | 70.7 KB |
+| Any JS chunk (gzip) | 100 KB | largest 70.7 KB (entry) |
+| Aggregate signed-out eager JS (gzip) | 230 KB | 208.4 KB |
+| Additional authenticated Home JS (gzip) | 45 KB | 40.7 KB |
+| Total CSS (gzip) | 25 KB | 22.5 KB |
+| Self-hosted fonts | 117 KB | 106 KB |
+| Initial HTML script/link resource tags | 6 | 6 |
+| Third-party origins in initial HTML | 0 | 0 |
+| Serialized `user_state` workspace | 256 KiB | enforced at write time |
+| Scoring bridge p95 (40 tickers) | 9.9 ms | 8.42 ms |
+| `scoreStock` calls / benchmark run | 132 | 120 |
+| Cadence arithmetic p95 (2,000 boundaries) | 16.5 ms | 5.94 ms |
+| Edge scoring CPU (20 users × 40 symbols × 5 strategies) | 1,500 ms | 851.5 ms local |
+| Queue forwarding CPU p95 | 10 ms | 0.104 ms local |
+| Queue operations / day | <10,000 | 72 normal / 192 all-DLQ |
+
+The aggregate, CSS, font, scoring-duration, and invocation ceilings are the
+2026-07-27 improved baselines plus approximately 10% regression headroom.
+Per-image/per-chunk limits remain the existing absolute quality/splitting caps.
+
+## Performance foundation (2026-07-27)
+
+- IBM Plex Sans 400/500/600/700 and Mono 400 are self-hosted as exact Latin
+  WOFF2 assets with `font-display: swap`; the Google Fonts DNS/TLS chain is
+  removed.
+- `public/_headers` gives hashed `/assets/*` a one-year immutable browser cache;
+  HTML/routes remain revalidating.
+- Dependency-free Performance Timeline marks cover auth config/session/hydrate,
+  Home mount, market boot/cycle, bridge invocations, Progress query rows,
+  workspace payload/write duration, and >50 ms long tasks. No credentials,
+  tickers, strategy names, or financial values are recorded.
+- `npm run check:performance` runs Forge golden outputs plus the deterministic
+  Beta-cap bridge, bounded cadence, and 20-user/800-symbol reliability
+  benchmarks. CI and `scripts/deploy.mjs` run typecheck, tests,
+  golden/benchmark checks, production build, and all budgets.
+- Runtime state uses auth/workspace/market/UI domain selector hooks; `liveCache`
+  revisions split score inputs/readiness from taxonomy/metadata. Alignment
+  caches are revision-keyed and reused by render/snapshot/check-event paths.
+- Auth hydrate uses one trusted session user and concurrent profile/workspace/
+  mark reads. Market bootstrap is fingerprinted/single-flight, with registry
+  and KV-cycle requests overlapped; endpoint/fallback/cadence behavior is
+  unchanged.
+- Cadence boundaries use bounded ET calendar arithmetic—never a minute walk.
+  Immutable completed cycles dispatch one reference through Cloudflare Queue;
+  the Supabase Edge scorer processes due schedules while browsers are closed.
+  Scale gates cover 800 distinct symbols, five strategies per 20 accounts,
+  Queue/DLQ operation ceilings, retry slack, and isolated run failures.
+- `SERVER_SCORING_ENABLED=shadow` compares server/client outputs without
+  changing authority; `true` switches normalized server results on only after
+  hosted migration/Edge/Queue smoke validation. Client scheduling remains the
+  rollback path and production must never dual-write check snapshots.
+
+### Measured route trace
+
+Before (live Worker, Chrome desktop, cache disabled): TTFB 139 ms,
+DOMContentLoaded 244 ms, FCP 380 ms, 21 resources, 1.22 MB decoded, Google
+Fonts third-party origin present.
+
+After (local production preview, Chrome): desktop cold TTFB 7 ms,
+DOMContentLoaded 67 ms, FCP 152 ms; mobile emulation cold TTFB 6 ms,
+DOMContentLoaded 69 ms, FCP 164 ms, zero long tasks and zero third-party
+origins. Local and live values are not latency-equivalent; repeat the live
+after-trace after this branch deploys. Authenticated Home/market-ready marks are
+installed but require a signed-in test session (no credentials are stored in
+the harness).
 
 ## QA gates for performance work
 

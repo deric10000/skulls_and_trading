@@ -35,7 +35,31 @@ visually premium — byte savings never justify degraded imagery.**
   modals in `StrategyForgePanel`).
 - New dependencies over ~30 KB gzip need a vendor-group decision in
   `vite.config.ts` and a budget check before landing.
-- Budgets (gzip): entry chunk ≤ 80 KB; any chunk ≤ 100 KB.
+- Budgets (gzip): entry chunk ≤ 80 KB; any chunk ≤ 100 KB; aggregate
+  signed-out eager JS ≤ 230 KB; authenticated Home additional JS ≤ 45 KB;
+  CSS ≤ 25 KB. Self-hosted fonts ≤ 117 KB.
+
+## Runtime performance — keep domains narrow
+
+- Consume app state through `useAuthState`, `useWorkspaceState`,
+  `useMarketState`, or `useUiState`; do not recreate a broad context hook.
+- `liveCache` taxonomy/metadata changes must not invalidate alignment.
+  Scoring-bridge work uses revision-keyed `getPortfolioAlignmentCached`;
+  `forge/scoring.ts` remains pure.
+- Hot-path repositories accept the trusted session user id. Keep market boot
+  fingerprinted/single-flight and Progress history reads deduped.
+- `user_state` stays ≤256 KiB and writes serialize per user. Add histories to
+  normalized RLS tables, never unbounded workspace JSON.
+- `npm run check:performance` is mandatory: golden Forge outputs plus the
+  40-ticker bridge, bounded cadence, and 20-user/800-symbol Queue/Edge gates.
+  New route/request/compute ceilings use the measured improved baseline +
+  ~10%; do not raise them to land a feature.
+- Never restore elapsed-minute cadence walks. Background scoring stays one
+  immutable cycle reference per hour, idempotent per due schedule/run, with
+  strict 40/user + 800-global admission and at least one retry shard per phase.
+- Enable server authority only after migration/Edge/Queue integration smoke and
+  shadow parity. Browser scoring remains rollback-only; never dual-write check
+  snapshots.
 
 ## When a budget fails
 
@@ -45,6 +69,8 @@ budget genuinely must grow (e.g. approved new artwork), update
 
 ## QA before claiming done
 
-Any change touching assets or the loading path: `npm run typecheck`,
-`npm run build`, `npm run check:budgets`, plus the functional smoke and
-locked-surface QA (`.cursor/rules/locked-surface-qa.mdc`).
+Any change touching assets, state domains, scoring orchestration, persistence,
+or the loading path: `npm run typecheck`, `npm test`,
+`npm run check:performance`, `npm run build`, `npm run check:budgets`, plus the
+functional smoke and locked-surface QA
+(`.cursor/rules/locked-surface-qa.mdc`).

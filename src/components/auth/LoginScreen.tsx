@@ -5,7 +5,7 @@ import loginBackground from "../../assets/skulls-and-trading-login-background-2.
 import loginBackgroundMobile from "../../assets/skulls-and-trading-login-background-mobile.webp";
 import { ensureSupabaseReady } from "../../lib/auth/supabaseClient";
 import { signInWithPassword } from "../../lib/auth/session";
-import { useAppState } from "../../state/AppState";
+import { useAuthState } from "../../state/AppState";
 import { Tabs, type TabItem } from "../Tabs";
 import { LockKey, ShieldStar, Strategy } from "../../lib/icons";
 import { AuthButton } from "./AuthButton";
@@ -48,7 +48,7 @@ function readCredentials(form: HTMLFormElement): {
 }
 
 export function LoginScreen() {
-  const { completeBetaSignIn } = useAppState();
+  const { completeBetaSignIn } = useAuthState();
   const [mode, setMode] = useState<Mode>("sign-in");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);

@@ -4,12 +4,12 @@ import {
   stashPendingInvite,
   signUpWithInvite,
 } from "../../lib/auth/session";
-import { useAppState } from "../../state/AppState";
+import { useAuthState } from "../../state/AppState";
 import { AuthButton } from "./AuthButton";
 import { AuthErrorState } from "./AuthErrorState";
 
 export function SignUpForm() {
-  const { completeBetaSignIn } = useAppState();
+  const { completeBetaSignIn } = useAuthState();
   const [error, setError] = useState("");
   const [info, setInfo] = useState("");
   const [submitting, setSubmitting] = useState(false);

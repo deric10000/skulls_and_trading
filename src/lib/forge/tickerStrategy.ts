@@ -113,6 +113,25 @@ export function strategiesForHolding(
     .sort((a, b) => a.id.localeCompare(b.id));
 }
 
+/** A holding with no applied strategy enabled for it in its own source. */
+export function isUntrackedHolding(
+  holding: PortfolioHolding,
+  portfolioId: string,
+  strategies: Strategy[],
+): boolean {
+  return strategiesForHolding(holding, portfolioId, strategies).length === 0;
+}
+
+/** Every currently untracked holding in source order (shares may be zero). */
+export function untrackedHoldings(
+  portfolio: Portfolio,
+  strategies: Strategy[],
+): PortfolioHolding[] {
+  return portfolio.holdings.filter((holding) =>
+    isUntrackedHolding(holding, portfolio.id, strategies),
+  );
+}
+
 /** All holdings in a portfolio, sorted by ticker symbol. */
 export function sortedPortfolioHoldings(portfolio: Portfolio): PortfolioHolding[] {
   return [...portfolio.holdings].sort((a, b) => a.ticker.localeCompare(b.ticker));

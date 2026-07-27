@@ -1,4 +1,4 @@
-import { useAppState } from "../../state/AppState";
+import { useWorkspaceState } from "../../state/AppState";
 
 function initials(handle: string): string {
   const parts = handle.trim().split(/\s+/).filter(Boolean);
@@ -8,7 +8,7 @@ function initials(handle: string): string {
 }
 
 export function AvatarCard() {
-  const { captain, updateCaptain } = useAppState();
+  const { captain, updateCaptain } = useWorkspaceState();
 
   return (
     <section className="panel avatar-card" aria-labelledby="identity-title">

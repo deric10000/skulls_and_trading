@@ -143,9 +143,11 @@ Prefer these tokens (or multiples that stay on the 4pt grid) over ad-hoc pixel v
 
 - Font family: **IBM Plex Sans** (primary), with `system-ui, -apple-system,
   BlinkMacSystemFont, "Segoe UI", sans-serif` fallbacks. Line height ~1.55. IBM Plex
-  Sans is loaded as a web font in [`index.html`](index.html) (weights 400/500/600/700)
-  and set on `:root` in [`src/index.css`](src/index.css); its slightly technical,
-  engineered character suits the command-deck tone.
+  Sans is self-hosted as exact Latin WOFF2 files (weights 400/500/600/700) plus
+  IBM Plex Mono 400 via `@font-face` / `font-display: swap` in
+  [`src/index.css`](src/index.css), and set on `:root`; its slightly technical,
+  engineered character suits the command-deck tone. Do not restore a
+  third-party font stylesheet or synthesize a missing weight.
 - Headings use `--text-strong`; body uses `--text-base` / `--text-muted`.
 - Eyebrows and labels: uppercase, letter-spaced, small, often `--accent-strong` or `--text-faint`.
 - Numeric values use `font-variant-numeric: tabular-nums`.

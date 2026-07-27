@@ -10,9 +10,9 @@ import type { PortfolioAlignment } from "./alignment";
  * seam is read once, in the calling component). Everything here is derived from
  * data already in the app — no new persisted fields or accessors.
  *
- * When `tickerInScope` is provided (Helm strategy dropdown), every metric —
- * including Open P&L — is reduced over that ticker set only. Omit it for the
- * All-strategies / whole-book view.
+ * Strategy Coverage keeps every held name in its denominator. All other
+ * performance/alignment metrics use only tracked holdings, and additionally
+ * honor `tickerInScope` when a single strategy is selected.
  */
 
 export interface HelmStatusSlice {
@@ -58,6 +58,7 @@ export function computeHelmMetrics({
   alignment,
   priceOf,
   tickerInScope,
+  isTracked,
   isScoreReady,
 }: {
   portfolio: Portfolio | undefined;
@@ -65,6 +66,8 @@ export function computeHelmMetrics({
   priceOf: (ticker: string) => number;
   /** When set, only these tickers contribute to every metric (incl. Open P&L). */
   tickerInScope?: (ticker: string) => boolean;
+  /** False for names with no strategy; coverage denominator still includes them. */
+  isTracked?: (ticker: string) => boolean;
   /**
    * When false, the holding is counted under `pendingScoreCount` and omitted
    * from Plan Alignment tone chips (not treated as On Plan).
@@ -77,13 +80,16 @@ export function computeHelmMetrics({
   const holdingCount = holdings.length;
 
   const byTicker = alignment.byTicker;
-  const scoredCount = holdings.filter((h) => byTicker[h.ticker]).length;
+  const trackedHoldings = holdings.filter(
+    (holding) => isTracked?.(holding.ticker) ?? Boolean(byTicker[holding.ticker]),
+  );
+  const scoredCount = trackedHoldings.filter((h) => byTicker[h.ticker]).length;
   const coveragePct =
     holdingCount > 0 ? Math.round((scoredCount / holdingCount) * 100) : 0;
 
   // Same aggregate formula as Current Watch — over the in-scope holdings only.
   const openPnlPct = portfolioRunningTotals(
-    holdings.map((holding) => ({
+    trackedHoldings.map((holding) => ({
       price: priceOf(holding.ticker),
       shares: holding.shares,
       avgPrice: holding.avgPrice,
@@ -94,7 +100,7 @@ export function computeHelmMetrics({
   const toneCounts = new Map<SignalTone, number>();
   const bucketCounts = new Map<string, number>();
   let pendingScoreCount = 0;
-  for (const holding of holdings) {
+  for (const holding of trackedHoldings) {
     const entry = byTicker[holding.ticker];
     if (!entry) continue;
     if (isScoreReady && !isScoreReady(holding.ticker)) {
