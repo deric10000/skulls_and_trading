@@ -24,6 +24,21 @@ running Codex as a default path.
 
 When the gate **is** met: follow this file end-to-end.
 
+## Auth check (before any Codex invoke)
+
+Before planning Phase 2 or running `codex exec`, confirm the CLI is
+authenticated through the **intended ChatGPT account** (Codex / ChatGPT
+subscription) — **not** an OpenAI API key.
+
+1. Run `codex login status` (or the current equivalent).
+2. Proceed only if status clearly indicates **Logged in using ChatGPT**
+   (or the same ChatGPT-subscription wording the CLI uses).
+3. If status shows API-key auth, is logged out, or is ambiguous: **stop**.
+   Tell the user and ask them to run `codex login` with the ChatGPT account
+   that owns the Codex plan. Do not fall back to API-key billing.
+
+Put the verified auth mode in the Phase 0 plan (e.g. “Auth: ChatGPT”).
+
 ## Why this exists
 
 User stays in Cursor chat. Cursor Agent orchestrates; Codex (CLI on the Mac,
@@ -38,7 +53,7 @@ One approved plan, multiple phases in the **same** Cursor session:
 
 | Phase | Who | What |
 |-------|-----|------|
-| **0 — Plan** | Cursor | Switch to Plan mode (or equivalent). Write the Codex plan. Resolve + propose top Codex model; **user confirms model** before code work. |
+| **0 — Plan** | Cursor | Switch to Plan mode (or equivalent). Confirm ChatGPT (not API-key) auth. Write the Codex plan. Resolve + propose top Codex model; **user confirms model** before code work. |
 | **1 — Branch** | Cursor | Ensure a `codex/…` git branch (see Branching). |
 | **2 — Codex edit** | Codex via Cursor shell | `codex exec` — **source file edits only**. No npm/git/deploy/network ops. |
 | **3 — Verify** | Cursor | Diff → typecheck/tests → architecture / locked-surface QA as touched. |
