@@ -1,0 +1,134 @@
+---
+description: >-
+  Codex CLI orchestration — ONLY when the user explicitly says use Codex /
+  via Codex / Codex please. Never invoke Codex otherwise. High-priority
+  code edits via Codex; Cursor owns plans, verification, git, deploy, MCP.
+alwaysApply: true
+---
+
+# Codex usage (explicit opt-in only)
+
+## Hard gate
+
+**Never** install, invoke, resume, or shell-out to Codex unless the user
+explicitly asks in this turn with a phrase like:
+
+- `use Codex`
+- `via Codex`
+- `Codex please`
+
+(Case-insensitive; minor wording variants that clearly mean Codex are OK.)
+
+If the gate is not met: do normal Cursor Agent work. Do **not** mention
+running Codex as a default path.
+
+When the gate **is** met: follow this file end-to-end.
+
+## Why this exists
+
+User stays in Cursor chat. Cursor Agent orchestrates; Codex (CLI on the Mac,
+ChatGPT login) does **high-priority code edits** billed to the Codex plan.
+Cursor keeps Cloudflare / Supabase MCP, tests, git, deploy, and approval
+prompts. Assume Codex does **not** have those MCP connections unless later
+wired on purpose.
+
+## Seamless plan phases (how it works)
+
+One approved plan, multiple phases in the **same** Cursor session:
+
+| Phase | Who | What |
+|-------|-----|------|
+| **0 — Plan** | Cursor | Switch to Plan mode (or equivalent). Write the Codex plan. Resolve + propose top Codex model; **user confirms model** before code work. |
+| **1 — Branch** | Cursor | Ensure a `codex/…` git branch (see Branching). |
+| **2 — Codex edit** | Codex via Cursor shell | `codex exec` — **source file edits only**. No npm/git/deploy/network ops. |
+| **3 — Verify** | Cursor | Diff → typecheck/tests → architecture / locked-surface QA as touched. |
+| **4 — Ship** | Cursor | Commit / merge / push / deploy **only** when the user explicitly asks; same approval prompts as today. |
+
+After Phase 2 finishes, **automatically continue Phase 3** without waiting for
+a second “please QA” — unless Phase 2 failed or the user paused the plan.
+Phase 4 never auto-runs.
+
+## Model selection (every Codex request)
+
+1. Resolve the **current top-tier Codex coding model** from live Codex CLI /
+   help / docs / `codex` model listing — do **not** hardcode a stale slug.
+2. Put the chosen model id in the **plan** (Phase 0) with a one-line why.
+3. **Ask the user to confirm that model** before Phase 2.
+4. Invoke with `codex exec -m <confirmed-model> …`.
+
+If resolution fails: stop and ask; do not guess a weak default for
+“highest tier” work.
+
+## Branching
+
+- Prefer prefix: **`codex/<short-slug>`**  
+  Examples: `codex/market-weather`, `codex/helm-open-pnl`.
+- If **already** on a `codex/…` branch for this work: **keep it**.
+- If on `main` or a non-Codex branch: create `codex/<slug>` from up-to-date
+  `main` (or rename/cut a Codex branch from the current feature branch so the
+  name is clearly `codex/…`).
+- Never commit Codex work straight to `main`.
+
+This coexists with `feature/` / `bug/` / `chore/` from `git-workflow.mdc`.
+Codex-attributed work uses the `codex/` prefix so bad Codex runs are easy to
+find and revert.
+
+## Phase 2 — Codex constraints (non-negotiable)
+
+Invoke non-interactively from the repo root, e.g.:
+
+```bash
+codex exec -m <confirmed-model> -s workspace-write -C "<repo-root>" "<prompt>"
+```
+
+(Adjust flags if CLI evolves; keep intent: writable workspace, no full
+unsandboxed access.)
+
+**Codex may:** edit application/source files needed for the task.
+
+**Codex must not:**
+
+- `git` (status/add/commit/push/merge) or rewrite git history
+- `npm` / `pnpm` / `yarn` / vitest / typecheck / build / deploy
+- Wrangler, Supabase CLI, or any Cloudflare / Supabase mutation
+- Broad shell “fix the world” commands
+
+Encode those forbids in the Codex prompt. Prefer sandbox
+`workspace-write` (not `danger-full-access`). Do **not** pass
+`--dangerously-bypass-approvals-and-sandbox`.
+
+If Codex tries forbidden commands: stop that path, note it in the plan log,
+and continue with Cursor for any needed commands in Phase 3/4.
+
+## Phase 3 — Cursor QA (always after Codex)
+
+1. `git diff` (and status) — summarize what Codex changed.
+2. `npm run typecheck` and `npm test` (and other gates already required by
+   performance / forge rules when those surfaces were touched).
+3. Data-architecture / locked-surface / design-governance checks when UI or
+   data paths changed.
+4. Explicit holes Codex likely missed: Worker/Cloudflare, Supabase schema /
+   RLS / Edge, env secrets, deploy config, MCP-only diagnostics.
+5. Report: what looks good, what remains, what Cursor still needs to do.
+
+## Phase 4 — Git / deploy (unchanged product ops)
+
+Same as normal Cursor workflow:
+
+- **Ask before** commit, merge, push, or deploy.
+- Never let Codex perform those.
+- User approval cards for privileged commands stay on the Cursor side.
+
+## Plan template (Phase 0 minimum)
+
+When generating a Codex plan, include:
+
+1. Trigger confirmation (user asked for Codex).
+2. Proposed **`codex/<slug>`** branch (or “keep current `codex/…`”).
+3. **Model:** `<id>` — ask user to confirm.
+4. Scope: files / behavior Codex will edit.
+5. Out of scope for Codex: tests, git, deploy, MCP cloud actions.
+6. Phase 3 Cursor verification checklist.
+7. Phase 4: commit/merge/deploy only on explicit user ask.
+
+Do not start Phase 2 until the plan (and model) are confirmed.

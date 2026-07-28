@@ -17,6 +17,9 @@ change can be reverted by dropping one branch/merge instead of untangling
   (e.g. `bug/mobile-footer`).
 - `chore/<short-name>` — housekeeping that isn't a feature or a fix
   (docs, rules, config) (e.g. `chore/git-workflow-rule`).
+- `codex/<short-name>` — work orchestrated via Codex CLI (see
+  `.cursor/rules/codex-usage.mdc`). Only when the user explicitly asks for
+  Codex; keeps Codex-attributed changes easy to find/revert.
 
 ## Flow
 
