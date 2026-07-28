@@ -10,6 +10,7 @@ import {
   getLiveTaxonomy,
   getLiveTechnicals,
   getLiveTechnicalsByTimeframe,
+  getWeatherTaxonomyReadiness,
   registerBootstrapTickers,
 } from "../market/liveCache";
 import { fetchMarketSearch } from "../market/client";
@@ -139,7 +140,13 @@ export const freeTierDataSource: DataSource = {
     const tax = seeded ? null : getLiveTaxonomy(ticker);
     const sector = seeded?.sector ?? tax?.sector ?? null;
     const industry = seeded?.industry ?? tax?.industry ?? null;
-    if (!seeded && (!sector || !industry)) {
+    const readiness = seeded ? undefined : getWeatherTaxonomyReadiness(ticker);
+    // Gap events only after a completed hard miss — never while pending/idle.
+    if (
+      !seeded &&
+      (!sector || !industry) &&
+      readiness?.status === "failed"
+    ) {
       void reportTaxonomyGap({
         ticker,
         reason: tax?.providerSector || tax?.providerIndustry

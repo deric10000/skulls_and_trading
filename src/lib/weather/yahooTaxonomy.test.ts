@@ -9,6 +9,16 @@ describe("mapYahooTaxonomy", () => {
     expect(result.gapReason).toBeNull();
   });
 
+  it("maps Yahoo Communication Services / Internet Content & Information (GOOG)", () => {
+    const result = mapYahooTaxonomy(
+      "Communication Services",
+      "Internet Content & Information",
+    );
+    expect(result.sector).toBe("Communication Services");
+    expect(result.industry).toBe("Interactive Media & Services");
+    expect(result.gapReason).toBeNull();
+  });
+
   it("does not invent IT/Software when provider fields are empty", () => {
     const result = mapYahooTaxonomy(null, null);
     expect(result.sector).toBeNull();

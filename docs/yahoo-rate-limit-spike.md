@@ -75,6 +75,7 @@ Likely stack, not a mysterious Yahoo clamp:
 4. **Stagger pulls (M, med)** — quotes immediately; fundamentals/technicals across the next minute window(s).  
 5. **Confirm Finnhub in prod (S, med)** — cuts N Yahoo quote units when the key works.  
 6. **Toast honesty (S, med)** — label as Worker soft budget; fix rough guide; only raise `30` after 1–3.
+7. **Weather taxonomy hydrate (S, shipped)** — add-time soft-queue for `assetProfile` mapping only (`weather/hydrateTaxonomy.ts`); concurrency 1 + Yahoo headroom so cron conviction cycles keep budget; taxonomy revision only (no `scoreInputs` / Forge fan-out). Batch comfort ~8–15/min when quotes are Finnhub-backed.
 
 ## Out of scope for this spike
 

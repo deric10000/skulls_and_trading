@@ -33,9 +33,25 @@ export interface LiveTickerTaxonomy {
   providerIndustry: string | null;
 }
 
+/** Weather UI taxonomy readiness — taxonomy revision only; never scoreInputs. */
+export type WeatherTaxonomyStatus = "idle" | "pending" | "ready" | "failed";
+
+export type WeatherTaxonomyGapReason =
+  | "missing_provider"
+  | "unmapped_yahoo"
+  | "fetch_error";
+
+export interface WeatherTaxonomyReadiness {
+  status: WeatherTaxonomyStatus;
+  /** Soft-queue or nextCycleAt target while pending. */
+  etaAt: string | null;
+  reason: WeatherTaxonomyGapReason | null;
+}
+
 const quotes = new Map<string, TickerQuote>();
 const fundamentals = new Map<string, FundamentalSnapshot>();
 const taxonomyByTicker = new Map<string, LiveTickerTaxonomy>();
+const weatherTaxonomyReadiness = new Map<string, WeatherTaxonomyReadiness>();
 const technicals = new Map<string, TechnicalSnapshot>();
 const technicalsByTimeframe = new Map<
   string,
@@ -67,6 +83,7 @@ const revisions: Record<LiveCacheRevisionDomain, number> = {
 };
 /** Search hits / session bootstrap for symbols not yet in TICKERS. */
 const bootstrapNames = new Map<string, string>();
+const liveCacheResetHooks: Array<() => void> = [];
 
 const listeners = new Map<
   () => void,
@@ -81,9 +98,39 @@ function bump(...domains: LiveCacheRevisionDomain[]): void {
   });
 }
 
+function syncWeatherReadinessFromMapped(
+  key: string,
+  mapped: {
+    sector: string | null;
+    industry: string | null;
+    gapReason: "missing_provider" | "unmapped_yahoo" | null;
+  },
+): void {
+  if (mapped.sector && mapped.industry) {
+    weatherTaxonomyReadiness.set(key, {
+      status: "ready",
+      etaAt: null,
+      reason: null,
+    });
+    return;
+  }
+  const prev = weatherTaxonomyReadiness.get(key);
+  // Hard miss only after an ingest attempt (pending hydrate or cycle payload).
+  if (prev?.status === "pending" || mapped.gapReason) {
+    weatherTaxonomyReadiness.set(key, {
+      status: "failed",
+      etaAt: null,
+      reason: mapped.gapReason ?? "missing_provider",
+    });
+  }
+}
+
 function ingestTaxonomyFromFundamentals(
   ticker: string,
-  snapshot: FundamentalSnapshot,
+  snapshot: Pick<
+    FundamentalSnapshot,
+    "providerSector" | "providerIndustry"
+  >,
 ): void {
   const mapped = mapYahooTaxonomy(
     snapshot.providerSector,
@@ -96,13 +143,18 @@ function ingestTaxonomyFromFundamentals(
     providerSector: mapped.providerSector,
     providerIndustry: mapped.providerIndustry,
   });
+  syncWeatherReadinessFromMapped(key, mapped);
   if (mapped.gapReason) {
-    void reportTaxonomyGap({
-      ticker: key,
-      reason: mapped.gapReason,
-      yahooSector: mapped.providerSector,
-      yahooIndustry: mapped.providerIndustry,
-    });
+    const readiness = weatherTaxonomyReadiness.get(key);
+    // Gap events only after a completed attempt (failed), never while waiting.
+    if (readiness?.status === "failed") {
+      void reportTaxonomyGap({
+        ticker: key,
+        reason: mapped.gapReason,
+        yahooSector: mapped.providerSector,
+        yahooIndustry: mapped.providerIndustry,
+      });
+    }
   }
 }
 
@@ -124,11 +176,21 @@ export function getLiveCacheRevision(domain: LiveCacheRevisionDomain): number {
   return revisions[domain];
 }
 
+/** Register cleanup when account market state is wiped (logout / switch). */
+export function onLiveCacheReset(hook: () => void): () => void {
+  liveCacheResetHooks.push(hook);
+  return () => {
+    const index = liveCacheResetHooks.indexOf(hook);
+    if (index >= 0) liveCacheResetHooks.splice(index, 1);
+  };
+}
+
 /** Clear account-scoped market state before account switches/hydration. */
 export function resetLiveCache(): void {
   quotes.clear();
   fundamentals.clear();
   taxonomyByTicker.clear();
+  weatherTaxonomyReadiness.clear();
   technicals.clear();
   technicalsByTimeframe.clear();
   lastPullByStrategy.clear();
@@ -137,6 +199,7 @@ export function resetLiveCache(): void {
   marketContext = null;
   marketCycle = null;
   budgets = [];
+  for (const hook of liveCacheResetHooks) hook();
   bump("scoreInputs", "scoreReadiness", "taxonomy", "metadata");
 }
 
@@ -207,6 +270,126 @@ export function getLiveFundamentals(
 
 export function getLiveTaxonomy(ticker: string): LiveTickerTaxonomy | undefined {
   return taxonomyByTicker.get(ticker.toUpperCase());
+}
+
+/**
+ * Weather-only taxonomy write from a fundamentals payload's assetProfile
+ * fields. Bumps **taxonomy** only — never scoreInputs / alignment.
+ */
+export function setLiveTaxonomyFromFundamentals(
+  ticker: string,
+  snapshot: Pick<
+    FundamentalSnapshot,
+    "providerSector" | "providerIndustry"
+  >,
+): void {
+  ingestTaxonomyFromFundamentals(ticker, snapshot);
+  bump("taxonomy");
+}
+
+export function getWeatherTaxonomyReadiness(
+  ticker: string,
+): WeatherTaxonomyReadiness | undefined {
+  return weatherTaxonomyReadiness.get(ticker.toUpperCase());
+}
+
+export function markWeatherTaxonomyPending(
+  ticker: string,
+  etaAt: string | null,
+): void {
+  const key = ticker.toUpperCase();
+  const prev = weatherTaxonomyReadiness.get(key);
+  if (prev?.status === "ready") return;
+  if (prev?.status === "pending" && prev.etaAt === etaAt) return;
+  weatherTaxonomyReadiness.set(key, {
+    status: "pending",
+    etaAt,
+    reason: null,
+  });
+  bump("taxonomy");
+}
+
+export function markWeatherTaxonomyReady(ticker: string): void {
+  const key = ticker.toUpperCase();
+  const prev = weatherTaxonomyReadiness.get(key);
+  if (prev?.status === "ready" && prev.etaAt == null && prev.reason == null) {
+    return;
+  }
+  weatherTaxonomyReadiness.set(key, {
+    status: "ready",
+    etaAt: null,
+    reason: null,
+  });
+  bump("taxonomy");
+}
+
+export function markWeatherTaxonomyFailed(
+  ticker: string,
+  reason: WeatherTaxonomyGapReason,
+): void {
+  weatherTaxonomyReadiness.set(ticker.toUpperCase(), {
+    status: "failed",
+    etaAt: null,
+    reason,
+  });
+  bump("taxonomy");
+}
+
+export function setWeatherTaxonomyEta(
+  ticker: string,
+  etaAt: string | null,
+): void {
+  const key = ticker.toUpperCase();
+  const prev = weatherTaxonomyReadiness.get(key);
+  if (!prev || prev.status !== "pending") return;
+  if (prev.etaAt === etaAt) return;
+  weatherTaxonomyReadiness.set(key, { ...prev, etaAt });
+  bump("taxonomy");
+}
+
+/** True when live (or readiness) GICS sector+industry are both present. */
+export function hasMappedWeatherTaxonomy(ticker: string): boolean {
+  const tax = taxonomyByTicker.get(ticker.toUpperCase());
+  return Boolean(tax?.sector && tax?.industry);
+}
+
+/**
+ * Countdown target for Weather pending UI: soft-queue eta while an in-session
+ * hydrate is running/queued; else published `nextCycleAt`; else the next UTC
+ * hour boundary (same clock the Worker uses when no cycle is cached yet).
+ * Always returns an ISO string while awaiting — never leave the UI without mm:ss.
+ */
+export function synthesizeNextCycleEtaAt(nowMs: number = Date.now()): string {
+  const hourMs = 60 * 60_000;
+  const next = Math.floor(nowMs / hourMs) * hourMs + hourMs;
+  return new Date(next).toISOString();
+}
+
+/**
+ * Countdown target for Weather pending UI: soft-queue eta while pending,
+ * else published `nextCycleAt` after registration (logout-durable path),
+ * else synthesized next-hour boundary so the countdown never blanks.
+ */
+export function resolveWeatherTaxonomyEtaAt(
+  ticker: string,
+  nowMs: number = Date.now(),
+): string | null {
+  const key = ticker.toUpperCase();
+  const readiness = weatherTaxonomyReadiness.get(key);
+  if (readiness?.status === "ready" || readiness?.status === "failed") {
+    return null;
+  }
+  const soft = readiness?.etaAt ? Date.parse(readiness.etaAt) : NaN;
+  if (Number.isFinite(soft) && soft > nowMs) {
+    return readiness!.etaAt;
+  }
+  const cycle = marketCycle?.nextCycleAt
+    ? Date.parse(marketCycle.nextCycleAt)
+    : NaN;
+  if (Number.isFinite(cycle) && cycle > nowMs) {
+    return marketCycle!.nextCycleAt;
+  }
+  return synthesizeNextCycleEtaAt(nowMs);
 }
 
 export function setLiveTechnicals(

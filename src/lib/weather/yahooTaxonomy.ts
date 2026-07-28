@@ -53,6 +53,8 @@ const YAHOO_INDUSTRY_ALIASES: Record<string, string> = {
   "software application": "Software",
   "software infrastructure": "Software",
   "software applications": "Software",
+  // Yahoo uses "&"; normalizeKey turns that into "and". Keep both spellings.
+  "internet content and information": "Interactive Media & Services",
   "internet content information": "Interactive Media & Services",
   "internet retail": "Broadline Retail",
   "credit services": "Consumer Finance",

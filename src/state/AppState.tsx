@@ -47,6 +47,10 @@ import {
   runMarketBootSingleFlight,
 } from "../lib/market/boot";
 import {
+  enqueueWeatherTaxonomyHydrate,
+  ensureWeatherTaxonomyAwaiting,
+} from "../lib/weather/hydrateTaxonomy";
+import {
   computePortfolioAlignment,
   type PortfolioAlignment,
   type TickerAlignment,
@@ -1029,6 +1033,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
           registerPortfolioMarketSymbols(tickers),
           refreshLiveMarket(),
         ]);
+        // Missing GICS for live-only names: pending until soft hydrate or cycle.
+        ensureWeatherTaxonomyAwaiting(tickers);
         // Cron may still be warming (cycle null). Pull book quotes so P&L paints,
         // then run one scoped first check per unstamped applied strategy.
         const missingQuotes = tickers.filter((ticker) => !getLiveQuote(ticker));
@@ -1400,6 +1406,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         tickerConvictionDirtyAt: getTickerConvictionDirtyMap(),
       }));
       void registerPortfolioMarketSymbols([ticker]);
+      enqueueWeatherTaxonomyHydrate([ticker]);
       void fetchMarketQuotes([ticker]).then((result) => {
         const quote = result?.quotes[ticker];
         if (!quote || !(quote.lastPrice > 0)) return;

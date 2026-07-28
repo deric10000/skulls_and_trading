@@ -262,6 +262,7 @@ Module map:
 | `session.ts` | ET-clock session detection (premarket / live / afterhours), DST-safe via `Intl`. |
 | `taxonomy.ts` | Canonical GICS 11 sectors + 74 industries (Weather browse SSOT). |
 | `yahooTaxonomy.ts` | Maps Yahoo `assetProfile` sector/industry → GICS keys (null when unmapped — never invent IT/Software). |
+| `hydrateTaxonomy.ts` | Add-time Weather taxonomy soft-queue (taxonomy revision only; no Forge/cadence coupling). |
 | `mock.ts` | Authored sub-score seeds for `mockDataSource` only (quarantined); emits full taxonomy. |
 | `live.ts` | FreeTier Weather from live `MarketContext`; sector/industry keys from `taxonomy.ts`; `augmentWeatherStocks` for live holdings. |
 | `graphics.ts` | Resolves a `dynamicGraphicKey` to a background treatment (gradient fallback now, image/video later). |
@@ -280,11 +281,35 @@ readings for seeded `TICKERS`. Live watch holdings get stock readings via
 `getWatchMarketWeather` → `augmentWeatherStocks` (same cascade tilt math —
 **no extra Yahoo calls**). GICS keys come from seeded `TICKERS` or from Yahoo
 `assetProfile` on the **existing** fundamentals `quoteSummary` request
-Live holdings map via Yahoo `assetProfile` on the **existing** fundamentals `quoteSummary` request
 (`providerSector` / `providerIndustry` → `mapYahooTaxonomy`). Sector and industry
 map independently when possible. Every watched ticker gets a stock reading
 (market cascade tilt, refined by sector/industry when known — **no extra Yahoo
-calls**). Missing sector/industry cards say so honestly; gaps upsert into
+calls** for the cascade paint itself).
+
+### Add-time taxonomy hydrate (Weather UI only)
+
+Newly added non-seeded tickers still get quote-on-add + symbol registration for
+P&L as today. Separately, `weather/hydrateTaxonomy.ts` soft-queues a **taxonomy
+hydrate** (Worker fundamentals/`quoteSummary` for `assetProfile` mapping only):
+
+- Writes **taxonomy-only** into `liveCache` (`setLiveTaxonomyFromFundamentals`)
+  and bumps the **`taxonomy` revision only** — never `scoreInputs`, never
+  alignment / Forge scoring / technicals / conviction checks / snapshot writes.
+- Soft-budget stagger (concurrency 1, Yahoo headroom reserved for the hourly
+  cycle). Practical batch comfort ~8–15 tickers/minute when quotes are
+  Finnhub-backed.
+- Per-ticker readiness: `idle | pending | ready | failed` + `etaAt`. Soft-queue
+  ETA while the session hydrate runs; otherwise `marketCycle.nextCycleAt` after
+  registration.
+- **Logout / leave durability:** the in-memory queue clears with `resetLiveCache`;
+  registered symbols complete on the next published Worker market cycle — no
+  separate Cloudflare Queue for Weather in this pass.
+- `MarketFlowWidget` shows **Pending weather check** + countdown (shared
+  `formatCheckCountdown`) while waiting. `NeedsDataReviewFlag` (“No
+  Sector/Industry associated”) only after a completed attempt returns
+  missing/unmapped Yahoo taxonomy — never during wait.
+
+Missing sector/industry cards say so honestly after a hard miss; gaps upsert into
 Supabase `taxonomy_gap_events` for later alias normalization.
 
 The widget (`MarketFlowWidget`) is read-only on the home page: it detects the
