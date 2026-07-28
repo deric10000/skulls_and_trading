@@ -4,8 +4,12 @@ import { dataSource } from "../lib/datasource";
 import { getWatchMarketWeather } from "../lib/datasource/freeTier";
 import {
   getLiveCacheGeneration,
+  getWeatherTaxonomyReadiness,
+  resolveWeatherTaxonomyEtaAt,
   subscribeLiveCache,
+  synthesizeNextCycleEtaAt,
 } from "../lib/market/liveCache";
+import { ensureWeatherTaxonomyAwaiting } from "../lib/weather/hydrateTaxonomy";
 import { SearchableSelect } from "./SearchableSelect";
 import { NeedsDataReviewFlag } from "./NeedsDataReviewFlag";
 import { CaretLeft, CaretRight } from "../lib/icons";
@@ -17,7 +21,7 @@ import {
   WEATHER_CONDITIONS,
   type WeatherGraphic,
 } from "../lib/weather";
-import { formatDecimals } from "../lib/format";
+import { formatCheckCountdown, formatDecimals } from "../lib/format";
 import type {
   MarketWeatherLayer,
   WeatherLayerReading,
@@ -173,6 +177,46 @@ export function MarketFlowWidget({
     [watchlist],
   );
   const stockList = watchTickers;
+
+  // Returning session / leave: pending until cycle taxonomy lands — never a
+  // false "No Sector associated" while waiting.
+  useEffect(() => {
+    ensureWeatherTaxonomyAwaiting(watchTickers);
+  }, [watchTickers, liveGeneration]);
+
+  const [countdownNow, setCountdownNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = window.setInterval(() => setCountdownNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  function weatherTaxonomyEmptyCopy(
+    layer: "sector" | "industry" | "stock",
+    ticker: string | null,
+  ): { kind: "pending" | "failed"; text: string } {
+    const failedLabel =
+      layer === "sector"
+        ? "No Sector associated"
+        : layer === "industry"
+          ? "No Industry associated"
+          : "No Stock Weather available";
+    if (!ticker) {
+      return { kind: "failed", text: failedLabel };
+    }
+    const readiness = getWeatherTaxonomyReadiness(ticker);
+    if (readiness?.status === "failed") {
+      return { kind: "failed", text: failedLabel };
+    }
+    // pending / idle / awaiting cycle — always show mm:ss (soft queue or cycle).
+    const etaAt =
+      resolveWeatherTaxonomyEtaAt(ticker, countdownNow) ??
+      synthesizeNextCycleEtaAt(countdownNow);
+    const countdown = formatCheckCountdown(Date.parse(etaAt) - countdownNow);
+    return {
+      kind: "pending",
+      text: `Pending weather check (${countdown})`,
+    };
+  }
 
   // Sector / Industry list the full GICS universe from the weather snapshot
   // (not the watch) so any slice is browsable. Industry options are scoped to
@@ -444,21 +488,52 @@ export function MarketFlowWidget({
                 </div>
                 {!reading ? (
                   <div className="weather-empty">
-                    {card.layer === "stock" && card.active ? (
-                      <NeedsDataReviewFlag label="No Stock Weather available" />
-                    ) : card.layer === "sector" && sel.stock && !sel.sector ? (
-                      <NeedsDataReviewFlag label="No Sector associated" />
-                    ) : card.layer === "industry" &&
-                      sel.stock &&
-                      !sel.industry ? (
-                      <NeedsDataReviewFlag label="No Industry associated" />
-                    ) : (
-                      <p className="weather-empty-copy">
-                        {card.layer === "stock" && options.length > 0
-                          ? "No watched name in this group — use Previous / Next to jump to one."
-                          : "Add a name to Current Watch to read its weather."}
-                      </p>
-                    )}
+                    {(() => {
+                      if (card.layer === "stock" && card.active) {
+                        const empty = weatherTaxonomyEmptyCopy(
+                          "stock",
+                          card.active,
+                        );
+                        return empty.kind === "failed" ? (
+                          <NeedsDataReviewFlag label={empty.text} />
+                        ) : (
+                          <p className="weather-empty-copy">{empty.text}</p>
+                        );
+                      }
+                      if (card.layer === "sector" && sel.stock && !sel.sector) {
+                        const empty = weatherTaxonomyEmptyCopy(
+                          "sector",
+                          sel.stock,
+                        );
+                        return empty.kind === "failed" ? (
+                          <NeedsDataReviewFlag label={empty.text} />
+                        ) : (
+                          <p className="weather-empty-copy">{empty.text}</p>
+                        );
+                      }
+                      if (
+                        card.layer === "industry" &&
+                        sel.stock &&
+                        !sel.industry
+                      ) {
+                        const empty = weatherTaxonomyEmptyCopy(
+                          "industry",
+                          sel.stock,
+                        );
+                        return empty.kind === "failed" ? (
+                          <NeedsDataReviewFlag label={empty.text} />
+                        ) : (
+                          <p className="weather-empty-copy">{empty.text}</p>
+                        );
+                      }
+                      return (
+                        <p className="weather-empty-copy">
+                          {card.layer === "stock" && options.length > 0
+                            ? "No watched name in this group — use Previous / Next to jump to one."
+                            : "Add a name to Current Watch to read its weather."}
+                        </p>
+                      );
+                    })()}
                   </div>
                 ) : null}
                 {showDropdown ? (

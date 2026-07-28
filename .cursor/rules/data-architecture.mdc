@@ -127,11 +127,16 @@ covered by that strategy's `appliedPortfolioIds` for the same source.
   index ETFs). Sector/industry keys come from `weather/taxonomy.ts` (GICS 11 /
   74); `TICKERS[].sector`/`.industry` must use those exact keys for cascade.
   Live holdings map via Yahoo `assetProfile` on the existing fundamentals
-  `quoteSummary` (`yahooTaxonomy.ts`) — never fabricate IT/Software. Watch
-  stocks are augmented client-side (`getWatchMarketWeather`); gaps upsert
-  `taxonomy_gap_events`. Snapshot covers the full taxonomy so users can browse
-  weather without holdings. Cache app-wide per timeframe until context
-  refreshes. See `data-architecture.md` §5.
+  `quoteSummary` (`yahooTaxonomy.ts`) — never fabricate IT/Software. Add-time
+  Weather hydrate (`weather/hydrateTaxonomy.ts`) may soft-queue that profile
+  fetch for UI only: write taxonomy + bump **`taxonomy` revision only** (never
+  `scoreInputs` / Forge / cadence). Pending UI uses soft-queue ETA or
+  `nextCycleAt`; durable completion after logout is the registered hourly
+  cycle. Watch stocks are augmented client-side (`getWatchMarketWeather`);
+  gaps upsert `taxonomy_gap_events` only after a hard miss. Snapshot covers
+  the full taxonomy so users can browse weather without holdings. Cache
+  app-wide per timeframe until context refreshes. See `data-architecture.md`
+  §5.
 - **Beta 0 user data:** Supabase Auth + Postgres RLS (`user_state`,
   `conviction_snapshots`, `portfolio_snapshots`, `ticker_marks`). Not
   localStorage SoT. `ticker_marks` hydrates account last prices into
