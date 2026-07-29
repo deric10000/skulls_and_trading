@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import {
+  requiredTickersForStrategyCheck,
   scoreCombinedAuthority,
   scoreStrategyCheck,
   type CompleteMarketCycle,
@@ -297,19 +298,9 @@ Deno.serve(async (request: Request): Promise<Response> => {
           const strategy = typedWorkspace.strategies.find(
             (item) => item.id === run.strategy_id,
           );
-          const requiredTickers = [
-            ...new Set(
-              (typedWorkspace.portfolios ?? [])
-                .filter((portfolio) =>
-                  (strategy?.appliedPortfolioIds ?? []).includes(portfolio.id),
-                )
-                .flatMap((portfolio) =>
-                  portfolio.holdings.map((holding) =>
-                    holding.ticker.toUpperCase(),
-                  ),
-                ),
-            ),
-          ];
+          const requiredTickers = strategy
+            ? requiredTickersForStrategyCheck(typedWorkspace, strategy)
+            : [];
           const preflight = classifyPreflightFailure({
             missingFromCycle: missingCycleSymbols(requiredTickers, cycle),
             incompleteTickers: incompleteCycleTickers(requiredTickers, cycle),

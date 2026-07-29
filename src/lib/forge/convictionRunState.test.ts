@@ -49,4 +49,14 @@ describe("convictionRunState", () => {
     expect(canonicalStrategyIds(["b", "a", "a"])).toEqual(["a", "b"]);
     expect(categorizeRunError("dispatch failed")).toBe("dispatch_failed");
   });
+
+  it("does not treat generic workspace failures as superseded", () => {
+    expect(categorizeRunError("Workspace read failed")).toBe("unknown");
+    expect(categorizeRunError("workspace_superseded")).toBe(
+      "workspace_superseded",
+    );
+    expect(categorizeRunError("run superseded by newer claim")).toBe(
+      "workspace_superseded",
+    );
+  });
 });

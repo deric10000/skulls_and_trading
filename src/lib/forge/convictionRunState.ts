@@ -82,7 +82,10 @@ export function categorizeRunError(
   }
   if (text.includes("dispatch")) return "dispatch_failed";
   if (text.includes("timeout")) return "processing_timeout";
-  if (text.includes("superseded") || text.includes("workspace")) {
+  if (
+    text.includes("workspace_superseded") ||
+    (text.includes("superseded") && !text.includes("retry"))
+  ) {
     return "workspace_superseded";
   }
   if (text.includes("scoring_revision") || text.includes("revision mismatch")) {

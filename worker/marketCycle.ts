@@ -279,22 +279,20 @@ export function resolveRegistryWriteMode(
   return symbolCount <= 1 ? "add" : "replace";
 }
 
-async function registeredSymbols(env: MarketCycleEnv): Promise<string[]> {
-  const authority = (env.SYMBOL_AUTHORITY ?? "supabase").toLowerCase();
-  if (authority !== "kv_legacy") {
-    const snapshot = await env.MARKET_CACHE.get<SubscriptionsSnapshot>(
-      SUBSCRIPTIONS_SNAPSHOT_KEY,
-      "json",
-    );
-    if (snapshot?.symbols?.length) {
-      return selectActiveGlobalSymbols([
-        {
-          symbols: normalizeSymbols(snapshot.symbols),
-          updatedAt: snapshot.asOf || new Date().toISOString(),
-        },
-      ]);
-    }
-  }
+/**
+ * Supabase snapshot is authoritative, but per-user registry writes must still
+ * expedite new symbols into the next cycle until the hourly snapshot refreshes.
+ */
+export function combineSubscriptionAuthoritySymbols(
+  snapshotSymbols: readonly string[] | null | undefined,
+  registrySymbols: readonly string[],
+): string[] {
+  return normalizeSymbols([...(snapshotSymbols ?? []), ...registrySymbols]);
+}
+
+async function listRegistryEntries(
+  env: MarketCycleEnv,
+): Promise<RegistryEntry[]> {
   const keys: { name: string }[] = [];
   let cursor: string | undefined;
   do {
@@ -311,8 +309,67 @@ async function registeredSymbols(env: MarketCycleEnv): Promise<string[]> {
       env.MARKET_CACHE.get<RegistryEntry>(key.name, "json"),
     ),
   );
-  return selectActiveGlobalSymbols(
-    entries.filter((entry): entry is RegistryEntry => entry != null),
+  return entries.filter((entry): entry is RegistryEntry => entry != null);
+}
+
+async function registeredSymbols(env: MarketCycleEnv): Promise<string[]> {
+  const entries = await listRegistryEntries(env);
+  const registrySymbols = entries.flatMap((entry) => entry.symbols);
+  const authority = (env.SYMBOL_AUTHORITY ?? "supabase").toLowerCase();
+  if (authority === "kv_legacy") {
+    return selectActiveGlobalSymbols(entries);
+  }
+  const snapshot = await env.MARKET_CACHE.get<SubscriptionsSnapshot>(
+    SUBSCRIPTIONS_SNAPSHOT_KEY,
+    "json",
+  );
+  const combined = combineSubscriptionAuthoritySymbols(
+    snapshot?.symbols,
+    registrySymbols,
+  );
+  if (combined.length === 0) return [];
+  return selectActiveGlobalSymbols([
+    {
+      symbols: combined,
+      updatedAt: snapshot?.asOf || new Date().toISOString(),
+    },
+  ]);
+}
+
+/** Patch snapshot immediately on add/replace so the next minute shard sees new tickers. */
+async function expediteSubscriptionsSnapshot(
+  env: MarketCycleEnv,
+  symbols: string[],
+  mode: RegistryWriteMode,
+): Promise<void> {
+  if ((env.SYMBOL_AUTHORITY ?? "supabase").toLowerCase() === "kv_legacy") {
+    return;
+  }
+  if (mode === "remove" || symbols.length === 0) return;
+  const existing = await env.MARKET_CACHE.get<SubscriptionsSnapshot>(
+    SUBSCRIPTIONS_SNAPSHOT_KEY,
+    "json",
+  );
+  const merged = combineSubscriptionAuthoritySymbols(
+    existing?.symbols,
+    symbols,
+  );
+  if (
+    existing &&
+    merged.length === existing.symbols.length &&
+    merged.every((symbol, index) => symbol === existing.symbols[index])
+  ) {
+    return;
+  }
+  const snapshot: SubscriptionsSnapshot = {
+    revision: `sha:${merged.length}:${merged.slice(0, 8).join(",")}`,
+    asOf: new Date().toISOString(),
+    symbols: merged,
+    source: existing?.source ?? "supabase",
+  };
+  await env.MARKET_CACHE.put(
+    SUBSCRIPTIONS_SNAPSHOT_KEY,
+    JSON.stringify(snapshot),
   );
 }
 
@@ -487,6 +544,16 @@ async function registerSymbols(
     registryKey,
     JSON.stringify({ symbols, updatedAt: new Date().toISOString() }),
   );
+  try {
+    await expediteSubscriptionsSnapshot(env, incoming, mode);
+  } catch (error) {
+    console.error(
+      JSON.stringify({
+        event: "subscriptions_snapshot_expedite_failed",
+        detail: error instanceof Error ? error.message : String(error),
+      }),
+    );
+  }
   return json({ registered: symbols.length, symbols, mode });
 }
 

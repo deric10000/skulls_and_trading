@@ -90,7 +90,9 @@ covered by that strategy's `appliedPortfolioIds` for the same source.
   → FreeTier. Authenticated clients may expedite registry sync (explicit
   `add|remove|replace`; singleton defaults to merge). Authoritative cycle
   symbols come from Supabase `market_symbol_subscriptions` → Worker snapshot
-  when configured (`SYMBOL_AUTHORITY`); clients still respect 40 symbols each
+  **unioned with** live registry entries when configured (`SYMBOL_AUTHORITY`);
+  registry POSTs also patch the snapshot on add/replace. Clients still respect
+  40 symbols each
   (800 active globally). SQL projection refresh serializes the global
   distinct-cap check with a transaction advisory lock and rejects >800; KV is
   a rebuildable projection, and cycle aggregation rejects any transient >800

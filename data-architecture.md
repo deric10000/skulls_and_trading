@@ -641,16 +641,19 @@ offline only — do not use as SoT for Beta accounts.
   coalesced hourly cycle. **Authoritative symbol source** is Supabase
   `market_symbol_subscriptions` (derived from portfolios), synced into a
   protected KV snapshot (`market:subscriptions:snapshot`) when
-  `SUPABASE_SERVICE_ROLE_KEY` is configured. `SYMBOL_AUTHORITY=kv_legacy`
-  falls back to per-user `market:registry:*` entries. Browser
-  `POST /api/market/registry` is expedition only and supports explicit
+  `SUPABASE_SERVICE_ROLE_KEY` is configured. Cycle collection **unions** that
+  snapshot with live `market:registry:*` entries so add/replace expedites are
+  not blocked until the next hourly sync; registry POSTs also patch the
+  snapshot on `add`/`replace`. `SYMBOL_AUTHORITY=kv_legacy` uses registry only.
+  Browser `POST /api/market/registry` is expedition only and supports explicit
   `mode: add|remove|replace` (default singleton = `add` merge — never wipe
   the account list). A cycle is published only after all ticker batches
   finish; clients never see partial data.
 - Scoring plane: each immutable completed cycle enqueues a reference for
   `supabase/functions/process-conviction-cycle`. The Edge scorer claims
   normalized `strategy_check_schedules` by independent cadence wall, runs
-  preflight against cycle coverage, calls the unchanged pure Forge engine
+  preflight against cycle coverage for tickers the strategy will score,
+  calls the unchanged pure Forge engine
   through `strategyAlignmentAdapter`, and commits run/results/snapshots/events
   only for ready completions. Runs distinguish pending / waiting / failed /
   superseded / incomplete (Score Pending is not used for terminal failures).

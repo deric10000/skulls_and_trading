@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  combineSubscriptionAuthoritySymbols,
   commitPublishedCycle,
   handleMarketCycleApi,
   hasCompleteFundamentals,
@@ -142,8 +143,12 @@ describe("market cycle scale and completeness", () => {
       "user-a",
     );
     expect(response?.status).toBe(200);
-    expect(put).toHaveBeenCalledOnce();
-    expect(put.mock.calls[0]).toHaveLength(2);
+    expect(put).toHaveBeenCalled();
+    const registryPut = put.mock.calls.find((call) =>
+      String(call[0]).startsWith("market:registry:"),
+    );
+    expect(registryPut).toBeTruthy();
+    expect(registryPut).toHaveLength(2);
   });
 
   it("publishes an immutable complete payload before dispatching its reference", async () => {
@@ -244,5 +249,54 @@ describe("market cycle scale and completeness", () => {
     expect(resolveRegistryWriteMode(undefined, 1)).toBe("add");
     expect(resolveRegistryWriteMode(undefined, 3)).toBe("replace");
     expect(resolveRegistryWriteMode("remove", 1)).toBe("remove");
+  });
+
+  it("unions subscription snapshot with registry expedite symbols", () => {
+    expect(
+      combineSubscriptionAuthoritySymbols(["GOOG", "MO"], ["CRWV", "GOOG"]).sort(),
+    ).toEqual(["CRWV", "GOOG", "MO"]);
+    expect(combineSubscriptionAuthoritySymbols(null, ["ACHR"])).toEqual(["ACHR"]);
+  });
+
+  it("expedites new registry symbols into an existing subscriptions snapshot", async () => {
+    const put = vi.fn().mockResolvedValue(undefined);
+    const env = {
+      SYMBOL_AUTHORITY: "supabase",
+      MARKET_CACHE: {
+        list: vi.fn().mockResolvedValue({
+          keys: [],
+          list_complete: true,
+          cacheStatus: null,
+        }),
+        get: vi.fn(async (key: string) => {
+          if (key === "market:subscriptions:snapshot") {
+            return {
+              revision: "sha:1:GOOG",
+              asOf: "2026-07-29T00:00:00.000Z",
+              symbols: ["GOOG"],
+              source: "supabase",
+            };
+          }
+          return null;
+        }),
+        put,
+      },
+    };
+    const response = await handleMarketCycleApi(
+      new Request("https://example.test/api/market/registry", {
+        method: "POST",
+        body: JSON.stringify({ symbols: ["CRWV"], mode: "add" }),
+      }),
+      env as never,
+      "/api/market/registry",
+      "user-a",
+    );
+    expect(response?.status).toBe(200);
+    const snapshotPut = put.mock.calls.find(
+      (call) => call[0] === "market:subscriptions:snapshot",
+    );
+    expect(snapshotPut).toBeTruthy();
+    const body = JSON.parse(String(snapshotPut?.[1])) as { symbols: string[] };
+    expect(body.symbols.sort()).toEqual(["CRWV", "GOOG"]);
   });
 });
