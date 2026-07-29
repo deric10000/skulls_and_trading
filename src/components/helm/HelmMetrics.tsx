@@ -922,7 +922,9 @@ export function HelmMetrics() {
       >
         {!focusedStrategy ? (
           <div className="select-card helm-metric helm-metric--text">
-            <span className="helm-metric-label">Strategy Coverage</span>
+            <div className="helm-metric-head">
+              <span className="helm-metric-label">Strategy Coverage</span>
+            </div>
             <div className="helm-metric-body">
               <span className="helm-metric-value">
                 {metrics.scoredCount}
@@ -945,7 +947,9 @@ export function HelmMetrics() {
               key={slice.label}
               className="select-card helm-metric helm-metric--text"
             >
-              <span className="helm-metric-label">{slice.label}</span>
+              <div className="helm-metric-head">
+                <span className="helm-metric-label">{slice.label}</span>
+              </div>
               <div className="helm-metric-body">
                 <span className="helm-metric-value">
                   {slice.count}
