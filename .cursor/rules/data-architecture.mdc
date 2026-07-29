@@ -216,7 +216,8 @@ covered by that strategy's `appliedPortfolioIds` for the same source.
   change Forge / zone / `portfolioRunningTotals` math. Also writes
   `metrics.cashAdded` / `cashWithdrawn` from same-day cash ledger rows.
   Check-driven path also appends `forge_check_events` (status + hold-inaction)
-  for Plan Adherence. Editable portfolio cash (`updatePortfolioCash`) +
+  for Plan Adherence (holds stay backend-tracked; Total Actions is ledger-only;
+  Average Hold Time uses qty share episodes). Editable portfolio cash (`updatePortfolioCash`) +
   `PortfolioTransaction` ledger in `share_fills` (qty + cash; cash rows are
   manual deposit/withdrawal only).
 - Cadence: Check = 1h/2h/4h/Daily/Weekly/Monthly + any combination of 4

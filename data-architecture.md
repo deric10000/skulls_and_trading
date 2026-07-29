@@ -88,7 +88,8 @@ Withdrawal). Qty-driven cash moves from paper buys/sells update
 `metrics.cashAdded` / `metrics.cashWithdrawn` on daily `portfolio_snapshots`
 sum same-day cash ledger deltas for Helm “Cash Added over Time.” Hold-from-
 inaction is recorded as `forge_check_events.kind = 'hold'` on each check when
-no qty fill landed in the cadence bucket (Plan Adherence Total Actions).
+no qty fill landed in the cadence bucket (Plan Adherence backend; not shown in
+Total Actions — Average Hold Time uses qty share episodes instead).
 Optional later: promote the qty/cash ledger to a dedicated Postgres table.
 
 ## 2. The `DataSource` seam (`src/lib/datasource/`)
@@ -516,14 +517,19 @@ uses the coarsest (slowest) floor among applied strategies. Total Conviction,
 Open P&L (range under tag), and Plan Adherence all read the same clamped
 timeframe.
 
-**Plan Adherence** (below Composition): Notifications (check-event flag counts,
-with proxies from `conviction_snapshots` / book `metrics.conviction` check days
-when append-only events are not yet present — so a Total Conviction check mark
-never implies “No checks in range”), Total Actions (ledger buys/sells/cash +
-hold-inaction events; hold proxies fill the same check days when no same-day
-qty fill exists), Zone-Followed Impact (MV-weighted forward return after
-**zone-matched qty fills only** — Trim/Add/Go to Cash via `zoneHints` or
-same-day check flags; Hold counts Total Actions but does not score Impact).
+**Plan Adherence** (below Composition): Average Hold Time (all-time mean length
+of share **episodes** from the qty ledger — sell to zero ends an episode;
+re-entry starts a new one; open positions with shares > 0 include length-to-date;
+respects portfolio + strategy scope; card tag is always “All time”),
+Notifications (check-event flag counts, with proxies from `conviction_snapshots`
+/ book `metrics.conviction` check days when append-only events are not yet
+present — so a Total Conviction check mark never implies “No checks in range”),
+Total Actions (ledger **buys/sells only**; cash ledger rows and
+`forge_check_events.kind = 'hold'` / hold proxies remain tracked for adherence
+internals but are **not** displayed or added into Total Actions — so the
+headline matches Zone-Followed Impact’s qty action count), Zone-Followed Impact
+(MV-weighted forward return after **zone-matched qty fills only** — Trim/Add/Go
+to Cash via `zoneHints` or same-day check flags; Hold does not score Impact).
 Honest empty states when no check-day marks exist at all.
 
 ### Forge check events (`forge_check_events`)

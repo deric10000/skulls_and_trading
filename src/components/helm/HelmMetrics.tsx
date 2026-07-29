@@ -40,6 +40,7 @@ import {
 import {
   countActions,
   countNotifications,
+  computeAverageHoldTime,
   computeZoneFollowedImpact,
   mergeCheckEventsWithProxies,
   type ForgeCheckEvent,
@@ -525,6 +526,45 @@ export function HelmMetrics() {
         timeframeBounds,
       )
     : null;
+  const averageHoldTime = useMemo(() => {
+    if (!portfolio) return null;
+    const tickersInScope = portfolio.holdings
+      .filter((holding) => {
+        if (!trackedTickerSet.has(holding.ticker.toUpperCase())) return false;
+        if (!focusedStrategy) return true;
+        return shouldScoreTickerWithStrategy(
+          holding,
+          focusedStrategy,
+          portfolio.id,
+        );
+      })
+      .map((holding) => holding.ticker.toUpperCase());
+    // Include tickers that only appear in the ledger for closed episodes.
+    for (const tx of shareFills) {
+      if (tx.kind !== "qty" || tx.portfolioId !== portfolio.id) continue;
+      const symbol = tx.ticker.toUpperCase();
+      if (trackedTickerSet.size > 0 && !trackedTickerSet.has(symbol)) continue;
+      if (!tickersInScope.includes(symbol)) tickersInScope.push(symbol);
+    }
+    const currentSharesByTicker: Record<string, number> = {};
+    for (const holding of portfolio.holdings) {
+      currentSharesByTicker[holding.ticker.toUpperCase()] = holding.shares;
+    }
+    return computeAverageHoldTime({
+      ledger: shareFills,
+      portfolioId: portfolio.id,
+      currentSharesByTicker,
+      strategyIds: adherenceStrategyIds,
+      tickersInScope,
+      asOfDate: etIsoDate(),
+    });
+  }, [
+    portfolio,
+    shareFills,
+    trackedTickerSet,
+    focusedStrategy,
+    adherenceStrategyIds,
+  ]);
   const zoneImpact = adherenceLoaded
     ? computeZoneFollowedImpact(
         shareFills.filter(
@@ -799,6 +839,25 @@ export function HelmMetrics() {
       >
         <div className="select-card helm-metric helm-metric--text">
           <div className="helm-metric-head">
+            <span className="helm-metric-label">Average Hold Time</span>
+            <span className="panel-tag session-tag">All time</span>
+          </div>
+          <div className="helm-metric-body">
+            <span className="helm-metric-value">
+              {averageHoldTime?.avgDays == null
+                ? "—"
+                : `${Math.round(averageHoldTime.avgDays)}d`}
+            </span>
+            <span className="helm-metric-note">
+              {averageHoldTime?.avgDays == null
+                ? "No hold episodes yet"
+                : "Mean episode length · all time"}
+            </span>
+          </div>
+        </div>
+
+        <div className="select-card helm-metric helm-metric--text">
+          <div className="helm-metric-head">
             <span className="helm-metric-label">Notifications</span>
             <span className="panel-tag session-tag">{sparkRangeLabel}</span>
           </div>
@@ -827,8 +886,8 @@ export function HelmMetrics() {
               {actionCounts == null
                 ? "Loading…"
                 : actionCounts.total === 0
-                  ? "No buys, sells, cash, or holds yet"
-                  : `Buy ${actionCounts.buy} · Sell ${actionCounts.sell} · Hold ${actionCounts.hold}`}
+                  ? "No buys or sells yet"
+                  : `Buy ${actionCounts.buy} · Sell ${actionCounts.sell}`}
             </span>
           </div>
         </div>

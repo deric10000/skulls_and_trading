@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   computeZoneFollowedImpact,
+  computeAverageHoldTime,
   countActions,
   countNotifications,
   forwardReturnPct,
@@ -45,7 +46,7 @@ describe("countNotifications", () => {
 });
 
 describe("countActions", () => {
-  it("tallies ledger fills and hold events", () => {
+  it("tallies ledger fills without folding holds into the total", () => {
     const ledger: PortfolioTransaction[] = [
       qtyTx({
         id: "1",
@@ -73,13 +74,109 @@ describe("countActions", () => {
       },
     ];
     expect(countActions(ledger, events, "p1", null, bounds)).toEqual({
-      total: 2,
+      total: 1,
       buy: 1,
       sell: 0,
       deposit: 0,
       withdrawal: 0,
       hold: 1,
     });
+  });
+
+  it("tracks cash without folding it into Total Actions", () => {
+    const ledger: PortfolioTransaction[] = [
+      qtyTx({
+        id: "1",
+        portfolioId: "p1",
+        ticker: "SOFI",
+        side: "buy",
+        deltaShares: 10,
+        sharesBefore: 0,
+        sharesAfter: 10,
+        fillPrice: 10,
+        filledAt: "2026-07-20T15:00:00.000Z",
+      }),
+      {
+        id: "c1",
+        kind: "cash",
+        portfolioId: "p1",
+        actionClass: "deposit",
+        deltaCash: 100,
+        cashBefore: 0,
+        cashAfter: 100,
+        filledAt: "2026-07-20T16:00:00.000Z",
+        source: "mock",
+      },
+    ];
+    expect(countActions(ledger, [], "p1", null, bounds)).toMatchObject({
+      total: 1,
+      buy: 1,
+      deposit: 1,
+    });
+  });
+});
+
+describe("computeAverageHoldTime", () => {
+  it("splits sell-to-zero and re-entry into separate episodes", () => {
+    const ledger: PortfolioTransaction[] = [
+      qtyTx({
+        id: "1",
+        portfolioId: "p1",
+        ticker: "SOFI",
+        side: "buy",
+        deltaShares: 10,
+        sharesBefore: 0,
+        sharesAfter: 10,
+        fillPrice: 10,
+        filledAt: "2026-06-01T15:00:00.000Z",
+      }),
+      qtyTx({
+        id: "2",
+        portfolioId: "p1",
+        ticker: "SOFI",
+        side: "sell",
+        deltaShares: -10,
+        sharesBefore: 10,
+        sharesAfter: 0,
+        fillPrice: 12,
+        filledAt: "2026-06-15T15:00:00.000Z",
+      }),
+      qtyTx({
+        id: "3",
+        portfolioId: "p1",
+        ticker: "SOFI",
+        side: "buy",
+        deltaShares: 5,
+        sharesBefore: 0,
+        sharesAfter: 5,
+        fillPrice: 11,
+        filledAt: "2026-07-01T15:00:00.000Z",
+      }),
+    ];
+    const result = computeAverageHoldTime({
+      ledger,
+      portfolioId: "p1",
+      currentSharesByTicker: { SOFI: 5 },
+      strategyIds: null,
+      tickersInScope: ["SOFI"],
+      asOfDate: "2026-07-11",
+    });
+    // Closed 14d (Jun 1→15) + open 10d (Jul 1→11) → mean 12
+    expect(result.episodeCount).toBe(2);
+    expect(result.avgDays).toBe(12);
+  });
+
+  it("returns null when there are no share episodes", () => {
+    expect(
+      computeAverageHoldTime({
+        ledger: [],
+        portfolioId: "p1",
+        currentSharesByTicker: { SOFI: 0 },
+        strategyIds: null,
+        tickersInScope: ["SOFI"],
+        asOfDate: "2026-07-11",
+      }).avgDays,
+    ).toBeNull();
   });
 });
 

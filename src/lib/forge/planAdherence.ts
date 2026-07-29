@@ -10,6 +10,7 @@ import type {
   TransactionActionClass,
 } from "../../types";
 import type { HelmTimeframeBounds } from "../finance/helmTimeframe";
+import { etIsoDate } from "../finance/portfolioSnapshotSeries";
 
 export type ForgeCheckEventKind = "status" | "hold";
 
@@ -283,9 +284,10 @@ export function countActions(
         (tx.deltaCash < 0 && !tx.actionClass)
       ) {
         out.withdrawal += 1;
-      } else {
-        continue;
       }
+      // Cash stays tracked but is not a trade action — keep Total Actions
+      // aligned with Zone-Followed Impact's qty denominator.
+      continue;
     } else if (tx.side === "buy") {
       out.buy += 1;
     } else if (tx.side === "sell") {
@@ -296,6 +298,8 @@ export function countActions(
     out.total += 1;
   }
 
+  // Hold pulses stay tracked for Average Hold Time / adherence internals, but
+  // they are inaction — never part of the user-facing Total Actions total.
   for (const event of events) {
     if (event.kind !== "hold") continue;
     if (!eventInScope(event, portfolioId, strategyIds)) continue;
@@ -303,10 +307,114 @@ export function countActions(
       continue;
     }
     out.hold += 1;
-    out.total += 1;
   }
 
   return out;
+}
+
+function qtyFillMatchesStrategy(
+  tx: Extract<PortfolioTransaction, { kind: "qty" }>,
+  strategyIds: string[] | null,
+): boolean {
+  if (!strategyIds || strategyIds.length === 0) return true;
+  const ids = tx.strategyIds ?? [];
+  if (ids.length === 0) return true;
+  return ids.some((id) => strategyIds.includes(id));
+}
+
+function calendarDaysBetween(startDate: string, endDate: string): number {
+  const startMs = Date.parse(startDate);
+  const endMs = Date.parse(endDate);
+  if (Number.isNaN(startMs) || Number.isNaN(endMs)) return 0;
+  return Math.max(0, Math.round((endMs - startMs) / 86_400_000));
+}
+
+export interface HoldEpisode {
+  ticker: string;
+  startDate: string;
+  /** Null while shares remain > 0 (open episode). */
+  endDate: string | null;
+  lengthDays: number;
+}
+
+export interface AverageHoldTimeResult {
+  /** Mean episode length in calendar days; null when no episodes. */
+  avgDays: number | null;
+  episodeCount: number;
+}
+
+/**
+ * All-time average hold time from qty ledger episodes.
+ * Sell-to-zero ends an episode; later re-entry starts a new one.
+ * Open positions (shares > 0) include length-to-date through `asOfDate`.
+ */
+export function computeAverageHoldTime(input: {
+  ledger: PortfolioTransaction[];
+  portfolioId: string;
+  currentSharesByTicker: Record<string, number>;
+  strategyIds: string[] | null;
+  tickersInScope: readonly string[];
+  asOfDate: string;
+}): AverageHoldTimeResult {
+  const scope = new Set(
+    input.tickersInScope.map((ticker) => ticker.toUpperCase()).filter(Boolean),
+  );
+  const episodes: HoldEpisode[] = [];
+
+  for (const ticker of scope) {
+    const fills = input.ledger
+      .filter(
+        (tx): tx is Extract<PortfolioTransaction, { kind: "qty" }> =>
+          tx.kind === "qty" &&
+          tx.portfolioId === input.portfolioId &&
+          tx.ticker.toUpperCase() === ticker &&
+          qtyFillMatchesStrategy(tx, input.strategyIds),
+      )
+      .sort((a, b) => Date.parse(a.filledAt) - Date.parse(b.filledAt));
+
+    let openStart: string | null = null;
+    for (const fill of fills) {
+      const before = fill.sharesBefore;
+      const after = fill.sharesAfter;
+      if (!(before > 0) && after > 0) {
+        openStart = etIsoDate(fill.filledAt);
+      }
+      if (before > 0 && !(after > 0) && openStart) {
+        const endDate = etIsoDate(fill.filledAt);
+        episodes.push({
+          ticker,
+          startDate: openStart,
+          endDate,
+          lengthDays: calendarDaysBetween(openStart, endDate),
+        });
+        openStart = null;
+      }
+    }
+
+    const currentShares = input.currentSharesByTicker[ticker] ?? 0;
+    if (currentShares > 0) {
+      const startDate =
+        openStart ??
+        (fills.length > 0 ? etIsoDate(fills[0]!.filledAt) : null);
+      if (startDate) {
+        episodes.push({
+          ticker,
+          startDate,
+          endDate: null,
+          lengthDays: calendarDaysBetween(startDate, input.asOfDate),
+        });
+      }
+    }
+  }
+
+  if (episodes.length === 0) {
+    return { avgDays: null, episodeCount: 0 };
+  }
+  const sum = episodes.reduce((acc, episode) => acc + episode.lengthDays, 0);
+  return {
+    avgDays: sum / episodes.length,
+    episodeCount: episodes.length,
+  };
 }
 
 /**
