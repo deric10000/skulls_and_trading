@@ -477,7 +477,8 @@ Metrics reduce an existing `PortfolioAlignment` (all-strategy memoized
 aggregate open P&L for live reads (open P&L / cost basis via
 `portfolioRunningTotals` — used by Current Watch; Helm Open P&L headline uses
 snapshot deltas instead), strategy coverage, status mix (by `STATUS_TONE`,
-shown as Plan Alignment chips), and composition by headline bucket/lens
+shown as Plan Alignment chips; footer note sums those chip counts as **Total
+Stocks in Alignment**), and composition by headline bucket/lens
 (rendered as its own Progress-style section of metric cards — placeholder
 `held/held` until Forge position-holdings rules supply a target). When a single
 strategy is picked, every Progress metric — **including Open P&L scope** —
@@ -521,9 +522,14 @@ timeframe.
 of share **episodes** from the qty ledger — sell to zero ends an episode;
 re-entry starts a new one; open positions with shares > 0 include length-to-date;
 respects portfolio + strategy scope; card tag is always “All time”),
-Notifications (check-event flag counts, with proxies from `conviction_snapshots`
-/ book `metrics.conviction` check days when append-only events are not yet
-present — so a Total Conviction check mark never implies “No checks in range”),
+Notifications (continuity-aware **notification runs** from status check
+events: same ticker/strategy/status across consecutive checks = one episode;
+clear then re-fire = a new episode; headline = episodes overlapping the Helm
+timeframe; secondary = new launches whose onset is in-range · distinct
+status/flag records **needing attention** — warning/negative tone or Trim/Add/Go
+to Cash zones; Watch / Hold Plan / Watch Setup still count toward episodes and
+new but not need attention; event fetch looks back beyond the tag
+so ongoing runs are not miscounted as new),
 Total Actions (ledger **buys/sells only**; cash ledger rows and
 `forge_check_events.kind = 'hold'` / hold proxies remain tracked for adherence
 internals but are **not** displayed or added into Total Actions — so the

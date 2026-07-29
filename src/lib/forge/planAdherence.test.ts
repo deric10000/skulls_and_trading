@@ -4,6 +4,7 @@ import {
   computeAverageHoldTime,
   countActions,
   countNotifications,
+  summarizeNotificationCampaigns,
   forwardReturnPct,
   hadQtyFillInBucket,
   mergeCheckEventsWithProxies,
@@ -26,8 +27,156 @@ const bounds = {
   toDate: "2026-07-22",
 };
 
+describe("summarizeNotificationCampaigns", () => {
+  it("counts continuous flags as one episode and restarts after a clear", () => {
+    const events: ForgeCheckEvent[] = [
+      {
+        portfolioId: "p1",
+        strategyId: "s1",
+        ticker: "SOFI",
+        checkedAt: "2026-07-15T20:00:00.000Z",
+        asOf: "2026-07-15",
+        kind: "status",
+        primaryStatus: "Trim Zone",
+        flags: ["Trim Zone"],
+        conviction: 70,
+      },
+      {
+        portfolioId: "p1",
+        strategyId: "s1",
+        ticker: "SOFI",
+        checkedAt: "2026-07-16T20:00:00.000Z",
+        asOf: "2026-07-16",
+        kind: "status",
+        primaryStatus: "Trim Zone",
+        flags: ["Trim Zone"],
+        conviction: 70,
+      },
+      {
+        portfolioId: "p1",
+        strategyId: "s1",
+        ticker: "SOFI",
+        checkedAt: "2026-07-17T20:00:00.000Z",
+        asOf: "2026-07-17",
+        kind: "status",
+        primaryStatus: "Aligned",
+        flags: ["Aligned"],
+        conviction: 80,
+      },
+      {
+        portfolioId: "p1",
+        strategyId: "s1",
+        ticker: "SOFI",
+        checkedAt: "2026-07-18T20:00:00.000Z",
+        asOf: "2026-07-18",
+        kind: "status",
+        primaryStatus: "Trim Zone",
+        flags: ["Trim Zone"],
+        conviction: 65,
+      },
+    ];
+    expect(
+      summarizeNotificationCampaigns(events, "p1", ["s1"], bounds),
+    ).toEqual({
+      episodes: 2,
+      newLaunches: 2,
+      distinct: 1,
+    });
+  });
+
+  it("does not treat a pre-window run as a new launch", () => {
+    const events: ForgeCheckEvent[] = [
+      {
+        portfolioId: "p1",
+        strategyId: "s1",
+        ticker: "SOFI",
+        checkedAt: "2026-07-14T20:00:00.000Z",
+        asOf: "2026-07-14",
+        kind: "status",
+        primaryStatus: "Trim Zone",
+        flags: ["Trim Zone"],
+        conviction: 70,
+      },
+      {
+        portfolioId: "p1",
+        strategyId: "s1",
+        ticker: "SOFI",
+        checkedAt: "2026-07-15T20:00:00.000Z",
+        asOf: "2026-07-15",
+        kind: "status",
+        primaryStatus: "Trim Zone",
+        flags: ["Trim Zone"],
+        conviction: 70,
+      },
+      {
+        portfolioId: "p1",
+        strategyId: "s1",
+        ticker: "SOFI",
+        checkedAt: "2026-07-16T20:00:00.000Z",
+        asOf: "2026-07-16",
+        kind: "status",
+        primaryStatus: "Trim Zone",
+        flags: ["Trim Zone"],
+        conviction: 70,
+      },
+    ];
+    expect(
+      summarizeNotificationCampaigns(events, "p1", ["s1"], bounds),
+    ).toEqual({
+      episodes: 1,
+      newLaunches: 0,
+      distinct: 1,
+    });
+  });
+
+  it("counts Watch toward episodes/new but not need attention", () => {
+    const events: ForgeCheckEvent[] = [
+      {
+        portfolioId: "p1",
+        strategyId: "s1",
+        ticker: "SOFI",
+        checkedAt: "2026-07-16T20:00:00.000Z",
+        asOf: "2026-07-16",
+        kind: "status",
+        primaryStatus: "Watch",
+        flags: ["Watch"],
+        conviction: 55,
+      },
+      {
+        portfolioId: "p1",
+        strategyId: "s1",
+        ticker: "AAPL",
+        checkedAt: "2026-07-16T20:00:00.000Z",
+        asOf: "2026-07-16",
+        kind: "status",
+        primaryStatus: "Review",
+        flags: ["Review"],
+        conviction: 40,
+      },
+      {
+        portfolioId: "p1",
+        strategyId: "s1",
+        ticker: "MSFT",
+        checkedAt: "2026-07-16T20:00:00.000Z",
+        asOf: "2026-07-16",
+        kind: "status",
+        primaryStatus: "Add Zone",
+        flags: ["Add Zone"],
+        conviction: 75,
+      },
+    ];
+    expect(
+      summarizeNotificationCampaigns(events, "p1", ["s1"], bounds),
+    ).toEqual({
+      episodes: 3,
+      newLaunches: 3,
+      distinct: 2,
+    });
+  });
+});
+
 describe("countNotifications", () => {
-  it("counts primary + distinct flags per status event", () => {
+  it("delegates to continuity-aware episode count", () => {
     const events: ForgeCheckEvent[] = [
       {
         portfolioId: "p1",
@@ -269,7 +418,9 @@ describe("mergeCheckEventsWithProxies", () => {
       ],
       tickers: ["SOFI", "ACHR"],
     });
-    expect(countNotifications(merged, "p1", ["s1"], bounds)).toBe(2);
+    expect(merged.filter((e) => e.kind === "status")).toHaveLength(2);
+    // High Alignment is not an alert campaign — episode count stays 0.
+    expect(countNotifications(merged, "p1", ["s1"], bounds)).toBe(0);
     expect(
       merged.filter((e) => e.kind === "status").every(
         (e) => e.primaryStatus === "High Alignment",

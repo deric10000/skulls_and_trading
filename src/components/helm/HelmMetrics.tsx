@@ -39,10 +39,10 @@ import {
 } from "../../lib/finance/portfolioSnapshotSeries";
 import {
   countActions,
-  countNotifications,
   computeAverageHoldTime,
   computeZoneFollowedImpact,
   mergeCheckEventsWithProxies,
+  summarizeNotificationCampaigns,
   type ForgeCheckEvent,
   type TickerPriceMark,
 } from "../../lib/forge/planAdherence";
@@ -287,6 +287,11 @@ export function HelmMetrics() {
       )
       .map((h) => h.ticker.toUpperCase());
 
+    const eventsFromIso =
+      fromStr < timeframeBounds.fromDate
+        ? `${fromStr}T00:00:00.000Z`
+        : timeframeBounds.fromIso;
+
     void fetchProgressHistory({
       userId: userProfile.id,
       portfolioId: portfolio.id,
@@ -294,7 +299,9 @@ export function HelmMetrics() {
       appliedStrategyIds: appliedStrategies.map((strategy) => strategy.id),
       tickers,
       recentFrom: fromStr,
-      eventsFromIso: timeframeBounds.fromIso,
+      // Look back beyond the Helm tag so ongoing notification campaigns are
+      // not miscounted as new launches at the window edge.
+      eventsFromIso,
       eventsToIso: timeframeBounds.toIso,
     }).then(({ bookRows, scopedBookRows, tickerRows, events }) => {
       if (cancelled) return;
@@ -505,8 +512,8 @@ export function HelmMetrics() {
   const adherenceStrategyIds = watchStrategyScopeId
     ? [watchStrategyScopeId]
     : null;
-  const notificationCount = adherenceLoaded
-    ? countNotifications(
+  const notificationSummary = adherenceLoaded
+    ? summarizeNotificationCampaigns(
         checkEvents,
         portfolio.id,
         adherenceStrategyIds,
@@ -600,6 +607,10 @@ export function HelmMetrics() {
     .filter((slice): slice is (typeof metrics.statusMix)[number] =>
       Boolean(slice),
     );
+  const stocksInAlignment = planCountSlices.reduce(
+    (sum, slice) => sum + slice.count,
+    0,
+  );
 
   return (
     <section className="helm-metrics" aria-labelledby="helm-metrics-title">
@@ -781,6 +792,14 @@ export function HelmMetrics() {
             ) : (
               <span className="helm-metric-note">No scored holdings yet</span>
             )}
+            {stocksInAlignment > 0 ? (
+              <span className="helm-metric-note helm-metric-note--split">
+                <span className="helm-metric-note-stat">
+                  {stocksInAlignment}
+                </span>{" "}
+                Total Stocks in Alignment
+              </span>
+            ) : null}
           </div>
         </div>
       </div>
@@ -863,13 +882,30 @@ export function HelmMetrics() {
           </div>
           <div className="helm-metric-body">
             <span className="helm-metric-value">
-              {notificationCount == null ? "—" : notificationCount}
+              {notificationSummary == null
+                ? "—"
+                : notificationSummary.episodes}
             </span>
             <span className="helm-metric-note">
-              {notificationCount === 0
-                ? "No checks in range yet"
-                : "Status + zone flags by check"}
+              {notificationSummary == null
+                ? "Loading…"
+                : notificationSummary.episodes === 0
+                  ? "No strategy conviction notifications"
+                  : "strategy conviction notifications"}
             </span>
+            {notificationSummary != null &&
+            notificationSummary.episodes > 0 ? (
+              <span className="helm-metric-note helm-metric-note--split">
+                <span className="helm-metric-note-stat">
+                  {notificationSummary.newLaunches}
+                </span>{" "}
+                new ·{" "}
+                <span className="helm-metric-note-stat">
+                  {notificationSummary.distinct}
+                </span>{" "}
+                need attention
+              </span>
+            ) : null}
           </div>
         </div>
 

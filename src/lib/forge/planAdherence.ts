@@ -11,6 +11,7 @@ import type {
 } from "../../types";
 import type { HelmTimeframeBounds } from "../finance/helmTimeframe";
 import { etIsoDate } from "../finance/portfolioSnapshotSeries";
+import { STATUS_TONE } from "../status";
 
 export type ForgeCheckEventKind = "status" | "hold";
 
@@ -68,28 +69,155 @@ function eventInScope(
   return true;
 }
 
-/** Count primary + distinct flags per status check event. */
+/** @deprecated Prefer summarizeNotificationCampaigns — pulse sum, not campaigns. */
 export function countNotifications(
   events: ForgeCheckEvent[],
   portfolioId: string,
   strategyIds: string[] | null,
   bounds: HelmTimeframeBounds,
 ): number {
-  let total = 0;
-  for (const event of events) {
-    if (event.kind !== "status") continue;
-    if (!eventInScope(event, portfolioId, strategyIds)) continue;
-    if (!inBounds(event.checkedAt, bounds) && !inBounds(event.asOf, bounds)) {
-      continue;
-    }
-    const labels = new Set<string>();
-    if (event.primaryStatus) labels.add(event.primaryStatus);
-    for (const flag of event.flags) {
-      if (flag) labels.add(flag);
-    }
-    total += labels.size;
+  return summarizeNotificationCampaigns(
+    events,
+    portfolioId,
+    strategyIds,
+    bounds,
+  ).episodes;
+}
+
+export interface NotificationCampaignSummary {
+  /** Continuity-aware notification runs that overlap the timeframe. */
+  episodes: number;
+  /** Episodes whose onset falls inside the timeframe. */
+  newLaunches: number;
+  /**
+   * Unique (strategy, ticker, status/flag) campaigns overlapping the range
+   * that need attention (warning/negative tone, or Trim/Add/Go to Cash zones).
+   * Neutral bands like Watch / Hold Plan / Watch Setup do not count here.
+   */
+  distinct: number;
+}
+
+/** Actionable Layer 3 zones — always need attention (Add Zone is positive tone). */
+const ACTIONABLE_ZONE_LABELS = new Set<string>([
+  "Trim Zone",
+  "Add Zone",
+  "Go to Cash",
+]);
+
+/** Filter for the “need attention” line only — not episodes / new launches. */
+export function needsAttentionLabel(label: string): boolean {
+  if (ACTIONABLE_ZONE_LABELS.has(label)) return true;
+  const tone = STATUS_TONE[label as StatusType];
+  return tone === "warning" || tone === "negative";
+}
+
+function labelsOnStatusEvent(event: ForgeCheckEvent): string[] {
+  const labels = new Set<string>();
+  if (event.primaryStatus) labels.add(event.primaryStatus);
+  for (const flag of event.flags) {
+    if (flag) labels.add(flag);
   }
-  return total;
+  // Conviction "all clear" bands are not alert campaigns.
+  labels.delete("High Alignment");
+  labels.delete("Aligned");
+  return [...labels];
+}
+
+function campaignKey(
+  strategyId: string,
+  ticker: string,
+  label: string,
+): string {
+  return `${strategyId}\0${ticker.toUpperCase()}\0${label}`;
+}
+
+/**
+ * Continuity-aware notification campaigns for Plan Adherence.
+ * Same (ticker, strategy, status/flag) across consecutive checks = one episode;
+ * a clear then re-fire starts a new episode. Provide lookback events before
+ * `bounds.fromDate` so ongoing runs are not miscounted as new launches.
+ */
+export function summarizeNotificationCampaigns(
+  events: ForgeCheckEvent[],
+  portfolioId: string,
+  strategyIds: string[] | null,
+  bounds: HelmTimeframeBounds,
+): NotificationCampaignSummary {
+  const scoped = events.filter(
+    (event) =>
+      event.kind === "status" && eventInScope(event, portfolioId, strategyIds),
+  );
+
+  /** strategy|ticker → sorted unique asOf check days */
+  const checkDaysByTicker = new Map<string, string[]>();
+  /** campaign key → asOf days where label was active */
+  const activeDaysByCampaign = new Map<string, Set<string>>();
+
+  for (const event of scoped) {
+    const ticker = event.ticker.toUpperCase();
+    const dayKey = `${event.strategyId}\0${ticker}`;
+    const days = checkDaysByTicker.get(dayKey) ?? [];
+    if (!days.includes(event.asOf)) {
+      days.push(event.asOf);
+      checkDaysByTicker.set(dayKey, days);
+    }
+    for (const label of labelsOnStatusEvent(event)) {
+      const key = campaignKey(event.strategyId, ticker, label);
+      const set = activeDaysByCampaign.get(key) ?? new Set<string>();
+      set.add(event.asOf);
+      activeDaysByCampaign.set(key, set);
+    }
+  }
+
+  for (const days of checkDaysByTicker.values()) {
+    days.sort();
+  }
+
+  let episodes = 0;
+  let newLaunches = 0;
+  let distinct = 0;
+
+  for (const [key, activeDays] of activeDaysByCampaign) {
+    const [strategyId, ticker] = key.split("\0");
+    const checkDays =
+      checkDaysByTicker.get(`${strategyId}\0${ticker}`) ?? [];
+    if (checkDays.length === 0) continue;
+
+    let openStart: string | null = null;
+    const runs: Array<{ start: string; end: string }> = [];
+
+    for (const day of checkDays) {
+      const on = activeDays.has(day);
+      if (on) {
+        if (openStart == null) openStart = day;
+      } else if (openStart != null) {
+        const priorIdx = checkDays.indexOf(day) - 1;
+        const end = priorIdx >= 0 ? checkDays[priorIdx]! : openStart;
+        runs.push({ start: openStart, end });
+        openStart = null;
+      }
+    }
+    if (openStart != null) {
+      runs.push({ start: openStart, end: checkDays[checkDays.length - 1]! });
+    }
+
+    let sawInWindow = false;
+    for (const run of runs) {
+      const overlaps =
+        run.start <= bounds.toDate && run.end >= bounds.fromDate;
+      if (!overlaps) continue;
+      episodes += 1;
+      if (run.start >= bounds.fromDate && run.start <= bounds.toDate) {
+        newLaunches += 1;
+      }
+      sawInWindow = true;
+    }
+    // Label is the third segment of campaignKey(strategy, ticker, label).
+    const label = key.split("\0")[2] ?? "";
+    if (sawInWindow && needsAttentionLabel(label)) distinct += 1;
+  }
+
+  return { episodes, newLaunches, distinct };
 }
 
 function eventKey(event: ForgeCheckEvent): string {
