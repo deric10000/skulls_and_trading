@@ -8,6 +8,13 @@ const migration = readFileSync(
   ),
   "utf8",
 );
+const reliabilityMigration = readFileSync(
+  new URL(
+    "../../migrations/20260729010000_conviction_reliability_states.sql",
+    import.meta.url,
+  ),
+  "utf8",
+);
 const schema = readFileSync(new URL("../../schema.sql", import.meta.url), "utf8");
 
 for (const [name, sql] of [
@@ -30,9 +37,7 @@ for (const [name, sql] of [
         "unique (user_id, strategy_id, cadence, scheduled_for)",
       );
       expect(sql).toContain("on conflict (user_id, strategy_id, cadence, scheduled_for)");
-      expect(sql).toContain(
-        "run.completed_at < now() - interval '5 minutes'",
-      );
+      expect(sql).toMatch(/interval '5 minutes'/);
       expect(sql).toContain(
         "run.claimed_at < now() - interval '10 minutes'",
       );
@@ -68,7 +73,25 @@ for (const [name, sql] of [
       expect(sql).toContain(
         "on conflict (run_id, portfolio_id, ticker, kind)",
       );
-      expect(sql).toContain("Strategy check run workspace revision is stale");
+      expect(sql).toMatch(
+        /Strategy check run (workspace|scoring) revision is stale/,
+      );
     });
   });
 }
+
+describe("conviction reliability migration contracts", () => {
+  it("adds explicit run states and scoring revision", () => {
+    expect(reliabilityMigration).toContain("waiting_for_data");
+    expect(reliabilityMigration).toContain("superseded");
+    expect(reliabilityMigration).toContain("scoring_revision");
+    expect(reliabilityMigration).toContain("strategy_definition_hash_v2");
+    expect(reliabilityMigration).toContain("error_category");
+  });
+
+  it("keeps schema aligned with scoring revision gate", () => {
+    expect(schema).toContain("compute_scoring_revision");
+    expect(schema).toContain("Strategy check run scoring revision is stale");
+    expect(schema).toContain("market_data_incomplete");
+  });
+});

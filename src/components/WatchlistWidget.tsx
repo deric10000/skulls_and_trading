@@ -1351,6 +1351,7 @@ export function WatchlistWidget({
     getWatchPullStamp,
     getWatchCheckSchedule,
     isConvictionScoreReady,
+    getConvictionPresentation,
     lastDataPullAtByStrategyId,
     requestImmediateStrategyCheck,
     marketLoading,
@@ -2591,6 +2592,11 @@ export function WatchlistWidget({
             item.ticker,
             rowStrategies.map((strategy) => strategy.id),
           );
+          const presentation = getConvictionPresentation(
+            selectedSource.id,
+            item.ticker,
+            rowStrategies.map((strategy) => strategy.id),
+          );
 
           const untracked =
             holding != null
@@ -2627,6 +2633,7 @@ export function WatchlistWidget({
                 scoreReady={
                   rowStrategies.length === 0 ? true : scoreReady
                 }
+                presentation={presentation}
               />
             </span>
           );

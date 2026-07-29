@@ -97,6 +97,7 @@ import {
   fetchStrategyCheckCombinedResults,
   filterCurrentStrategyCheckResults,
   fetchStrategyCheckLatestResults,
+  fetchStrategyCheckRuns,
   fetchStrategyCheckSchedules,
   fetchStrategyCheckState,
   fetchTickerMarks,
@@ -106,11 +107,17 @@ import {
   upsertTickerMarks,
   type StrategyCheckLatestResultRecord,
   type StrategyCheckCombinedResultRecord,
+  type StrategyCheckRunRecord,
   type StrategyCheckScheduleRecord,
   type StrategyCheckStateRecord,
   type UserFlags,
   type UserWorkspace,
 } from "../lib/userStore";
+import {
+  presentConvictionRun,
+  type ConvictionErrorCategory,
+  type ConvictionRunPresentation,
+} from "../lib/forge/convictionRunState";
 import { sanitizeStrategyPatch } from "../lib/userStore/strategyMerge";
 import type {
   Bucket,
@@ -414,6 +421,12 @@ export interface AppStateValue {
     ticker: string,
     strategyIds: string[],
   ) => boolean;
+  /** Explicit run presentation when score is not ready (pending vs warning). */
+  getConvictionPresentation: (
+    portfolioId: string,
+    ticker: string,
+    strategyIds: string[],
+  ) => ConvictionRunPresentation;
   marketLoading: boolean;
   marketError: string | null;
   refreshLiveMarket: () => Promise<void>;
@@ -566,6 +579,9 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const [serverCombinedResults, setServerCombinedResults] = useState<
     StrategyCheckCombinedResultRecord[]
   >([]);
+  const [serverCheckRuns, setServerCheckRuns] = useState<
+    StrategyCheckRunRecord[]
+  >([]);
   const persistEnabled = useRef(false);
   const invalidTimeToastKey = useRef("");
   const immediateCheckTimers = useRef(
@@ -621,6 +637,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       checkSchedules,
       latestResults,
       combinedResults,
+      checkRuns,
     ] = await Promise.all([
       measureAsync("hydrate-profile", () => fetchProfile(user)),
       measureAsync("hydrate-workspace", () =>
@@ -645,6 +662,11 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       serverScoringEnabled
         ? measureAsync("hydrate-combined-results", () =>
             fetchStrategyCheckCombinedResults(user.id),
+          )
+        : Promise.resolve([]),
+      serverScoringEnabled
+        ? measureAsync("hydrate-check-runs", () =>
+            fetchStrategyCheckRuns(user.id),
           )
         : Promise.resolve([]),
     ]);
@@ -685,6 +707,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     setServerCheckSchedules(checkSchedules);
     setServerLatestResults(latestResults);
     setServerCombinedResults(combinedResults);
+    setServerCheckRuns(checkRuns);
     hydrateTickerConvictionDirty(workspace.flags.tickerConvictionDirtyAt);
     const timeframeMigrations = consumeTimeframeMigrations();
     applyWorkspaceToSetters(workspace, {
@@ -817,17 +840,19 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const refreshServerScoringState = useCallback(async () => {
     const userId = userIdRef.current;
     if (!userId || getServerScoringMode() === "client") return;
-    const [checkState, checkSchedules, latestResults, combinedResults] =
+    const [checkState, checkSchedules, latestResults, combinedResults, checkRuns] =
       await Promise.all([
       fetchStrategyCheckState(userId),
       fetchStrategyCheckSchedules(userId),
       fetchStrategyCheckLatestResults(userId),
       fetchStrategyCheckCombinedResults(userId),
+      fetchStrategyCheckRuns(userId),
     ]);
     setServerCheckState(checkState);
     setServerCheckSchedules(checkSchedules);
     setServerLatestResults(latestResults);
     setServerCombinedResults(combinedResults);
+    setServerCheckRuns(checkRuns);
     if (getServerScoringMode() === "authoritative") {
       for (const row of checkState) {
         if (!row.lastCycleAsOf) continue;
@@ -1012,7 +1037,10 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   }, [persistSharedMarketState, refreshServerScoringState]);
 
   useEffect(() => {
-    if (!isAuthenticated || serverScoringMode === "authoritative") return;
+    if (!isAuthenticated) return;
+    // Authoritative mode still expedites registry sync (merge/replace), but
+    // Cloudflare cycle correctness must not depend on this — subscriptions
+    // snapshot is authoritative when configured.
     const tickers = [
       ...new Set(
         portfolios.flatMap((portfolio) =>
@@ -1020,6 +1048,11 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         ),
       ),
     ];
+    if (serverScoringMode === "authoritative") {
+      if (tickers.length === 0) return;
+      void registerPortfolioMarketSymbols(tickers, "replace");
+      return;
+    }
     const applied = strategies.filter(
       (strategy) => (strategy.appliedPortfolioIds ?? []).length > 0,
     );
@@ -1030,7 +1063,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       try {
         // Registry and KV cycle are independent; overlap their network waits.
         await Promise.allSettled([
-          registerPortfolioMarketSymbols(tickers),
+          registerPortfolioMarketSymbols(tickers, "replace"),
           refreshLiveMarket(),
         ]);
         // Missing GICS for live-only names: pending until soft hydrate or cycle.
@@ -1073,6 +1106,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     refreshLiveMarket,
     persistSharedMarketState,
     requestImmediateStrategyCheck,
+    serverScoringMode,
   ]);
 
   useEffect(() => {
@@ -1405,7 +1439,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         ...current,
         tickerConvictionDirtyAt: getTickerConvictionDirtyMap(),
       }));
-      void registerPortfolioMarketSymbols([ticker]);
+      void registerPortfolioMarketSymbols([ticker], "add");
       enqueueWeatherTaxonomyHydrate([ticker]);
       void fetchMarketQuotes([ticker]).then((result) => {
         const quote = result?.quotes[ticker];
@@ -2014,7 +2048,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
           ...current,
           tickerConvictionDirtyAt: getTickerConvictionDirtyMap(),
         }));
-        void registerPortfolioMarketSymbols([ticker]);
+        void registerPortfolioMarketSymbols([ticker], "add");
         requestImmediateStrategyCheck(strategyId);
       }
     },
@@ -2351,6 +2385,56 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     ],
   );
 
+  const getConvictionPresentation = useCallback(
+    (
+      portfolioId: string,
+      ticker: string,
+      strategyIds: string[],
+    ): ConvictionRunPresentation => {
+      const scoreReady = isConvictionScoreReadyForWatch(
+        portfolioId,
+        ticker,
+        strategyIds,
+      );
+      const symbol = ticker.toUpperCase();
+      const relevant = serverCheckRuns.filter(
+        (run) =>
+          strategyIds.includes(run.strategyId) &&
+          (run.affectedTickers.length === 0 ||
+            run.affectedTickers.includes(symbol)),
+      );
+      const latest = relevant[0];
+      const stateError = serverCheckState.find(
+        (row) =>
+          strategyIds.includes(row.strategyId) && row.lastError != null,
+      );
+      return presentConvictionRun({
+        dbStatus: latest?.status ?? "pending",
+        attemptCount: latest?.attemptCount,
+        error: latest?.error ?? stateError?.lastError ?? null,
+        errorCategory: (latest?.errorCategory ?? undefined) as
+          | ConvictionErrorCategory
+          | undefined,
+        affectedTickers: latest?.affectedTickers ?? [symbol],
+        nextRetryAt: latest?.nextRetryAt,
+        scoreReady,
+        hasHistoricalResult: serverLatestResults.some(
+          (row) =>
+            row.portfolioId === portfolioId &&
+            row.ticker === symbol &&
+            strategyIds.includes(row.strategyId),
+        ),
+        scheduledFor: latest?.scheduledFor ?? null,
+      });
+    },
+    [
+      isConvictionScoreReadyForWatch,
+      serverCheckRuns,
+      serverCheckState,
+      serverLatestResults,
+    ],
+  );
+
   const getPortfolioAlignment = useCallback(
     (portfolioId: string): PortfolioAlignment =>
       alignmentByPortfolio[portfolioId] ?? {
@@ -2591,6 +2675,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       getWatchPullStamp,
       getWatchCheckSchedule,
       isConvictionScoreReady: isConvictionScoreReadyForWatch,
+      getConvictionPresentation,
       marketLoading,
       marketError,
       refreshLiveMarket,
@@ -2666,6 +2751,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       getWatchPullStamp,
       getWatchCheckSchedule,
       isConvictionScoreReadyForWatch,
+      getConvictionPresentation,
       marketLoading,
       marketError,
       refreshLiveMarket,
@@ -2787,6 +2873,7 @@ export function useMarketState() {
     getWatchPullStamp: state.getWatchPullStamp,
     getWatchCheckSchedule: state.getWatchCheckSchedule,
     isConvictionScoreReady: state.isConvictionScoreReady,
+    getConvictionPresentation: state.getConvictionPresentation,
     marketLoading: state.marketLoading,
     marketError: state.marketError,
     refreshLiveMarket: state.refreshLiveMarket,

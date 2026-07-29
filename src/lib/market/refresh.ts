@@ -38,8 +38,9 @@ import {
 
 export async function registerPortfolioMarketSymbols(
   tickers: string[],
+  mode: "add" | "remove" | "replace" = "add",
 ): Promise<boolean> {
-  return registerMarketSymbols(tickers);
+  return registerMarketSymbols(tickers, mode);
 }
 
 export async function readLatestMarketCycle(

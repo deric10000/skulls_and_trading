@@ -6,6 +6,7 @@ import { computeStrategyScopeAlignment } from "../../../src/lib/forge/strategyAl
 import { mergeStrategiesForScoring } from "../../../src/lib/forge/mergeStrategies";
 import type { Portfolio, Strategy } from "../../../src/types";
 import {
+  requiredTickersForStrategyCheck,
   scoreAuthoritativeCheck,
   scoreStrategyCheck,
   type CompleteMarketCycle,
@@ -345,5 +346,30 @@ describe("server/browser bucket parity", () => {
     expect(snapshot.open_pnl_pct).toBeCloseTo(-40 / 140 * 100);
     expect(snapshot.metrics.trackedOpenPnlPct).toBeCloseTo(10 / 40 * 100);
     expect(snapshot.metrics.conviction).toBeTypeOf("number");
+  });
+
+  it("preflight required tickers match shouldScore holdings only", () => {
+    const assigned = holding("CELH", 1, 10);
+    const otherStrategyOnly = {
+      ...holding("NVDA", 1, 100),
+      strategyIds: ["aggressive-ai-high-beta"],
+    };
+    const scopedStrategy = {
+      ...strategy,
+      isDefault: true,
+      appliedPortfolioIds: ["book"],
+    };
+    const workspace: Workspace = {
+      portfolios: [{
+        id: "book",
+        label: "Book",
+        type: "portfolio",
+        holdings: [assigned, otherStrategyOnly],
+      }],
+      strategies: [scopedStrategy],
+    };
+    expect(requiredTickersForStrategyCheck(workspace, scopedStrategy)).toEqual([
+      "CELH",
+    ]);
   });
 });

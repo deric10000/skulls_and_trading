@@ -314,6 +314,24 @@ function shouldScore(
   );
 }
 
+/** Tickers the scorer will actually evaluate for this strategy (preflight must match). */
+export function requiredTickersForStrategyCheck(
+  workspace: Workspace,
+  strategy: Strategy,
+): string[] {
+  const applied = new Set(strategy.appliedPortfolioIds ?? []);
+  const tickers = new Set<string>();
+  for (const portfolio of workspace.portfolios ?? []) {
+    if (!applied.has(portfolio.id)) continue;
+    for (const holding of portfolio.holdings) {
+      if (shouldScore(strategy, portfolio.id, holding)) {
+        tickers.add(holding.ticker.toUpperCase());
+      }
+    }
+  }
+  return [...tickers].sort();
+}
+
 function hadQuantityFill(
   ledger: PortfolioTransaction[],
   portfolioId: string,
@@ -442,6 +460,17 @@ export function scoreStrategyCheck(
           results: scored.results,
           zoneResults: scored.zoneResults,
           cycleKey: cycle.cycleKey,
+          cycleAsOf: cycle.cycleAsOf,
+          checkEvaluations: (scored.zoneResults ?? []).map((zone) => ({
+            metric: zone.chip?.metric ?? zone.chip?.id ?? null,
+            timeframe: zone.chip?.timeframe ?? null,
+            observedValue: zone.value ?? null,
+            operator: zone.chip?.operator ?? null,
+            threshold: zone.chip?.threshold ?? null,
+            pass: zone.outcome === "pass",
+            outcome: zone.outcome,
+            cycleAsOf: cycle.cycleAsOf,
+          })),
         },
       };
       results.push(result);

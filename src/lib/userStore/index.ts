@@ -644,6 +644,75 @@ export interface StrategyCheckCombinedResultRecord {
   payload: Record<string, unknown>;
 }
 
+export interface StrategyCheckRunRecord {
+  id: string;
+  strategyId: string;
+  cadence: CheckInterval;
+  status: string;
+  attemptCount: number;
+  error: string | null;
+  errorCategory: string | null;
+  affectedTickers: string[];
+  nextRetryAt: string | null;
+  scheduledFor: string;
+  completedAt: string | null;
+}
+
+export function mapStrategyCheckRunRows(
+  rows: Array<Record<string, unknown>>,
+): StrategyCheckRunRecord[] {
+  return rows.map((row) => ({
+    id: String(row.id ?? ""),
+    strategyId: String(row.strategy_id ?? ""),
+    cadence: String(row.cadence ?? "1D") as CheckInterval,
+    status: String(row.status ?? "pending"),
+    attemptCount: Number(row.attempt_count ?? 0),
+    error: row.error == null ? null : String(row.error),
+    errorCategory: row.error_category == null ? null : String(row.error_category),
+    affectedTickers: Array.isArray(row.affected_tickers)
+      ? (row.affected_tickers as string[])
+      : [],
+    nextRetryAt: row.next_retry_at == null ? null : String(row.next_retry_at),
+    scheduledFor: String(row.scheduled_for ?? ""),
+    completedAt: row.completed_at == null ? null : String(row.completed_at),
+  }));
+}
+
+export async function fetchStrategyCheckRuns(
+  trustedUserId?: string,
+): Promise<StrategyCheckRunRecord[]> {
+  const supabase = getSupabase();
+  const userId =
+    trustedUserId ?? (await supabase.auth.getUser()).data.user?.id;
+  if (!userId) return [];
+  const { data, error } = await supabase
+    .from("strategy_check_runs")
+    .select(
+      "id,strategy_id,cadence,status,attempt_count,error,error_category,affected_tickers,next_retry_at,scheduled_for,completed_at",
+    )
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false })
+    .limit(200);
+  if (error) {
+    // Older DBs without new columns still return core fields when select fails —
+    // fall back to a minimal projection.
+    const fallback = await supabase
+      .from("strategy_check_runs")
+      .select(
+        "id,strategy_id,cadence,status,attempt_count,error,scheduled_for,completed_at",
+      )
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(200);
+    if (fallback.error) {
+      console.warn("strategy_check_runs fetch failed", fallback.error.message);
+      return [];
+    }
+    return mapStrategyCheckRunRows(fallback.data ?? []);
+  }
+  return mapStrategyCheckRunRows(data ?? []);
+}
+
 export function combinedResultMatchesScope(
   result: StrategyCheckCombinedResultRecord,
   strategyIds: string[],

@@ -638,17 +638,33 @@ offline only — do not use as SoT for Beta accounts.
 ### Cadence rules
 
 - Data plane: `worker/marketCycle.ts` — one-minute cron shards build a globally
-  coalesced hourly cycle from the durable per-user symbol registry. A cycle is
-  published only after all ticker batches finish; clients never see partial data.
+  coalesced hourly cycle. **Authoritative symbol source** is Supabase
+  `market_symbol_subscriptions` (derived from portfolios), synced into a
+  protected KV snapshot (`market:subscriptions:snapshot`) when
+  `SUPABASE_SERVICE_ROLE_KEY` is configured. Cycle collection **unions** that
+  snapshot with live `market:registry:*` entries so add/replace expedites are
+  not blocked until the next hourly sync; registry POSTs also patch the
+  snapshot on `add`/`replace`. `SYMBOL_AUTHORITY=kv_legacy` uses registry only.
+  Browser `POST /api/market/registry` is expedition only and supports explicit
+  `mode: add|remove|replace` (default singleton = `add` merge — never wipe
+  the account list). A cycle is published only after all ticker batches
+  finish; clients never see partial data.
 - Scoring plane: each immutable completed cycle enqueues a reference for
   `supabase/functions/process-conviction-cycle`. The Edge scorer claims
-  normalized `strategy_check_schedules` by independent cadence wall, calls the
-  unchanged pure Forge engine through `strategyAlignmentAdapter`, and commits
-  run/results/snapshots/events transactionally. `pg_cron` recovers missed
-  dispatches and expired leases. `src/lib/forge/scheduler.ts` is bounded
-  display/countdown + rollback logic, not the authoritative writer when
-  `SERVER_SCORING_ENABLED` is authoritative. Notification preferences do not
-  gate checks; login/manual refresh only read KV-backed cycle data.
+  normalized `strategy_check_schedules` by independent cadence wall, runs
+  preflight against cycle coverage for tickers the strategy will score,
+  calls the unchanged pure Forge engine
+  through `strategyAlignmentAdapter`, and commits run/results/snapshots/events
+  only for ready completions. Runs distinguish pending / waiting / failed /
+  superseded / incomplete (Score Pending is not used for terminal failures).
+  Claim/complete use a **scoring_revision** (portfolios+strategies+fills) so
+  unrelated workspace saves do not invalidate in-flight checks.
+  Definition hashes are scoped to applied portfolios/fills (`v2:` prefix).
+  `pg_cron` recovers missed dispatches and expired leases.
+  `src/lib/forge/scheduler.ts` is bounded display/countdown + rollback logic,
+  not the authoritative writer when `SERVER_SCORING_ENABLED` is authoritative.
+  Notification preferences do not gate checks; login/manual refresh only read
+  KV-backed cycle data.
 - Setup exception: adding one ticker requests one quote for immediate P&L but
   keeps conviction pending. Apply/update/Forge Preview reconciles the normalized
   strategy schedule as due, so the next completed cycle performs the first

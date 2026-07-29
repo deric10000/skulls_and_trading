@@ -87,12 +87,17 @@ covered by that strategy's `appliedPortfolioIds` for the same source.
   Paid/brokerage later swaps the same export — don't scatter `fetch()` into UI.
 - Live fields (quotes, fundies, techs, market context, Weather, search) go through
   Worker `/api/market/*` → KV-published market cycle → atomic `liveCache` commit
-  → FreeTier. Authenticated clients register up to 40 symbols each (800 active
-  symbols globally). SQL projection refresh serializes the global distinct-cap
-  check with a transaction advisory lock and rejects >800; KV is a rebuildable
-  client projection, and cycle aggregation rejects any transient >800 view
-  until persisted-workspace re-registration reconciles it. Login/manual refresh
-  never fan out upstream for steady-state cadence. Add-ticker requests one quote
+  → FreeTier. Authenticated clients may expedite registry sync (explicit
+  `add|remove|replace`; singleton defaults to merge). Authoritative cycle
+  symbols come from Supabase `market_symbol_subscriptions` → Worker snapshot
+  **unioned with** live registry entries when configured (`SYMBOL_AUTHORITY`);
+  registry POSTs also patch the snapshot on add/replace. Clients still respect
+  40 symbols each
+  (800 active globally). SQL projection refresh serializes the global
+  distinct-cap check with a transaction advisory lock and rejects >800; KV is
+  a rebuildable projection, and cycle aggregation rejects any transient >800
+  view until persisted-workspace reconciliation. Login/manual refresh never
+  fan out upstream for steady-state cadence. Add-ticker requests one quote
   for immediate P&L (score remains pending); apply/update/Forge Preview
   reconciles a server first-check due against the next completed cycle. The
   bounded browser scheduler/scoped pull remains rollback-only.
