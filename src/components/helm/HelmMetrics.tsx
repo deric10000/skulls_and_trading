@@ -1015,16 +1015,14 @@ export function HelmMetrics() {
             </span>
             {notificationSummary != null &&
             notificationSummary.episodes > 0 ? (
-              <span className="helm-metric-note helm-metric-note--split">
-                <span className="helm-metric-note-stat">
-                  {notificationSummary.newLaunches}
-                </span>{" "}
-                new ·{" "}
-                <span className="helm-metric-note-stat">
-                  {notificationSummary.distinct}
-                </span>{" "}
-                need attention
-              </span>
+              <div className="helm-metric-chips">
+                <span className="chip status--neutral">
+                  {notificationSummary.newLaunches} new
+                </span>
+                <span className="chip status--warning">
+                  {notificationSummary.distinct} need attention
+                </span>
+              </div>
             ) : null}
           </div>
         </div>
