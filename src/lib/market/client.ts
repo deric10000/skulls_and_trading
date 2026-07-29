@@ -67,13 +67,16 @@ export async function fetchMarketQuotes(
   }
 }
 
-export async function registerMarketSymbols(symbols: string[]): Promise<boolean> {
+export async function registerMarketSymbols(
+  symbols: string[],
+  mode: "add" | "remove" | "replace" = "add",
+): Promise<boolean> {
   const unique = [...new Set(symbols.map((s) => s.toUpperCase()).filter(Boolean))];
   try {
     const res = await fetch("/api/market/registry", {
       method: "POST",
       headers: await authHeaders({ "content-type": "application/json" }),
-      body: JSON.stringify({ symbols: unique }),
+      body: JSON.stringify({ symbols: unique, mode }),
     });
     return res.ok;
   } catch {

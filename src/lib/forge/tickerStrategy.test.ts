@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_STRATEGIES } from "../../data";
 import type { Portfolio, PortfolioHolding, Strategy } from "../../types";
-import { isUntrackedHolding, untrackedHoldings } from "./tickerStrategy";
+import { isUntrackedHolding, strategiesForHolding, untrackedHoldings } from "./tickerStrategy";
+import { canonicalStrategyIds } from "./convictionRunState";
 
 const DEFAULT_ID = DEFAULT_STRATEGIES[0]!.id;
 
@@ -72,5 +73,21 @@ describe("untracked holdings", () => {
         (item) => item.ticker,
       ),
     ).toEqual(["ZERO", "HELD"]);
+  });
+
+  it("returns applicable strategies sorted by id regardless of workspace order", () => {
+    const held = holding("AAA", ["z-strat", "a-strat"]);
+    const strategies = [
+      strategy("z-strat", ["book"], false),
+      strategy("a-strat", ["book"], false),
+    ];
+    const forward = strategiesForHolding(held, "book", strategies).map(
+      (item) => item.id,
+    );
+    const reverse = strategiesForHolding(held, "book", [...strategies].reverse())
+      .map((item) => item.id);
+    expect(forward).toEqual(["a-strat", "z-strat"]);
+    expect(reverse).toEqual(["a-strat", "z-strat"]);
+    expect(canonicalStrategyIds(forward)).toEqual(canonicalStrategyIds(reverse));
   });
 });

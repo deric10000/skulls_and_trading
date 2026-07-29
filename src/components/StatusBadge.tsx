@@ -120,24 +120,39 @@ export function WatchAlignStack({
   );
 }
 
-/** Meter + score, or pending cadence check (stock Tooltip + Info icon). */
+/** Meter + score, or pending/warning cadence check (stock Tooltip + Info icon). */
 export function WatchConvictionMeter({
   conviction,
   scoreReady,
+  presentation,
 }: {
   conviction: number;
   scoreReady: boolean;
+  presentation?: {
+    isPendingLike: boolean;
+    label: string;
+    tip: string;
+  };
 }) {
   if (!scoreReady) {
+    const label = presentation?.label ?? "Score Pending Next Check";
+    const tip =
+      presentation?.tip ??
+      CONVICTION_NO_SCORE_TIP;
+    const pendingLike = presentation?.isPendingLike ?? true;
     return (
-      <Tooltip title="Score pending next check" body={CONVICTION_NO_SCORE_TIP}>
+      <Tooltip title={label} body={tip}>
         <span
-          className="watch-conviction-meter watch-conviction-meter--pending"
+          className={
+            pendingLike
+              ? "watch-conviction-meter watch-conviction-meter--pending"
+              : "watch-conviction-meter watch-conviction-meter--pending watch-conviction-meter--warning"
+          }
           tabIndex={0}
         >
           <span className="watch-conviction-score watch-conviction-score--pending">
             <Info aria-hidden weight="regular" />
-            Score Pending Next Check
+            {label}
           </span>
         </span>
       </Tooltip>

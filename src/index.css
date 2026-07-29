@@ -3591,6 +3591,10 @@ span.checkbox {
   min-height: 1.1rem;
 }
 
+.watch-conviction-meter--warning .watch-conviction-score--pending {
+  color: var(--warning, #c4a35a);
+}
+
 .watch-conviction-score--pending {
   display: inline-flex;
   align-items: center;

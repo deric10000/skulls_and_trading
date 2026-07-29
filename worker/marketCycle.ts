@@ -12,6 +12,7 @@ import {
 } from "./convictionDispatch";
 
 const REGISTRY_PREFIX = "market:registry:";
+const SUBSCRIPTIONS_SNAPSHOT_KEY = "market:subscriptions:snapshot";
 const CYCLE_MANIFEST_PREFIX = "market:cycle:manifest:";
 const TECH_SHARD_PREFIX = "market:cycle:tech:";
 const CONTEXT_PREFIX = "market:cycle:context:";
@@ -27,14 +28,27 @@ const MAX_CONCURRENCY = 6;
 const HOUR_MS = 60 * 60_000;
 const SHARD_TTL_SECONDS = 3 * 24 * 60 * 60;
 
+export type RegistryWriteMode = "add" | "remove" | "replace";
+
 export interface MarketCycleEnv extends MarketEnv {
   MARKET_CACHE: KVNamespace;
   CONVICTION_CYCLE_QUEUE: Queue<ConvictionCycleReference>;
+  SUPABASE_URL?: string;
+  SUPABASE_SERVICE_ROLE_KEY?: string;
+  /** supabase = subscriptions snapshot authority; kv_legacy = registry-only */
+  SYMBOL_AUTHORITY?: string;
 }
 
 interface RegistryEntry {
   symbols: string[];
   updatedAt: string;
+}
+
+interface SubscriptionsSnapshot {
+  revision: string;
+  asOf: string;
+  symbols: string[];
+  source: "supabase" | "kv_registry";
 }
 
 interface CycleManifest {
@@ -242,7 +256,45 @@ async function mapWithConcurrency<T>(
   return results;
 }
 
+export function mergeRegistrySymbols(
+  existing: string[] | null | undefined,
+  incoming: string[],
+  mode: RegistryWriteMode,
+): string[] {
+  const prior = normalizeSymbols(existing ?? []);
+  const next = normalizeSymbols(incoming);
+  if (mode === "replace") return next;
+  if (mode === "remove") {
+    const drop = new Set(next);
+    return prior.filter((symbol) => !drop.has(symbol));
+  }
+  return normalizeSymbols([...prior, ...next]);
+}
+
+export function resolveRegistryWriteMode(
+  raw: unknown,
+  symbolCount: number,
+): RegistryWriteMode {
+  if (raw === "replace" || raw === "add" || raw === "remove") return raw;
+  return symbolCount <= 1 ? "add" : "replace";
+}
+
 async function registeredSymbols(env: MarketCycleEnv): Promise<string[]> {
+  const authority = (env.SYMBOL_AUTHORITY ?? "supabase").toLowerCase();
+  if (authority !== "kv_legacy") {
+    const snapshot = await env.MARKET_CACHE.get<SubscriptionsSnapshot>(
+      SUBSCRIPTIONS_SNAPSHOT_KEY,
+      "json",
+    );
+    if (snapshot?.symbols?.length) {
+      return selectActiveGlobalSymbols([
+        {
+          symbols: normalizeSymbols(snapshot.symbols),
+          updatedAt: snapshot.asOf || new Date().toISOString(),
+        },
+      ]);
+    }
+  }
   const keys: { name: string }[] = [];
   let cursor: string | undefined;
   do {
@@ -262,6 +314,72 @@ async function registeredSymbols(env: MarketCycleEnv): Promise<string[]> {
   return selectActiveGlobalSymbols(
     entries.filter((entry): entry is RegistryEntry => entry != null),
   );
+}
+
+/**
+ * Pull active symbols from Supabase market_symbol_subscriptions into KV.
+ * Requires SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY.
+ */
+export async function syncSubscriptionsSnapshot(
+  env: MarketCycleEnv,
+): Promise<SubscriptionsSnapshot | null> {
+  const base = env.SUPABASE_URL?.replace(/\/$/, "");
+  const key = env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!base || !key) return null;
+
+  const symbols: string[] = [];
+  let offset = 0;
+  const pageSize = 1000;
+  for (;;) {
+    const url =
+      `${base}/rest/v1/market_symbol_subscriptions` +
+      `?select=ticker&active=eq.true&order=ticker&limit=${pageSize}&offset=${offset}`;
+    const response = await fetch(url, {
+      headers: {
+        apikey: key,
+        authorization: `Bearer ${key}`,
+        accept: "application/json",
+      },
+    });
+    if (!response.ok) {
+      console.error(
+        JSON.stringify({
+          event: "subscriptions_snapshot_fetch_failed",
+          status: response.status,
+        }),
+      );
+      return null;
+    }
+    const rows = (await response.json()) as Array<{ ticker?: string }>;
+    for (const row of rows) {
+      if (typeof row.ticker === "string" && row.ticker) symbols.push(row.ticker);
+    }
+    if (rows.length < pageSize) break;
+    offset += pageSize;
+  }
+
+  const normalized = normalizeSymbols(symbols);
+  selectActiveGlobalSymbols([
+    { symbols: normalized, updatedAt: new Date().toISOString() },
+  ]);
+  const snapshot: SubscriptionsSnapshot = {
+    revision: `sha:${normalized.length}:${normalized.slice(0, 8).join(",")}`,
+    asOf: new Date().toISOString(),
+    symbols: normalized,
+    source: "supabase",
+  };
+  await env.MARKET_CACHE.put(
+    SUBSCRIPTIONS_SNAPSHOT_KEY,
+    JSON.stringify(snapshot),
+  );
+  console.log(
+    JSON.stringify({
+      event: "subscriptions_snapshot_synced",
+      count: normalized.length,
+      revision: snapshot.revision,
+    }),
+  );
+  return snapshot;
 }
 
 export function selectActiveGlobalSymbols(
@@ -302,13 +420,17 @@ async function registerSymbols(
   env: MarketCycleEnv,
   userId: string,
 ): Promise<Response> {
-  let body: { symbols?: unknown };
+  let body: { symbols?: unknown; mode?: unknown };
   try {
-    body = (await request.json()) as { symbols?: unknown };
+    body = (await request.json()) as { symbols?: unknown; mode?: unknown };
   } catch {
     return json({ error: "invalid json" }, 400);
   }
-  const symbols = normalizeSymbols(body.symbols);
+  const incoming = normalizeSymbols(body.symbols);
+  const mode = resolveRegistryWriteMode(body.mode, incoming.length);
+  const registryKey = `${REGISTRY_PREFIX}${userId}`;
+  const prior = await env.MARKET_CACHE.get<RegistryEntry>(registryKey, "json");
+  const symbols = mergeRegistrySymbols(prior?.symbols, incoming, mode);
   if (symbols.length > MAX_SYMBOLS_PER_USER) {
     console.error(
       JSON.stringify({
@@ -317,6 +439,7 @@ async function registerSymbols(
         userId,
         requested: symbols.length,
         limit: MAX_SYMBOLS_PER_USER,
+        mode,
       }),
     );
     return json(
@@ -334,7 +457,7 @@ async function registerSymbols(
   });
   const existingEntries = await Promise.all(
     existingKeys.keys
-      .filter((key) => key.name !== `${REGISTRY_PREFIX}${userId}`)
+      .filter((key) => key.name !== registryKey)
       .map((key) => env.MARKET_CACHE.get<RegistryEntry>(key.name, "json")),
   );
   try {
@@ -349,6 +472,7 @@ async function registerSymbols(
         scope: "global",
         userId,
         limit: MAX_GLOBAL_SYMBOLS,
+        mode,
       }),
     );
     return json(
@@ -360,10 +484,10 @@ async function registerSymbols(
     );
   }
   await env.MARKET_CACHE.put(
-    `${REGISTRY_PREFIX}${userId}`,
+    registryKey,
     JSON.stringify({ symbols, updatedAt: new Date().toISOString() }),
   );
-  return json({ registered: symbols.length, symbols });
+  return json({ registered: symbols.length, symbols, mode });
 }
 
 export async function handleMarketCycleApi(
@@ -825,6 +949,21 @@ export async function runScheduledMarketCycle(
   if (!isMarketWeek(scheduledTime)) return;
   const boundary = hourBoundary(scheduledTime);
   const minute = new Date(scheduledTime).getUTCMinutes();
+
+  // Refresh authoritative subscription snapshot once per hour (minute 0) when
+  // service-role credentials are configured. Failures keep the prior snapshot.
+  if (minute === 0) {
+    try {
+      await syncSubscriptionsSnapshot(env);
+    } catch (error) {
+      console.error(
+        JSON.stringify({
+          event: "subscriptions_snapshot_sync_error",
+          detail: error instanceof Error ? error.message : String(error),
+        }),
+      );
+    }
+  }
 
   const previousBoundary = boundary - HOUR_MS;
   const published = await env.MARKET_CACHE.get<MarketCyclePayload>(

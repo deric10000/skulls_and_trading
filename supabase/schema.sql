@@ -112,6 +112,8 @@ create table if not exists public.user_state (
   -- One-shot per-user UI flags (e.g. onboardingSeen after the first-login
   -- Onboarding modal is dismissed). Small marker map, not workspace data.
   flags jsonb not null default '{}'::jsonb,
+  -- Hash of portfolios + strategies + share_fills only (not logs/flags/UI).
+  scoring_revision text,
   updated_at timestamptz not null default now()
 );
 
@@ -351,18 +353,27 @@ create table if not exists public.strategy_check_runs (
   cycle_key text not null,
   definition_hash text not null,
   workspace_updated_at timestamptz not null,
+  scoring_revision text,
   status text not null default 'pending'
-    check (status in ('pending', 'running', 'complete', 'failed')),
+    check (status in (
+      'pending', 'running', 'complete', 'failed',
+      'superseded', 'waiting_for_data', 'incomplete', 'overdue'
+    )),
   attempt_count integer not null default 0 check (attempt_count >= 0),
   claimed_at timestamptz,
   completed_at timestamptz,
   error text,
+  error_category text,
+  affected_tickers text[] not null default '{}'::text[],
+  next_retry_at timestamptz,
   created_at timestamptz not null default now(),
   unique (user_id, strategy_id, cadence, scheduled_for)
 );
 create index if not exists strategy_check_runs_recovery_idx
   on public.strategy_check_runs (status, claimed_at)
-  where status in ('pending', 'running', 'failed');
+  where status in (
+    'pending', 'running', 'failed', 'waiting_for_data', 'incomplete', 'overdue'
+  );
 
 create table if not exists public.strategy_check_state (
   user_id uuid not null references auth.users (id) on delete cascade,
@@ -576,15 +587,12 @@ begin
     intervals.cadence,
     now(),
     true,
-    encode(extensions.digest(
-      concat(
-        strategy->>'id', ':', intervals.cadence, ':',
-        strategy::text, ':',
-        coalesce(workspace.portfolios, '[]'::jsonb)::text, ':',
-        coalesce(workspace.share_fills, '[]'::jsonb)::text
-      ),
-      'sha256'
-    ), 'hex'),
+    public.strategy_definition_hash_v2(
+      strategy,
+      intervals.cadence,
+      coalesce(workspace.portfolios, '[]'::jsonb),
+      coalesce(workspace.share_fills, '[]'::jsonb)
+    ),
     now()
   from jsonb_array_elements(workspace.strategies) strategy
   cross join lateral (
@@ -649,28 +657,44 @@ create trigger user_state_refresh_scoring_projections
   after insert or update of portfolios, strategies or delete on public.user_state
   for each row execute function public.on_user_state_refresh_scoring_projections();
 
+drop function if exists public.claim_due_strategy_check_runs(timestamptz, text, integer);
+
 create or replace function public.claim_due_strategy_check_runs(
   p_cycle_as_of timestamptz,
   p_cycle_key text,
   p_limit integer default 25
-)
-returns table (
-  run_id uuid, user_id uuid, strategy_id text,
-  cadence text, scheduled_for timestamptz,
-  definition_hash text, workspace_updated_at timestamptz,
+) returns table (
+  run_id uuid,
+  user_id uuid,
+  strategy_id text,
+  cadence text,
+  scheduled_for timestamptz,
+  definition_hash text,
+  workspace_updated_at timestamptz,
+  scoring_revision text,
   attempt_count integer
 )
-language plpgsql security definer set search_path = public
+language plpgsql
+security definer
+set search_path = public
 as $$
 begin
   insert into public.strategy_check_runs (
     user_id, strategy_id, cadence, scheduled_for, cycle_as_of, cycle_key,
-    definition_hash, workspace_updated_at
+    definition_hash, workspace_updated_at, scoring_revision
   )
   select
     schedule.user_id, schedule.strategy_id, schedule.cadence,
     schedule.next_due_at, p_cycle_as_of, p_cycle_key,
-    schedule.definition_hash, workspace.updated_at
+    schedule.definition_hash, workspace.updated_at,
+    coalesce(
+      workspace.scoring_revision,
+      public.compute_scoring_revision(
+        coalesce(workspace.portfolios, '[]'::jsonb),
+        coalesce(workspace.strategies, '[]'::jsonb),
+        coalesce(workspace.share_fills, '[]'::jsonb)
+      )
+    )
   from public.strategy_check_schedules schedule
   join public.user_state workspace on workspace.user_id = schedule.user_id
   where schedule.enabled and schedule.next_due_at <= p_cycle_as_of
@@ -679,9 +703,12 @@ begin
       cycle_key = excluded.cycle_key,
       definition_hash = excluded.definition_hash,
       workspace_updated_at = excluded.workspace_updated_at,
+      scoring_revision = excluded.scoring_revision,
       status = 'pending',
       claimed_at = null
-  where public.strategy_check_runs.status in ('pending', 'failed');
+  where public.strategy_check_runs.status in (
+    'pending', 'failed', 'waiting_for_data', 'incomplete', 'overdue'
+  );
 
   return query
   with claimable as (
@@ -694,12 +721,20 @@ begin
     join public.user_state workspace on workspace.user_id = run.user_id
     where run.cycle_key = p_cycle_key
       and run.definition_hash = schedule.definition_hash
-      and run.workspace_updated_at = workspace.updated_at
+      and coalesce(run.scoring_revision, '') = coalesce(
+        workspace.scoring_revision,
+        public.compute_scoring_revision(
+          coalesce(workspace.portfolios, '[]'::jsonb),
+          coalesce(workspace.strategies, '[]'::jsonb),
+          coalesce(workspace.share_fills, '[]'::jsonb)
+        ),
+        ''
+      )
       and (
         run.status = 'pending'
         or (
-          run.status = 'failed'
-          and run.completed_at < now() - interval '5 minutes'
+          run.status in ('failed', 'waiting_for_data', 'incomplete', 'overdue')
+          and coalesce(run.completed_at, run.created_at) < now() - interval '5 minutes'
         )
         or (run.status = 'running' and run.claimed_at < now() - interval '10 minutes')
       )
@@ -712,20 +747,23 @@ begin
     set status = 'running',
         attempt_count = run.attempt_count + 1,
         claimed_at = now(),
-        error = null
+        error = null,
+        error_category = null
     from claimable
     where run.id = claimable.id
     returning
       run.id, run.user_id, run.strategy_id, run.cadence, run.scheduled_for,
-      run.definition_hash, run.workspace_updated_at, run.attempt_count
+      run.definition_hash, run.workspace_updated_at, run.scoring_revision,
+      run.attempt_count
   )
   select claimed.id, claimed.user_id, claimed.strategy_id,
          claimed.cadence, claimed.scheduled_for,
          claimed.definition_hash, claimed.workspace_updated_at,
-         claimed.attempt_count
+         claimed.scoring_revision, claimed.attempt_count
   from claimed;
 end;
 $$;
+
 revoke all on function public.claim_due_strategy_check_runs(timestamptz, text, integer)
   from public;
 grant execute on function public.claim_due_strategy_check_runs(timestamptz, text, integer)
@@ -747,7 +785,7 @@ returns boolean language plpgsql security definer set search_path = public
 as $$
 declare
   claimed public.strategy_check_runs%rowtype;
-  current_workspace_updated_at timestamptz;
+  current_scoring_revision text;
   current_definition_hash text;
 begin
   select * into claimed from public.strategy_check_runs
@@ -757,16 +795,45 @@ begin
   if claimed.status <> 'running' then
     raise exception 'Strategy check run is not claimed';
   end if;
-  select updated_at into current_workspace_updated_at
+  -- Only scoring-relevant revision invalidates completion (not logs/flags/UI).
+  select coalesce(
+    scoring_revision,
+    public.compute_scoring_revision(
+      coalesce(portfolios, '[]'::jsonb),
+      coalesce(strategies, '[]'::jsonb),
+      coalesce(share_fills, '[]'::jsonb)
+    )
+  ) into current_scoring_revision
   from public.user_state where user_id = claimed.user_id;
   select definition_hash into current_definition_hash
   from public.strategy_check_schedules
   where user_id = claimed.user_id
     and strategy_id = claimed.strategy_id
     and cadence = claimed.cadence;
-  if current_workspace_updated_at is distinct from claimed.workspace_updated_at
-     or current_definition_hash is distinct from claimed.definition_hash then
-    raise exception 'Strategy check run workspace revision is stale';
+  if (
+        coalesce(claimed.scoring_revision, '') <> ''
+        and current_scoring_revision is distinct from claimed.scoring_revision
+      )
+      or current_definition_hash is distinct from claimed.definition_hash then
+    update public.strategy_check_runs
+    set status = 'superseded',
+        error = 'scoring_revision_mismatch',
+        error_category = 'scoring_revision_mismatch',
+        completed_at = now()
+    where id = claimed.id
+      and status = 'running';
+    raise exception 'Strategy check run scoring revision is stale';
+  end if;
+
+  if coalesce(jsonb_array_length(p_results), 0) = 0
+     and coalesce(jsonb_array_length(p_combined_results), 0) = 0 then
+    update public.strategy_check_runs
+    set status = 'incomplete',
+        error = 'market_data_incomplete',
+        error_category = 'market_data_incomplete',
+        completed_at = now()
+    where id = claimed.id;
+    return false;
   end if;
 
   if exists (

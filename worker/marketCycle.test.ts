@@ -7,6 +7,8 @@ import {
   hasCompleteTechnicalShard,
   MAX_GLOBAL_SYMBOLS,
   MAX_SYMBOLS_PER_USER,
+  mergeRegistrySymbols,
+  resolveRegistryWriteMode,
   selectActiveGlobalSymbols,
   shardCapacityPlan,
 } from "./marketCycle";
@@ -230,5 +232,17 @@ describe("market cycle scale and completeness", () => {
     expect(body.cycle.symbols).toEqual(allowed);
     expect(Object.keys(body.cycle.quotes)).toEqual(allowed);
     expect(body.cycle.errors).toEqual(["T0320: visible"]);
+  });
+
+  it("merges singleton registry adds instead of replacing the account list", () => {
+    expect(
+      mergeRegistrySymbols(["GOOG", "NVDA"], ["CRWV"], "add").sort(),
+    ).toEqual(["CRWV", "GOOG", "NVDA"]);
+    expect(mergeRegistrySymbols(["GOOG", "NVDA"], ["CRWV"], "replace")).toEqual([
+      "CRWV",
+    ]);
+    expect(resolveRegistryWriteMode(undefined, 1)).toBe("add");
+    expect(resolveRegistryWriteMode(undefined, 3)).toBe("replace");
+    expect(resolveRegistryWriteMode("remove", 1)).toBe("remove");
   });
 });

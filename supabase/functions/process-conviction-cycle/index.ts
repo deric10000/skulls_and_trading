@@ -7,6 +7,11 @@ import {
 } from "../_shared/alignment.ts";
 import { nextCheckBoundary } from "../_shared/cadence.ts";
 import { runIsolatedBatch } from "../_shared/isolatedBatch.ts";
+import {
+  classifyPreflightFailure,
+  incompleteCycleTickers,
+  missingCycleSymbols,
+} from "../_shared/preflight.ts";
 import type { CheckInterval } from "../../../src/types.ts";
 
 interface CycleRequest {
@@ -24,6 +29,7 @@ interface ClaimedRun {
   scheduled_for: string;
   definition_hash: string;
   workspace_updated_at: string;
+  scoring_revision?: string | null;
   attempt_count: number;
 }
 
@@ -236,17 +242,48 @@ Deno.serve(async (request: Request): Promise<Response> => {
           }
           const { data: workspace, error: workspaceError } = await supabase
             .from("user_state")
-            .select("portfolios,strategies,share_fills,updated_at")
+            .select("portfolios,strategies,share_fills,updated_at,scoring_revision")
             .eq("user_id", run.user_id)
             .single();
           if (workspaceError) {
             throw new Error(`Workspace read failed: ${workspaceError.message}`);
           }
+          const currentScoringRevision =
+            typeof workspace.scoring_revision === "string" &&
+            workspace.scoring_revision.length > 0
+              ? workspace.scoring_revision
+              : null;
           if (
-            typeof workspace.updated_at !== "string" ||
-            Date.parse(workspace.updated_at) !== Date.parse(run.workspace_updated_at)
+            run.scoring_revision &&
+            currentScoringRevision &&
+            run.scoring_revision !== currentScoringRevision
           ) {
-            throw new Error("Claimed workspace revision changed before scoring");
+            throw new Error(
+              JSON.stringify({
+                softFail: true,
+                status: "superseded",
+                category: "workspace_superseded",
+                affected: [],
+                message: "scoring_revision_mismatch",
+              }),
+            );
+          }
+          // Legacy runs without scoring_revision: keep updated_at gate.
+          if (
+            !run.scoring_revision &&
+            (typeof workspace.updated_at !== "string" ||
+              Date.parse(workspace.updated_at) !==
+                Date.parse(run.workspace_updated_at))
+          ) {
+            throw new Error(
+              JSON.stringify({
+                softFail: true,
+                status: "superseded",
+                category: "workspace_superseded",
+                affected: [],
+                message: "workspace_superseded",
+              }),
+            );
           }
           const { data: scheduleRows, error: schedulesError } = await supabase
             .from("strategy_check_schedules")
@@ -257,6 +294,40 @@ Deno.serve(async (request: Request): Promise<Response> => {
           }
           const schedules = (scheduleRows ?? []) as ScheduleRevision[];
           const typedWorkspace = workspace as Workspace;
+          const strategy = typedWorkspace.strategies.find(
+            (item) => item.id === run.strategy_id,
+          );
+          const requiredTickers = [
+            ...new Set(
+              (typedWorkspace.portfolios ?? [])
+                .filter((portfolio) =>
+                  (strategy?.appliedPortfolioIds ?? []).includes(portfolio.id),
+                )
+                .flatMap((portfolio) =>
+                  portfolio.holdings.map((holding) =>
+                    holding.ticker.toUpperCase(),
+                  ),
+                ),
+            ),
+          ];
+          const preflight = classifyPreflightFailure({
+            missingFromCycle: missingCycleSymbols(requiredTickers, cycle),
+            incompleteTickers: incompleteCycleTickers(requiredTickers, cycle),
+            hasContext: cycle.context != null,
+          });
+          if (preflight) {
+            const exhausted = run.attempt_count >= 5;
+            const err = new Error(
+              JSON.stringify({
+                softFail: true,
+                status: exhausted ? "failed" : preflight.status,
+                category: exhausted ? "retry_exhausted" : preflight.category,
+                affected: preflight.affected,
+                message: preflight.message,
+              }),
+            );
+            throw err;
+          }
           const individual = scoreStrategyCheck(
             typedWorkspace,
             run.strategy_id,
@@ -264,7 +335,7 @@ Deno.serve(async (request: Request): Promise<Response> => {
             cycle,
           );
           const combinedKey =
-            `${run.user_id}|${run.workspace_updated_at}|${cycle.cycleKey}`;
+            `${run.user_id}|${run.scoring_revision ?? run.workspace_updated_at}|${cycle.cycleKey}`;
           let combined = combinedByWorkspaceCycle.get(combinedKey);
           if (!combined) {
             combined = scoreCombinedAuthority(typedWorkspace, cycle);
@@ -287,7 +358,11 @@ Deno.serve(async (request: Request): Promise<Response> => {
               p_portfolio_snapshots: output.portfolioSnapshots,
               p_combined_results: output.combinedResults.map((result) => ({
                 ...result,
-                input_revision: scopeRevision(result.strategy_ids, schedules),
+                strategy_ids: [...result.strategy_ids].sort(),
+                input_revision: scopeRevision(
+                  [...result.strategy_ids].sort(),
+                  schedules,
+                ),
               })),
               p_whole_book_snapshots: output.wholeBookSnapshots,
               p_events: output.events,
@@ -298,23 +373,61 @@ Deno.serve(async (request: Request): Promise<Response> => {
           }
         },
         async (run, message) => {
+          let status = "failed";
+          let category = "unknown";
+          let affected: string[] = [];
+          let errorText = message;
+          try {
+            const parsed = JSON.parse(message) as {
+              softFail?: boolean;
+              status?: string;
+              category?: string;
+              affected?: string[];
+              message?: string;
+            };
+            if (parsed.softFail) {
+              status = parsed.status ?? "failed";
+              category = parsed.category ?? "unknown";
+              affected = parsed.affected ?? [];
+              errorText = parsed.message ?? message;
+            }
+          } catch {
+            if (message.includes("revision")) {
+              category = "scoring_revision_mismatch";
+            }
+          }
           const { error: failError } = await supabase.rpc(
             "fail_strategy_check_run",
             {
               p_run_id: run.run_id,
-              p_error: message,
+              p_error: errorText,
+              p_error_category: category,
+              p_affected_tickers: affected,
+              p_status: status,
+              p_next_retry_at:
+                status === "failed" || status === "superseded"
+                  ? null
+                  : new Date(Date.now() + 5 * 60_000).toISOString(),
             },
           );
           if (failError) {
-            throw new Error(failError.message);
+            const { error: legacyFail } = await supabase.rpc(
+              "fail_strategy_check_run",
+              {
+                p_run_id: run.run_id,
+                p_error: errorText,
+              },
+            );
+            if (legacyFail) throw new Error(legacyFail.message);
           }
           console.error(
             JSON.stringify({
               event: "conviction_run",
               runId: run.run_id,
               strategyId: run.strategy_id,
-              outcome: "failed",
-              error: message,
+              outcome: status,
+              error: errorText,
+              category,
             }),
           );
         },

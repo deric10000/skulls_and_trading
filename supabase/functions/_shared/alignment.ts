@@ -442,6 +442,17 @@ export function scoreStrategyCheck(
           results: scored.results,
           zoneResults: scored.zoneResults,
           cycleKey: cycle.cycleKey,
+          cycleAsOf: cycle.cycleAsOf,
+          checkEvaluations: (scored.zoneResults ?? []).map((zone) => ({
+            metric: zone.chip?.metric ?? zone.chip?.id ?? null,
+            timeframe: zone.chip?.timeframe ?? null,
+            observedValue: zone.value ?? null,
+            operator: zone.chip?.operator ?? null,
+            threshold: zone.chip?.threshold ?? null,
+            pass: zone.outcome === "pass",
+            outcome: zone.outcome,
+            cycleAsOf: cycle.cycleAsOf,
+          })),
         },
       };
       results.push(result);
