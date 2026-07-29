@@ -475,12 +475,17 @@ Metrics reduce an existing `PortfolioAlignment` (all-strategy memoized
 `computePortfolioAlignment` when one strategy is picked) through the pure
 `src/lib/forge/helmMetrics.ts` (`computeHelmMetrics`): MV-weighted conviction,
 aggregate open P&L for live reads (open P&L / cost basis via
-`portfolioRunningTotals` — used by Current Watch; Helm Open P&L headline uses
-snapshot deltas instead), strategy coverage, status mix (by `STATUS_TONE`,
+`portfolioRunningTotals` — used by Current Watch; All Strategies Helm Open P&L
+headline is the shared timeframe window delta (live whole-book % stays computed
+for the upcoming switch); single-strategy Helm headline still
+uses all-time snapshot deltas), strategy coverage, status mix (by `STATUS_TONE`,
 shown as Plan Alignment chips; footer note sums those chip counts as **Total
 Stocks in Alignment**), and composition by headline bucket/lens
-(rendered as its own Progress-style section of metric cards — placeholder
-`held/held` until Forge position-holdings rules supply a target). When a single
+(rendered as its own Progress-style section of metric cards — each lens
+count over whole-book portfolio holdings, e.g. 5/8 · % of holdings;
+multi-strategy membership can sum above 100%; **Strategy Coverage** shows only
+in All Strategies and hides when a single strategy is scoped so the selected
+lens card keeps the same share numbers). When a single
 strategy is picked, every Progress metric — **including Open P&L scope** —
 reduces only over holdings enabled for that strategy
 (`shouldScoreTickerWithStrategy` / `tickerInScope`, same rule as Current Watch's
@@ -500,16 +505,28 @@ Technical Setup, etc.). No fabricated history when marks are missing.
 below). Helm fetches the **full** series for the mirrored portfolio + scope
 (`strategy_id` or `''` for All) — no short day cap — and derives:
 
-- **Headline** = all-time period change: `openPnlPct(last) − openPnlPct(first)`
-  via `pnlDeltaPct` (honest empty / em dash when fewer than two snapshot days).
-- **Under the timeframe tag** (default “1 WEEK”; toggle UI later) = the same
-  delta over the shared Helm spark window (`helmTimeframe` / `sparkRange`).
+- **All Strategies headline** = window Open P&L delta over whole-book
+  `open_pnl_pct` (same story as the sparks / “1 WEEK” tag). Live whole-book %
+  (Current Watch parity via `portfolioRunningTotals`) stays computed for the
+  upcoming timeframe switch UI but is not the All Strategies headline today.
+- **Single-strategy headline** = all-time period change:
+  `openPnlPct(last) − openPnlPct(first)` via `pnlDeltaPct` (honest empty / em
+  dash when fewer than two snapshot days); the small % under the timeframe tag
+  is the window delta.
+- **Under the timeframe tag** (default “1 WEEK”; toggle UI later) = window
+  delta over whole-book `open_pnl_pct` (All Strategies) or scoped strategy
+  `open_pnl_pct` (single strategy), via the shared Helm spark window.
+  All Strategies also stacks per-applied-strategy Open P&L sparklines under the
+  whole-book spark (strategy name label under each lane); single-strategy scope
+  keeps one spark. All Strategies omits the duplicate small % under the tag
+  when the headline already is that window delta.
 
 Spark tips/axis are clipped through the Last Conviction Check ET day so a
 mid-day refresh cannot show a calendar day ahead of the toast. Seed for a
 missing window day uses the **latest snapshot level**, never live open-book %.
 Current Watch footer Total / Open P&L remains live open-book % via
-`portfolioRunningTotals` — different meaning by design.
+`portfolioRunningTotals`. All Strategies Helm headline is the window delta
+(spark-aligned); live whole-book % is reserved for the timeframe switch.
 
 **Shared Helm timeframe** (`src/lib/finance/helmTimeframe.ts`): default `1w`
 (indicator only; toggle UI later). Also plumbs `1m` / `1y` / `ytd` plus cadence
@@ -521,7 +538,8 @@ timeframe.
 **Plan Adherence** (below Composition): Average Hold Time (all-time mean length
 of share **episodes** from the qty ledger — sell to zero ends an episode;
 re-entry starts a new one; open positions with shares > 0 include length-to-date;
-respects portfolio + strategy scope; card tag is always “All time”),
+respects portfolio + strategy scope; card tag is always “All time”; note reads
+**Avg. hold time of stocks since** the earliest in-scope open date),
 Notifications (continuity-aware **notification runs** from status check
 events: same ticker/strategy/status across consecutive checks = one episode;
 clear then re-fire = a new episode; headline = episodes overlapping the Helm

@@ -313,6 +313,7 @@ describe("computeAverageHoldTime", () => {
     // Closed 14d (Jun 1→15) + open 10d (Jul 1→11) → mean 12
     expect(result.episodeCount).toBe(2);
     expect(result.avgDays).toBe(12);
+    expect(result.sinceDate).toBe("2026-06-01");
   });
 
   it("returns null when there are no share episodes", () => {
@@ -324,8 +325,8 @@ describe("computeAverageHoldTime", () => {
         strategyIds: null,
         tickersInScope: ["SOFI"],
         asOfDate: "2026-07-11",
-      }).avgDays,
-    ).toBeNull();
+      }),
+    ).toEqual({ avgDays: null, episodeCount: 0, sinceDate: null });
   });
 });
 

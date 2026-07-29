@@ -1081,8 +1081,15 @@ button {
 }
 
 .helm-metrics-grid {
+  /* Shared floor ≈ content + existing card padding. auto-fit drops 3→2→1
+     columns from the Helm column width (not the viewport), so cards wrap
+     before values like Total Conviction “/100” protrude. */
+  --helm-metric-min: 13.5rem;
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(
+    auto-fit,
+    minmax(min(100%, var(--helm-metric-min)), 1fr)
+  );
   gap: var(--space-2);
   /* Rows grow with the tallest card’s content — never clip chips/sparks. */
   grid-auto-rows: minmax(min-content, auto);
@@ -1101,6 +1108,7 @@ button {
   padding: 0.75rem 0.85rem;
   height: 100%;
   min-height: min-content;
+  min-width: min(100%, var(--helm-metric-min, 13.5rem));
   overflow: visible;
   box-sizing: border-box;
 }
@@ -1196,6 +1204,15 @@ button {
   gap: 0.3rem;
   text-align: center;
   min-height: min-content;
+  overflow: visible;
+  flex-shrink: 0;
+}
+
+.helm-metric--text .helm-metric-label {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-align: center;
+  width: 100%;
 }
 
 /* Plan Alignment: overall status + tone totals, stacked top-left. */
@@ -1228,26 +1245,84 @@ button {
   width: auto;
 }
 
-/* Open P&L: head + value stay top; spark + dates pin to the bottom when the
-   card stretches (multi-column). Use margin-top:auto — not flex:1/min-height:0 —
-   so Safari cannot shrink the block below chart+dates and spill axis labels
-   outside the card border (seen on real iOS; desktop mobile viewport often misses it). */
+/* Open P&L: head + value stay top; spark group centers in leftover space when
+   the card stretches. Lane gaps keep each label with its plot without crowding. */
 .helm-metric--pnl .helm-metric-spark-block {
   margin-top: auto;
+  margin-bottom: auto;
   display: flex;
   flex-direction: column;
-  gap: 0.15rem;
+  align-items: stretch;
+  gap: 0.35rem;
   flex: 0 0 auto;
   width: 100%;
+  max-width: 100%;
+  align-self: center;
 }
 
 .helm-metric--pnl .helm-metric-spark-block .helm-metric-spark {
   margin-top: 0;
   flex-shrink: 0;
+  width: 100%;
 }
 
 .helm-metric--pnl .helm-metric-spark-block .helm-metric-spark-dates {
   flex-shrink: 0;
+  width: 100%;
+}
+
+/* All Strategies: whole-book spark on top, then each applied strategy. */
+.helm-metric--pnl .helm-metric-spark-stack {
+  margin-top: auto;
+  margin-bottom: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.7rem;
+  flex: 0 0 auto;
+  width: 100%;
+  max-width: 100%;
+  align-self: center;
+}
+
+.helm-metric--pnl-stacked {
+  gap: 0.5rem;
+}
+
+.helm-metric-spark-lane {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.28rem;
+  width: 100%;
+  min-width: 0;
+  flex: 0 0 auto;
+}
+
+.helm-metric-spark-lane .helm-metric-spark {
+  margin-top: 0;
+  flex-shrink: 0;
+  width: 100%;
+}
+
+/* Prefer wrap over ellipsis so names stay readable when the card is narrow. */
+.helm-metric-spark-lane .helm-metric-note {
+  overflow: visible;
+  text-overflow: unset;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.25;
+  text-align: left;
+  /* Match leftmost plot: LWC point markers sit ~radius inset from the edge. */
+  padding-left: 3px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.helm-metric--pnl .helm-metric-spark-stack .helm-metric-spark-dates {
+  flex-shrink: 0;
+  margin-top: 0.25rem;
+  width: 100%;
 }
 
 .helm-metric--conviction {
@@ -1267,7 +1342,11 @@ button {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  min-width: 0;
+  max-width: 100%;
+}
+
+.helm-conviction-score-row .helm-metric-value {
+  flex: 0 0 auto;
 }
 
 .helm-conviction-copy {
@@ -1396,18 +1475,6 @@ button {
   flex-wrap: wrap;
   gap: 0.4rem;
   margin-top: 0.15rem;
-}
-
-@media (max-width: 1023px) {
-  .helm-metrics-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 560px) {
-  .helm-metrics-grid {
-    grid-template-columns: 1fr;
-  }
 }
 
 .onboarding-badge-wrap {

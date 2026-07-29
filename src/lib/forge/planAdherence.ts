@@ -469,6 +469,8 @@ export interface AverageHoldTimeResult {
   /** Mean episode length in calendar days; null when no episodes. */
   avgDays: number | null;
   episodeCount: number;
+  /** Earliest in-scope position open (YYYY-MM-DD); null when no episodes. */
+  sinceDate: string | null;
 }
 
 /**
@@ -536,12 +538,17 @@ export function computeAverageHoldTime(input: {
   }
 
   if (episodes.length === 0) {
-    return { avgDays: null, episodeCount: 0 };
+    return { avgDays: null, episodeCount: 0, sinceDate: null };
   }
   const sum = episodes.reduce((acc, episode) => acc + episode.lengthDays, 0);
+  let sinceDate = episodes[0]!.startDate;
+  for (const episode of episodes) {
+    if (episode.startDate < sinceDate) sinceDate = episode.startDate;
+  }
   return {
     avgDays: sum / episodes.length,
     episodeCount: episodes.length,
+    sinceDate,
   };
 }
 

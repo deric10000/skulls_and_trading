@@ -236,10 +236,13 @@ readings — **do not** re-query Yahoo for scoring at click time.
 A holding with no applicable assigned strategy is **Untracked**, not a 0%
 conviction score. It appears only in All Strategies Current Watch, is hidden
 under a specific strategy, and remains in Current Watch whole-book Open P&L.
-Helm excludes it from All-Strategies conviction/alignment/composition and from
-tracked Open P&L history, while Strategy Coverage keeps it in the denominator.
-No historical assignment is fabricated: `metrics.trackedOpenPnlPct` begins
-forward-only and Helm stays pending until two honest points exist.
+Helm excludes it from All-Strategies conviction/alignment/composition, while
+Strategy Coverage keeps it in the denominator. Helm All Strategies Open P&L
+headline is the shared timeframe window delta over whole-book history
+(spark-aligned); live whole-book % stays computed for the timeframe switch.
+`metrics.trackedOpenPnlPct` remains written for forward tracked-only history
+but is not the All Strategies Helm spark source. No historical assignment is
+fabricated: `metrics.trackedOpenPnlPct` begins forward-only.
 
 ## 8. Deferred (later passes)
 

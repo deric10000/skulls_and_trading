@@ -32,11 +32,12 @@ import {
   pnlDeltaPct,
   seriesToConvictionSparkPoints,
   seriesToSparkPoints,
-  seriesToTrackedOpenPnlSparkPoints,
   sparkRangeShowsPointMarkers,
   type HelmTimeframe,
   type SparkPoint,
 } from "../../lib/finance/portfolioSnapshotSeries";
+import { portfolioRunningTotals } from "../../lib/finance/portfolioTotals";
+import { getLiveQuote } from "../../lib/market/liveCache";
 import {
   countActions,
   computeAverageHoldTime,
@@ -113,14 +114,24 @@ function resolveCssColor(varName: string, fallback: string): string {
   return value || fallback;
 }
 
+function pnlSparkLineColor(points: SparkPoint[]): string {
+  const delta = pnlDeltaPct(points);
+  const up = (delta ?? 0) >= 0;
+  return resolveCssColor(
+    up ? "--positive" : "--negative",
+    up ? "#3d9a6a" : "#c45c4a",
+  );
+}
+
 /**
  * The Helm — derived progress metrics for the portfolio selected in Current
  * Watch (mirrored via shared AppState). Strategy scope is shared Home state
  * (`watchStrategyScopeId`) so Progress and Current Watch filter together.
  * Open P&L and Total Conviction history load from portfolio_snapshots
- * (additive; scoring unchanged). Open P&L headline = all-time snapshot
- * `openPnlPct` delta; range under the timeframe tag uses the shared Helm
- * window. Shared spark range defaults to 1 week (toggle UI later).
+ * (additive; scoring unchanged). All Strategies Open P&L headline = window
+ * delta (matches spark colors); live whole-book % stays computed for the
+ * upcoming timeframe switch. Single-strategy scope keeps all-time snapshot
+ * delta as the headline. Shared spark range defaults to 1 week (toggle UI later).
  */
 export function HelmMetrics() {
   const {
@@ -167,6 +178,10 @@ export function HelmMetrics() {
   }, [portfolio, strategies]);
 
   const [pnlSparkPoints, setPnlSparkPoints] = useState<SparkPoint[]>([]);
+  /** Per-strategy Open P&L series for All Strategies stacked sparks. */
+  const [pnlStrategySeries, setPnlStrategySeries] = useState<
+    Array<{ strategyId: string; points: SparkPoint[] }>
+  >([]);
   const [convictionSparkPoints, setConvictionSparkPoints] = useState<
     SparkPoint[]
   >([]);
@@ -264,6 +279,7 @@ export function HelmMetrics() {
   useEffect(() => {
     if (!portfolio || !alignment || !userProfile?.id) {
       setPnlSparkPoints([]);
+      setPnlStrategySeries([]);
       setConvictionSparkPoints([]);
       setSparkLoaded(false);
       setConvictionView(null);
@@ -305,11 +321,24 @@ export function HelmMetrics() {
       eventsToIso: timeframeBounds.toIso,
     }).then(({ bookRows, scopedBookRows, tickerRows, events }) => {
       if (cancelled) return;
-      setPnlSparkPoints(
-        watchStrategyScopeId
-          ? seriesToSparkPoints(bookRows)
-          : seriesToTrackedOpenPnlSparkPoints(bookRows),
-      );
+      setPnlSparkPoints(seriesToSparkPoints(bookRows));
+      if (watchStrategyScopeId) {
+        setPnlStrategySeries([]);
+      } else {
+        const byStrategy = new Map<string, typeof scopedBookRows>();
+        for (const row of scopedBookRows) {
+          if (!row.strategyId) continue;
+          const list = byStrategy.get(row.strategyId) ?? [];
+          list.push(row);
+          byStrategy.set(row.strategyId, list);
+        }
+        setPnlStrategySeries(
+          appliedStrategies.map((strategy) => ({
+            strategyId: strategy.id,
+            points: seriesToSparkPoints(byStrategy.get(strategy.id) ?? []),
+          })),
+        );
+      }
       // Conviction: scoped strategy rows (or merged across strategies for All).
       // Never rely only on whole-book '' rows — those often lack conviction.
       setConvictionSparkPoints(
@@ -463,14 +492,70 @@ export function HelmMetrics() {
   );
   const allTimePnlPct = pnlDeltaPct(pnlHistoryPoints);
   const rangePnlPct = pnlDeltaPct(pnlDisplayPoints);
-  const pnlUp = (allTimePnlPct ?? rangePnlPct ?? 0) >= 0;
-  const pnlLineColor = resolveCssColor(
-    pnlUp ? "--positive" : "--negative",
-    pnlUp ? "#3d9a6a" : "#c45c4a",
-  );
+  // Reserved for upcoming Helm timeframe switch (live level / 1m / 1y / YTD).
+  // Not shown on All Strategies today — headline uses the window delta so it
+  // matches the spark colors. Keep computing so Current Watch parity stays ready.
+  const liveBookOpenPnlPct = portfolioRunningTotals(
+    portfolio.holdings.map((holding) => {
+      const quote = getLiveQuote(holding.ticker);
+      const lastPrice =
+        quote && Number.isFinite(quote.lastPrice) && quote.lastPrice > 0
+          ? quote.lastPrice
+          : 0;
+      return {
+        price: lastPrice,
+        shares: holding.shares,
+        avgPrice: holding.avgPrice,
+      };
+    }),
+    portfolio.cashAvailable ?? 0,
+  ).openPnlPct;
+  void liveBookOpenPnlPct;
+  // All Strategies: window delta (same story as the sparks). Single strategy:
+  // all-time snapshot delta. Tag under “1 WEEK” only when it differs (scoped).
+  const headlinePnlPct = focusedStrategy ? allTimePnlPct : rangePnlPct;
+  const showRangePnlUnderTag = Boolean(focusedStrategy) && rangePnlPct != null;
+  const pnlLineColor = pnlSparkLineColor(pnlDisplayPoints);
   const showPnlSpark = pnlDisplayPoints.length >= 1;
   const drawPnlLine = pnlDisplayPoints.length >= 2;
   const pnlAxis = sparkAxisLabels(pnlDisplayPoints);
+  const showStackedPnlSparks = !focusedStrategy && appliedStrategies.length > 0;
+  const stackedPnlLanes = showStackedPnlSparks
+    ? [
+        {
+          key: "all",
+          label: "All Strategies",
+          history: pnlHistoryPoints,
+        },
+        ...pnlStrategySeries.map((series) => ({
+          key: series.strategyId,
+          label:
+            appliedStrategies.find((strategy) => strategy.id === series.strategyId)
+              ?.name ?? series.strategyId,
+          history: series.points,
+        })),
+      ].map((lane) => {
+        const clipped = clipSparkPointsThrough(lane.history, historyEndDay);
+        const latest =
+          clipped.length > 0 ? clipped[clipped.length - 1]!.value : null;
+        const display = displaySparkPointsForRange(clipped, sparkRange, {
+          loaded: sparkLoaded,
+          seedValue: latest,
+          seedTime: historyEndDay,
+        });
+        return {
+          key: lane.key,
+          label: lane.label,
+          display,
+          drawLine: display.length >= 2,
+          lineColor: pnlSparkLineColor(display),
+        };
+      })
+    : [];
+  const showPnlSparkBlock =
+    showStackedPnlSparks
+      ? stackedPnlLanes.some((lane) => lane.display.length >= 1)
+      : showPnlSpark;
 
   const convictionDisplayPoints = displaySparkPointsForRange(
     clipSparkPointsThrough(convictionSparkPoints, historyEndDay),
@@ -484,25 +569,8 @@ export function HelmMetrics() {
   const showConvictionSpark = convictionDisplayPoints.length >= 1;
   const drawConvictionLine = convictionDisplayPoints.length >= 2;
   const convictionAxis = sparkAxisLabels(convictionDisplayPoints);
-  const convictionDelta =
-    drawConvictionLine &&
-    convictionDisplayPoints[0] &&
-    convictionDisplayPoints[convictionDisplayPoints.length - 1]
-      ? convictionDisplayPoints[convictionDisplayPoints.length - 1]!.value -
-        convictionDisplayPoints[0]!.value
-      : 0;
-  const convictionLineColor = resolveCssColor(
-    drawConvictionLine
-      ? convictionDelta >= 0
-        ? "--positive"
-        : "--negative"
-      : "--positive",
-    drawConvictionLine
-      ? convictionDelta >= 0
-        ? "#3d9a6a"
-        : "#c45c4a"
-      : "#3d9a6a",
-  );
+  // Neutral blue — conviction level isn't a P&L win/loss signal.
+  const convictionLineColor = resolveCssColor("--info", "#56b6f0");
 
   const todayDelta = convictionView?.change.todayDelta ?? null;
   const sessions5Delta = convictionView?.change.sessions5Delta ?? null;
@@ -611,6 +679,11 @@ export function HelmMetrics() {
     (sum, slice) => sum + slice.count,
     0,
   );
+  // Composition share always uses the whole-book denominator so a single-strategy
+  // scope keeps the same N/8 · % as All Strategies (not N/N).
+  const portfolioHoldingCount = portfolio.holdings.filter(
+    (holding) => holding.shares > 0,
+  ).length;
 
   return (
     <section className="helm-metrics" aria-labelledby="helm-metrics-title">
@@ -712,54 +785,88 @@ export function HelmMetrics() {
           <span className="helm-metric-note">Market-value weighted</span>
         </div>
 
-        <div className="select-card helm-metric helm-metric--pnl">
+        <div
+          className={`select-card helm-metric helm-metric--pnl${
+            showStackedPnlSparks ? " helm-metric--pnl-stacked" : ""
+          }`}
+        >
           <div className="helm-metric-head">
             <span className="helm-metric-label">Open P&amp;L</span>
             <span className="helm-metric-tag-stack">
               <span className="panel-tag session-tag">{sparkRangeLabel}</span>
-              {rangePnlPct != null ? (
+              {showRangePnlUnderTag ? (
                 <span
                   className={`helm-metric-range-pnl ${
-                    rangePnlPct >= 0
+                    rangePnlPct! >= 0
                       ? "helm-metric-value--up"
                       : "helm-metric-value--down"
                   }`}
                 >
-                  {formatChange(rangePnlPct)}
+                  {formatChange(rangePnlPct!)}
                 </span>
               ) : null}
             </span>
           </div>
           <span
             className={`helm-metric-value ${
-              allTimePnlPct == null
+              headlinePnlPct == null
                 ? ""
-                : allTimePnlPct >= 0
+                : headlinePnlPct >= 0
                   ? "helm-metric-value--up"
                   : "helm-metric-value--down"
             }`}
           >
-            {allTimePnlPct != null ? formatChange(allTimePnlPct) : "—"}
+            {headlinePnlPct != null ? formatChange(headlinePnlPct) : "—"}
           </span>
-          {showPnlSpark ? (
-            <div className="helm-metric-spark-block">
-              <Suspense fallback={null}>
-                <SparklineChart
-                  points={pnlDisplayPoints}
-                  lineColor={pnlLineColor}
-                  height={48}
-                  className="helm-metric-spark"
-                  showPointMarkers={showPointMarkers}
-                  lineVisible={drawPnlLine}
-                  formatValue={formatChange}
-                  ariaLabel="Open P&L history"
-                />
-              </Suspense>
-              <span className="helm-metric-spark-dates">
-                <span>{pnlAxis.start}</span>
-                <span>{pnlAxis.end}</span>
-              </span>
-            </div>
+          {showPnlSparkBlock ? (
+            showStackedPnlSparks ? (
+              <div className="helm-metric-spark-stack">
+                {stackedPnlLanes.map((lane) =>
+                  lane.display.length >= 1 ? (
+                    <div key={lane.key} className="helm-metric-spark-lane">
+                      <Suspense fallback={null}>
+                        <SparklineChart
+                          points={lane.display}
+                          lineColor={lane.lineColor}
+                          height={28}
+                          className="helm-metric-spark"
+                          showPointMarkers={showPointMarkers}
+                          lineVisible={lane.drawLine}
+                          formatValue={formatChange}
+                          ariaLabel={`${lane.label} Open P&L history`}
+                        />
+                      </Suspense>
+                      <span className="helm-metric-note" title={lane.label}>
+                        {lane.label}
+                      </span>
+                    </div>
+                  ) : null,
+                )}
+                <span className="helm-metric-spark-dates">
+                  <span>{pnlAxis.start}</span>
+                  <span>{pnlAxis.end}</span>
+                </span>
+              </div>
+            ) : (
+              <div className="helm-metric-spark-block">
+                <Suspense fallback={null}>
+                  <SparklineChart
+                    points={pnlDisplayPoints}
+                    lineColor={pnlLineColor}
+                    height={48}
+                    className="helm-metric-spark"
+                    showPointMarkers={showPointMarkers}
+                    lineVisible={drawPnlLine}
+                    formatValue={formatChange}
+                    ariaLabel="Open P&L history"
+                  />
+                </Suspense>
+                <span className="helm-metric-spark-dates">
+                  <span>{pnlAxis.start}</span>
+                  <span>{pnlAxis.end}</span>
+                </span>
+              </div>
+            )
           ) : (
             <span className="helm-metric-note">A by-product of discipline</span>
           )}
@@ -813,35 +920,44 @@ export function HelmMetrics() {
         className="helm-metrics-grid"
         aria-labelledby="helm-composition-title"
       >
-        <div className="select-card helm-metric helm-metric--text">
-          <span className="helm-metric-label">Strategy Coverage</span>
-          <div className="helm-metric-body">
-            <span className="helm-metric-value">
-              {metrics.scoredCount}
-              <span className="helm-metric-unit">/{metrics.holdingCount}</span>
-            </span>
-            <span className="helm-metric-note">
-              {metrics.coveragePct}% of holdings
-            </span>
-          </div>
-        </div>
-        {metrics.composition.map((slice) => (
-          <div
-            key={slice.label}
-            className="select-card helm-metric helm-metric--text"
-          >
-            <span className="helm-metric-label">{slice.label}</span>
+        {!focusedStrategy ? (
+          <div className="select-card helm-metric helm-metric--text">
+            <span className="helm-metric-label">Strategy Coverage</span>
             <div className="helm-metric-body">
               <span className="helm-metric-value">
-                {slice.count}
-                <span className="helm-metric-unit">/{slice.count}</span>
+                {metrics.scoredCount}
+                <span className="helm-metric-unit">
+                  /{metrics.holdingCount}
+                </span>
               </span>
               <span className="helm-metric-note">
-                100% of position holdings
+                {metrics.coveragePct}% of holdings
               </span>
             </div>
           </div>
-        ))}
+        ) : null}
+        {metrics.composition.map((slice) => {
+          const denom = portfolioHoldingCount;
+          const sharePct =
+            denom > 0 ? Math.round((slice.count / denom) * 100) : 0;
+          return (
+            <div
+              key={slice.label}
+              className="select-card helm-metric helm-metric--text"
+            >
+              <span className="helm-metric-label">{slice.label}</span>
+              <div className="helm-metric-body">
+                <span className="helm-metric-value">
+                  {slice.count}
+                  <span className="helm-metric-unit">/{denom}</span>
+                </span>
+                <span className="helm-metric-note">
+                  {sharePct}% of holdings
+                </span>
+              </div>
+            </div>
+          );
+        })}
       </div>
       {metrics.composition.length === 0 ? (
         <p className="helm-metrics-empty">No scored holdings yet</p>
@@ -868,9 +984,9 @@ export function HelmMetrics() {
                 : `${Math.round(averageHoldTime.avgDays)}d`}
             </span>
             <span className="helm-metric-note">
-              {averageHoldTime?.avgDays == null
-                ? "No hold episodes yet"
-                : "Mean episode length · all time"}
+              {averageHoldTime?.avgDays == null || !averageHoldTime.sinceDate
+                ? "No hold history yet"
+                : `Avg. hold time of stocks since ${formatSparkDate(averageHoldTime.sinceDate)}`}
             </span>
           </div>
         </div>

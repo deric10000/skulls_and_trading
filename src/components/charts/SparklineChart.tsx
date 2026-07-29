@@ -151,6 +151,9 @@ export function SparklineChart({
       timeScale: {
         visible: false,
         borderVisible: false,
+        fixLeftEdge: true,
+        fixRightEdge: true,
+        rightOffset: 0,
       },
       crosshair: {
         vertLine: { visible: false, labelVisible: false },
@@ -282,6 +285,11 @@ export function SparklineChart({
       crosshairMarkerBackgroundColor: lineColor,
     });
     chart.timeScale().fitContent();
+    chart.timeScale().applyOptions({
+      fixLeftEdge: true,
+      fixRightEdge: true,
+      rightOffset: 0,
+    });
   }, [points, lineColor, lineVisible, showPointMarkers, isSinglePoint]);
 
   useEffect(() => {
