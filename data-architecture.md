@@ -88,7 +88,8 @@ Withdrawal). Qty-driven cash moves from paper buys/sells update
 `metrics.cashAdded` / `metrics.cashWithdrawn` on daily `portfolio_snapshots`
 sum same-day cash ledger deltas for Helm “Cash Added over Time.” Hold-from-
 inaction is recorded as `forge_check_events.kind = 'hold'` on each check when
-no qty fill landed in the cadence bucket (Plan Adherence Total Actions).
+no qty fill landed in the cadence bucket (Plan Adherence backend; not shown in
+Total Actions — Average Hold Time uses qty share episodes instead).
 Optional later: promote the qty/cash ledger to a dedicated Postgres table.
 
 ## 2. The `DataSource` seam (`src/lib/datasource/`)
@@ -474,11 +475,17 @@ Metrics reduce an existing `PortfolioAlignment` (all-strategy memoized
 `computePortfolioAlignment` when one strategy is picked) through the pure
 `src/lib/forge/helmMetrics.ts` (`computeHelmMetrics`): MV-weighted conviction,
 aggregate open P&L for live reads (open P&L / cost basis via
-`portfolioRunningTotals` — used by Current Watch; Helm Open P&L headline uses
-snapshot deltas instead), strategy coverage, status mix (by `STATUS_TONE`,
-shown as Plan Alignment chips), and composition by headline bucket/lens
-(rendered as its own Progress-style section of metric cards — placeholder
-`held/held` until Forge position-holdings rules supply a target). When a single
+`portfolioRunningTotals` — used by Current Watch; All Strategies Helm Open P&L
+headline is the shared timeframe window delta (live whole-book % stays computed
+for the upcoming switch); single-strategy Helm headline still
+uses all-time snapshot deltas), strategy coverage, status mix (by `STATUS_TONE`,
+shown as Plan Alignment chips; footer note sums those chip counts as **Total
+Stocks in Alignment**), and composition by headline bucket/lens
+(rendered as its own Progress-style section of metric cards — each lens
+count over whole-book portfolio holdings, e.g. 5/8 · % of holdings;
+multi-strategy membership can sum above 100%; **Strategy Coverage** shows only
+in All Strategies and hides when a single strategy is scoped so the selected
+lens card keeps the same share numbers). When a single
 strategy is picked, every Progress metric — **including Open P&L scope** —
 reduces only over holdings enabled for that strategy
 (`shouldScoreTickerWithStrategy` / `tickerInScope`, same rule as Current Watch's
@@ -498,16 +505,28 @@ Technical Setup, etc.). No fabricated history when marks are missing.
 below). Helm fetches the **full** series for the mirrored portfolio + scope
 (`strategy_id` or `''` for All) — no short day cap — and derives:
 
-- **Headline** = all-time period change: `openPnlPct(last) − openPnlPct(first)`
-  via `pnlDeltaPct` (honest empty / em dash when fewer than two snapshot days).
-- **Under the timeframe tag** (default “1 WEEK”; toggle UI later) = the same
-  delta over the shared Helm spark window (`helmTimeframe` / `sparkRange`).
+- **All Strategies headline** = window Open P&L delta over whole-book
+  `open_pnl_pct` (same story as the sparks / “1 WEEK” tag). Live whole-book %
+  (Current Watch parity via `portfolioRunningTotals`) stays computed for the
+  upcoming timeframe switch UI but is not the All Strategies headline today.
+- **Single-strategy headline** = all-time period change:
+  `openPnlPct(last) − openPnlPct(first)` via `pnlDeltaPct` (honest empty / em
+  dash when fewer than two snapshot days); the small % under the timeframe tag
+  is the window delta.
+- **Under the timeframe tag** (default “1 WEEK”; toggle UI later) = window
+  delta over whole-book `open_pnl_pct` (All Strategies) or scoped strategy
+  `open_pnl_pct` (single strategy), via the shared Helm spark window.
+  All Strategies also stacks per-applied-strategy Open P&L sparklines under the
+  whole-book spark (strategy name label under each lane); single-strategy scope
+  keeps one spark. All Strategies omits the duplicate small % under the tag
+  when the headline already is that window delta.
 
 Spark tips/axis are clipped through the Last Conviction Check ET day so a
 mid-day refresh cannot show a calendar day ahead of the toast. Seed for a
 missing window day uses the **latest snapshot level**, never live open-book %.
 Current Watch footer Total / Open P&L remains live open-book % via
-`portfolioRunningTotals` — different meaning by design.
+`portfolioRunningTotals`. All Strategies Helm headline is the window delta
+(spark-aligned); live whole-book % is reserved for the timeframe switch.
 
 **Shared Helm timeframe** (`src/lib/finance/helmTimeframe.ts`): default `1w`
 (indicator only; toggle UI later). Also plumbs `1m` / `1y` / `ytd` plus cadence
@@ -516,14 +535,25 @@ uses the coarsest (slowest) floor among applied strategies. Total Conviction,
 Open P&L (range under tag), and Plan Adherence all read the same clamped
 timeframe.
 
-**Plan Adherence** (below Composition): Notifications (check-event flag counts,
-with proxies from `conviction_snapshots` / book `metrics.conviction` check days
-when append-only events are not yet present — so a Total Conviction check mark
-never implies “No checks in range”), Total Actions (ledger buys/sells/cash +
-hold-inaction events; hold proxies fill the same check days when no same-day
-qty fill exists), Zone-Followed Impact (MV-weighted forward return after
-**zone-matched qty fills only** — Trim/Add/Go to Cash via `zoneHints` or
-same-day check flags; Hold counts Total Actions but does not score Impact).
+**Plan Adherence** (below Composition): Average Hold Time (all-time mean length
+of share **episodes** from the qty ledger — sell to zero ends an episode;
+re-entry starts a new one; open positions with shares > 0 include length-to-date;
+respects portfolio + strategy scope; card tag is always “All time”; note reads
+**Avg. hold time of stocks since** the earliest in-scope open date),
+Notifications (continuity-aware **notification runs** from status check
+events: same ticker/strategy/status across consecutive checks = one episode;
+clear then re-fire = a new episode; headline = episodes overlapping the Helm
+timeframe; secondary = new launches whose onset is in-range · distinct
+status/flag records **needing attention** — warning/negative tone or Trim/Add/Go
+to Cash zones; Watch / Hold Plan / Watch Setup still count toward episodes and
+new but not need attention; event fetch looks back beyond the tag
+so ongoing runs are not miscounted as new),
+Total Actions (ledger **buys/sells only**; cash ledger rows and
+`forge_check_events.kind = 'hold'` / hold proxies remain tracked for adherence
+internals but are **not** displayed or added into Total Actions — so the
+headline matches Zone-Followed Impact’s qty action count), Zone-Followed Impact
+(MV-weighted forward return after **zone-matched qty fills only** — Trim/Add/Go
+to Cash via `zoneHints` or same-day check flags; Hold does not score Impact).
 Honest empty states when no check-day marks exist at all.
 
 ### Forge check events (`forge_check_events`)
