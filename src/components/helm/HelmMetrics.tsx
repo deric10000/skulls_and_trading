@@ -922,7 +922,9 @@ export function HelmMetrics() {
       >
         {!focusedStrategy ? (
           <div className="select-card helm-metric helm-metric--text">
-            <span className="helm-metric-label">Strategy Coverage</span>
+            <div className="helm-metric-head">
+              <span className="helm-metric-label">Strategy Coverage</span>
+            </div>
             <div className="helm-metric-body">
               <span className="helm-metric-value">
                 {metrics.scoredCount}
@@ -945,7 +947,9 @@ export function HelmMetrics() {
               key={slice.label}
               className="select-card helm-metric helm-metric--text"
             >
-              <span className="helm-metric-label">{slice.label}</span>
+              <div className="helm-metric-head">
+                <span className="helm-metric-label">{slice.label}</span>
+              </div>
               <div className="helm-metric-body">
                 <span className="helm-metric-value">
                   {slice.count}
@@ -1011,16 +1015,14 @@ export function HelmMetrics() {
             </span>
             {notificationSummary != null &&
             notificationSummary.episodes > 0 ? (
-              <span className="helm-metric-note helm-metric-note--split">
-                <span className="helm-metric-note-stat">
-                  {notificationSummary.newLaunches}
-                </span>{" "}
-                new ·{" "}
-                <span className="helm-metric-note-stat">
-                  {notificationSummary.distinct}
-                </span>{" "}
-                need attention
-              </span>
+              <div className="helm-metric-chips">
+                <span className="chip status--neutral">
+                  {notificationSummary.newLaunches} new
+                </span>
+                <span className="chip status--warning">
+                  {notificationSummary.distinct} need attention
+                </span>
+              </div>
             ) : null}
           </div>
         </div>

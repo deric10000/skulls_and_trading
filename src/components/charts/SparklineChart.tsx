@@ -125,18 +125,25 @@ export function SparklineChart({
   pointsRef.current = points;
   const formatValueRef = useRef(formatValue);
   formatValueRef.current = formatValue;
+  const showPointMarkersRef = useRef(showPointMarkers);
+  showPointMarkersRef.current = showPointMarkers;
   const tipRef = useRef<HoverTip | null>(null);
   const [hoverTip, setHoverTip] = useState<HoverTip | null>(null);
   tipRef.current = hoverTip;
+  const syncSizeRef = useRef<() => void>(() => {});
 
+  // Chart lifetime — do NOT remount when isMobile flips (tablet/phone breakpoint).
+  // Destroying LWC mid-layout is what left sparks blank until a full refresh.
   useEffect(() => {
     if (isSinglePoint) return;
     const host = hostRef.current;
+    const wrap = wrapRef.current;
     if (!host) return;
 
     const chart = createChart(host, {
+      autoSize: true,
       height,
-      width: host.clientWidth || 200,
+      width: Math.max(host.clientWidth, 1),
       layout: {
         background: { type: ColorType.Solid, color: "transparent" },
         textColor: "transparent",
@@ -180,12 +187,102 @@ export function SparklineChart({
     chartRef.current = chart;
     seriesRef.current = series;
 
+    const seed = pointsRef.current;
+    if (seed.length > 0) {
+      series.setData(
+        seed.map((point) => ({
+          time: point.time as Time,
+          value: point.value,
+        })),
+      );
+    }
+
+    let raf = 0;
+    let retry = 0;
+    const syncSize = () => {
+      const el = hostRef.current;
+      const chartApi = chartRef.current;
+      if (!el || !chartApi) return;
+      const width = Math.floor(el.clientWidth);
+      const nextHeight = Math.floor(el.clientHeight) || height;
+      if (width <= 0 || nextHeight <= 0) {
+        // Home deck / grid breakpoint can report 0 for a few frames — retry.
+        if (retry < 24) {
+          retry += 1;
+          cancelAnimationFrame(raf);
+          raf = requestAnimationFrame(syncSize);
+        }
+        return;
+      }
+      retry = 0;
+      chartApi.resize(width, nextHeight, true);
+      chartApi.timeScale().fitContent();
+      chartApi.timeScale().applyOptions({
+        fixLeftEdge: true,
+        fixRightEdge: true,
+        rightOffset: 0,
+      });
+    };
+    syncSizeRef.current = syncSize;
+
+    const scheduleSync = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        // Second frame: wait for CSS grid/deck reflow after breakpoint.
+        raf = requestAnimationFrame(syncSize);
+      });
+    };
+
+    const ro = new ResizeObserver(scheduleSync);
+    ro.observe(host);
+    if (wrap) ro.observe(wrap);
+
+    const io =
+      typeof IntersectionObserver !== "undefined"
+        ? new IntersectionObserver(
+            (entries) => {
+              if (entries.some((entry) => entry.isIntersecting)) {
+                scheduleSync();
+              }
+            },
+            { threshold: [0, 0.01, 1] },
+          )
+        : null;
+    if (io && wrap) io.observe(wrap);
+
+    window.addEventListener("resize", scheduleSync);
+    scheduleSync();
+
+    return () => {
+      cancelAnimationFrame(raf);
+      ro.disconnect();
+      io?.disconnect();
+      window.removeEventListener("resize", scheduleSync);
+      chart.remove();
+      chartRef.current = null;
+      seriesRef.current = null;
+      syncSizeRef.current = () => {};
+      setHoverTip(null);
+    };
+    // Intentionally omit isMobile / series style props — those swap without remount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- chart shell only
+  }, [height, isSinglePoint]);
+
+  // Tap vs hover — swap listeners only; keep the same chart instance.
+  useEffect(() => {
+    if (isSinglePoint) return;
+    const chart = chartRef.current;
+    const host = hostRef.current;
+    if (!chart || !host) return;
+
     const onMove = (param: MouseEventParams<Time>) => {
-      if (!showPointMarkers) {
+      if (!showPointMarkersRef.current) {
         setHoverTip(null);
         return;
       }
+      const series = seriesRef.current;
       if (
+        !series ||
         !param.point ||
         param.time === undefined ||
         !param.seriesData.has(series)
@@ -210,7 +307,7 @@ export function SparklineChart({
     };
 
     const onClick = (param: MouseEventParams<Time>) => {
-      if (!showPointMarkers) {
+      if (!showPointMarkersRef.current) {
         setHoverTip(null);
         return;
       }
@@ -240,31 +337,11 @@ export function SparklineChart({
 
     if (isMobile) {
       chart.subscribeClick(onClick);
-    } else {
-      chart.subscribeCrosshairMove(onMove);
+      return () => chart.unsubscribeClick(onClick);
     }
-
-    const ro = new ResizeObserver(() => {
-      if (!hostRef.current || !chartRef.current) return;
-      chartRef.current.applyOptions({
-        width: hostRef.current.clientWidth,
-      });
-    });
-    ro.observe(host);
-
-    return () => {
-      if (isMobile) {
-        chart.unsubscribeClick(onClick);
-      } else {
-        chart.unsubscribeCrosshairMove(onMove);
-      }
-      ro.disconnect();
-      chart.remove();
-      chartRef.current = null;
-      seriesRef.current = null;
-      setHoverTip(null);
-    };
-  }, [height, lineColor, lineVisible, showPointMarkers, isMobile, isSinglePoint]);
+    chart.subscribeCrosshairMove(onMove);
+    return () => chart.unsubscribeCrosshairMove(onMove);
+  }, [isMobile, isSinglePoint]);
 
   useEffect(() => {
     if (isSinglePoint) return;
@@ -290,7 +367,19 @@ export function SparklineChart({
       fixRightEdge: true,
       rightOffset: 0,
     });
+    syncSizeRef.current();
   }, [points, lineColor, lineVisible, showPointMarkers, isSinglePoint]);
+
+  // Breakpoint / deck reflow — force a paint after layout CSS settles.
+  useEffect(() => {
+    if (isSinglePoint) return;
+    const id = window.setTimeout(() => syncSizeRef.current(), 50);
+    const id2 = window.setTimeout(() => syncSizeRef.current(), 200);
+    return () => {
+      window.clearTimeout(id);
+      window.clearTimeout(id2);
+    };
+  }, [isMobile, isSinglePoint]);
 
   useEffect(() => {
     if (!isMobile || !hoverTip) return;
@@ -371,7 +460,10 @@ export function SparklineChart({
           </button>
         </div>
       ) : (
-        <div ref={hostRef} style={{ width: "100%", height: "100%" }} />
+        <div
+          ref={hostRef}
+          style={{ width: "100%", height: "100%", minWidth: 0 }}
+        />
       )}
       {hoverTip ? (
         <span
