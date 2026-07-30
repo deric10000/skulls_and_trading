@@ -327,10 +327,12 @@ export function MarketFlowWidget({
     : Object.keys(snapshot.industries).sort((a, b) => a.localeCompare(b));
 
   const [selectedLayer, setSelectedLayer] = useState<MarketWeatherLayer | null>(null);
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
   const openLayerDetail = useCallback(
     (layer: MarketWeatherLayer) => {
       setSelectedLayer(layer);
+      setShowAdvanced(false);
       markWeatherReaderLayer(layer);
     },
     [markWeatherReaderLayer],
@@ -390,26 +392,76 @@ export function MarketFlowWidget({
               <span className="flow-index">{index + 1}</span>
               <span className="flow-summary-titles">
                 <span className="flow-label">{detailReading.label}</span>
-                <ConditionChip reading={detailReading} />
+                {detailReading.availability === "unavailable" ? (
+                  <span className="chip status--neutral weather-condition-chip">
+                    Independent weather unavailable
+                  </span>
+                ) : (
+                  <ConditionChip reading={detailReading} />
+                )}
               </span>
             </header>
-            <p className="weather-score-line">
-              Score {formatDecimals(detailReading.score)}/100
-            </p>
             <p className="flow-summary-note">{detailReading.explanation}</p>
             <p className="weather-why-line">
               <strong>Why:</strong> {detailReading.why}
             </p>
-            <div className="weather-scores">
-              {SUBSCORE_META.map((meta) => (
-                <SubScoreRow
-                  key={meta.key}
-                  label={meta.label}
-                  value={detailReading.subScores[meta.key]}
-                  hint={meta.hint}
-                />
-              ))}
-            </div>
+            {detailReading.modelVersion === "v2" ? (
+              <>
+                {detailReading.evidence && detailReading.evidence.length > 0 ? (
+                  <div className="weather-scores" aria-label="Weather evidence">
+                    {detailReading.evidence.map((row) => (
+                      <div className="weather-score-row" key={row.label}>
+                        <span className="weather-score-label">{row.label}</span>
+                        <span className="weather-score-value">{row.value}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+                {detailReading.availability !== "unavailable" ? (
+                  <>
+                    <button
+                      type="button"
+                      className="btn btn--secondary btn--sm"
+                      aria-expanded={showAdvanced}
+                      onClick={() => setShowAdvanced((current) => !current)}
+                    >
+                      {showAdvanced ? "Hide Advanced Details" : "Advanced Details"}
+                    </button>
+                    {showAdvanced ? (
+                      <div className="weather-advanced">
+                        <p className="weather-score-line">
+                          Weather Index {formatDecimals(detailReading.score)}/100
+                        </p>
+                        <p className="weather-score-line">
+                          Coverage: {detailReading.coverage ?? "partial"} · Model:
+                          Weather V2
+                        </p>
+                        <p className="weather-score-line">
+                          Evidence as of{" "}
+                          {new Date(detailReading.lastUpdated).toLocaleString()}
+                        </p>
+                      </div>
+                    ) : null}
+                  </>
+                ) : null}
+              </>
+            ) : (
+              <>
+                <p className="weather-score-line">
+                  Score {formatDecimals(detailReading.score)}/100
+                </p>
+                <div className="weather-scores">
+                  {SUBSCORE_META.map((meta) => (
+                    <SubScoreRow
+                      key={meta.key}
+                      label={meta.label}
+                      value={detailReading.subScores[meta.key]}
+                      hint={meta.hint}
+                    />
+                  ))}
+                </div>
+              </>
+            )}
             <p className="weather-climate">
               <strong>Climate:</strong> {detailReading.climateContext.note}
             </p>
@@ -476,7 +528,9 @@ export function MarketFlowWidget({
                 disabled={!reading}
                 aria-label={
                   reading
-                    ? `${cardLabel}: ${WEATHER_CONDITIONS[reading.conditionId].label}, score ${formatDecimals(reading.score)}/100. View details.`
+                    ? reading.availability === "unavailable"
+                      ? `${cardLabel}: independent weather unavailable. View details.`
+                      : `${cardLabel}: ${WEATHER_CONDITIONS[reading.conditionId].label}. View details.`
                     : undefined
                 }
               />
@@ -484,7 +538,15 @@ export function MarketFlowWidget({
                 <div className="weather-headpill" aria-hidden="true">
                   <span className="flow-index">{index + 1}</span>
                   <span className="weather-layer">{cardLabel}</span>
-                  {reading ? <ConditionChip reading={reading} /> : null}
+                  {reading ? (
+                    reading.availability === "unavailable" ? (
+                      <span className="chip status--neutral weather-condition-chip">
+                        Unavailable
+                      </span>
+                    ) : (
+                      <ConditionChip reading={reading} />
+                    )
+                  ) : null}
                 </div>
                 {!reading ? (
                   <div className="weather-empty">
@@ -534,6 +596,21 @@ export function MarketFlowWidget({
                         </p>
                       );
                     })()}
+                  </div>
+                ) : null}
+                {reading?.modelVersion === "v2" &&
+                reading.availability !== "unavailable" &&
+                reading.evidence?.length ? (
+                  <div className="weather-card-evidence" aria-hidden="true">
+                    {reading.evidence.slice(0, 4).map((row) => (
+                      <span key={row.label}>
+                        {row.label} <strong>{row.value}</strong>
+                      </span>
+                    ))}
+                    <span>
+                      Coverage <strong>{reading.coverage ?? "partial"}</strong>
+                    </span>
+                    <span className="weather-card-why">{reading.why}</span>
                   </div>
                 ) : null}
                 {showDropdown ? (

@@ -110,6 +110,11 @@ export function buildMarketV2Reading(
           weatherIndex: index.value,
           substantiallyBelowStructureRelation:
             structure?.relations.some((relation) => relation.substantiallyBelow),
+          dailyRangeMultiple: spy?.dailyRangeMultiple,
+          absoluteReturnAtrMultiple: spy?.absoluteReturnAtrMultiple,
+          volumeRatio: spy?.volumeRatio,
+          breakingResistance: spy?.breakingResistance,
+          lostSupport: spy?.lostSupport,
           ...(qqq200 ? { qqq200 } : {}),
         });
   return {

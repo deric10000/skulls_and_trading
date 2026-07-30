@@ -155,11 +155,20 @@ export function buildStockV2Reading(
           substantiallyBelowStructureRelation: structure?.relations.some(
             (relation) => relation.substantiallyBelow,
           ),
-          dailyRangeMultiple: inputs.events?.dailyRangeMultiple,
-          absoluteReturnAtrMultiple: inputs.events?.absoluteReturnAtrMultiple,
-          breakingResistance: inputs.events?.breakingResistance,
-          lostSupport: inputs.events?.lostSupport,
-          ...(finite(relativeVolume) ? { volumeRatio: relativeVolume } : {}),
+          dailyRangeMultiple:
+            inputs.events?.dailyRangeMultiple ??
+            inputs.observable?.dailyRangeMultiple,
+          absoluteReturnAtrMultiple:
+            inputs.events?.absoluteReturnAtrMultiple ??
+            inputs.observable?.absoluteReturnAtrMultiple,
+          breakingResistance:
+            inputs.events?.breakingResistance ??
+            inputs.observable?.breakingResistance,
+          lostSupport:
+            inputs.events?.lostSupport ?? inputs.observable?.lostSupport,
+          ...(finite(inputs.observable?.volumeRatio ?? relativeVolume)
+            ? { volumeRatio: inputs.observable?.volumeRatio ?? relativeVolume }
+            : {}),
         });
   return {
     ticker: inputs.ticker.toUpperCase(),

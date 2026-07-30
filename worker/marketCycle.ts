@@ -1112,6 +1112,7 @@ async function publishCycle(
       fundamentalValues,
       weatherBenchmarks,
       manifest.cycleAsOf,
+      priorPublishedCycle?.weatherSymbolObservables ?? {},
     ),
     errors: [
       ...techShards.flatMap((shard) => shard.errors),

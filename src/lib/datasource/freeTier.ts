@@ -14,7 +14,10 @@ import {
   registerBootstrapTickers,
 } from "../market/liveCache";
 import { fetchMarketSearch } from "../market/client";
-import { augmentWeatherStocks, buildLiveWeatherSnapshot } from "../weather/live";
+import {
+  addLiveV2Stocks,
+  buildLiveV2WeatherSnapshot,
+} from "../weather/liveV2";
 import { reportTaxonomyGap } from "../userStore/taxonomyGaps";
 import type { MarketContext, TickerInfo, FundamentalSnapshot, TechnicalSnapshot } from "../../types";
 import type {
@@ -175,7 +178,7 @@ export const freeTierDataSource: DataSource = {
     const cached = weatherCache.get(timeframe);
     if (cached) return cached;
     const ctx = getLiveMarketContext() ?? EMPTY_LIVE_CONTEXT;
-    const snapshot = buildLiveWeatherSnapshot(timeframe, ctx);
+    const snapshot = buildLiveV2WeatherSnapshot(timeframe, ctx);
     weatherCache.set(timeframe, snapshot);
     return snapshot;
   },
@@ -201,15 +204,14 @@ export const freeTierDataSource: DataSource = {
 };
 
 /**
- * Weather snapshot for a watch list: base session cascade + a stock reading
- * for every watched name (taxonomy refines the tilt when known).
+ * Weather snapshot for a watch list: independent V2 layer evidence with a
+ * stock reading for every watched name.
  */
 export function getWatchMarketWeather(
   timeframe: MarketWeatherTimeframe,
   watchTickers: string[],
 ): MarketWeatherSnapshot {
   const base = freeTierDataSource.getMarketWeather(timeframe);
-  const ctx = getLiveMarketContext() ?? EMPTY_LIVE_CONTEXT;
   const extras: Array<{
     ticker: string;
     sector?: string | null;
@@ -225,7 +227,7 @@ export function getWatchMarketWeather(
       industry: info?.industry ?? null,
     });
   }
-  return augmentWeatherStocks(base, ctx, extras);
+  return addLiveV2Stocks(base, extras);
 }
 
 /** Invalidate weather session cache when live context refreshes. */

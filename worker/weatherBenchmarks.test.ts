@@ -45,6 +45,11 @@ describe("weather benchmark projection", () => {
     expect(value?.drawdownFrom20dHighPct).toBeTypeOf("number");
     expect(value?.return5dPct).toBeTypeOf("number");
     expect(value?.return20dPct).toBeTypeOf("number");
+    expect(value?.dailyRangeMultiple).toBeTypeOf("number");
+    expect(value?.absoluteReturnAtrMultiple).toBeTypeOf("number");
+    expect(value?.volumeRatio).toBeCloseTo(1);
+    expect(value?.breakingResistance).toBeTypeOf("boolean");
+    expect(value?.lostSupport).toBeTypeOf("boolean");
   });
 
   it("annotates non-SPY benchmarks with RS vs SPY at publish", () => {

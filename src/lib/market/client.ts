@@ -33,6 +33,12 @@ export interface WeatherBenchmarkObservable {
   return20dPct?: number;
   rsVsSpy5d?: number;
   rsVsSpy20d?: number;
+  priorFreshRsVsSpy20d?: number;
+  dailyRangeMultiple?: number;
+  absoluteReturnAtrMultiple?: number;
+  volumeRatio?: number;
+  breakingResistance?: boolean;
+  lostSupport?: boolean;
 }
 
 export interface WeatherSymbolObservable extends WeatherBenchmarkObservable {

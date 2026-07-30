@@ -179,6 +179,22 @@ export const WEATHER_CONDITIONS: Record<
     recommendedUserMessage:
       "Conditions are deteriorating. Risk is rising before the full storm is obvious.",
   },
+  "mixed-signals": {
+    id: "mixed-signals",
+    label: "Mixed Signals",
+    shortLabel: "Mixed",
+    plainEnglishMeaning:
+      "The evidence is pulling in different directions, so no single weather condition tells the whole story.",
+    scoringRule:
+      "V2 residual when healthy and stressed pillars materially disagree without meeting a specialty-condition trigger.",
+    visualTone: "Balanced, unresolved, observant.",
+    designSystemColors: ["--amber-400", "--blue-400", "--text-faint"],
+    severity: "neutral",
+    defaultIcon: WaveTriangle,
+    dynamicGraphicKey: "mixed-signals",
+    recommendedUserMessage:
+      "The evidence is split. Check the supporting signals before acting.",
+  },
 };
 
 /** Convenience: ordered list of all condition definitions. */

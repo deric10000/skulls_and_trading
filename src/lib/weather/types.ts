@@ -30,7 +30,20 @@ export type WeatherConditionId =
   | "rotation-current"
   | "calm-waters"
   | "rogue-wave"
-  | "red-sky-warning";
+  | "red-sky-warning"
+  | "mixed-signals";
+
+export type WeatherCoverage =
+  | "insufficient"
+  | "provisional"
+  | "partial"
+  | "complete";
+
+export interface WeatherEvidenceRow {
+  label: string;
+  value: string;
+  tone?: "positive" | "neutral" | "warning" | "negative";
+}
 
 /** How a condition reads emotionally / how strongly to flag it. */
 export type WeatherSeverity =
@@ -94,6 +107,13 @@ export interface WeatherLayerReading {
   climateContext: ClimateContext;
   dynamicGraphicKey: WeatherConditionId;
   lastUpdated: string; // ISO timestamp
+  /** V2 evidence contract. Omitted only by legacy/mock V1 projections. */
+  modelVersion?: "v1" | "v2";
+  coverage?: WeatherCoverage;
+  availability?: "available" | "unavailable";
+  unavailableReason?: "independent-industry-weather-unavailable";
+  evidence?: WeatherEvidenceRow[];
+  pillarScores?: Record<string, number>;
 }
 
 /** Static definition for a weather condition (the shared condition library). */

@@ -161,8 +161,23 @@ export function buildSectorV2Reading(
           substantiallyBelowStructureRelation: structure?.relations.some(
             (relation) => relation.substantiallyBelow,
           ),
+          dailyRangeMultiple: obs.dailyRangeMultiple,
+          absoluteReturnAtrMultiple: obs.absoluteReturnAtrMultiple,
+          volumeRatio: obs.volumeRatio,
+          breakingResistance: obs.breakingResistance,
+          lostSupport: obs.lostSupport,
           relativeStrengthImprovement: options.relativeStrengthImprovement,
-          hasPriorFreshV2Cycle: options.hasPriorFreshV2Cycle,
+          ...(options.relativeStrengthImprovement == null &&
+          typeof obs.priorFreshRsVsSpy20d === "number" &&
+          typeof rsVsSpy20d === "number"
+            ? {
+                relativeStrengthImprovement:
+                  rsVsSpy20d - obs.priorFreshRsVsSpy20d,
+              }
+            : {}),
+          hasPriorFreshV2Cycle:
+            options.hasPriorFreshV2Cycle ??
+            typeof obs.priorFreshRsVsSpy20d === "number",
         });
   return {
     sector: typedSector,

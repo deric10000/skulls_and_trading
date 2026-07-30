@@ -69,6 +69,13 @@ export interface WeatherBenchmarkObservable {
   /** Subject 5d − SPY 5d (percentage points); filled at publish. */
   rsVsSpy5d?: number;
   rsVsSpy20d?: number;
+  /** Prior fresh cycle RS20, retained only for deterministic Rotation evidence. */
+  priorFreshRsVsSpy20d?: number;
+  dailyRangeMultiple?: number;
+  absoluteReturnAtrMultiple?: number;
+  volumeRatio?: number;
+  breakingResistance?: boolean;
+  lostSupport?: boolean;
 }
 
 export interface WeatherSymbolObservable extends WeatherBenchmarkObservable {
@@ -114,6 +121,7 @@ export function deriveWeatherSymbolObservables(
   fundamentals: Record<string, Record<string, unknown>>,
   benchmarks: PublishedWeatherBenchmarks,
   cycleAsOf?: string,
+  prior: Record<string, WeatherSymbolObservable> = {},
 ): Record<string, WeatherSymbolObservable> {
   const output: Record<string, WeatherSymbolObservable> = {};
   const spy = benchmarks.benchmarks.SPY;
@@ -131,6 +139,10 @@ export function deriveWeatherSymbolObservables(
         : {}),
       ...(finite(observable.return20dPct) && finite(spy?.return20dPct)
         ? { rsVsSpy20d: observable.return20dPct - spy.return20dPct }
+        : {}),
+      ...(prior[symbol]?.freshness === "fresh" &&
+      finite(prior[symbol]?.rsVsSpy20d)
+        ? { priorFreshRsVsSpy20d: prior[symbol]!.rsVsSpy20d }
         : {}),
       ...(finite(observable.return5dPct) && finite(sector?.return5dPct)
         ? { rsVsSector5d: observable.return5dPct - sector.return5dPct }
@@ -190,6 +202,44 @@ export function buildWeatherBenchmarkObservable(
   const last = dailyBars.at(-1);
   if (!last || !finite(last.close) || last.close <= 0) return null;
   const closes = dailyBars.map((bar) => bar.close);
+  const previous = dailyBars.at(-2);
+  const atrPercent = atrPct(dailyBars, 14);
+  const atrPrice =
+    finite(atrPercent) && atrPercent > 0
+      ? (last.close * atrPercent) / 100
+      : undefined;
+  const priorBars = dailyBars.slice(0, -1);
+  const prior20High =
+    priorBars.length >= 20
+      ? Math.max(
+          ...priorBars
+            .slice(-20)
+            .map((bar) => bar.high)
+            .filter(finite),
+        )
+      : undefined;
+  const priorVolumes = priorBars
+    .slice(-20)
+    .map((bar) => bar.volume)
+    .filter(finite);
+  const averagePriorVolume =
+    priorVolumes.length > 0
+      ? priorVolumes.reduce((sum, value) => sum + value, 0) /
+        priorVolumes.length
+      : undefined;
+  const priorCloses = closes.slice(0, -1);
+  const lostSupport = [
+    [ema(priorCloses, 20), ema(closes, 20)],
+    [sma(priorCloses, 50), sma(closes, 50)],
+    [sma(priorCloses, 200), sma(closes, 200)],
+  ].some(
+    ([priorLevel, currentLevel]) =>
+      finite(previous?.close) &&
+      finite(priorLevel) &&
+      finite(currentLevel) &&
+      previous.close >= priorLevel &&
+      last.close < currentLevel,
+  );
   const optional = (key: string, value: number | null | undefined) =>
     finite(value) ? { [key]: value } : {};
   return {
@@ -201,12 +251,37 @@ export function buildWeatherBenchmarkObservable(
     ...optional("sma20", sma(closes, 20)),
     ...optional("sma50", sma(closes, 50)),
     ...optional("sma200", sma(closes, 200)),
-    ...optional("atrPct", atrPct(dailyBars, 14)),
+    ...optional("atrPct", atrPercent),
     ...optional("atrPctBaseline60d", atrPctBaseline60d(dailyBars)),
     ...optional("drawdownFrom20dHighPct", drawdownFrom20dHighPct(dailyBars)),
     ...optional("rsi14", rsi(closes, 14)),
     ...optional("return5dPct", returnPct(closes, 5)),
     ...optional("return20dPct", returnPct(closes, 20)),
+    ...optional(
+      "dailyRangeMultiple",
+      finite(last.high) &&
+        finite(last.low) &&
+        finite(atrPrice) &&
+        atrPrice > 0
+        ? (last.high - last.low) / atrPrice
+        : undefined,
+    ),
+    ...optional(
+      "absoluteReturnAtrMultiple",
+      finite(previous?.close) && finite(atrPrice) && atrPrice > 0
+        ? Math.abs(last.close - previous.close) / atrPrice
+        : undefined,
+    ),
+    ...optional(
+      "volumeRatio",
+      finite(last.volume) && finite(averagePriorVolume) && averagePriorVolume > 0
+        ? last.volume / averagePriorVolume
+        : undefined,
+    ),
+    ...(finite(prior20High) && finite(atrPrice)
+      ? { breakingResistance: last.close >= prior20High + 0.25 * atrPrice }
+      : {}),
+    ...(priorBars.length > 0 ? { lostSupport } : {}),
   };
 }
 
@@ -338,6 +413,13 @@ export function derivePublishedWeatherBenchmarks(
         ...current,
         ...(sourceCycleAsOf ? { sourceCycleAsOf } : {}),
         freshness: "fresh",
+        ...(lifecycle.prior?.freshnessBySymbol?.[symbol] === "fresh" &&
+        finite(lifecycle.prior?.benchmarks[symbol]?.rsVsSpy20d)
+          ? {
+              priorFreshRsVsSpy20d:
+                lifecycle.prior!.benchmarks[symbol]!.rsVsSpy20d,
+            }
+          : {}),
       };
       freshnessBySymbol[symbol] = "fresh";
       if (sourceCycleAsOf) sourceCycleAsOfBySymbol[symbol] = sourceCycleAsOf;

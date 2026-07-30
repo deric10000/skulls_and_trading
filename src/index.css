@@ -7035,6 +7035,37 @@ select.forge-cell-input {
   font-size: 0.85rem;
 }
 
+.weather-card-evidence {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, auto));
+  gap: 0.25rem 0.75rem;
+  max-width: min(100%, 30rem);
+  padding: 0.45rem 0.6rem;
+  border-radius: var(--radius-sm);
+  background: rgb(5 7 13 / 0.78);
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  line-height: 1.4;
+}
+
+.weather-card-evidence strong {
+  color: var(--text-strong);
+  font-variant-numeric: tabular-nums;
+}
+
+.weather-card-why {
+  grid-column: 1 / -1;
+  overflow: hidden;
+  color: var(--text-base);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.weather-advanced {
+  display: grid;
+  gap: 0.25rem;
+}
+
 /* Sector / Industry selector: SearchableSelect (`on-graphics` trigger + typeahead
    menu). Spans the card width, below the head pill. Re-enables pointer events
    (the rest of the overlay is click-through to the card hit target) so changing
