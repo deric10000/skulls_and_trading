@@ -167,6 +167,15 @@ describe("market cycle scale and completeness", () => {
       technicals: {},
       byTimeframe: {},
       context: {},
+      weatherBenchmarks: {
+        status: "insufficient" as const,
+        expectedSymbols: [],
+        freshSymbols: [],
+        missingSymbols: [],
+        benchmarks: {},
+        sectorSpdrOutperformingFreshCount: 0,
+        sectorSpdrAboveSma50FreshCount: 0,
+      },
       errors: [],
     };
     const env = {
@@ -214,6 +223,15 @@ describe("market cycle scale and completeness", () => {
       technicals: values,
       byTimeframe: values,
       context: {},
+      weatherBenchmarks: {
+        status: "complete",
+        expectedSymbols: [],
+        freshSymbols: [],
+        missingSymbols: [],
+        benchmarks: {},
+        sectorSpdrOutperformingFreshCount: 11,
+        sectorSpdrAboveSma50FreshCount: 11,
+      },
       errors: ["T0000: hidden", "T0320: visible"],
     };
     const env = {

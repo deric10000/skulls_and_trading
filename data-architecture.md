@@ -287,6 +287,15 @@ map independently when possible. Every watched ticker gets a stock reading
 (market cascade tilt, refined by sector/industry when known — **no extra Yahoo
 calls** for the cascade paint itself).
 
+Market Weather V2 inputs publish in parallel on each completed cycle as
+`weatherBenchmarks`, backed by the dedicated
+`market:cycle:weather-benchmarks:<cycle>` KV shard. Its RSP, IWM, 11 GICS SPDR,
+and QQQ system symbols stay outside the user registry/40-symbol manifest and
+fundamentals gate. The shard reuses cron's closed 1h→daily technical path;
+missing inputs remain omitted and its status is `provisional` or
+`insufficient` without blocking user quote publication. FreeTier's visible
+`getMarketWeather` path remains on the v1 snapshot until a separate UI flip.
+
 ### Add-time taxonomy hydrate (Weather UI only)
 
 Newly added non-seeded tickers still get quote-on-add + symbol registration for

@@ -6,6 +6,7 @@ export * from "./conditions";
 export * from "./scoring";
 export * from "./scoringV2";
 export * from "./scoringV2Types";
+export * from "./marketV2Adapter";
 export * from "./session";
 export * from "./graphics";
 export * from "./taxonomy";

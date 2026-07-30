@@ -11,7 +11,10 @@ import type {
   TickerQuote,
   TimeframedIndicators,
 } from "../../types";
-import type { MarketCyclePayload } from "./client";
+import type {
+  MarketCyclePayload,
+  WeatherBenchmarksPayload,
+} from "./client";
 import { sanitizeFundamentals } from "../forge/metricSanity";
 import { mapYahooTaxonomy } from "../weather/yahooTaxonomy";
 import { reportTaxonomyGap } from "../userStore/taxonomyGaps";
@@ -58,6 +61,7 @@ const technicalsByTimeframe = new Map<
   Partial<Record<CandleInterval, TimeframedIndicators>>
 >();
 let marketContext: MarketContext | null = null;
+let weatherBenchmarks: WeatherBenchmarksPayload | null = null;
 let marketCycle: Pick<
   MarketCyclePayload,
   "cycleAsOf" | "completedAt" | "publishedAt" | "nextCycleAt"
@@ -197,6 +201,7 @@ export function resetLiveCache(): void {
   strategyDirtyAt.clear();
   tickerDirtyAt.clear();
   marketContext = null;
+  weatherBenchmarks = null;
   marketCycle = null;
   budgets = [];
   for (const hook of liveCacheResetHooks) hook();
@@ -220,6 +225,7 @@ export function applyMarketCycle(cycle: MarketCyclePayload): void {
     technicalsByTimeframe.set(ticker.toUpperCase(), snapshots);
   }
   if (cycle.context) marketContext = cycle.context;
+  weatherBenchmarks = cycle.weatherBenchmarks ?? null;
   marketCycle = {
     cycleAsOf: cycle.cycleAsOf,
     completedAt: cycle.completedAt,
@@ -231,6 +237,11 @@ export function applyMarketCycle(cycle: MarketCyclePayload): void {
 
 export function getMarketCycleMeta(): typeof marketCycle {
   return marketCycle;
+}
+
+/** Parallel V2 input projection; FreeTier Weather UI remains on v1. */
+export function getLiveWeatherBenchmarks(): WeatherBenchmarksPayload | null {
+  return weatherBenchmarks;
 }
 
 export function setLiveQuotes(next: Record<string, TickerQuote>): void {

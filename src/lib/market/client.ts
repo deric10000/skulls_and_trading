@@ -14,6 +14,36 @@ import type {
 import { getAccessToken } from "../auth/session";
 import type { ProviderBudget } from "./liveCache";
 
+export interface WeatherBenchmarkObservable {
+  asOf: string;
+  price: number;
+  ema10?: number;
+  ema20?: number;
+  ema200?: number;
+  sma20?: number;
+  sma50?: number;
+  sma200?: number;
+  atrPct?: number;
+  rsi14?: number;
+  return5dPct?: number;
+  return20dPct?: number;
+}
+
+export interface WeatherBenchmarksPayload {
+  status: "complete" | "provisional" | "insufficient";
+  completedAt?: string;
+  expectedSymbols: string[];
+  freshSymbols: string[];
+  missingSymbols: string[];
+  benchmarks: Record<string, WeatherBenchmarkObservable>;
+  rspMinusSpy5dPct?: number;
+  iwmMinusSpy5dPct?: number;
+  sectorSpdrOutperforming?: number;
+  sectorSpdrOutperformingFreshCount: number;
+  sectorSpdrAboveSma50?: number;
+  sectorSpdrAboveSma50FreshCount: number;
+}
+
 export interface MarketCyclePayload {
   cycleAsOf: string;
   completedAt: string;
@@ -28,6 +58,7 @@ export interface MarketCyclePayload {
     Partial<Record<CandleInterval, TimeframedIndicators>>
   >;
   context: MarketContext | null;
+  weatherBenchmarks?: WeatherBenchmarksPayload;
   errors: string[];
 }
 
