@@ -12,6 +12,8 @@ import {
   resolveRegistryWriteMode,
   selectActiveGlobalSymbols,
   shardCapacityPlan,
+  weatherBenchmarkRunMode,
+  type WeatherBenchmarkShard,
 } from "./marketCycle";
 
 describe("market cycle scale and completeness", () => {
@@ -72,6 +74,45 @@ describe("market cycle scale and completeness", () => {
         values: { AAPL: {}, MSFT: {} },
       }),
     ).toBe(true);
+  });
+
+  it("owns benchmark initial work after tech and retries partial work only at minute 59", () => {
+    const partial: WeatherBenchmarkShard = {
+      schemaVersion: 1,
+      completedAt: "2026-07-29T20:29:30.000Z",
+      expectedSymbols: ["SPY", "QQQ", "RSP"],
+      values: {
+        SPY: { asOf: "2026-07-29T20:00:00.000Z", price: 620 },
+      },
+      attemptCount: 1,
+      budgetSkippedSymbols: ["QQQ", "RSP"],
+      errors: [],
+    };
+    const complete: WeatherBenchmarkShard = {
+      ...partial,
+      values: {
+        SPY: { asOf: "2026-07-29T20:00:00.000Z", price: 620 },
+        QQQ: { asOf: "2026-07-29T20:00:00.000Z", price: 550 },
+        RSP: { asOf: "2026-07-29T20:00:00.000Z", price: 180 },
+        IWM: { asOf: "2026-07-29T20:00:00.000Z", price: 240 },
+        XLE: { asOf: "2026-07-29T20:00:00.000Z", price: 90 },
+        XLB: { asOf: "2026-07-29T20:00:00.000Z", price: 90 },
+        XLI: { asOf: "2026-07-29T20:00:00.000Z", price: 90 },
+        XLY: { asOf: "2026-07-29T20:00:00.000Z", price: 90 },
+        XLP: { asOf: "2026-07-29T20:00:00.000Z", price: 90 },
+        XLV: { asOf: "2026-07-29T20:00:00.000Z", price: 90 },
+        XLF: { asOf: "2026-07-29T20:00:00.000Z", price: 90 },
+        XLK: { asOf: "2026-07-29T20:00:00.000Z", price: 90 },
+        XLC: { asOf: "2026-07-29T20:00:00.000Z", price: 90 },
+        XLU: { asOf: "2026-07-29T20:00:00.000Z", price: 90 },
+        XLRE: { asOf: "2026-07-29T20:00:00.000Z", price: 90 },
+      },
+    };
+    expect(weatherBenchmarkRunMode(28, null)).toBeNull();
+    expect(weatherBenchmarkRunMode(29, null)).toBe("initial");
+    expect(weatherBenchmarkRunMode(30, partial)).toBeNull();
+    expect(weatherBenchmarkRunMode(59, partial)).toBe("retry");
+    expect(weatherBenchmarkRunMode(59, complete)).toBeNull();
   });
 
   it("requires a fundamentals value for every cycle symbol", () => {
@@ -172,7 +213,10 @@ describe("market cycle scale and completeness", () => {
         status: "insufficient" as const,
         expectedSymbols: [],
         freshSymbols: [],
+        staleSymbols: [],
         missingSymbols: [],
+        freshnessBySymbol: {},
+        sourceCycleAsOfBySymbol: {},
         benchmarks: {},
         sectorSpdrOutperformingFreshCount: 0,
         sectorSpdrAboveSma50FreshCount: 0,
@@ -229,7 +273,10 @@ describe("market cycle scale and completeness", () => {
         status: "complete",
         expectedSymbols: [],
         freshSymbols: [],
+        staleSymbols: [],
         missingSymbols: [],
+        freshnessBySymbol: {},
+        sourceCycleAsOfBySymbol: {},
         benchmarks: {},
         sectorSpdrOutperformingFreshCount: 11,
         sectorSpdrAboveSma50FreshCount: 11,

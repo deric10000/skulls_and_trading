@@ -16,6 +16,8 @@ import type { ProviderBudget } from "./liveCache";
 
 export interface WeatherBenchmarkObservable {
   asOf: string;
+  sourceCycleAsOf?: string;
+  freshness?: "fresh" | "stale";
   price: number;
   ema10?: number;
   ema20?: number;
@@ -43,7 +45,10 @@ export interface WeatherBenchmarksPayload {
   completedAt?: string;
   expectedSymbols: string[];
   freshSymbols: string[];
+  staleSymbols?: string[];
   missingSymbols: string[];
+  freshnessBySymbol?: Record<string, "fresh" | "stale" | "unavailable">;
+  sourceCycleAsOfBySymbol?: Record<string, string>;
   benchmarks: Record<string, WeatherBenchmarkObservable>;
   rspMinusSpy5dPct?: number;
   iwmMinusSpy5dPct?: number;

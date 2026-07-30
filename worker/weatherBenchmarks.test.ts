@@ -4,7 +4,10 @@ import {
   buildWeatherBenchmarkObservable,
   derivePublishedWeatherBenchmarks,
   deriveWeatherSymbolObservables,
+  expectedWeatherCycleAge,
+  planWeatherBenchmarkFetch,
   SECTOR_SPDR_SYMBOLS,
+  WEATHER_BENCHMARK_FETCH_ORDER,
   WEATHER_BENCHMARK_SYMBOLS,
 } from "./weatherBenchmarks";
 
@@ -83,6 +86,30 @@ describe("weather benchmark projection", () => {
     expect(published.sectorSpdrAboveSma50FreshCount).toBe(11);
   });
 
+  it("reserves Yahoo headroom and cuts IWM before required benchmarks", () => {
+    expect(planWeatherBenchmarkFetch(17).fetchSymbols).toEqual([
+      ...WEATHER_BENCHMARK_FETCH_ORDER,
+    ]);
+    const iwmCut = planWeatherBenchmarkFetch(16);
+    expect(iwmCut.fetchSymbols).not.toContain("IWM");
+    expect(iwmCut.budgetSkippedSymbols).toEqual(["IWM"]);
+    expect(iwmCut.fetchSymbols).toHaveLength(14);
+
+    const constrained = planWeatherBenchmarkFetch(5);
+    expect(constrained.fetchSymbols).toEqual(["SPY", "QQQ", "RSP"]);
+    expect(constrained.budgetSkippedSymbols.at(-1)).toBe("IWM");
+  });
+
+  it("plans minute-59 recovery for missing symbols only", () => {
+    const existing = WEATHER_BENCHMARK_FETCH_ORDER.filter(
+      (symbol) => symbol !== "XLRE" && symbol !== "IWM",
+    );
+    expect(planWeatherBenchmarkFetch(4, existing)).toEqual({
+      fetchSymbols: ["XLRE", "IWM"],
+      budgetSkippedSymbols: [],
+    });
+  });
+
   it("is insufficient without RSP or six fresh sector observations", () => {
     const benchmark = buildWeatherBenchmarkObservable(dailyBars())!;
     const published = derivePublishedWeatherBenchmarks({
@@ -96,6 +123,50 @@ describe("weather benchmark projection", () => {
     });
     expect(published.status).toBe("insufficient");
     expect(published.sectorSpdrOutperforming).toBeUndefined();
+  });
+
+  it("carries prior observations for at most two expected cycles as explicitly stale", () => {
+    const benchmark = buildWeatherBenchmarkObservable(dailyBars())!;
+    const first = derivePublishedWeatherBenchmarks(
+      Object.fromEntries(
+        ["SPY", "RSP", "IWM", "QQQ", ...SECTOR_SPDR_SYMBOLS].map(
+          (symbol) => [symbol, benchmark],
+        ),
+      ),
+      "2026-07-29T20:29:30.000Z",
+      { cycleAsOf: "2026-07-29T20:00:00.000Z" },
+    );
+    const carried = derivePublishedWeatherBenchmarks(
+      {},
+      "2026-07-29T21:29:30.000Z",
+      {
+        cycleAsOf: "2026-07-29T21:00:00.000Z",
+        prior: first,
+      },
+    );
+    expect(carried.freshSymbols).toEqual([]);
+    expect(carried.staleSymbols).toHaveLength(15);
+    expect(carried.freshnessBySymbol?.SPY).toBe("stale");
+    expect(carried.benchmarks.SPY?.freshness).toBe("stale");
+    expect(carried.status).toBe("insufficient");
+
+    const expired = derivePublishedWeatherBenchmarks(
+      {},
+      "2026-07-29T23:29:30.000Z",
+      {
+        cycleAsOf: "2026-07-29T23:00:00.000Z",
+        prior: carried,
+      },
+    );
+    expect(expired.freshnessBySymbol?.SPY).toBe("unavailable");
+    expect(expired.benchmarks.SPY).toBeUndefined();
+  });
+
+  it("does not age observations during closed market-week hours", () => {
+    expect(expectedWeatherCycleAge(
+      "2026-08-01T00:00:00.000Z",
+      "2026-08-02T23:00:00.000Z",
+    )).toBe(0);
   });
 });
 

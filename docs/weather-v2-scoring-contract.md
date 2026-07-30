@@ -280,10 +280,10 @@ Each example lists **expected** `coverage` + `conditionId` (or Industry unavaila
 
 | ID | Scenario | Expected |
 |---|---|---|
-| G1 | Market: Structure 80, Participation 70, Risk 65, Momentum 60; computed Index 72; QQQ above EMA200 | `complete` → **risk-on-tide** |
+| G1 | Market: Structure 80, Participation 70, Risk 65, Momentum 60; computed Index 71; QQQ above EMA200 | `complete` → **risk-on-tide** |
 | G2 | Market: Structure 75, Participation 35, Risk 40, Momentum 50; computed Index 53; no event flags | **chop-seas** because pillar spread is 40 and Headwind does not pass (`weatherIndex` is not <45) |
 | G3 | Market: Structure 25, Participation 30, Risk 25, Momentum 30; computed Index 27 | **risk-off-storm** |
-| G4 | Market: same pillar values as G1; HY unavailable, VIX supplies Risk 65; computed Index 72 | `partial` → **risk-on-tide** |
+| G4 | Market: same pillar values as G1; HY unavailable, VIX supplies Risk 65; computed Index 71 | `partial` → **risk-on-tide** |
 | G5 | Market: Structure 25, Participation 30, VIX-only Risk 25, Momentum 30; HY more than two expected cycles old and omitted; computed Index 27 | `partial` → **risk-off-storm**; HY must not become 50 |
 | G6 | Stock: Structure 50, RS 48, volume Participation 48, Risk 58, Momentum 56; computed confirmation 48 and Index 52; parent Sector Index 30 | **headwind** through the weak-higher-layer path |
 | G7 | Benchmark shard missing RSP and <6 SPDRs | Market **insufficient** |

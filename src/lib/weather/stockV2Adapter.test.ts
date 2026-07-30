@@ -52,6 +52,16 @@ describe("Stock V2 adapter", () => {
     expect(reading.pillars.relativeStrength).toBeUndefined();
   });
 
+  it("marks an explicitly stale symbol observable partial", () => {
+    const reading = buildStockV2Reading({
+      ticker: "AAPL",
+      price: 100,
+      technicals,
+      observable: { ...observable, freshness: "stale" },
+    });
+    expect(reading.coverage).toBe("partial");
+  });
+
   it("takes the G6 weak-Sector headwind path", () => {
     const reading = buildStockV2Reading({
       ticker: "G6", price: 100,

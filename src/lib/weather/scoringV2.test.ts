@@ -25,14 +25,30 @@ const condition = (result: WeatherV2Classification) =>
 
 const market = (
   overrides: Partial<ClassifyWeatherV2Inputs> = {},
-): ClassifyWeatherV2Inputs => ({
-  layer: "market",
-  coverage: "complete",
-  pillars: { structure: 80, participation: 70, risk: 65, momentum: 60 },
-  weatherIndex: 72,
-  qqq200: computeQqq200Support(1.1),
-  ...overrides,
-});
+): ClassifyWeatherV2Inputs => {
+  const pillars = overrides.pillars ?? {
+    structure: 80,
+    participation: 70,
+    risk: 65,
+    momentum: 60,
+  };
+  const index = computeWeatherIndex("market", pillars);
+  if (!index) throw new Error("Market fixture requires at least one pillar");
+  if (
+    overrides.weatherIndex !== undefined &&
+    Math.abs(overrides.weatherIndex - index.value) > 0.000_001
+  ) {
+    throw new Error("Market fixture Weather Index must match its pillars");
+  }
+  return {
+    layer: "market",
+    coverage: "complete",
+    qqq200: computeQqq200Support(1.1),
+    ...overrides,
+    pillars,
+    weatherIndex: index.value,
+  };
+};
 
 describe("Weather V2 formulas", () => {
   it("uses ATR-unit distance bands and half-up rounding after aggregation", () => {
@@ -108,14 +124,12 @@ describe("Weather V2 golden fixtures G1-G18", () => {
   it("G2: wide Market disagreement is Chop Seas, not Headwind", () => {
     expect(condition(classifyWeatherV2(market({
       pillars: { structure: 75, participation: 35, risk: 40, momentum: 50 },
-      weatherIndex: 53,
     })))).toBe("chop-seas");
   });
 
   it("G3: broadly damaged Market is Risk-Off Storm", () => {
     expect(condition(classifyWeatherV2(market({
       pillars: { structure: 25, participation: 30, risk: 25, momentum: 30 },
-      weatherIndex: 27,
     })))).toBe("risk-off-storm");
   });
 
@@ -151,7 +165,7 @@ describe("Weather V2 golden fixtures G1-G18", () => {
         risk: 58,
         momentum: 56,
       },
-      weatherIndex: 52,
+      weatherIndex: 51.5,
       higherLayerIndex: 30,
     }))).toBe("headwind");
   });
@@ -174,14 +188,12 @@ describe("Weather V2 golden fixtures G1-G18", () => {
   it("G8: conflicting pillars classify as Chop Seas", () => {
     expect(condition(classifyWeatherV2(market({
       pillars: { structure: 80, risk: 25, participation: 50, momentum: 50 },
-      weatherIndex: 54,
     })))).toBe("chop-seas");
   });
 
   it("G9: quiet, aligned Market earns Calm Waters", () => {
     expect(condition(classifyWeatherV2(market({
       pillars: { structure: 52, participation: 50, risk: 60, momentum: 50 },
-      weatherIndex: 53,
     })))).toBe("calm-waters");
   });
 
@@ -196,7 +208,7 @@ describe("Weather V2 golden fixtures G1-G18", () => {
         risk: 65,
         momentum: 50,
       },
-      weatherIndex: 56,
+      weatherIndex: 56.15,
       higherLayerIndex: 50,
       substantiallyBelowStructureRelation: true,
     }))).toBe("mixed-signals");
@@ -205,7 +217,6 @@ describe("Weather V2 golden fixtures G1-G18", () => {
   it("G11: QQQ slightly below EMA200 contributes Market Headwind", () => {
     expect(condition(classifyWeatherV2(market({
       pillars: { structure: 48, participation: 50, risk: 55, momentum: 55 },
-      weatherIndex: 51,
       qqq200: computeQqq200Support(-0.5),
     })))).toBe("headwind");
   });
@@ -213,7 +224,6 @@ describe("Weather V2 golden fixtures G1-G18", () => {
   it("G12: exact confirmed QQQ break path emits Red Sky Warning", () => {
     expect(condition(classifyWeatherV2(market({
       pillars: { structure: 42, participation: 40, risk: 40, momentum: 50 },
-      weatherIndex: 43,
       qqq200: computeQqq200Support(-1.2),
     })))).toBe("red-sky-warning");
   });
@@ -252,7 +262,7 @@ describe("Weather V2 golden fixtures G1-G18", () => {
       layer: "sector",
       coverage: "complete",
       pillars: { structure: 60, relativeStrength: 75, risk: 60, momentum: 55 },
-      weatherIndex: 62,
+      weatherIndex: 63,
       relativeStrengthImprovement: 6 - 3.5,
       hasPriorFreshV2Cycle: true,
     }))).toBe("rotation-current");

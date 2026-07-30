@@ -27,8 +27,8 @@ import {
 import { GICS_SECTORS, type GicsSector } from "./taxonomy";
 
 export interface SectorV2Reading {
-  sector: GicsSector;
-  spdr: string;
+  sector: GicsSector | null;
+  spdr: string | null;
   coverage: WeatherV2Coverage;
   condition: WeatherV2Classification;
   pillars: WeatherV2Pillars;
@@ -43,8 +43,8 @@ export interface SectorV2Reading {
 }
 
 function emptySectorReading(
-  sector: GicsSector,
-  spdr: string,
+  sector: GicsSector | null,
+  spdr: string | null,
 ): SectorV2Reading {
   return {
     sector,
@@ -80,11 +80,15 @@ export function buildSectorV2Reading(
   assertGicsSectorSpdrMap();
   const spdr = spdrForGicsSector(sector);
   if (!spdr || !GICS_SECTORS.includes(sector as GicsSector)) {
-    return emptySectorReading("Information Technology", "XLK");
+    return emptySectorReading(null, null);
   }
   const typedSector = sector as GicsSector;
   const obs = weather?.benchmarks[spdr];
   if (!obs) return emptySectorReading(typedSector, spdr);
+  const freshness =
+    weather?.freshnessBySymbol?.[spdr] ??
+    obs.freshness ??
+    "fresh";
 
   const structure = computeStructure({
     price: obs.price,
@@ -131,15 +135,14 @@ export function buildSectorV2Reading(
     layer: "sector",
     hasInstrument: true,
     hasMinimumStructure: structure?.hasMinimumRelation === true,
-    softBudgetPartial: weather?.status === "provisional",
     optionalInputMissing:
+      freshness !== "fresh" ||
       structure?.partial === true ||
       relativeStrength?.partial === true ||
       risk?.partial === true ||
-      momentum?.partial === true ||
-      weather?.status !== "complete",
+      momentum?.partial === true,
     allPreferredInputsFresh:
-      weather?.status === "complete" &&
+      freshness === "fresh" &&
       structure?.partial !== true &&
       relativeStrength != null &&
       risk != null &&

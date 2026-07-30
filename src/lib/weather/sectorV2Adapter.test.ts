@@ -84,6 +84,35 @@ describe("Sector V2 adapter", () => {
     });
   });
 
+  it("never relabels an unknown sector as Information Technology", () => {
+    const reading = buildSectorV2Reading("Imaginary Sector", weather);
+    expect(reading.sector).toBeNull();
+    expect(reading.spdr).toBeNull();
+    expect(reading.coverage).toBe("insufficient");
+  });
+
+  it("evaluates coverage for the mapped sector instead of unrelated global gaps", () => {
+    const reading = buildSectorV2Reading("Information Technology", {
+      ...weather,
+      status: "provisional",
+      missingSymbols: ["IWM"],
+      freshnessBySymbol: { XLK: "fresh" },
+    });
+    expect(reading.coverage).toBe("complete");
+  });
+
+  it("marks a carried mapped SPDR partial rather than fresh or unavailable", () => {
+    const reading = buildSectorV2Reading("Information Technology", {
+      ...weather,
+      freshnessBySymbol: { XLK: "stale" },
+      benchmarks: {
+        ...weather.benchmarks,
+        XLK: { ...xlK, freshness: "stale" },
+      },
+    });
+    expect(reading.coverage).toBe("partial");
+  });
+
   it("fires Rotation Current when RS improvement and confirmation clear (G17)", () => {
     const strongRs = {
       ...weather,

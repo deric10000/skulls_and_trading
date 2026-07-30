@@ -48,6 +48,9 @@ export const WEATHER_BENCHMARK_FETCH_ORDER = [
 
 export interface WeatherBenchmarkObservable {
   asOf: string;
+  /** Cycle that fetched or carried this observable into the published payload. */
+  sourceCycleAsOf?: string;
+  freshness?: "fresh" | "stale";
   price: number;
   ema10?: number;
   ema20?: number;
@@ -110,6 +113,7 @@ export function deriveWeatherSymbolObservables(
   values: Record<string, WeatherBenchmarkObservable>,
   fundamentals: Record<string, Record<string, unknown>>,
   benchmarks: PublishedWeatherBenchmarks,
+  cycleAsOf?: string,
 ): Record<string, WeatherSymbolObservable> {
   const output: Record<string, WeatherSymbolObservable> = {};
   const spy = benchmarks.benchmarks.SPY;
@@ -120,6 +124,8 @@ export function deriveWeatherSymbolObservables(
       : undefined;
     output[symbol] = {
       ...observable,
+      ...(cycleAsOf ? { sourceCycleAsOf: cycleAsOf } : {}),
+      freshness: "fresh",
       ...(finite(observable.return5dPct) && finite(spy?.return5dPct)
         ? { rsVsSpy5d: observable.return5dPct - spy.return5dPct }
         : {}),
@@ -209,7 +215,10 @@ export interface PublishedWeatherBenchmarks {
   completedAt?: string;
   expectedSymbols: string[];
   freshSymbols: string[];
+  staleSymbols?: string[];
   missingSymbols: string[];
+  freshnessBySymbol?: Record<string, "fresh" | "stale" | "unavailable">;
+  sourceCycleAsOfBySymbol?: Record<string, string>;
   benchmarks: Record<string, WeatherBenchmarkObservable>;
   rspMinusSpy5dPct?: number;
   iwmMinusSpy5dPct?: number;
@@ -219,61 +228,196 @@ export interface PublishedWeatherBenchmarks {
   sectorSpdrAboveSma50FreshCount: number;
 }
 
+const HOUR_MS = 60 * 60_000;
+export const WEATHER_BENCHMARK_YAHOO_RESERVE = 2;
+
+function easternCycleParts(time: number): {
+  weekday: string;
+  minutes: number;
+} {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    weekday: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(new Date(time));
+  const get = (type: string) =>
+    parts.find((part) => part.type === type)?.value ?? "";
+  return {
+    weekday: get("weekday"),
+    minutes: (Number(get("hour")) % 24) * 60 + Number(get("minute")),
+  };
+}
+
+/** Same Sunday 20:00 ET → Friday 20:00 ET market-week policy as marketCycle. */
+export function isExpectedWeatherCycle(time: number): boolean {
+  const { weekday, minutes } = easternCycleParts(time);
+  if (weekday === "Sat") return false;
+  if (weekday === "Sun") return minutes >= 20 * 60;
+  if (weekday === "Fri") return minutes <= 20 * 60;
+  return true;
+}
+
+/** Count scheduled hourly cycles, excluding the source cycle itself. */
+export function expectedWeatherCycleAge(
+  sourceCycleAsOf: string | undefined,
+  currentCycleAsOf: string | undefined,
+): number | null {
+  if (!sourceCycleAsOf || !currentCycleAsOf) return null;
+  const source = Date.parse(sourceCycleAsOf);
+  const current = Date.parse(currentCycleAsOf);
+  if (!Number.isFinite(source) || !Number.isFinite(current) || source > current) {
+    return null;
+  }
+  let age = 0;
+  for (
+    let boundary = Math.floor(source / HOUR_MS) * HOUR_MS + HOUR_MS;
+    boundary <= current && age <= 3;
+    boundary += HOUR_MS
+  ) {
+    if (isExpectedWeatherCycle(boundary)) age += 1;
+  }
+  return age;
+}
+
+/**
+ * Reserve Yahoo headroom and drop IWM before any required benchmark. Existing
+ * values are excluded so minute-59 recovery fetches only missing symbols.
+ */
+export function planWeatherBenchmarkFetch(
+  yahooRemaining: number,
+  existingSymbols: Iterable<string> = [],
+  reserve = WEATHER_BENCHMARK_YAHOO_RESERVE,
+): { fetchSymbols: string[]; budgetSkippedSymbols: string[] } {
+  const existing = new Set(
+    [...existingSymbols].map((symbol) => symbol.toUpperCase()),
+  );
+  const missingRequired = WEATHER_BENCHMARK_FETCH_ORDER.filter(
+    (symbol) => symbol !== "IWM" && !existing.has(symbol),
+  );
+  const iwmMissing = !existing.has("IWM");
+  const available = Math.max(0, Math.floor(yahooRemaining) - reserve);
+  const orderedMissing = [
+    ...missingRequired,
+    ...(iwmMissing ? ["IWM"] : []),
+  ];
+  const fetchSymbols = orderedMissing.slice(0, available);
+  return {
+    fetchSymbols,
+    budgetSkippedSymbols: orderedMissing.slice(fetchSymbols.length),
+  };
+}
+
+export function weatherBenchmarkMissingSymbols(
+  values: Record<string, WeatherBenchmarkObservable>,
+): string[] {
+  return WEATHER_BENCHMARK_FETCH_ORDER.filter((symbol) => !values[symbol]);
+}
+
 export function derivePublishedWeatherBenchmarks(
   values: Record<string, WeatherBenchmarkObservable>,
   completedAt?: string,
+  lifecycle: {
+    cycleAsOf?: string;
+    prior?: PublishedWeatherBenchmarks | null;
+  } = {},
 ): PublishedWeatherBenchmarks {
   const expectedSymbols = ["SPY", ...WEATHER_BENCHMARK_SYMBOLS];
-  const freshSymbols = expectedSymbols.filter((symbol) => values[symbol]);
-  const missingSymbols = expectedSymbols.filter((symbol) => !values[symbol]);
-  const spy5d = values.SPY?.return5dPct;
+  const benchmarks: Record<string, WeatherBenchmarkObservable> = {};
+  const freshnessBySymbol: Record<
+    string,
+    "fresh" | "stale" | "unavailable"
+  > = {};
+  const sourceCycleAsOfBySymbol: Record<string, string> = {};
+  for (const symbol of expectedSymbols) {
+    const current = values[symbol];
+    if (current) {
+      const sourceCycleAsOf = lifecycle.cycleAsOf ?? current.sourceCycleAsOf;
+      benchmarks[symbol] = {
+        ...current,
+        ...(sourceCycleAsOf ? { sourceCycleAsOf } : {}),
+        freshness: "fresh",
+      };
+      freshnessBySymbol[symbol] = "fresh";
+      if (sourceCycleAsOf) sourceCycleAsOfBySymbol[symbol] = sourceCycleAsOf;
+      continue;
+    }
+    const prior = lifecycle.prior?.benchmarks[symbol];
+    const priorSource =
+      lifecycle.prior?.sourceCycleAsOfBySymbol?.[symbol] ??
+      prior?.sourceCycleAsOf;
+    const age = expectedWeatherCycleAge(priorSource, lifecycle.cycleAsOf);
+    if (prior && age != null && age >= 1 && age <= 2) {
+      benchmarks[symbol] = {
+        ...prior,
+        ...(priorSource ? { sourceCycleAsOf: priorSource } : {}),
+        freshness: "stale",
+      };
+      freshnessBySymbol[symbol] = "stale";
+      if (priorSource) sourceCycleAsOfBySymbol[symbol] = priorSource;
+    } else {
+      freshnessBySymbol[symbol] = "unavailable";
+    }
+  }
+  const freshSymbols = expectedSymbols.filter(
+    (symbol) => freshnessBySymbol[symbol] === "fresh",
+  );
+  const staleSymbols = expectedSymbols.filter(
+    (symbol) => freshnessBySymbol[symbol] === "stale",
+  );
+  const missingSymbols = expectedSymbols.filter(
+    (symbol) => freshnessBySymbol[symbol] === "unavailable",
+  );
+  const fresh = (symbol: string) =>
+    freshnessBySymbol[symbol] === "fresh" ? benchmarks[symbol] : undefined;
+  const spy5d = fresh("SPY")?.return5dPct;
   const relativeSectors = SECTOR_SPDR_SYMBOLS.filter(
     (symbol) =>
-      finite(values[symbol]?.return5dPct) && finite(spy5d),
+      finite(fresh(symbol)?.return5dPct) && finite(spy5d),
   );
   const structuredSectors = SECTOR_SPDR_SYMBOLS.filter(
-    (symbol) => finite(values[symbol]?.sma50),
+    (symbol) => finite(fresh(symbol)?.sma50),
   );
   const outperforming = relativeSectors.filter(
-    (symbol) => values[symbol]!.return5dPct! > spy5d!,
+    (symbol) => fresh(symbol)!.return5dPct! > spy5d!,
   ).length;
   const aboveSma50 = structuredSectors.filter(
-    (symbol) => values[symbol]!.price > values[symbol]!.sma50!,
+    (symbol) => fresh(symbol)!.price > fresh(symbol)!.sma50!,
   ).length;
   const hasRspParticipation =
-    finite(values.RSP?.return5dPct) && finite(spy5d);
+    finite(fresh("RSP")?.return5dPct) && finite(spy5d);
   const hasMinimumParticipation =
     hasRspParticipation || relativeSectors.length >= 6 ||
     structuredSectors.length >= 6;
   const hasSpyStructure =
-    finite(values.SPY?.price) &&
-    finite(values.SPY?.atrPct) &&
+    finite(fresh("SPY")?.price) &&
+    finite(fresh("SPY")?.atrPct) &&
     (
-      finite(values.SPY?.ema20) ||
-      finite(values.SPY?.sma20) ||
-      finite(values.SPY?.sma50)
+      finite(fresh("SPY")?.ema20) ||
+      finite(fresh("SPY")?.sma20) ||
+      finite(fresh("SPY")?.sma50)
     );
   const hasMinimumMarket =
     hasSpyStructure && hasMinimumParticipation;
   const hasPreferredFields =
-    expectedSymbols.every((symbol) => values[symbol]) &&
+    expectedSymbols.every((symbol) => freshnessBySymbol[symbol] === "fresh") &&
     hasRspParticipation &&
-    finite(values.IWM?.return5dPct) &&
+    finite(fresh("IWM")?.return5dPct) &&
     relativeSectors.length === SECTOR_SPDR_SYMBOLS.length &&
     structuredSectors.length === SECTOR_SPDR_SYMBOLS.length &&
-    finite(values.QQQ?.price) &&
-    finite(values.QQQ?.ema200) &&
-    finite(values.QQQ?.atrPct);
+    finite(fresh("QQQ")?.price) &&
+    finite(fresh("QQQ")?.ema200) &&
+    finite(fresh("QQQ")?.atrPct);
   const status =
     !hasMinimumMarket
       ? "insufficient"
       : !hasPreferredFields
         ? "provisional"
         : "complete";
-  const spy5dVal = values.SPY?.return5dPct;
-  const spy20dVal = values.SPY?.return20dPct;
-  const benchmarks: Record<string, WeatherBenchmarkObservable> = {};
-  for (const [symbol, obs] of Object.entries(values)) {
+  const spy5dVal = benchmarks.SPY?.return5dPct;
+  const spy20dVal = benchmarks.SPY?.return20dPct;
+  for (const [symbol, obs] of Object.entries(benchmarks)) {
     if (symbol === "SPY") {
       benchmarks[symbol] = obs;
       continue;
@@ -287,19 +431,21 @@ export function derivePublishedWeatherBenchmarks(
     }
     benchmarks[symbol] = withRs;
   }
-  if (values.SPY) benchmarks.SPY = values.SPY;
   return {
     status,
     ...(completedAt ? { completedAt } : {}),
     expectedSymbols,
     freshSymbols,
+    staleSymbols,
     missingSymbols,
+    freshnessBySymbol,
+    sourceCycleAsOfBySymbol,
     benchmarks,
-    ...(finite(values.RSP?.return5dPct) && finite(spy5d)
-      ? { rspMinusSpy5dPct: values.RSP.return5dPct - spy5d }
+    ...(finite(fresh("RSP")?.return5dPct) && finite(spy5d)
+      ? { rspMinusSpy5dPct: fresh("RSP")!.return5dPct! - spy5d }
       : {}),
-    ...(finite(values.IWM?.return5dPct) && finite(spy5d)
-      ? { iwmMinusSpy5dPct: values.IWM.return5dPct - spy5d }
+    ...(finite(fresh("IWM")?.return5dPct) && finite(spy5d)
+      ? { iwmMinusSpy5dPct: fresh("IWM")!.return5dPct! - spy5d }
       : {}),
     ...(relativeSectors.length >= 6
       ? { sectorSpdrOutperforming: outperforming / relativeSectors.length }

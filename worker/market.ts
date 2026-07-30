@@ -192,6 +192,12 @@ function refreshBudgetWindow(id: ProviderId, limit: number): void {
   }
 }
 
+/** Read-only snapshot for bounded scheduled work that must reserve headroom. */
+export function getProviderBudgetSnapshot(id: ProviderId): ProviderBudget {
+  refreshBudgetWindow(id, budgets[id].limit);
+  return { ...budgets[id] };
+}
+
 function consumeBudget(id: ProviderId, limit: number): boolean {
   refreshBudgetWindow(id, limit);
   const budget = budgets[id];

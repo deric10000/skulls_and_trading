@@ -292,8 +292,13 @@ Market Weather V2 inputs publish in parallel on each completed cycle as
 `market:cycle:weather-benchmarks:<cycle>` KV shard. Its RSP, IWM, 11 GICS SPDR,
 and QQQ system symbols stay outside the user registry/40-symbol manifest and
 fundamentals gate. The shard reuses cron's closed 1h→daily technical path;
-missing inputs remain omitted and its status is `provisional` or
-`insufficient` without blocking user quote publication. GICS sector → Select
+minute 29 owns the initial bounded pull and minute 59 retries only missing
+symbols. The pull reads the existing rolling Yahoo soft budget, reserves two
+units of headroom, and drops IWM before required benchmarks. Missing inputs
+remain omitted and its status is `provisional` or `insufficient` without
+blocking user quote publication. A prior observation may carry for at most two
+expected market-week cycles with explicit `sourceCycleAsOf` + `stale`
+metadata; stale values never count as fresh Market participation. GICS sector → Select
 Sector SPDR mapping is SSOT in `src/lib/weather/sectorSpdr.ts` (Worker twin:
 `GICS_SECTOR_TO_SPDR` in `worker/weatherBenchmarks.ts`). Parallel pure adapters
 `buildMarketV2Reading` / `buildSectorV2Reading` consume those observables;
@@ -305,8 +310,10 @@ Stock V2 consumes the ticker's existing `liveCache` daily technicals/1D
 indicators plus `weatherSymbolObservables`, a per-registered-symbol projection
 from the same completed daily bars. Cycle publish adds SPY and mapped
 GICS-sector SPDR relative strength when those benchmarks exist; missing values
-remain omitted. FreeTier UI and `getMarketWeather` remain on v1 until a separate
-flip.
+remain omitted. Sector coverage is evaluated from its mapped SPDR rather than
+unrelated benchmark gaps; stale per-symbol observations downgrade Stock/Sector
+coverage to `partial`. FreeTier UI and `getMarketWeather` remain on v1 until a
+separate flip.
 
 ### Add-time taxonomy hydrate (Weather UI only)
 

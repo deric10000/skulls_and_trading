@@ -75,6 +75,7 @@ export function buildStockV2Reading(
   const price = inputs.price ?? inputs.observable?.price;
   const daily = inputs.dailyIndicators;
   const technicals = inputs.technicals;
+  const observableFreshness = inputs.observable?.freshness ?? "fresh";
   const ema10 = inputs.observable?.ema10 ?? levelFromPriceDistance(
     price,
     daily?.priceVsEma10Pct ?? technicals?.priceVs10EmaPct,
@@ -127,12 +128,14 @@ export function buildStockV2Reading(
     hasInstrument: finite(price) && price > 0,
     hasMinimumStructure: structure?.hasMinimumRelation === true,
     optionalInputMissing:
+      observableFreshness !== "fresh" ||
       structure?.partial === true ||
       relativeStrength?.partial === true ||
       risk?.partial === true ||
       momentum?.partial === true ||
       participation == null,
     allPreferredInputsFresh:
+      observableFreshness === "fresh" &&
       structure?.partial !== true &&
       relativeStrength?.partial !== true &&
       risk?.partial !== true &&
