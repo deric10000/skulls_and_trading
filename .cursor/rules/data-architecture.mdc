@@ -128,8 +128,12 @@ covered by that strategy's `appliedPortfolioIds` for the same source.
   `conditions.ts`; per-condition CSS is `.weather--<id>` / `.weather-bg--<id>`.
 - Read weather through `dataSource.getMarketWeather(timeframe)`, never by
   importing `weather/mock.ts` from a component.
-- FreeTier: `weather/live.ts` builds from live `MarketContext` (Worker FRED +
-  index ETFs). Sector/industry keys come from `weather/taxonomy.ts` (GICS 11 /
+- FreeTier: `weather/liveV2.ts` builds Market/Sector/Stock/Industry readings from
+  Worker weather benchmarks + per-symbol observables + liveCache tech (V2).
+  Industry is independently readable only via product-approved system ETF map
+  (`INDUSTRY_TO_SYSTEM_ETF`); otherwise unavailable + Sector backdrop — never
+  registered-peer baskets. Legacy `weather/live.ts` tilt cascade is mock/rollback
+  only. Sector/industry keys come from `weather/taxonomy.ts` (GICS 11 /
   74); `TICKERS[].sector`/`.industry` must use those exact keys for cascade.
   Live holdings map via Yahoo `assetProfile` on the existing fundamentals
   `quoteSummary` (`yahooTaxonomy.ts`) — never fabricate IT/Software. Add-time

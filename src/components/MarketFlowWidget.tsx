@@ -4,6 +4,7 @@ import { dataSource } from "../lib/datasource";
 import { getWatchMarketWeather } from "../lib/datasource/freeTier";
 import {
   getLiveCacheGeneration,
+  getMarketCycleMeta,
   getWeatherTaxonomyReadiness,
   resolveWeatherTaxonomyEtaAt,
   subscribeLiveCache,
@@ -12,7 +13,11 @@ import {
 import { ensureWeatherTaxonomyAwaiting } from "../lib/weather/hydrateTaxonomy";
 import { SearchableSelect } from "./SearchableSelect";
 import { NeedsDataReviewFlag } from "./NeedsDataReviewFlag";
-import { CaretLeft, CaretRight } from "../lib/icons";
+import { ForgeToast } from "./forge/ForgeToast";
+import { ForgePill } from "./ForgePill";
+import { Tooltip } from "./Tooltip";
+import { WeatherEvidence } from "./WeatherEvidence";
+import { CaretDown, CaretLeft, CaretRight, Timer } from "../lib/icons";
 import {
   getMarketSession,
   resolveWeatherGraphic,
@@ -21,7 +26,11 @@ import {
   WEATHER_CONDITIONS,
   type WeatherGraphic,
 } from "../lib/weather";
-import { formatCheckCountdown, formatDecimals } from "../lib/format";
+import {
+  formatCheckCountdown,
+  formatCheckTime,
+  formatDecimals,
+} from "../lib/format";
 import type {
   MarketWeatherLayer,
   WeatherLayerReading,
@@ -31,6 +40,28 @@ import type {
 /** Detail-view footer — conditions are a read, not a forecast. */
 const WEATHER_SNAPSHOT_DISCLAIMER =
   "This is a snapshot of how conditions look right now — not a prediction of where the market will go.";
+
+const WEATHER_SCHEDULE_TOAST_STORAGE_KEY = "st-weather-schedule-collapsed";
+
+function readWeatherScheduleCollapsed(): boolean {
+  try {
+    return sessionStorage.getItem(WEATHER_SCHEDULE_TOAST_STORAGE_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function writeWeatherScheduleCollapsed(collapsed: boolean) {
+  try {
+    if (collapsed) {
+      sessionStorage.setItem(WEATHER_SCHEDULE_TOAST_STORAGE_KEY, "1");
+    } else {
+      sessionStorage.removeItem(WEATHER_SCHEDULE_TOAST_STORAGE_KEY);
+    }
+  } catch {
+    /* private mode — in-session state still works */
+  }
+}
 
 // Beginner-friendly tooltip copy for the five instruments (product spec).
 const SUBSCORE_META: {
@@ -152,10 +183,72 @@ export function MarketFlowWidget({
   const [liveGeneration, setLiveGeneration] = useState(getLiveCacheGeneration);
   useEffect(() => subscribeLiveCache(() => setLiveGeneration(getLiveCacheGeneration())), []);
 
+  const [scheduleToastCollapsed, setScheduleToastCollapsed] = useState(
+    readWeatherScheduleCollapsed,
+  );
+  const [countdownNow, setCountdownNow] = useState(() => Date.now());
+
   // Session detection picks which weather to read. The snapshot is fetched
   // ONCE per session, then stock readings are augmented for every watched
   // name that has mapped GICS sector/industry (client-side; no Yahoo fan-out).
   const session = getMarketSession();
+  const cycleMeta = useMemo(() => getMarketCycleMeta(), [liveGeneration]);
+  const nextWeatherAt =
+    cycleMeta?.nextCycleAt ?? synthesizeNextCycleEtaAt();
+  const lastWeatherAt =
+    cycleMeta?.completedAt ?? cycleMeta?.publishedAt ?? cycleMeta?.cycleAsOf ?? null;
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setCountdownNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const weatherCountdown = formatCheckCountdown(
+    Date.parse(nextWeatherAt) - countdownNow,
+  );
+  const scheduleLastLabel = lastWeatherAt
+    ? formatCheckTime(lastWeatherAt)
+    : "Waiting on first cycle";
+  const scheduleNextLabel = `${formatCheckTime(nextWeatherAt)} (${weatherCountdown})`;
+
+  function setScheduleCollapsed(collapsed: boolean) {
+    writeWeatherScheduleCollapsed(collapsed);
+    setScheduleToastCollapsed(collapsed);
+  }
+
+  const scheduleToggle = (
+    <button
+      type="button"
+      className={
+        scheduleToastCollapsed ? "icon-btn" : "icon-btn icon-btn--active"
+      }
+      aria-label={
+        scheduleToastCollapsed
+          ? "Show weather schedule"
+          : "Minimize weather schedule"
+      }
+      aria-expanded={!scheduleToastCollapsed}
+      onClick={() => setScheduleCollapsed(!scheduleToastCollapsed)}
+    >
+      <Timer aria-hidden weight="regular" />
+    </button>
+  );
+
+  const scheduleToast = !scheduleToastCollapsed ? (
+    <div className="forge-toast-stack weather-schedule-toast">
+      <ForgeToast
+        tone="info"
+        onDismiss={() => setScheduleCollapsed(true)}
+        dismissLabel="Minimize weather schedule"
+      >
+        <p>
+          Last Weather Cycle: {scheduleLastLabel}
+          {` · Next Cycle: ${scheduleNextLabel}`}
+        </p>
+      </ForgeToast>
+    </div>
+  ) : null;
+
   const snapshot = useMemo(
     () =>
       getWatchMarketWeather(
@@ -183,12 +276,6 @@ export function MarketFlowWidget({
   useEffect(() => {
     ensureWeatherTaxonomyAwaiting(watchTickers);
   }, [watchTickers, liveGeneration]);
-
-  const [countdownNow, setCountdownNow] = useState(() => Date.now());
-  useEffect(() => {
-    const timer = window.setInterval(() => setCountdownNow(Date.now()), 1000);
-    return () => window.clearInterval(timer);
-  }, []);
 
   function weatherTaxonomyEmptyCopy(
     layer: "sector" | "industry" | "stock",
@@ -327,10 +414,12 @@ export function MarketFlowWidget({
     : Object.keys(snapshot.industries).sort((a, b) => a.localeCompare(b));
 
   const [selectedLayer, setSelectedLayer] = useState<MarketWeatherLayer | null>(null);
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
   const openLayerDetail = useCallback(
     (layer: MarketWeatherLayer) => {
       setSelectedLayer(layer);
+      setShowAdvanced(false);
       markWeatherReaderLayer(layer);
     },
     [markWeatherReaderLayer],
@@ -373,7 +462,10 @@ export function MarketFlowWidget({
       <section className="panel market-flow" aria-labelledby="flow-title">
         <div className="panel-head">
           <h2 id="flow-title">Market Weather</h2>
-          <span className="panel-tag">{LAYER_LABEL[selectedLayer]}</span>
+          <div className="market-flow-head-meta">
+            <span className="panel-tag">{LAYER_LABEL[selectedLayer]}</span>
+            {scheduleToggle}
+          </div>
         </div>
         <button
           type="button"
@@ -383,6 +475,7 @@ export function MarketFlowWidget({
           <CaretLeft aria-hidden />
           Market Weather
         </button>
+        {scheduleToast}
         <div className={`flow-summary weather-summary ${graphic.accentClass}`}>
           <WeatherBackdrop graphic={graphic} variant="summary" />
           <div className="flow-summary-content">
@@ -390,29 +483,108 @@ export function MarketFlowWidget({
               <span className="flow-index">{index + 1}</span>
               <span className="flow-summary-titles">
                 <span className="flow-label">{detailReading.label}</span>
-                <ConditionChip reading={detailReading} />
+                {detailReading.availability === "unavailable" ? (
+                  <span className="chip status--neutral weather-condition-chip">
+                    Independent weather unavailable
+                  </span>
+                ) : (
+                  <ConditionChip reading={detailReading} />
+                )}
               </span>
             </header>
-            <p className="weather-score-line">
-              Score {formatDecimals(detailReading.score)}/100
-            </p>
-            <p className="flow-summary-note">{detailReading.explanation}</p>
-            <p className="weather-why-line">
-              <strong>Why:</strong> {detailReading.why}
-            </p>
-            <div className="weather-scores">
-              {SUBSCORE_META.map((meta) => (
-                <SubScoreRow
-                  key={meta.key}
-                  label={meta.label}
-                  value={detailReading.subScores[meta.key]}
-                  hint={meta.hint}
-                />
-              ))}
-            </div>
-            <p className="weather-climate">
-              <strong>Climate:</strong> {detailReading.climateContext.note}
-            </p>
+            {detailReading.modelVersion === "v2" ? (
+              <>
+                <WeatherEvidence reading={detailReading} />
+                {detailReading.availability !== "unavailable" ? (
+                  <div
+                    className={
+                      showAdvanced
+                        ? "watch-plan-section is-expanded"
+                        : "watch-plan-section"
+                    }
+                  >
+                    <button
+                      type="button"
+                      className="watch-plan-section-toggle"
+                      aria-expanded={showAdvanced}
+                      aria-controls={`weather-advanced-${selectedLayer}`}
+                      onClick={() => setShowAdvanced((current) => !current)}
+                    >
+                      <span className="config-label forge-label">
+                        Advanced Details
+                      </span>
+                      <CaretDown
+                        className="watch-plan-section-caret"
+                        aria-hidden
+                        weight="regular"
+                      />
+                    </button>
+                    {showAdvanced ? (
+                      <div
+                        id={`weather-advanced-${selectedLayer}`}
+                        className="watch-plan-section-body"
+                      >
+                        <div className="weather-advanced">
+                          {detailReading.dataPoints?.length ? (
+                            <div className="watch-summary-chip-group">
+                              <span className="config-label forge-label">
+                                Weather Data Points
+                              </span>
+                              <div className="forge-box-body">
+                                {detailReading.dataPoints.map((point) => (
+                                  <Tooltip
+                                    key={`${point.label}-${point.value}`}
+                                    title={`${point.label} ${point.value}`}
+                                    body={point.detail}
+                                    wide
+                                  >
+                                    <ForgePill>
+                                      {point.label} {point.value}
+                                    </ForgePill>
+                                  </Tooltip>
+                                ))}
+                              </div>
+                            </div>
+                          ) : null}
+                          <p className="weather-score-line">
+                            Coverage: {detailReading.coverage ?? "partial"} · Model:
+                            Weather V2
+                          </p>
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+              </>
+            ) : (
+              <>
+                <p className="weather-score-line">
+                  Score {formatDecimals(detailReading.score)}/100
+                </p>
+                <div className="weather-scores">
+                  {SUBSCORE_META.map((meta) => (
+                    <SubScoreRow
+                      key={meta.key}
+                      label={meta.label}
+                      value={detailReading.subScores[meta.key]}
+                      hint={meta.hint}
+                    />
+                  ))}
+                </div>
+              </>
+            )}
+            {detailReading.modelVersion === "v2" ? (
+              detailReading.longTermTrend ? (
+                <p className="weather-climate">
+                  <strong>Long-term trend:</strong>{" "}
+                  {detailReading.longTermTrend}
+                </p>
+              ) : null
+            ) : (
+              <p className="weather-climate">
+                <strong>Climate:</strong> {detailReading.climateContext.note}
+              </p>
+            )}
             <p className="weather-disclaimer">{WEATHER_SNAPSHOT_DISCLAIMER}</p>
           </div>
         </div>
@@ -424,12 +596,16 @@ export function MarketFlowWidget({
     <section className="panel market-flow" aria-labelledby="flow-title">
       <div className="panel-head">
         <h2 id="flow-title">Market Weather</h2>
-        <span className="panel-tag session-tag">{SESSION_META[session].label}</span>
+        <div className="market-flow-head-meta">
+          <span className="panel-tag session-tag">{SESSION_META[session].label}</span>
+          {scheduleToggle}
+        </div>
       </div>
       <p className="panel-intro">
         See if your names sail with the weather or fight the wind — Market down
         to Stock.
       </p>
+      {scheduleToast}
       <ol className="flow-steps flow-steps--vertical">
         {cards.map((card, index) => {
           const reading = card.reading;
@@ -476,7 +652,9 @@ export function MarketFlowWidget({
                 disabled={!reading}
                 aria-label={
                   reading
-                    ? `${cardLabel}: ${WEATHER_CONDITIONS[reading.conditionId].label}, score ${formatDecimals(reading.score)}/100. View details.`
+                    ? reading.availability === "unavailable"
+                      ? `${cardLabel}: independent weather unavailable. View details.`
+                      : `${cardLabel}: ${WEATHER_CONDITIONS[reading.conditionId].label}. View details.`
                     : undefined
                 }
               />
@@ -484,7 +662,15 @@ export function MarketFlowWidget({
                 <div className="weather-headpill" aria-hidden="true">
                   <span className="flow-index">{index + 1}</span>
                   <span className="weather-layer">{cardLabel}</span>
-                  {reading ? <ConditionChip reading={reading} /> : null}
+                  {reading ? (
+                    reading.availability === "unavailable" ? (
+                      <span className="chip status--neutral weather-condition-chip">
+                        Unavailable
+                      </span>
+                    ) : (
+                      <ConditionChip reading={reading} />
+                    )
+                  ) : null}
                 </div>
                 {!reading ? (
                   <div className="weather-empty">
@@ -534,6 +720,16 @@ export function MarketFlowWidget({
                         </p>
                       );
                     })()}
+                  </div>
+                ) : null}
+                {reading ? (
+                  <div className="weather-card-description">
+                    <p className="weather-card-summary">
+                      {reading.summary ?? reading.explanation}
+                    </p>
+                    <span className="weather-card-more" aria-hidden="true">
+                      View forecast →
+                    </span>
                   </div>
                 ) : null}
                 {showDropdown ? (

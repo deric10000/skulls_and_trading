@@ -4,6 +4,7 @@ import {
   clearStrategyConvictionDirty,
   getLastDataPullAt,
   getLiveQuote,
+  getLiveWeatherSymbolObservable,
   hasUsableLiveQuote,
   isConvictionScoreReady,
   markStrategyConvictionDirty,
@@ -50,6 +51,23 @@ function emptyCycle(
 }
 
 describe("account market-state hydration", () => {
+  it("hydrates per-symbol Weather observables with a completed cycle", () => {
+    applyMarketCycle(emptyCycle({
+      weatherSymbolObservables: {
+        AAPL: {
+          asOf: "2026-07-21T20:00:00.000Z",
+          price: 225,
+          return5dPct: 2,
+          rsVsSpy5d: 1,
+        },
+      },
+    }));
+    expect(getLiveWeatherSymbolObservable("aapl")).toMatchObject({
+      return5dPct: 2,
+      rsVsSpy5d: 1,
+    });
+  });
+
   it("restores a real quote and strategy check stamp", () => {
     setLiveQuotes({
       AAPL: {

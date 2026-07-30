@@ -16,6 +16,10 @@ import {
   resampleTo4h,
 } from "./indicators";
 import { sanitizeFundamentals } from "./metricSanity";
+import {
+  buildWeatherBenchmarkObservable,
+  type WeatherBenchmarkObservable,
+} from "./weatherBenchmarks";
 
 export interface MarketEnv {
   FINNHUB_API_KEY?: string;
@@ -53,6 +57,7 @@ export interface CronTechnicalBundle {
   quote: QuotePayload;
   technicals: Record<string, unknown>;
   byTimeframe: Partial<Record<CandleTime, TimeframedIndicatorsPayload>>;
+  weatherBenchmark: WeatherBenchmarkObservable | null;
 }
 
 const DAY_MS = 86_400_000;
@@ -185,6 +190,12 @@ function refreshBudgetWindow(id: ProviderId, limit: number): void {
     budget.remaining = limit;
     budget.resetAt = now + MINUTE_MS;
   }
+}
+
+/** Read-only snapshot for bounded scheduled work that must reserve headroom. */
+export function getProviderBudgetSnapshot(id: ProviderId): ProviderBudget {
+  refreshBudgetWindow(id, budgets[id].limit);
+  return { ...budgets[id] };
 }
 
 function consumeBudget(id: ProviderId, limit: number): boolean {
@@ -1088,6 +1099,7 @@ export async function fetchCronTechnicalBundle(
     },
     technicals: { ...technicals, asOf },
     byTimeframe,
+    weatherBenchmark: buildWeatherBenchmarkObservable(longer["1D"]),
   };
 }
 

@@ -9,8 +9,9 @@ export * from "./graphics";
 export * from "./taxonomy";
 export { buildLiveWeatherSnapshot, subScoresFromMarketContext, augmentWeatherStocks } from "./live";
 export { mapYahooTaxonomy } from "./yahooTaxonomy";
-/** Mock-only — FreeTier uses `weather/live` via dataSource.getMarketWeather. */
+/** Mock-only — FreeTier uses `weather/liveV2` via dataSource.getMarketWeather. */
 export { getMarketWeatherSnapshot } from "./mock";
+// V2 modules (scoringV2, sectorSpdr, adapters): import directly, not via barrel.
 
 // Map a condition's severity to a design-system signal tone (chip coloring).
 export const SEVERITY_TONE: Record<WeatherSeverity, SignalTone> = {

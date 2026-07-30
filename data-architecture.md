@@ -287,6 +287,61 @@ map independently when possible. Every watched ticker gets a stock reading
 (market cascade tilt, refined by sector/industry when known — **no extra Yahoo
 calls** for the cascade paint itself).
 
+Market Weather V2 inputs publish in parallel on each completed cycle as
+`weatherBenchmarks`, backed by the dedicated
+`market:cycle:weather-benchmarks:<cycle>` KV shard. Its RSP, IWM, 11 GICS SPDR,
+and QQQ system symbols stay outside the user registry/40-symbol manifest and
+fundamentals gate. The shard reuses cron's closed 1h→daily technical path;
+minute 29 owns the initial bounded pull and minute 59 retries only missing
+symbols. The pull reads the existing rolling Yahoo soft budget, reserves two
+units of headroom, and drops IWM before required benchmarks. Missing inputs
+remain omitted and its status is `provisional` or `insufficient` without
+blocking user quote publication. A prior observation may carry for at most two
+expected market-week cycles with explicit `sourceCycleAsOf` + `stale`
+metadata; stale values never count as fresh Market participation. GICS sector → Select
+Sector SPDR mapping is SSOT in `src/lib/weather/sectorSpdr.ts` (Worker twin:
+`GICS_SECTOR_TO_SPDR` in `worker/weatherBenchmarks.ts`). Parallel pure adapters
+`buildMarketV2Reading` / `buildSectorV2Reading` / `buildStockV2Reading` /
+`buildIndustryV2Reading` consume those observables via `weather/liveV2.ts`.
+FreeTier `getMarketWeather` builds the **V2** snapshot (`buildLiveV2WeatherSnapshot`):
+Market/Sector/Stock use layer-specific evidence; Industry is independently readable
+only when a product-approved system Industry ETF is mapped (`INDUSTRY_TO_SYSTEM_ETF`,
+currently empty → **Independent Industry Weather unavailable** + Sector backdrop).
+Do not use registered-peer baskets for Industry independence. The `liveV2` module
+loads via `preloadWeatherV2()` from AuthedApp so the signed-out entry chunk does
+not pull V2 scoring adapters. The legacy v1 tilt path in `weather/live.ts`
+remains for mock/fixtures and rollback only.
+
+Stock V2 consumes the ticker's existing `liveCache` daily technicals/1D
+indicators plus `weatherSymbolObservables`, a per-registered-symbol projection
+from the same completed daily bars. Cycle publish adds SPY and mapped
+GICS-sector SPDR relative strength when those benchmarks exist; missing values
+remain omitted. Sector coverage is evaluated from its mapped SPDR rather than
+unrelated benchmark gaps; stale per-symbol observations downgrade Stock/Sector
+coverage to `partial`. Card faces hide the numeric Weather Index; Advanced
+Details exposes Index, coverage, `weatherModelVersion`, and evidence timestamp.
+V2 adapters also project those completed-cycle observables into the pure
+`weather/narrative.ts` builder. It owns the market-language
+`WeatherLayerReading.summary` overview projection and
+`WeatherLayerReading.explanation` detail projection, plus the
+`WeatherLayerReading.longTermTrend` projection (SPY 200-day SMA + QQQ 200-day
+EMA for Market; instrument 200-day SMA for other readable layers), and its
+`WeatherLayerReading.dataPoints` Advanced Details projection. Data points are
+formatted from only the completed-cycle facts already used by the reading and
+render through the shared `ForgePill` + `Tooltip`. Their deterministic detail
+copy describes the value relative to its applicable price, benchmark, or norm;
+opening Advanced Details performs no fetch and cannot change scoring. All
+projections use the same typed facts and
+exhaustive condition registry. The builder performs no I/O, omits
+unavailable facts, and never substitutes internal pillar scores for real-world
+evidence. Narrative context carries the known parent relationship so Stock and
+Industry conditions name their actual Sector and Sector conditions name the
+broader Market; user copy must not fall back to abstract phrases such as
+“asset or layer” or “surrounding environment.” These projections rebuild with
+each published cycle and for newly augmented watch stocks without changing the
+pull cadence or adding UI-triggered provider requests. V2 readings stamp a
+`narrativeVersion` so future template revisions remain auditable.
+
 ### Add-time taxonomy hydrate (Weather UI only)
 
 Newly added non-seeded tickers still get quote-on-add + symbol registration for

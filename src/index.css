@@ -1903,15 +1903,17 @@ button {
   color: var(--text-muted);
 }
 
-/* Current Watch: stock count + Timer toggle in the panel-head upper right. */
-.watchlist-head-meta {
+/* Current Watch / Market Weather: tag + Timer toggle in the panel-head. */
+.watchlist-head-meta,
+.market-flow-head-meta {
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
   flex-shrink: 0;
 }
 
-.watch-schedule-toast {
+.watch-schedule-toast,
+.weather-schedule-toast {
   margin-bottom: var(--space-3);
 }
 
@@ -7033,6 +7035,75 @@ select.forge-cell-input {
 /* Null-gap flags on weather cards keep warning tone over the dark capsule. */
 .weather-empty .needs-data-review {
   font-size: 0.85rem;
+}
+
+.weather-evidence {
+  display: grid;
+  gap: var(--space-2);
+  max-width: min(100%, 30rem);
+  padding: var(--space-2);
+  border-radius: var(--radius-sm);
+  background: rgb(5 7 13 / 0.78);
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  line-height: 1.4;
+}
+
+.weather-evidence-description {
+  margin: 0;
+  color: var(--text-base);
+  font-size: 0.85rem;
+  line-height: 1.55;
+}
+
+.weather-evidence-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, auto));
+  gap: 0.25rem 0.75rem;
+}
+
+.weather-evidence strong {
+  color: var(--text-strong);
+  font-variant-numeric: tabular-nums;
+}
+
+.weather-checked-at {
+  align-self: flex-end;
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+}
+
+.weather-card-description {
+  display: grid;
+  gap: 0.25rem;
+  max-width: min(100%, 30rem);
+  margin: 0;
+  padding: 0.45rem 0.6rem;
+  border-radius: var(--radius-sm);
+  background: rgb(5 7 13 / 0.78);
+  color: var(--text-base);
+  font-size: 0.76rem;
+  line-height: 1.45;
+}
+
+.weather-card-summary {
+  display: -webkit-box;
+  margin: 0;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.weather-card-more {
+  justify-self: start;
+  color: var(--accent-strong);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.weather-advanced {
+  display: grid;
+  gap: 0.25rem;
 }
 
 /* Sector / Industry selector: SearchableSelect (`on-graphics` trigger + typeahead

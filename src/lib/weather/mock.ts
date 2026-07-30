@@ -74,6 +74,7 @@ const SECTOR_SEEDS: Record<string, WeatherSeed> = {
   },
 };
 
+/** Soft tilts for v1 cascade only — deprecated for V2 scoring (use SPDR SSOT). */
 const SECTOR_TILT: Record<string, number> = {
   Energy: -1,
   Materials: -1,

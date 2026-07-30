@@ -14,6 +14,56 @@ import type {
 import { getAccessToken } from "../auth/session";
 import type { ProviderBudget } from "./liveCache";
 
+export interface WeatherBenchmarkObservable {
+  asOf: string;
+  sourceCycleAsOf?: string;
+  freshness?: "fresh" | "stale";
+  price: number;
+  ema10?: number;
+  ema20?: number;
+  ema200?: number;
+  sma20?: number;
+  sma50?: number;
+  sma200?: number;
+  atrPct?: number;
+  atrPctBaseline60d?: number;
+  drawdownFrom20dHighPct?: number;
+  rsi14?: number;
+  return5dPct?: number;
+  return20dPct?: number;
+  rsVsSpy5d?: number;
+  rsVsSpy20d?: number;
+  priorFreshRsVsSpy20d?: number;
+  dailyRangeMultiple?: number;
+  absoluteReturnAtrMultiple?: number;
+  volumeRatio?: number;
+  breakingResistance?: boolean;
+  lostSupport?: boolean;
+}
+
+export interface WeatherSymbolObservable extends WeatherBenchmarkObservable {
+  rsVsSector5d?: number;
+  rsVsSector20d?: number;
+}
+
+export interface WeatherBenchmarksPayload {
+  status: "complete" | "provisional" | "insufficient";
+  completedAt?: string;
+  expectedSymbols: string[];
+  freshSymbols: string[];
+  staleSymbols?: string[];
+  missingSymbols: string[];
+  freshnessBySymbol?: Record<string, "fresh" | "stale" | "unavailable">;
+  sourceCycleAsOfBySymbol?: Record<string, string>;
+  benchmarks: Record<string, WeatherBenchmarkObservable>;
+  rspMinusSpy5dPct?: number;
+  iwmMinusSpy5dPct?: number;
+  sectorSpdrOutperforming?: number;
+  sectorSpdrOutperformingFreshCount: number;
+  sectorSpdrAboveSma50?: number;
+  sectorSpdrAboveSma50FreshCount: number;
+}
+
 export interface MarketCyclePayload {
   cycleAsOf: string;
   completedAt: string;
@@ -28,6 +78,8 @@ export interface MarketCyclePayload {
     Partial<Record<CandleInterval, TimeframedIndicators>>
   >;
   context: MarketContext | null;
+  weatherBenchmarks?: WeatherBenchmarksPayload;
+  weatherSymbolObservables?: Record<string, WeatherSymbolObservable>;
   errors: string[];
 }
 

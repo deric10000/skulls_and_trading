@@ -41,6 +41,7 @@ const WEATHER_ART: Partial<Record<WeatherConditionId, string>> = {
   "calm-waters": calmWatersArt,
   "rogue-wave": rogueWaveArt,
   "red-sky-warning": redSkyWarningArt,
+  "mixed-signals": chopSeasArt,
 };
 
 export interface WeatherGraphic {

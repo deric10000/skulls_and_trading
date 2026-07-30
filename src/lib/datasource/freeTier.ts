@@ -14,7 +14,6 @@ import {
   registerBootstrapTickers,
 } from "../market/liveCache";
 import { fetchMarketSearch } from "../market/client";
-import { augmentWeatherStocks, buildLiveWeatherSnapshot } from "../weather/live";
 import { reportTaxonomyGap } from "../userStore/taxonomyGaps";
 import type { MarketContext, TickerInfo, FundamentalSnapshot, TechnicalSnapshot } from "../../types";
 import type {
@@ -28,11 +27,36 @@ import type {
  * mock dual-read for those fields. Search never blends TOP_SEARCH_TICKERS.
  *
  * AppState owns refreshing liveCache (Pass 2 loading / lastPull stamps).
+ *
+ * Weather V2 (`liveV2`) is loaded asynchronously via `preloadWeatherV2` so the
+ * signed-out entry chunk does not pull scoring adapters / taxonomy trees
+ * (performance-budget.md). AuthedApp must preload before Home weather reads.
  */
+
+type LiveV2Module = typeof import("../weather/liveV2");
+
+let liveV2: LiveV2Module | null = null;
+let liveV2Load: Promise<LiveV2Module> | null = null;
+
 let searchCache: { q: string; hits: { symbol: string; name: string }[] } | null =
   null;
 
 const weatherCache = new Map<MarketWeatherTimeframe, MarketWeatherSnapshot>();
+
+/** Load Weather V2 into a separate chunk; safe to call repeatedly. */
+export function preloadWeatherV2(): Promise<LiveV2Module> {
+  if (liveV2) return Promise.resolve(liveV2);
+  liveV2Load ??= import("../weather/liveV2").then((mod) => {
+    liveV2 = mod;
+    weatherCache.clear();
+    return mod;
+  });
+  return liveV2Load;
+}
+
+export function isWeatherV2Ready(): boolean {
+  return liveV2 != null;
+}
 
 /** Null-shaped live context before the first successful Worker pull. */
 export const EMPTY_LIVE_CONTEXT: MarketContext = {
@@ -95,6 +119,49 @@ function emptyTechnicalShape(): TechnicalSnapshot {
     sectorEtf1mChangePct: null,
     asOf: EMPTY_LIVE_CONTEXT.asOf,
     source: "live",
+  };
+}
+
+/** Sync placeholder until AuthedApp finishes `preloadWeatherV2`. */
+function pendingWeatherSnapshot(
+  timeframe: MarketWeatherTimeframe,
+): MarketWeatherSnapshot {
+  const lastUpdated = new Date().toISOString();
+  const pending = {
+    layer: "market" as const,
+    label: "Market",
+    score: 0,
+    confidence: 0,
+    conditionId: "mixed-signals" as const,
+    subScores: {
+      trend: 0,
+      breadth: 0,
+      volatility: 0,
+      riskAppetite: 0,
+      rotation: 0,
+    },
+    explanation:
+      "Weather evidence is still loading for this session.",
+    why: "Waiting for the Weather V2 module.",
+    climateContext: {
+      position: "near" as const,
+      note: "Long-term context loads with Structure evidence.",
+      confidenceAdjustment: 0,
+    },
+    dynamicGraphicKey: "mixed-signals" as const,
+    lastUpdated,
+    modelVersion: "v2" as const,
+    coverage: "insufficient" as const,
+    availability: "unavailable" as const,
+  };
+  return {
+    timeframe,
+    generatedAt: lastUpdated,
+    market: pending,
+    sectors: {},
+    industries: {},
+    stocks: {},
+    industrySectors: {},
   };
 }
 
@@ -174,8 +241,12 @@ export const freeTierDataSource: DataSource = {
   getMarketWeather: (timeframe) => {
     const cached = weatherCache.get(timeframe);
     if (cached) return cached;
+    if (!liveV2) {
+      void preloadWeatherV2();
+      return pendingWeatherSnapshot(timeframe);
+    }
     const ctx = getLiveMarketContext() ?? EMPTY_LIVE_CONTEXT;
-    const snapshot = buildLiveWeatherSnapshot(timeframe, ctx);
+    const snapshot = liveV2.buildLiveV2WeatherSnapshot(timeframe, ctx);
     weatherCache.set(timeframe, snapshot);
     return snapshot;
   },
@@ -201,15 +272,15 @@ export const freeTierDataSource: DataSource = {
 };
 
 /**
- * Weather snapshot for a watch list: base session cascade + a stock reading
- * for every watched name (taxonomy refines the tilt when known).
+ * Weather snapshot for a watch list: independent V2 layer evidence with a
+ * stock reading for every watched name.
  */
 export function getWatchMarketWeather(
   timeframe: MarketWeatherTimeframe,
   watchTickers: string[],
 ): MarketWeatherSnapshot {
   const base = freeTierDataSource.getMarketWeather(timeframe);
-  const ctx = getLiveMarketContext() ?? EMPTY_LIVE_CONTEXT;
+  if (!liveV2) return base;
   const extras: Array<{
     ticker: string;
     sector?: string | null;
@@ -225,7 +296,7 @@ export function getWatchMarketWeather(
       industry: info?.industry ?? null,
     });
   }
-  return augmentWeatherStocks(base, ctx, extras);
+  return liveV2.addLiveV2Stocks(base, extras);
 }
 
 /** Invalidate weather session cache when live context refreshes. */

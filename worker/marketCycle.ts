@@ -3,6 +3,7 @@ import {
   fetchCronFundamentals,
   fetchCronMarketContext,
   fetchCronTechnicalBundle,
+  getProviderBudgetSnapshot,
   type MarketEnv,
   type QuotePayload,
 } from "./market";
@@ -10,12 +11,23 @@ import {
   COMPLETE_CYCLE_PREFIX,
   type ConvictionCycleReference,
 } from "./convictionDispatch";
+import {
+  derivePublishedWeatherBenchmarks,
+  deriveWeatherSymbolObservables,
+  planWeatherBenchmarkFetch,
+  WEATHER_BENCHMARK_FETCH_ORDER,
+  weatherBenchmarkMissingSymbols,
+  type PublishedWeatherBenchmarks,
+  type WeatherBenchmarkObservable,
+  type WeatherSymbolObservable,
+} from "./weatherBenchmarks";
 
 const REGISTRY_PREFIX = "market:registry:";
 const SUBSCRIPTIONS_SNAPSHOT_KEY = "market:subscriptions:snapshot";
 const CYCLE_MANIFEST_PREFIX = "market:cycle:manifest:";
 const TECH_SHARD_PREFIX = "market:cycle:tech:";
 const CONTEXT_PREFIX = "market:cycle:context:";
+const WEATHER_BENCHMARK_PREFIX = "market:cycle:weather-benchmarks:";
 const FUNDY_MANIFEST_PREFIX = "market:fundy:manifest:";
 const FUNDY_SHARD_PREFIX = "market:fundy:shard:";
 const PUBLISHED_CYCLE_KEY = "market:cycle:published";
@@ -66,6 +78,7 @@ interface TechnicalShard {
     string,
     Partial<Record<CandleTime, TimeframedIndicatorsPayload>>
   >;
+  weatherSymbolObservables: Record<string, WeatherBenchmarkObservable>;
   errors: string[];
 }
 
@@ -73,6 +86,27 @@ interface ContextShard {
   completedAt: string;
   context: Record<string, unknown> | null;
   errors: string[];
+}
+
+export interface WeatherBenchmarkShard {
+  schemaVersion: 1;
+  completedAt: string;
+  expectedSymbols: string[];
+  values: Record<string, WeatherBenchmarkObservable>;
+  attemptCount: number;
+  budgetSkippedSymbols: string[];
+  errors: string[];
+}
+
+export function weatherBenchmarkRunMode(
+  minute: number,
+  shard: WeatherBenchmarkShard | null,
+): "initial" | "retry" | null {
+  if (!shard) return minute >= 29 ? "initial" : null;
+  return minute === 59 &&
+      weatherBenchmarkMissingSymbols(shard.values).length > 0
+    ? "retry"
+    : null;
 }
 
 interface FundamentalsManifest {
@@ -147,6 +181,8 @@ export interface MarketCyclePayload {
     Partial<Record<CandleTime, TimeframedIndicatorsPayload>>
   >;
   context: Record<string, unknown> | null;
+  weatherBenchmarks: PublishedWeatherBenchmarks;
+  weatherSymbolObservables: Record<string, WeatherSymbolObservable>;
   errors: string[];
 }
 
@@ -589,6 +625,7 @@ export async function handleMarketCycleApi(
         fundamentals: filter(cycle.fundamentals),
         technicals: filter(cycle.technicals),
         byTimeframe: filter(cycle.byTimeframe),
+        weatherSymbolObservables: filter(cycle.weatherSymbolObservables ?? {}),
         errors: cycle.errors.filter((error) => {
           if (!error.includes(":")) return true;
           const symbol = error.split(":", 1)[0] ?? "";
@@ -606,6 +643,10 @@ function techShardKey(cycleAsOf: string, index: number): string {
 
 function contextKey(cycleAsOf: string): string {
   return `${CONTEXT_PREFIX}${keyTime(cycleAsOf)}`;
+}
+
+function weatherBenchmarkKey(cycleAsOf: string): string {
+  return `${WEATHER_BENCHMARK_PREFIX}${keyTime(cycleAsOf)}`;
 }
 
 function fundyShardKey(dayKey: string, index: number): string {
@@ -708,6 +749,7 @@ async function writeTechnicalShard(
     quotes: {},
     technicals: {},
     byTimeframe: {},
+    weatherSymbolObservables: {},
     errors: [],
   };
   for (const row of rows) {
@@ -718,6 +760,10 @@ async function writeTechnicalShard(
     shard.quotes[row.symbol] = row.bundle.quote;
     shard.technicals[row.symbol] = row.bundle.technicals;
     shard.byTimeframe[row.symbol] = row.bundle.byTimeframe;
+    if (row.bundle.weatherBenchmark) {
+      shard.weatherSymbolObservables[row.symbol] =
+        row.bundle.weatherBenchmark;
+    }
   }
   await env.MARKET_CACHE.put(
     techShardKey(manifest.cycleAsOf, index),
@@ -767,6 +813,65 @@ async function writeContextShard(
   } catch {
     // No marker is written: later shards retry, and publication stays atomic.
   }
+}
+
+async function writeWeatherBenchmarkShard(
+  env: MarketCycleEnv,
+  manifest: CycleManifest,
+  existing: WeatherBenchmarkShard | null = null,
+): Promise<WeatherBenchmarkShard> {
+  const values = { ...(existing?.values ?? {}) };
+  const budget = getProviderBudgetSnapshot("yahoo");
+  const fetchPlan = planWeatherBenchmarkFetch(
+    budget.remaining,
+    Object.keys(values),
+  );
+  const shard: WeatherBenchmarkShard = {
+    schemaVersion: 1,
+    completedAt: "",
+    expectedSymbols: [...WEATHER_BENCHMARK_FETCH_ORDER],
+    values,
+    attemptCount: (existing?.attemptCount ?? 0) + 1,
+    budgetSkippedSymbols: fetchPlan.budgetSkippedSymbols,
+    errors: [],
+  };
+  // Sequential priority is intentional. The plan omits IWM before required
+  // symbols and preserves two Yahoo units for other Worker traffic.
+  for (const symbol of fetchPlan.fetchSymbols) {
+    try {
+      const bundle = await fetchCronTechnicalBundle(
+        symbol,
+        Date.parse(manifest.cycleAsOf),
+      );
+      if (bundle?.weatherBenchmark) {
+        shard.values[symbol] = bundle.weatherBenchmark;
+      } else {
+        shard.errors.push(`${symbol}: weather benchmark unavailable`);
+      }
+    } catch {
+      shard.errors.push(`${symbol}: weather benchmark pull failed`);
+    }
+  }
+  const missing = weatherBenchmarkMissingSymbols(shard.values);
+  shard.budgetSkippedSymbols = shard.budgetSkippedSymbols.filter((symbol) =>
+    missing.includes(symbol)
+  );
+  for (const symbol of missing) {
+    if (!shard.errors.some((error) => error.startsWith(`${symbol}:`))) {
+      shard.errors.push(
+        shard.budgetSkippedSymbols.includes(symbol)
+          ? `${symbol}: weather benchmark deferred by Yahoo soft budget`
+          : `${symbol}: weather benchmark unavailable after retry`,
+      );
+    }
+  }
+  shard.completedAt = new Date().toISOString();
+  await env.MARKET_CACHE.put(
+    weatherBenchmarkKey(manifest.cycleAsOf),
+    JSON.stringify(shard),
+    { expirationTtl: SHARD_TTL_SECONDS },
+  );
+  return shard;
 }
 
 async function writeFundamentalsShard(
@@ -893,6 +998,10 @@ async function publishCycle(
     contextKey(manifest.cycleAsOf),
     "json",
   );
+  const weatherShard = await env.MARKET_CACHE.get<WeatherBenchmarkShard>(
+    weatherBenchmarkKey(manifest.cycleAsOf),
+    "json",
+  );
   if (!techShards || !context?.context) {
     logIncomplete(!techShards ? "technical_shards_missing" : "context_missing", {
       expectedTechnicalShards: manifest.shardCount,
@@ -955,6 +1064,18 @@ async function publishCycle(
     cycleKey,
     "json",
   );
+  const priorPublishedCycle = await env.MARKET_CACHE.get<MarketCyclePayload>(
+    PUBLISHED_CYCLE_KEY,
+    "json",
+  );
+  const weatherBenchmarks = derivePublishedWeatherBenchmarks(
+    weatherShard?.values ?? {},
+    weatherShard?.completedAt,
+    {
+      cycleAsOf: manifest.cycleAsOf,
+      prior: priorPublishedCycle?.weatherBenchmarks ?? null,
+    },
+  );
   const payload: MarketCyclePayload = {
     schemaVersion: 1,
     complete: true,
@@ -963,6 +1084,7 @@ async function publishCycle(
     completedAt: [
       ...techShards.map((shard) => shard.completedAt),
       context.completedAt,
+      ...(weatherShard ? [weatherShard.completedAt] : []),
     ].sort().at(-1)!,
     publishedAt: new Date(now).toISOString(),
     nextCycleAt: new Date(hourBoundary(now) + HOUR_MS).toISOString(),
@@ -981,9 +1103,21 @@ async function publishCycle(
       ...techShards.map((shard) => shard.byTimeframe),
     ),
     context: context.context,
+    weatherBenchmarks,
+    weatherSymbolObservables: deriveWeatherSymbolObservables(
+      Object.assign(
+        {},
+        ...techShards.map((shard) => shard.weatherSymbolObservables ?? {}),
+      ),
+      fundamentalValues,
+      weatherBenchmarks,
+      manifest.cycleAsOf,
+      priorPublishedCycle?.weatherSymbolObservables ?? {},
+    ),
     errors: [
       ...techShards.flatMap((shard) => shard.errors),
       ...context.errors,
+      ...(weatherShard?.errors ?? ["weather benchmarks: shard missing"]),
       ...(fundyShards?.flatMap((shard) => shard.errors) ?? []),
     ],
   };
@@ -1004,7 +1138,7 @@ async function publishCycle(
 
 /**
  * Deterministic minute ownership avoids mutable KV locks:
- * 00–28 technical shards, then context, then 30–58 daily fundamentals.
+ * 00–28 technical shards, then context + Weather benchmarks, then fundamentals.
  * The next hour publishes only when every expected shard and every symbol's
  * fundamentals value exist.
  */
@@ -1082,6 +1216,36 @@ export async function runScheduledMarketCycle(
           phase: "context",
           durationMs: Date.now() - invocationStartedAt,
           symbolCount: manifest.symbols.length,
+          completed: true,
+        }),
+      );
+      // Minute 29 owns both small post-tech shards. A late context recovery
+      // returns here to avoid combining it with a 30-symbol fundy pull.
+      if (minute > 29) return;
+    }
+    const existingWeather = await env.MARKET_CACHE.get<WeatherBenchmarkShard>(
+      weatherBenchmarkKey(manifest.cycleAsOf),
+      "json",
+    );
+    const weatherMode = weatherBenchmarkRunMode(minute, existingWeather);
+    if (weatherMode) {
+      const writtenWeather = await writeWeatherBenchmarkShard(
+        env,
+        manifest,
+        existingWeather,
+      );
+      console.log(
+        JSON.stringify({
+          event: "market_cycle_phase",
+          phase: "weather_benchmarks",
+          durationMs: Date.now() - invocationStartedAt,
+          symbolCount: WEATHER_BENCHMARK_FETCH_ORDER.length,
+          mode: weatherMode,
+          attemptCount: writtenWeather.attemptCount,
+          missingSymbols: weatherBenchmarkMissingSymbols(
+            writtenWeather.values,
+          ),
+          budgetSkippedSymbols: writtenWeather.budgetSkippedSymbols,
           completed: true,
         }),
       );

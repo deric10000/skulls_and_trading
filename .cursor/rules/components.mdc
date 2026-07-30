@@ -6,6 +6,44 @@ alwaysApply: false
 
 # Component & Layout Rules
 
+## Market Weather evidence
+
+`WeatherEvidence` (`src/components/WeatherEvidence.tsx`) is the single renderer
+for V2 pillar evidence in Market Weather detail views. Pass the complete
+`WeatherLayerReading`; do not slice, duplicate, or hand-render pillar rows or
+coverage in `MarketFlowWidget`. Overview cards show the shared
+`reading.explanation` narrative instead of internal scores. Detail views repeat
+that same narrative inside `WeatherEvidence`, followed by the exact shared
+`config-label forge-label` heading treatment and the pillar grid. The
+`Weather Forecast` and `Skulls and Trading Weather Index` labels share that
+established treatment; the score section reuses `watch-summary-my-plan` for the
+same thin divider used in Current Watch details. The calculated Weather Index
+total belongs directly below that heading and above its pillar scores, not in
+`Advanced Details`.
+Weather `Advanced Details` reuses the existing Current Watch
+`watch-plan-section`, `watch-plan-section-toggle`, body, and caret pattern; do
+not restore a full-width secondary button or introduce parallel disclosure CSS.
+Its completed-cycle market facts render through the shared `ForgePill`
+component under `Weather Data Points`; do not recreate chip styling or fetch
+additional data when the disclosure opens. Only facts present in the published
+reading appear. Each chip uses the shared `Tooltip` so desktop gets the
+design-system hover/focus popover and mobile gets the bottom viewport sheet
+with its close control. Tooltip copy defines the measure and interprets its
+current completed-cycle relationship (for example, price distance from an
+average); it remains descriptive rather than predictive or advisory.
+V2 detail cards display the reading's deterministic `longTermTrend` projection
+under the label `Long-term trend`; they do not render the legacy generic
+`Climate` note. Missing non-Industry evidence hides the section, while an
+unmapped Industry uses the approved unavailable explanation.
+`WeatherCheckedAt` owns the `Checked as of …` timestamp treatment inside detail
+evidence cards; overview cards intentionally omit it. Do not repeat
+`reading.why` when it merely restates those same evidence values.
+Overview cards consume the typed, deterministic `reading.summary` projection
+and fall back to `reading.explanation` only for legacy readings. Summary copy
+uses the same completed-cycle facts as the detail forecast and is limited to
+three rendered lines; do not create ticker-, screenshot-, or condition-instance
+copy in `MarketFlowWidget`.
+
 These components are **shared and considered stable**. Reuse them as-is.
 Do not restyle, restructure, or "improve" them as a side effect of an
 unrelated task. Only change them when the user explicitly asks, and only the
