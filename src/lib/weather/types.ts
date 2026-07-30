@@ -109,6 +109,8 @@ export interface WeatherLayerReading {
   lastUpdated: string; // ISO timestamp
   /** V2 evidence contract. Omitted only by legacy/mock V1 projections. */
   modelVersion?: "v1" | "v2";
+  /** Deterministic copy-template version for historical replay/audit. */
+  narrativeVersion?: "v1";
   coverage?: WeatherCoverage;
   availability?: "available" | "unavailable";
   unavailableReason?: "independent-industry-weather-unavailable";

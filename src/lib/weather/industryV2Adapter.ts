@@ -13,6 +13,7 @@ import type {
   WeatherV2Coverage,
   WeatherV2Pillars,
 } from "./scoringV2Types";
+import type { WeatherNarrativeFacts } from "./narrative";
 
 /**
  * Product-owned Industry → ETF registry. V2 intentionally ships with no
@@ -29,6 +30,7 @@ export interface IndustryV2Reading {
   pillars: WeatherV2Pillars;
   weatherIndex: number | null;
   weatherIndexScore: number | null;
+  narrativeFacts: WeatherNarrativeFacts;
 }
 
 export function buildIndustryV2Reading(
@@ -54,6 +56,7 @@ export function buildIndustryV2Reading(
       pillars: {},
       weatherIndex: null,
       weatherIndexScore: null,
+      narrativeFacts: {},
     };
   }
 
@@ -127,5 +130,24 @@ export function buildIndustryV2Reading(
     pillars,
     weatherIndex: index?.value ?? null,
     weatherIndexScore: index?.score ?? null,
+    narrativeFacts: {
+      price: obs.price,
+      ema10: obs.ema10,
+      ema20: obs.ema20,
+      sma50: obs.sma50,
+      sma200: obs.sma200,
+      rsi14: obs.rsi14,
+      return5dPct: obs.return5dPct,
+      rsVsSpy5d: obs.rsVsSpy5d,
+      rsVsSpy20d: obs.rsVsSpy20d,
+      volumeRatio: obs.volumeRatio,
+      dailyRangeMultiple: obs.dailyRangeMultiple,
+      absoluteReturnAtrMultiple: obs.absoluteReturnAtrMultiple,
+      atrPct: obs.atrPct,
+      atrPctBaseline60d: obs.atrPctBaseline60d,
+      breakingResistance: obs.breakingResistance,
+      lostSupport: obs.lostSupport,
+      higherLayerIndex: options.higherLayerIndex,
+    },
   };
 }

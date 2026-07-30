@@ -237,6 +237,34 @@ If the applicable confirmation input is missing, conditions that require confirm
 
 **Never** fall through to Calm.
 
+### User-facing narrative contract
+
+The V2 condition and its explanation are two projections of the same completed
+cycle. Classification continues to use the normalized pillars above;
+user-facing copy translates the underlying observables into familiar market
+language.
+
+- `weather/narrative.ts` is the deterministic narrative owner for every V2
+  Market, Sector, Industry, and Stock reading.
+- V2 adapters pass only real observables already present in the completed
+  cycle: moving-average relationships, RSI, returns, breadth, relative
+  strength, VIX/volatility, volume, ATR movement, support/resistance, and
+  parent-layer context.
+- A narrative never infers or manufactures a missing observable. Missing
+  clauses are omitted.
+- Internal pillar scores remain evidence in the detail view; they are not the
+  overview explanation.
+- Overview and detail views consume the same
+  `WeatherLayerReading.explanation`. UI components do not independently
+  rebuild or rewrite it.
+- V2 readings stamp `narrativeVersion: "v1"` so later template changes can be
+  versioned without silently changing the interpretation of historical output.
+- Narrative generation performs no fetch and does not change Worker cadence,
+  classification thresholds, cycle publication, or symbol registration.
+- A later completed cycle deterministically rebuilds the narrative from its
+  current facts. Newly registered stocks receive the same treatment when their
+  first completed-cycle observables become available.
+
 ---
 
 ## 6. QQQ / NASDAQ-100 support (not override)

@@ -25,6 +25,7 @@ import {
   spdrForGicsSector,
 } from "./sectorSpdr";
 import { GICS_SECTORS, type GicsSector } from "./taxonomy";
+import type { WeatherNarrativeFacts } from "./narrative";
 
 export interface SectorV2Reading {
   sector: GicsSector | null;
@@ -40,6 +41,7 @@ export interface SectorV2Reading {
   };
   weatherIndex: number | null;
   weatherIndexScore: number | null;
+  narrativeFacts: WeatherNarrativeFacts;
 }
 
 function emptySectorReading(
@@ -60,6 +62,7 @@ function emptySectorReading(
     },
     weatherIndex: null,
     weatherIndexScore: null,
+    narrativeFacts: {},
   };
 }
 
@@ -188,6 +191,31 @@ export function buildSectorV2Reading(
     pillarDetails: { structure, relativeStrength, risk, momentum },
     weatherIndex: index?.value ?? null,
     weatherIndexScore: index?.score ?? null,
+    narrativeFacts: {
+      price: obs.price,
+      ema10: obs.ema10,
+      ema20: obs.ema20,
+      sma50: obs.sma50,
+      sma200: obs.sma200,
+      rsi14: obs.rsi14,
+      return5dPct: obs.return5dPct,
+      rsVsSpy5d,
+      rsVsSpy20d,
+      relativeStrengthImprovement:
+        options.relativeStrengthImprovement ??
+        (typeof obs.priorFreshRsVsSpy20d === "number" &&
+        typeof rsVsSpy20d === "number"
+          ? rsVsSpy20d - obs.priorFreshRsVsSpy20d
+          : undefined),
+      volumeRatio: obs.volumeRatio,
+      dailyRangeMultiple: obs.dailyRangeMultiple,
+      absoluteReturnAtrMultiple: obs.absoluteReturnAtrMultiple,
+      atrPct: obs.atrPct,
+      atrPctBaseline60d: obs.atrPctBaseline60d,
+      breakingResistance: obs.breakingResistance,
+      lostSupport: obs.lostSupport,
+      higherLayerIndex: options.higherLayerIndex,
+    },
   };
 }
 

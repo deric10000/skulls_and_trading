@@ -17,6 +17,10 @@ import type {
 } from "./scoringV2Types";
 import { buildStockV2Reading } from "./stockV2Adapter";
 import {
+  buildWeatherNarrative,
+  type WeatherNarrativeFacts,
+} from "./narrative";
+import {
   GICS_INDUSTRIES,
   GICS_SECTORS,
   industrySectorMap,
@@ -66,6 +70,7 @@ function toReading(args: {
   pillars: WeatherV2Pillars;
   weatherIndexScore: number | null;
   lastUpdated: string;
+  narrativeFacts: WeatherNarrativeFacts;
 }): WeatherLayerReading {
   const unavailable =
     args.classification.kind === "industry-unavailable" ||
@@ -92,11 +97,13 @@ function toReading(args: {
       riskAppetite: 0,
       rotation: 0,
     },
-    explanation: unavailable
-      ? args.layer === "industry"
-        ? "Independent Industry Weather is unavailable until an approved industry ETF is mapped."
-        : "There is not enough fresh market evidence to issue a weather condition yet."
-      : "This condition is based on the latest completed market evidence.",
+    explanation: buildWeatherNarrative({
+      conditionId: id,
+      layer: args.layer,
+      label: args.label,
+      coverage: args.coverage,
+      facts: args.narrativeFacts,
+    }),
     why:
       availableEvidence.length > 0
         ? availableEvidence.map((row) => `${row.label} ${row.value}`).join(" · ")
@@ -109,6 +116,7 @@ function toReading(args: {
     dynamicGraphicKey: id,
     lastUpdated: args.lastUpdated,
     modelVersion: "v2",
+    narrativeVersion: "v1",
     coverage: args.coverage,
     availability: unavailable ? "unavailable" : "available",
     ...(args.classification.kind === "industry-unavailable"
@@ -143,6 +151,7 @@ export function buildLiveV2WeatherSnapshot(
     pillars: marketV2.pillars,
     weatherIndexScore: marketV2.weatherIndexScore,
     lastUpdated: generatedAt,
+    narrativeFacts: marketV2.narrativeFacts,
   });
   const sectors: Record<string, WeatherLayerReading> = {};
   for (const sector of buildAllSectorV2Readings(weather, {
@@ -157,6 +166,7 @@ export function buildLiveV2WeatherSnapshot(
       pillars: sector.pillars,
       weatherIndexScore: sector.weatherIndexScore,
       lastUpdated: generatedAt,
+      narrativeFacts: sector.narrativeFacts,
     });
   }
   const industries: Record<string, WeatherLayerReading> = {};
@@ -172,6 +182,7 @@ export function buildLiveV2WeatherSnapshot(
       pillars: industry.pillars,
       weatherIndexScore: industry.weatherIndexScore,
       lastUpdated: generatedAt,
+      narrativeFacts: industry.narrativeFacts,
     });
     const parentBackdrop = sectors[item.sector]?.conditionId;
     industries[item.name] = parentBackdrop
@@ -223,6 +234,7 @@ export function addLiveV2Stocks(
       pillars: stock.pillars,
       weatherIndexScore: stock.weatherIndexScore,
       lastUpdated: snapshot.generatedAt,
+      narrativeFacts: stock.narrativeFacts,
     });
   }
   return { ...snapshot, stocks };

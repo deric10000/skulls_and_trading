@@ -7037,10 +7037,9 @@ select.forge-cell-input {
   font-size: 0.85rem;
 }
 
-.weather-card-evidence {
+.weather-evidence {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, auto));
-  gap: 0.25rem 0.75rem;
+  gap: var(--space-1);
   max-width: min(100%, 30rem);
   padding: 0.45rem 0.6rem;
   border-radius: var(--radius-sm);
@@ -7050,17 +7049,26 @@ select.forge-cell-input {
   line-height: 1.4;
 }
 
-.weather-card-evidence strong {
+.weather-evidence-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, auto));
+  gap: 0.25rem 0.75rem;
+}
+
+.weather-evidence strong {
   color: var(--text-strong);
   font-variant-numeric: tabular-nums;
 }
 
-.weather-card-why {
-  grid-column: 1 / -1;
-  overflow: hidden;
+.weather-card-description {
+  max-width: min(100%, 30rem);
+  margin: 0;
+  padding: 0.45rem 0.6rem;
+  border-radius: var(--radius-sm);
+  background: rgb(5 7 13 / 0.78);
   color: var(--text-base);
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  font-size: 0.76rem;
+  line-height: 1.45;
 }
 
 .weather-advanced {

@@ -28,9 +28,9 @@ export const WEATHER_CONDITIONS: Record<
     label: "Risk-On Tide",
     shortLabel: "Risk-On",
     plainEnglishMeaning:
-      "Broad conditions are supportive. Buyers are active, volatility is manageable, and aggressive stocks have wind behind them.",
+      "Broad conditions are supportive. Buyers are participating and volatility remains manageable.",
     scoringRule:
-      "Weather >= 65, Trend >= 60, Breadth >= 55, Volatility >= 45, Risk Appetite >= 55",
+      "Index >= 65, Structure >= 60, layer confirmation >= 55, Risk >= 45, Momentum >= 55",
     visualTone: "Strong, bullish, energetic, forward-moving.",
     designSystemColors: ["--green-400", "--green-500", "--green-300"],
     severity: "positive",
@@ -45,7 +45,8 @@ export const WEATHER_CONDITIONS: Record<
     shortLabel: "Risk-Off",
     plainEnglishMeaning:
       "Broad selling pressure is active. Most stocks are fighting the tape.",
-    scoringRule: "Weather <= 35, Trend <= 40, Breadth <= 40, Volatility <= 40",
+    scoringRule:
+      "Index <= 35, Structure <= 40, layer confirmation <= 40, Risk <= 40",
     visualTone: "Dangerous, stormy, defensive.",
     designSystemColors: ["--red-500", "--red-600", "--ink-700"],
     severity: "negative",
@@ -77,7 +78,7 @@ export const WEATHER_CONDITIONS: Record<
     plainEnglishMeaning:
       "Momentum is pushing through resistance with volume and participation.",
     scoringRule:
-      "Trend >= 70, Breadth >= 60, Volume >= 120% of normal, price breaking above resistance / prior high / key MA",
+      "Structure >= 70, layer confirmation >= 60, volume >= 120% of normal, and price breaking resistance",
     visualTone: "Powerful, directional, accelerating.",
     designSystemColors: ["--green-400", "--green-300", "--blue-300"],
     severity: "positive",
@@ -92,7 +93,7 @@ export const WEATHER_CONDITIONS: Record<
     plainEnglishMeaning:
       "The asset or layer is facing pressure from its surrounding environment.",
     scoringRule:
-      "Layer score < 45 while a higher layer is neutral/positive, or stock rising into a weak sector/industry/market",
+      "Weak local Index/evidence, weak parent backdrop plus soft local evidence, or the Market QQQ 200-day headwind path",
     visualTone: "Resistance, pressure, struggle.",
     designSystemColors: ["--brand-ember", "--amber-500", "--text-faint"],
     severity: "caution",
@@ -155,7 +156,7 @@ export const WEATHER_CONDITIONS: Record<
     plainEnglishMeaning:
       "Something abnormal is happening. The move is unusually large, fast, or catalyst-driven.",
     scoringRule:
-      "Move > 1.5× normal daily range, OR volume > 200% of normal, OR major catalyst/news, OR unusually elevated options/volume",
+      "Daily range > 1.5× normal AND either absolute move >= 1 ATR or volume > 200% of normal",
     visualTone: "Sudden, unusual, high-alert, volatile.",
     designSystemColors: ["--violet-500", "--violet-400", "--amber-400"],
     severity: "alert",

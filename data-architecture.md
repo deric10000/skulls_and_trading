@@ -320,6 +320,14 @@ remain omitted. Sector coverage is evaluated from its mapped SPDR rather than
 unrelated benchmark gaps; stale per-symbol observations downgrade Stock/Sector
 coverage to `partial`. Card faces hide the numeric Weather Index; Advanced
 Details exposes Index, coverage, `weatherModelVersion`, and evidence timestamp.
+V2 adapters also project those completed-cycle observables into the pure
+`weather/narrative.ts` builder. It owns the market-language
+`WeatherLayerReading.explanation` consumed by both overview and detail
+surfaces. It performs no I/O, omits unavailable facts, and never substitutes
+internal pillar scores for real-world evidence. The projection rebuilds with
+each published cycle and for newly augmented watch stocks without changing the
+pull cadence or adding UI-triggered provider requests. V2 readings stamp a
+`narrativeVersion` so future template revisions remain auditable.
 
 ### Add-time taxonomy hydrate (Weather UI only)
 

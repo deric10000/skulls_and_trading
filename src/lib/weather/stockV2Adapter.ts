@@ -23,6 +23,7 @@ import type {
   WeatherV2PillarScore,
   WeatherV2Pillars,
 } from "./scoringV2Types";
+import type { WeatherNarrativeFacts } from "./narrative";
 
 export interface StockV2AdapterInputs {
   ticker: string;
@@ -55,6 +56,7 @@ export interface StockV2Reading {
   };
   weatherIndex: number | null;
   weatherIndexScore: number | null;
+  narrativeFacts: WeatherNarrativeFacts;
 }
 
 const finite = (value: number | null | undefined): value is number =>
@@ -185,5 +187,43 @@ export function buildStockV2Reading(
     },
     weatherIndex: index?.value ?? null,
     weatherIndexScore: index?.score ?? null,
+    narrativeFacts: {
+      price: finite(price) ? price : undefined,
+      ema10,
+      ema20,
+      sma50: inputs.observable?.sma50,
+      sma200: inputs.observable?.sma200,
+      rsi14:
+        inputs.observable?.rsi14 ??
+        daily?.rsi ??
+        technicals?.rsi14 ??
+        undefined,
+      return5dPct: inputs.observable?.return5dPct,
+      rsVsSpy5d: inputs.observable?.rsVsSpy5d,
+      rsVsSpy20d: inputs.observable?.rsVsSpy20d,
+      rsVsSector5d: inputs.observable?.rsVsSector5d,
+      rsVsSector20d: inputs.observable?.rsVsSector20d,
+      volumeRatio: finite(volumeRatioForEvents)
+        ? volumeRatioForEvents
+        : undefined,
+      dailyRangeMultiple:
+        inputs.events?.dailyRangeMultiple ??
+        inputs.observable?.dailyRangeMultiple,
+      absoluteReturnAtrMultiple:
+        inputs.events?.absoluteReturnAtrMultiple ??
+        inputs.observable?.absoluteReturnAtrMultiple,
+      atrPct:
+        inputs.observable?.atrPct ??
+        daily?.atrPct ??
+        technicals?.atrPct14d ??
+        undefined,
+      atrPctBaseline60d: inputs.observable?.atrPctBaseline60d,
+      breakingResistance:
+        inputs.events?.breakingResistance ??
+        inputs.observable?.breakingResistance,
+      lostSupport:
+        inputs.events?.lostSupport ?? inputs.observable?.lostSupport,
+      higherLayerIndex: inputs.sectorWeatherIndex,
+    },
   };
 }

@@ -18,6 +18,7 @@ import type {
   WeatherV2PillarScore,
   WeatherV2Pillars,
 } from "./scoringV2Types";
+import type { WeatherNarrativeFacts } from "./narrative";
 
 export interface MarketV2Reading {
   coverage: WeatherV2Coverage;
@@ -32,6 +33,7 @@ export interface MarketV2Reading {
   weatherIndex: number | null;
   weatherIndexScore: number | null;
   qqq200: Qqq200Support | null;
+  narrativeFacts: WeatherNarrativeFacts;
 }
 
 /**
@@ -125,5 +127,30 @@ export function buildMarketV2Reading(
     weatherIndex: index?.value ?? null,
     weatherIndexScore: index?.score ?? null,
     qqq200,
+    narrativeFacts: {
+      price: spy?.price,
+      ema10: spy?.ema10,
+      ema20: spy?.ema20,
+      sma50: spy?.sma50,
+      sma200: spy?.sma200,
+      rsi14: spy?.rsi14,
+      return5dPct: spy?.return5dPct,
+      volumeRatio: spy?.volumeRatio,
+      dailyRangeMultiple: spy?.dailyRangeMultiple,
+      absoluteReturnAtrMultiple: spy?.absoluteReturnAtrMultiple,
+      breakingResistance: spy?.breakingResistance,
+      lostSupport: spy?.lostSupport,
+      vix: context?.vix ?? undefined,
+      rspMinusSpy5dPct: weather?.rspMinusSpy5dPct,
+      iwmMinusSpy5dPct: weather?.iwmMinusSpy5dPct,
+      sectorSpdrOutperforming: weather?.sectorSpdrOutperforming,
+      sectorSpdrOutperformingFreshCount:
+        weather?.sectorSpdrOutperformingFreshCount,
+      sectorSpdrAboveSma50: weather?.sectorSpdrAboveSma50,
+      sectorSpdrAboveSma50FreshCount:
+        weather?.sectorSpdrAboveSma50FreshCount,
+      qqq200Headwind: qqq200?.headwind,
+      qqq200Break: qqq200?.break,
+    },
   };
 }

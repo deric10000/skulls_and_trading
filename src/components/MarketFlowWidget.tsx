@@ -14,6 +14,7 @@ import { ensureWeatherTaxonomyAwaiting } from "../lib/weather/hydrateTaxonomy";
 import { SearchableSelect } from "./SearchableSelect";
 import { NeedsDataReviewFlag } from "./NeedsDataReviewFlag";
 import { ForgeToast } from "./forge/ForgeToast";
+import { WeatherEvidence } from "./WeatherEvidence";
 import { CaretLeft, CaretRight, Timer } from "../lib/icons";
 import {
   getMarketSession,
@@ -490,21 +491,9 @@ export function MarketFlowWidget({
               </span>
             </header>
             <p className="flow-summary-note">{detailReading.explanation}</p>
-            <p className="weather-why-line">
-              <strong>Why:</strong> {detailReading.why}
-            </p>
             {detailReading.modelVersion === "v2" ? (
               <>
-                {detailReading.evidence && detailReading.evidence.length > 0 ? (
-                  <div className="weather-scores" aria-label="Weather evidence">
-                    {detailReading.evidence.map((row) => (
-                      <div className="weather-score-row" key={row.label}>
-                        <span className="weather-score-label">{row.label}</span>
-                        <span className="weather-score-value">{row.value}</span>
-                      </div>
-                    ))}
-                  </div>
-                ) : null}
+                <WeatherEvidence reading={detailReading} />
                 {detailReading.availability !== "unavailable" ? (
                   <>
                     <button
@@ -690,20 +679,10 @@ export function MarketFlowWidget({
                     })()}
                   </div>
                 ) : null}
-                {reading?.modelVersion === "v2" &&
-                reading.availability !== "unavailable" &&
-                reading.evidence?.length ? (
-                  <div className="weather-card-evidence" aria-hidden="true">
-                    {reading.evidence.slice(0, 4).map((row) => (
-                      <span key={row.label}>
-                        {row.label} <strong>{row.value}</strong>
-                      </span>
-                    ))}
-                    <span>
-                      Coverage <strong>{reading.coverage ?? "partial"}</strong>
-                    </span>
-                    <span className="weather-card-why">{reading.why}</span>
-                  </div>
+                {reading ? (
+                  <p className="weather-card-description">
+                    {reading.explanation}
+                  </p>
                 ) : null}
                 {showDropdown ? (
                   <div className="weather-select">
