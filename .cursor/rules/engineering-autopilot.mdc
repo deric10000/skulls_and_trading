@@ -1,0 +1,38 @@
+---
+description: Proportional engineering governance and documentation routing for all Cursor work
+alwaysApply: true
+---
+
+# Engineering Autopilot
+
+Classify every task silently before implementing: Level 1 (routine), Level 2
+(connected), or Level 3 (critical), per `docs/engineering-autopilot.md`.
+
+**Level 1 fast path (no full doc read required):** copy/labels, styling,
+isolated component layout, small local UI behavior, fixture updates that do not
+alter a data contract, and ordinary explanatory documentation, release notes,
+or non-contractual notes. Follow the design system, product voice, and
+applicable component rules; inspect the affected component and nearby tests;
+run focused lint/type/test validation; check the final diff for unrelated
+changes. Do not add architecture documents or broad test suites.
+
+**Level 2 / Level 3 (or ambiguous classification):** read and follow
+`docs/engineering-autopilot.md` before planning or implementing. Keep routine
+work fast; automatically add architecture, reliability, migration, recovery,
+and production-safety checks when the task crosses a Level 3 boundary.
+
+Changes to agent rules, governance documents, product doctrine, design-system
+contracts, architecture references, or performance policies are at least Level
+2. Treat them as Level 3 when they change an actual security, data, persistence,
+scoring, historical-integrity, deployment, or production contract.
+
+Use its document-routing table to load only the canonical references relevant
+to the active task. Do not duplicate their long-form guidance into plans or
+rules.
+
+This rule does not authorize Codex CLI use. `.cursor/rules/codex-usage.mdc`
+remains the authority: Cursor may invoke Codex only when the user explicitly
+requests Codex in that turn.
+
+Do not deploy, mutate production data, apply production migrations, commit,
+merge, or push without the approvals required by the repository rules.
