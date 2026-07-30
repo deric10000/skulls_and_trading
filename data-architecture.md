@@ -301,10 +301,16 @@ expected market-week cycles with explicit `sourceCycleAsOf` + `stale`
 metadata; stale values never count as fresh Market participation. GICS sector → Select
 Sector SPDR mapping is SSOT in `src/lib/weather/sectorSpdr.ts` (Worker twin:
 `GICS_SECTOR_TO_SPDR` in `worker/weatherBenchmarks.ts`). Parallel pure adapters
-`buildMarketV2Reading` / `buildSectorV2Reading` consume those observables;
-FreeTier's visible `getMarketWeather` path remains on the v1 snapshot (and
-`SECTOR_TILT` cascade) until a separate UI flip. Do not use registered-peer
-baskets for Industry independence.
+`buildMarketV2Reading` / `buildSectorV2Reading` / `buildStockV2Reading` /
+`buildIndustryV2Reading` consume those observables via `weather/liveV2.ts`.
+FreeTier `getMarketWeather` builds the **V2** snapshot (`buildLiveV2WeatherSnapshot`):
+Market/Sector/Stock use layer-specific evidence; Industry is independently readable
+only when a product-approved system Industry ETF is mapped (`INDUSTRY_TO_SYSTEM_ETF`,
+currently empty → **Independent Industry Weather unavailable** + Sector backdrop).
+Do not use registered-peer baskets for Industry independence. The `liveV2` module
+loads via `preloadWeatherV2()` from AuthedApp so the signed-out entry chunk does
+not pull V2 scoring adapters. The legacy v1 tilt path in `weather/live.ts`
+remains for mock/fixtures and rollback only.
 
 Stock V2 consumes the ticker's existing `liveCache` daily technicals/1D
 indicators plus `weatherSymbolObservables`, a per-registered-symbol projection
@@ -312,8 +318,8 @@ from the same completed daily bars. Cycle publish adds SPY and mapped
 GICS-sector SPDR relative strength when those benchmarks exist; missing values
 remain omitted. Sector coverage is evaluated from its mapped SPDR rather than
 unrelated benchmark gaps; stale per-symbol observations downgrade Stock/Sector
-coverage to `partial`. FreeTier UI and `getMarketWeather` remain on v1 until a
-separate flip.
+coverage to `partial`. Card faces hide the numeric Weather Index; Advanced
+Details exposes Index, coverage, `weatherModelVersion`, and evidence timestamp.
 
 ### Add-time taxonomy hydrate (Weather UI only)
 

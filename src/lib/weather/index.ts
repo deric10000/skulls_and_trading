@@ -6,18 +6,13 @@ export * from "./conditions";
 export * from "./scoring";
 export * from "./scoringV2";
 export * from "./scoringV2Types";
-export * from "./marketV2Adapter";
 export * from "./session";
 export * from "./graphics";
 export * from "./taxonomy";
 export * from "./sectorSpdr";
-export * from "./sectorV2Adapter";
-export * from "./stockV2Adapter";
-export * from "./industryV2Adapter";
-export * from "./liveV2";
 export { buildLiveWeatherSnapshot, subScoresFromMarketContext, augmentWeatherStocks } from "./live";
 export { mapYahooTaxonomy } from "./yahooTaxonomy";
-/** Mock-only — FreeTier uses `weather/live` via dataSource.getMarketWeather. */
+/** Mock-only — FreeTier uses `weather/liveV2` via dataSource.getMarketWeather. */
 export { getMarketWeatherSnapshot } from "./mock";
 
 // Map a condition's severity to a design-system signal tone (chip coloring).

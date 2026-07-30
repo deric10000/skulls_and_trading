@@ -1,9 +1,10 @@
-import { lazy, Suspense, useEffect } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { AppShell } from "./components/AppShell";
 import { ComingSoonOverlay } from "./components/ComingSoonOverlay";
 import { MarketBudgetToasts } from "./components/MarketBudgetToasts";
 import { ForgeToast } from "./components/forge/ForgeToast";
 import { HomePage } from "./pages/HomePage";
+import { preloadWeatherV2, isWeatherV2Ready } from "./lib/datasource/freeTier";
 import { useUiState } from "./state/AppState";
 
 // Pages are lazy by default (performance-budget.md). Home stays eager: it is
@@ -59,6 +60,17 @@ export default function AuthedApp() {
     clearCadenceToast,
     previewStrategyCheckToast,
   } = useUiState();
+  const [weatherV2Ready, setWeatherV2Ready] = useState(() => isWeatherV2Ready());
+
+  useEffect(() => {
+    let cancelled = false;
+    void preloadWeatherV2().then(() => {
+      if (!cancelled) setWeatherV2Ready(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // One-shot preview: ?previewCadenceToast=1 (or DEV window hook).
   useEffect(() => {
@@ -123,7 +135,7 @@ export default function AuthedApp() {
         </div>
       ) : null}
       <Suspense fallback={null}>
-        <ActivePage />
+        {weatherV2Ready ? <ActivePage /> : null}
       </Suspense>
     </AppShell>
   );

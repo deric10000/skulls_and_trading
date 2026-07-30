@@ -143,6 +143,7 @@ export function buildStockV2Reading(
       participation != null,
   });
   const index = computeWeatherIndex("stock", pillars);
+  const volumeRatioForEvents = inputs.observable?.volumeRatio ?? relativeVolume;
   const condition =
     coverage === "insufficient" || !index
       ? ({ kind: "insufficient", coverage: "insufficient" } as const)
@@ -166,8 +167,8 @@ export function buildStockV2Reading(
             inputs.observable?.breakingResistance,
           lostSupport:
             inputs.events?.lostSupport ?? inputs.observable?.lostSupport,
-          ...(finite(inputs.observable?.volumeRatio ?? relativeVolume)
-            ? { volumeRatio: inputs.observable?.volumeRatio ?? relativeVolume }
+          ...(finite(volumeRatioForEvents)
+            ? { volumeRatio: volumeRatioForEvents }
             : {}),
         });
   return {

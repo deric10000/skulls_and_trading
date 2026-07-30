@@ -4,6 +4,7 @@ import { dataSource } from "../lib/datasource";
 import { getWatchMarketWeather } from "../lib/datasource/freeTier";
 import {
   getLiveCacheGeneration,
+  getMarketCycleMeta,
   getWeatherTaxonomyReadiness,
   resolveWeatherTaxonomyEtaAt,
   subscribeLiveCache,
@@ -12,7 +13,8 @@ import {
 import { ensureWeatherTaxonomyAwaiting } from "../lib/weather/hydrateTaxonomy";
 import { SearchableSelect } from "./SearchableSelect";
 import { NeedsDataReviewFlag } from "./NeedsDataReviewFlag";
-import { CaretLeft, CaretRight } from "../lib/icons";
+import { ForgeToast } from "./forge/ForgeToast";
+import { CaretLeft, CaretRight, Timer } from "../lib/icons";
 import {
   getMarketSession,
   resolveWeatherGraphic,
@@ -21,7 +23,11 @@ import {
   WEATHER_CONDITIONS,
   type WeatherGraphic,
 } from "../lib/weather";
-import { formatCheckCountdown, formatDecimals } from "../lib/format";
+import {
+  formatCheckCountdown,
+  formatCheckTime,
+  formatDecimals,
+} from "../lib/format";
 import type {
   MarketWeatherLayer,
   WeatherLayerReading,
@@ -31,6 +37,28 @@ import type {
 /** Detail-view footer — conditions are a read, not a forecast. */
 const WEATHER_SNAPSHOT_DISCLAIMER =
   "This is a snapshot of how conditions look right now — not a prediction of where the market will go.";
+
+const WEATHER_SCHEDULE_TOAST_STORAGE_KEY = "st-weather-schedule-collapsed";
+
+function readWeatherScheduleCollapsed(): boolean {
+  try {
+    return sessionStorage.getItem(WEATHER_SCHEDULE_TOAST_STORAGE_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function writeWeatherScheduleCollapsed(collapsed: boolean) {
+  try {
+    if (collapsed) {
+      sessionStorage.setItem(WEATHER_SCHEDULE_TOAST_STORAGE_KEY, "1");
+    } else {
+      sessionStorage.removeItem(WEATHER_SCHEDULE_TOAST_STORAGE_KEY);
+    }
+  } catch {
+    /* private mode — in-session state still works */
+  }
+}
 
 // Beginner-friendly tooltip copy for the five instruments (product spec).
 const SUBSCORE_META: {
@@ -152,10 +180,72 @@ export function MarketFlowWidget({
   const [liveGeneration, setLiveGeneration] = useState(getLiveCacheGeneration);
   useEffect(() => subscribeLiveCache(() => setLiveGeneration(getLiveCacheGeneration())), []);
 
+  const [scheduleToastCollapsed, setScheduleToastCollapsed] = useState(
+    readWeatherScheduleCollapsed,
+  );
+  const [countdownNow, setCountdownNow] = useState(() => Date.now());
+
   // Session detection picks which weather to read. The snapshot is fetched
   // ONCE per session, then stock readings are augmented for every watched
   // name that has mapped GICS sector/industry (client-side; no Yahoo fan-out).
   const session = getMarketSession();
+  const cycleMeta = useMemo(() => getMarketCycleMeta(), [liveGeneration]);
+  const nextWeatherAt =
+    cycleMeta?.nextCycleAt ?? synthesizeNextCycleEtaAt();
+  const lastWeatherAt =
+    cycleMeta?.completedAt ?? cycleMeta?.publishedAt ?? cycleMeta?.cycleAsOf ?? null;
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setCountdownNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const weatherCountdown = formatCheckCountdown(
+    Date.parse(nextWeatherAt) - countdownNow,
+  );
+  const scheduleLastLabel = lastWeatherAt
+    ? formatCheckTime(lastWeatherAt)
+    : "Waiting on first cycle";
+  const scheduleNextLabel = `${formatCheckTime(nextWeatherAt)} (${weatherCountdown})`;
+
+  function setScheduleCollapsed(collapsed: boolean) {
+    writeWeatherScheduleCollapsed(collapsed);
+    setScheduleToastCollapsed(collapsed);
+  }
+
+  const scheduleToggle = (
+    <button
+      type="button"
+      className={
+        scheduleToastCollapsed ? "icon-btn" : "icon-btn icon-btn--active"
+      }
+      aria-label={
+        scheduleToastCollapsed
+          ? "Show weather schedule"
+          : "Minimize weather schedule"
+      }
+      aria-expanded={!scheduleToastCollapsed}
+      onClick={() => setScheduleCollapsed(!scheduleToastCollapsed)}
+    >
+      <Timer aria-hidden weight="regular" />
+    </button>
+  );
+
+  const scheduleToast = !scheduleToastCollapsed ? (
+    <div className="forge-toast-stack weather-schedule-toast">
+      <ForgeToast
+        tone="info"
+        onDismiss={() => setScheduleCollapsed(true)}
+        dismissLabel="Minimize weather schedule"
+      >
+        <p>
+          Last Weather Cycle: {scheduleLastLabel}
+          {` · Next Cycle: ${scheduleNextLabel}`}
+        </p>
+      </ForgeToast>
+    </div>
+  ) : null;
+
   const snapshot = useMemo(
     () =>
       getWatchMarketWeather(
@@ -183,12 +273,6 @@ export function MarketFlowWidget({
   useEffect(() => {
     ensureWeatherTaxonomyAwaiting(watchTickers);
   }, [watchTickers, liveGeneration]);
-
-  const [countdownNow, setCountdownNow] = useState(() => Date.now());
-  useEffect(() => {
-    const timer = window.setInterval(() => setCountdownNow(Date.now()), 1000);
-    return () => window.clearInterval(timer);
-  }, []);
 
   function weatherTaxonomyEmptyCopy(
     layer: "sector" | "industry" | "stock",
@@ -375,7 +459,10 @@ export function MarketFlowWidget({
       <section className="panel market-flow" aria-labelledby="flow-title">
         <div className="panel-head">
           <h2 id="flow-title">Market Weather</h2>
-          <span className="panel-tag">{LAYER_LABEL[selectedLayer]}</span>
+          <div className="market-flow-head-meta">
+            <span className="panel-tag">{LAYER_LABEL[selectedLayer]}</span>
+            {scheduleToggle}
+          </div>
         </div>
         <button
           type="button"
@@ -385,6 +472,7 @@ export function MarketFlowWidget({
           <CaretLeft aria-hidden />
           Market Weather
         </button>
+        {scheduleToast}
         <div className={`flow-summary weather-summary ${graphic.accentClass}`}>
           <WeatherBackdrop graphic={graphic} variant="summary" />
           <div className="flow-summary-content">
@@ -476,12 +564,16 @@ export function MarketFlowWidget({
     <section className="panel market-flow" aria-labelledby="flow-title">
       <div className="panel-head">
         <h2 id="flow-title">Market Weather</h2>
-        <span className="panel-tag session-tag">{SESSION_META[session].label}</span>
+        <div className="market-flow-head-meta">
+          <span className="panel-tag session-tag">{SESSION_META[session].label}</span>
+          {scheduleToggle}
+        </div>
       </div>
       <p className="panel-intro">
         See if your names sail with the weather or fight the wind — Market down
         to Stock.
       </p>
+      {scheduleToast}
       <ol className="flow-steps flow-steps--vertical">
         {cards.map((card, index) => {
           const reading = card.reading;
