@@ -66,7 +66,7 @@ function tilt(
   };
 }
 
-/** Soft tilts until real sector RS ships — keyed by GICS sector names. */
+/** Soft tilts for v1 cascade only — deprecated for V2 scoring (use SPDR SSOT). */
 const SECTOR_TILT: Record<string, number> = {
   Energy: -1,
   Materials: -1,

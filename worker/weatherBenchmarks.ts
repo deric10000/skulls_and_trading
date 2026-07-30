@@ -14,6 +14,21 @@ export const SECTOR_SPDR_SYMBOLS = [
   "XLRE",
 ] as const;
 
+/** Must stay 1:1 with src/lib/weather/sectorSpdr.ts GICS_SECTOR_TO_SPDR. */
+export const GICS_SECTOR_TO_SPDR = {
+  Energy: "XLE",
+  Materials: "XLB",
+  Industrials: "XLI",
+  "Consumer Discretionary": "XLY",
+  "Consumer Staples": "XLP",
+  "Health Care": "XLV",
+  Financials: "XLF",
+  "Information Technology": "XLK",
+  "Communication Services": "XLC",
+  Utilities: "XLU",
+  "Real Estate": "XLRE",
+} as const;
+
 /** Dedicated system symbols. These never enter the user cycle manifest. */
 export const WEATHER_BENCHMARK_SYMBOLS = [
   "RSP",
@@ -41,9 +56,16 @@ export interface WeatherBenchmarkObservable {
   sma50?: number;
   sma200?: number;
   atrPct?: number;
+  /** Median ATR14% over prior ≤60 completed sessions (instrument Risk). */
+  atrPctBaseline60d?: number;
+  /** Positive % below the prior completed 20-session high. */
+  drawdownFrom20dHighPct?: number;
   rsi14?: number;
   return5dPct?: number;
   return20dPct?: number;
+  /** Subject 5d − SPY 5d (percentage points); filled at publish. */
+  rsVsSpy5d?: number;
+  rsVsSpy20d?: number;
 }
 
 function finite(value: number | null | undefined): value is number {
@@ -56,6 +78,38 @@ function returnPct(closes: number[], sessions: number): number | undefined {
   const prior = closes.at(-(sessions + 1));
   if (!finite(current) || !finite(prior) || prior === 0) return undefined;
   return ((current - prior) / prior) * 100;
+}
+
+function median(values: number[]): number | undefined {
+  if (values.length === 0) return undefined;
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 0
+    ? (sorted[mid - 1]! + sorted[mid]!) / 2
+    : sorted[mid];
+}
+
+/** Median of ATR14% ending on each of the last ≤60 completed sessions. */
+function atrPctBaseline60d(bars: OhlcvBar[]): number | undefined {
+  const values: number[] = [];
+  for (let end = bars.length; end >= 15 && values.length < 60; end -= 1) {
+    const value = atrPct(bars.slice(0, end), 14);
+    if (finite(value)) values.push(value);
+  }
+  return median(values);
+}
+
+function drawdownFrom20dHighPct(bars: OhlcvBar[]): number | undefined {
+  if (bars.length < 20) return undefined;
+  const window = bars.slice(-20);
+  const high = Math.max(
+    ...window.map((bar) =>
+      finite(bar.high) ? bar.high : finite(bar.close) ? bar.close : Number.NaN,
+    ),
+  );
+  const close = bars.at(-1)?.close;
+  if (!finite(high) || high <= 0 || !finite(close)) return undefined;
+  return Math.max(0, ((high - close) / high) * 100);
 }
 
 /** Pure projection from the same completed daily bars used by cron technicals. */
@@ -77,6 +131,8 @@ export function buildWeatherBenchmarkObservable(
     ...optional("sma50", sma(closes, 50)),
     ...optional("sma200", sma(closes, 200)),
     ...optional("atrPct", atrPct(dailyBars, 14)),
+    ...optional("atrPctBaseline60d", atrPctBaseline60d(dailyBars)),
+    ...optional("drawdownFrom20dHighPct", drawdownFrom20dHighPct(dailyBars)),
     ...optional("rsi14", rsi(closes, 14)),
     ...optional("return5dPct", returnPct(closes, 5)),
     ...optional("return20dPct", returnPct(closes, 20)),
@@ -149,13 +205,31 @@ export function derivePublishedWeatherBenchmarks(
       : !hasPreferredFields
         ? "provisional"
         : "complete";
+  const spy5dVal = values.SPY?.return5dPct;
+  const spy20dVal = values.SPY?.return20dPct;
+  const benchmarks: Record<string, WeatherBenchmarkObservable> = {};
+  for (const [symbol, obs] of Object.entries(values)) {
+    if (symbol === "SPY") {
+      benchmarks[symbol] = obs;
+      continue;
+    }
+    const withRs = { ...obs };
+    if (finite(obs.return5dPct) && finite(spy5dVal)) {
+      withRs.rsVsSpy5d = obs.return5dPct - spy5dVal;
+    }
+    if (finite(obs.return20dPct) && finite(spy20dVal)) {
+      withRs.rsVsSpy20d = obs.return20dPct - spy20dVal;
+    }
+    benchmarks[symbol] = withRs;
+  }
+  if (values.SPY) benchmarks.SPY = values.SPY;
   return {
     status,
     ...(completedAt ? { completedAt } : {}),
     expectedSymbols,
     freshSymbols,
     missingSymbols,
-    benchmarks: values,
+    benchmarks,
     ...(finite(values.RSP?.return5dPct) && finite(spy5d)
       ? { rspMinusSpy5dPct: values.RSP.return5dPct - spy5d }
       : {}),

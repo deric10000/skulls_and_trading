@@ -24,9 +24,13 @@ export interface WeatherBenchmarkObservable {
   sma50?: number;
   sma200?: number;
   atrPct?: number;
+  atrPctBaseline60d?: number;
+  drawdownFrom20dHighPct?: number;
   rsi14?: number;
   return5dPct?: number;
   return20dPct?: number;
+  rsVsSpy5d?: number;
+  rsVsSpy20d?: number;
 }
 
 export interface WeatherBenchmarksPayload {

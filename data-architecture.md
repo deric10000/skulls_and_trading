@@ -293,8 +293,13 @@ Market Weather V2 inputs publish in parallel on each completed cycle as
 and QQQ system symbols stay outside the user registry/40-symbol manifest and
 fundamentals gate. The shard reuses cron's closed 1h→daily technical path;
 missing inputs remain omitted and its status is `provisional` or
-`insufficient` without blocking user quote publication. FreeTier's visible
-`getMarketWeather` path remains on the v1 snapshot until a separate UI flip.
+`insufficient` without blocking user quote publication. GICS sector → Select
+Sector SPDR mapping is SSOT in `src/lib/weather/sectorSpdr.ts` (Worker twin:
+`GICS_SECTOR_TO_SPDR` in `worker/weatherBenchmarks.ts`). Parallel pure adapters
+`buildMarketV2Reading` / `buildSectorV2Reading` consume those observables;
+FreeTier's visible `getMarketWeather` path remains on the v1 snapshot (and
+`SECTOR_TILT` cascade) until a separate UI flip. Do not use registered-peer
+baskets for Industry independence.
 
 ### Add-time taxonomy hydrate (Weather UI only)
 

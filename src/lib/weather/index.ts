@@ -10,6 +10,8 @@ export * from "./marketV2Adapter";
 export * from "./session";
 export * from "./graphics";
 export * from "./taxonomy";
+export * from "./sectorSpdr";
+export * from "./sectorV2Adapter";
 export { buildLiveWeatherSnapshot, subScoresFromMarketContext, augmentWeatherStocks } from "./live";
 export { mapYahooTaxonomy } from "./yahooTaxonomy";
 /** Mock-only — FreeTier uses `weather/live` via dataSource.getMarketWeather. */

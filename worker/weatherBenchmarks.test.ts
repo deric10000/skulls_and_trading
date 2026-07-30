@@ -37,8 +37,33 @@ describe("weather benchmark projection", () => {
     expect(value?.ema200).toBeTypeOf("number");
     expect(value?.sma50).toBeTypeOf("number");
     expect(value?.atrPct).toBeGreaterThan(0);
+    expect(value?.atrPctBaseline60d).toBeTypeOf("number");
+    expect(value?.drawdownFrom20dHighPct).toBeTypeOf("number");
     expect(value?.return5dPct).toBeTypeOf("number");
     expect(value?.return20dPct).toBeTypeOf("number");
+  });
+
+  it("annotates non-SPY benchmarks with RS vs SPY at publish", () => {
+    const spy = buildWeatherBenchmarkObservable(dailyBars())!;
+    const sector = {
+      ...spy,
+      return5dPct: (spy.return5dPct ?? 0) + 1.5,
+      return20dPct: (spy.return20dPct ?? 0) + 2.25,
+    };
+    const published = derivePublishedWeatherBenchmarks({
+      SPY: spy,
+      XLK: sector,
+      RSP: spy,
+      QQQ: spy,
+      ...Object.fromEntries(
+        SECTOR_SPDR_SYMBOLS.filter((symbol) => symbol !== "XLK").map(
+          (symbol) => [symbol, spy],
+        ),
+      ),
+    });
+    expect(published.benchmarks.XLK?.rsVsSpy5d).toBeCloseTo(1.5);
+    expect(published.benchmarks.XLK?.rsVsSpy20d).toBeCloseTo(2.25);
+    expect(published.benchmarks.SPY?.rsVsSpy5d).toBeUndefined();
   });
 
   it("marks an IWM-only cut provisional while retaining participation", () => {
