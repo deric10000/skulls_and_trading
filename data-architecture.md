@@ -322,9 +322,11 @@ coverage to `partial`. Card faces hide the numeric Weather Index; Advanced
 Details exposes Index, coverage, `weatherModelVersion`, and evidence timestamp.
 V2 adapters also project those completed-cycle observables into the pure
 `weather/narrative.ts` builder. It owns the market-language
-`WeatherLayerReading.explanation` consumed by both overview and detail
-surfaces. It performs no I/O, omits unavailable facts, and never substitutes
-internal pillar scores for real-world evidence. The projection rebuilds with
+`WeatherLayerReading.summary` overview projection and
+`WeatherLayerReading.explanation` detail projection. Both use the same typed
+facts and exhaustive condition registry. The builder performs no I/O, omits
+unavailable facts, and never substitutes internal pillar scores for real-world
+evidence. These projections rebuild with
 each published cycle and for newly augmented watch stocks without changing the
 pull cadence or adding UI-triggered provider requests. V2 readings stamp a
 `narrativeVersion` so future template revisions remain auditable.

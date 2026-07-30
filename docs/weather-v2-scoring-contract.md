@@ -255,8 +255,15 @@ language.
 - Internal pillar scores remain evidence in the detail view; they are not the
   overview explanation.
 - Overview and detail views consume the same
-  `WeatherLayerReading.explanation`. UI components do not independently
-  rebuild or rewrite it.
+  completed-cycle facts. `WeatherLayerReading.summary` is the compact overview
+  projection; `WeatherLayerReading.explanation` is the detailed forecast. UI
+  components do not independently rebuild or rewrite either projection.
+- Every condition id must have an explicit summary meaning and evidence
+  strategy in the exhaustive typed registry. Adding a future condition without
+  defining its summary is a compile-time failure.
+- Summaries select only the strongest one or two available facts and target
+  three rendered lines. They are not character slices of the detailed forecast
+  and may never introduce evidence absent from that same reading.
 - V2 readings stamp `narrativeVersion: "v1"` so later template changes can be
   versioned without silently changing the interpretation of historical output.
 - Narrative generation performs no fetch and does not change Worker cadence,

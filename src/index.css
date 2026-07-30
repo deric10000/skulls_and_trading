@@ -7039,14 +7039,21 @@ select.forge-cell-input {
 
 .weather-evidence {
   display: grid;
-  gap: var(--space-1);
+  gap: var(--space-2);
   max-width: min(100%, 30rem);
-  padding: 0.45rem 0.6rem;
+  padding: var(--space-2);
   border-radius: var(--radius-sm);
   background: rgb(5 7 13 / 0.78);
   color: var(--text-muted);
   font-size: 0.72rem;
   line-height: 1.4;
+}
+
+.weather-evidence-description {
+  margin: 0;
+  color: var(--text-base);
+  font-size: 0.85rem;
+  line-height: 1.55;
 }
 
 .weather-evidence-grid {
@@ -7060,7 +7067,15 @@ select.forge-cell-input {
   font-variant-numeric: tabular-nums;
 }
 
+.weather-checked-at {
+  align-self: flex-end;
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+}
+
 .weather-card-description {
+  display: grid;
+  gap: 0.25rem;
   max-width: min(100%, 30rem);
   margin: 0;
   padding: 0.45rem 0.6rem;
@@ -7069,6 +7084,21 @@ select.forge-cell-input {
   color: var(--text-base);
   font-size: 0.76rem;
   line-height: 1.45;
+}
+
+.weather-card-summary {
+  display: -webkit-box;
+  margin: 0;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.weather-card-more {
+  justify-self: start;
+  color: var(--accent-strong);
+  font-weight: 600;
+  white-space: nowrap;
 }
 
 .weather-advanced {

@@ -490,7 +490,6 @@ export function MarketFlowWidget({
                 )}
               </span>
             </header>
-            <p className="flow-summary-note">{detailReading.explanation}</p>
             {detailReading.modelVersion === "v2" ? (
               <>
                 <WeatherEvidence reading={detailReading} />
@@ -680,9 +679,14 @@ export function MarketFlowWidget({
                   </div>
                 ) : null}
                 {reading ? (
-                  <p className="weather-card-description">
-                    {reading.explanation}
-                  </p>
+                  <div className="weather-card-description">
+                    <p className="weather-card-summary">
+                      {reading.summary ?? reading.explanation}
+                    </p>
+                    <span className="weather-card-more" aria-hidden="true">
+                      View forecast →
+                    </span>
+                  </div>
                 ) : null}
                 {showDropdown ? (
                   <div className="weather-select">

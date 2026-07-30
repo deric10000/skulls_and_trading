@@ -102,6 +102,8 @@ export interface WeatherLayerReading {
   confidence: number; // 0–100
   conditionId: WeatherConditionId;
   subScores: WeatherSubScores;
+  /** Compact card projection of the same facts used by `explanation`. */
+  summary?: string;
   explanation: string; // short, beginner-friendly
   why: string; // the "why" line
   climateContext: ClimateContext;

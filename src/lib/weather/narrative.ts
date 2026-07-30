@@ -42,6 +42,20 @@ const finite = (value: number | undefined): value is number =>
 const pct = (value: number) => `${Math.abs(value).toFixed(1)}%`;
 const multiple = (value: number) => `${value.toFixed(1)}×`;
 
+const SUMMARY_MEANINGS = {
+  "risk-on-tide": "Conditions are broadly supportive.",
+  "risk-off-storm": "Selling pressure is broad and conditions are defensive.",
+  "chop-seas": "Market signals are pulling in different directions.",
+  "breakout-wind": "Price is breaking resistance with confirmation.",
+  headwind: "This layer is moving against a difficult backdrop.",
+  tailwind: "The backdrop is constructive, but not yet explosive.",
+  "rotation-current": "Capital is strengthening within this group.",
+  "calm-waters": "Conditions are stable and balanced.",
+  "rogue-wave": "An unusually large move is underway.",
+  "red-sky-warning": "Conditions are deteriorating before a full breakdown.",
+  "mixed-signals": "The evidence has not established a clear direction.",
+} satisfies Record<WeatherConditionId, string>;
+
 function subject(layer: MarketWeatherLayer, label: string): string {
   if (layer === "market") return "The S&P 500";
   if (layer === "stock") return label;
@@ -270,6 +284,111 @@ function evidenceSentence(
         momentum,
       ]);
   }
+}
+
+function summaryEvidence(
+  conditionId: WeatherConditionId,
+  layer: MarketWeatherLayer,
+  label: string,
+  facts: WeatherNarrativeFacts,
+): string {
+  const structure = movingAverageClause(layer, label, facts);
+  const momentum = momentumClause(facts);
+  const participation = layer === "market" ? participationClause(facts) : null;
+  const relativeStrength = relativeStrengthClause(layer, facts);
+  const volatility = volatilityClause(facts);
+
+  switch (conditionId) {
+    case "rogue-wave":
+      return joinClauses([
+        finite(facts.dailyRangeMultiple)
+          ? `today's range is ${multiple(facts.dailyRangeMultiple)} normal`
+          : null,
+        finite(facts.volumeRatio)
+          ? `volume is ${multiple(facts.volumeRatio)} average`
+          : finite(facts.absoluteReturnAtrMultiple)
+            ? `the move has reached ${multiple(facts.absoluteReturnAtrMultiple)} its typical range`
+            : null,
+      ], 2);
+    case "red-sky-warning":
+      if (facts.qqq200Break) {
+        return "the Nasdaq 100 has broken materially below its 200-day moving average";
+      }
+      if (facts.lostSupport) {
+        return `${subject(layer, label)} has lost technical support`;
+      }
+      return joinClauses([structure, participation, volatility, momentum], 1);
+    case "breakout-wind":
+      return joinClauses([
+        `${subject(layer, label)} has broken above recent resistance`,
+        finite(facts.volumeRatio)
+          ? `volume is ${multiple(facts.volumeRatio)} average`
+          : null,
+      ], 2);
+    case "rotation-current":
+      return joinClauses([
+        relativeStrength,
+        finite(facts.relativeStrengthImprovement)
+          ? `relative performance improved ${facts.relativeStrengthImprovement.toFixed(1)} points since the prior cycle`
+          : null,
+      ], 2);
+    case "headwind":
+      return joinClauses([
+        structure,
+        finite(facts.higherLayerIndex) && facts.higherLayerIndex < 45
+          ? "the surrounding market backdrop is weak"
+          : facts.qqq200Headwind
+            ? "the Nasdaq 100 is below its 200-day moving average"
+            : null,
+        relativeStrength,
+      ], 2);
+    case "chop-seas":
+      return joinClauses([
+        finite(facts.rspMinusSpy5dPct) && facts.rspMinusSpy5dPct < 0
+          ? `equal-weight stocks trail the S&P 500 by ${pct(facts.rspMinusSpy5dPct)} over five days`
+          : finite(facts.iwmMinusSpy5dPct) && facts.iwmMinusSpy5dPct < 0
+            ? `small caps trail the S&P 500 by ${pct(facts.iwmMinusSpy5dPct)} over five days`
+            : null,
+        structure,
+        relativeStrength,
+        momentum,
+      ], 1);
+    case "risk-on-tide":
+    case "risk-off-storm":
+    case "tailwind":
+    case "calm-waters":
+    case "mixed-signals":
+      return joinClauses([
+        structure,
+        participation,
+        relativeStrength,
+        volatility,
+        momentum,
+      ], 1);
+  }
+}
+
+export function buildWeatherSummary(args: {
+  conditionId: WeatherConditionId;
+  layer: MarketWeatherLayer;
+  label: string;
+  coverage: WeatherCoverage;
+  facts: WeatherNarrativeFacts;
+}): string {
+  if (args.coverage === "insufficient") {
+    return args.layer === "industry"
+      ? "Independent Industry Weather is unavailable until an approved industry ETF is mapped."
+      : "Waiting for enough fresh evidence to issue this Weather reading.";
+  }
+  const evidence = summaryEvidence(
+    args.conditionId,
+    args.layer,
+    args.label,
+    args.facts,
+  );
+  return evidence
+    ? `${SUMMARY_MEANINGS[args.conditionId]} ${evidence}.`
+    : SUMMARY_MEANINGS[args.conditionId];
 }
 
 export function buildWeatherNarrative(args: {

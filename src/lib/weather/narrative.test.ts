@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { buildWeatherNarrative, type WeatherNarrativeFacts } from "./narrative";
+import {
+  buildWeatherNarrative,
+  buildWeatherSummary,
+  type WeatherNarrativeFacts,
+} from "./narrative";
 import type { WeatherConditionId } from "./types";
 
 const marketFacts: WeatherNarrativeFacts = {
@@ -57,8 +61,20 @@ describe("Weather V2 user narrative", () => {
 
     for (const [conditionId, facts] of Object.entries(factsByCondition)) {
       const copy = narrative(conditionId as WeatherConditionId, facts);
+      const summary = buildWeatherSummary({
+        conditionId: conditionId as WeatherConditionId,
+        layer: "market",
+        label: "Market",
+        coverage: "complete",
+        facts,
+      });
       expect(copy.length).toBeGreaterThan(50);
+      expect(summary.length).toBeGreaterThan(30);
+      expect(summary.length).toBeLessThan(copy.length);
       expect(copy).not.toMatch(
+        /\b(Structure|Participation|Risk|Momentum) \d+\/100\b/,
+      );
+      expect(summary).not.toMatch(
         /\b(Structure|Participation|Risk|Momentum) \d+\/100\b/,
       );
     }
@@ -81,6 +97,26 @@ describe("Weather V2 user narrative", () => {
     expect(first).toContain("contained at 16.4");
     expect(next).toContain("elevated at 26.2");
     expect(next).not.toBe(first);
+  });
+
+  it("summarizes the same Rogue Wave facts without slicing the detail copy", () => {
+    const facts = {
+      dailyRangeMultiple: 1.8,
+      absoluteReturnAtrMultiple: 1.5,
+      volumeRatio: 1.5,
+    };
+    const summary = buildWeatherSummary({
+      conditionId: "rogue-wave",
+      layer: "market",
+      label: "Market",
+      coverage: "complete",
+      facts,
+    });
+    const detail = narrative("rogue-wave", facts);
+    expect(summary).toContain("1.8× normal");
+    expect(summary).toContain("1.5× average");
+    expect(detail).toContain("1.5× its typical range");
+    expect(detail.startsWith(summary)).toBe(false);
   });
 
   it("uses stock and sector comparisons for a stock reading", () => {

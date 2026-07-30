@@ -18,6 +18,7 @@ import type {
 import { buildStockV2Reading } from "./stockV2Adapter";
 import {
   buildWeatherNarrative,
+  buildWeatherSummary,
   type WeatherNarrativeFacts,
 } from "./narrative";
 import {
@@ -97,6 +98,13 @@ function toReading(args: {
       riskAppetite: 0,
       rotation: 0,
     },
+    summary: buildWeatherSummary({
+      conditionId: id,
+      layer: args.layer,
+      label: args.label,
+      coverage: args.coverage,
+      facts: args.narrativeFacts,
+    }),
     explanation: buildWeatherNarrative({
       conditionId: id,
       layer: args.layer,
