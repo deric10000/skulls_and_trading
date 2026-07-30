@@ -150,7 +150,7 @@ Typical examples:
 - Copy or label changes
 - Styling and spacing
 - Isolated component layout
-- Documentation
+- Ordinary explanatory documentation, release notes, or non-contractual notes
 - Small, local UI behavior
 - Test-fixture or mock-copy updates that do not alter a data contract
 
@@ -173,6 +173,11 @@ Typical examples:
 - New data-fetching behavior
 - A calculation with several consumers
 - A change to a shared client-side state contract
+- Agent rules or engineering-governance documents
+- Product-doctrine or product-voice contracts
+- Design-system contracts
+- Architecture references
+- Performance policies
 
 Required agent behavior, in addition to Level 1:
 
@@ -201,6 +206,9 @@ Typical examples:
 - Security or privacy behavior
 - Deployment configuration
 - Production-data reconciliation
+- Documentation or rule changes that alter an actual security, data,
+  persistence, scoring, historical-integrity, deployment, or production
+  contract
 
 Required agent behavior, in addition to Levels 1 and 2:
 
