@@ -17,6 +17,8 @@ import type {
 } from "./scoringV2Types";
 import { buildStockV2Reading } from "./stockV2Adapter";
 import {
+  buildLongTermTrend,
+  buildWeatherDataPoints,
   buildWeatherNarrative,
   buildWeatherSummary,
   type WeatherNarrativeFacts,
@@ -72,12 +74,17 @@ function toReading(args: {
   weatherIndexScore: number | null;
   lastUpdated: string;
   narrativeFacts: WeatherNarrativeFacts;
+  parentLabel?: string;
 }): WeatherLayerReading {
   const unavailable =
     args.classification.kind === "industry-unavailable" ||
     args.classification.kind === "insufficient";
   const id = conditionId(args.classification);
   const availableEvidence = evidenceRows(args.pillars);
+  const narrativeFacts = {
+    ...args.narrativeFacts,
+    parentLabel: args.parentLabel,
+  };
   return {
     layer: args.layer,
     label: args.label,
@@ -103,14 +110,20 @@ function toReading(args: {
       layer: args.layer,
       label: args.label,
       coverage: args.coverage,
-      facts: args.narrativeFacts,
+      facts: narrativeFacts,
+    }),
+    longTermTrend: buildLongTermTrend({
+      layer: args.layer,
+      label: args.label,
+      coverage: args.coverage,
+      facts: narrativeFacts,
     }),
     explanation: buildWeatherNarrative({
       conditionId: id,
       layer: args.layer,
       label: args.label,
       coverage: args.coverage,
-      facts: args.narrativeFacts,
+      facts: narrativeFacts,
     }),
     why:
       availableEvidence.length > 0
@@ -134,6 +147,11 @@ function toReading(args: {
         }
       : {}),
     evidence: availableEvidence,
+    dataPoints: buildWeatherDataPoints({
+      layer: args.layer,
+      label: args.label,
+      facts: narrativeFacts,
+    }),
     pillarScores: Object.fromEntries(
       Object.entries(args.pillars).map(([key, value]) => [
         key,
@@ -175,6 +193,7 @@ export function buildLiveV2WeatherSnapshot(
       weatherIndexScore: sector.weatherIndexScore,
       lastUpdated: generatedAt,
       narrativeFacts: sector.narrativeFacts,
+      parentLabel: "broader market",
     });
   }
   const industries: Record<string, WeatherLayerReading> = {};
@@ -191,6 +210,7 @@ export function buildLiveV2WeatherSnapshot(
       weatherIndexScore: industry.weatherIndexScore,
       lastUpdated: generatedAt,
       narrativeFacts: industry.narrativeFacts,
+      parentLabel: item.sector,
     });
     const parentBackdrop = sectors[item.sector]?.conditionId;
     industries[item.name] = parentBackdrop
@@ -243,6 +263,7 @@ export function addLiveV2Stocks(
       weatherIndexScore: stock.weatherIndexScore,
       lastUpdated: snapshot.generatedAt,
       narrativeFacts: stock.narrativeFacts,
+      parentLabel: row.sector ?? undefined,
     });
   }
   return { ...snapshot, stocks };

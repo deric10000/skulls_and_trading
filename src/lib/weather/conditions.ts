@@ -60,7 +60,7 @@ export const WEATHER_CONDITIONS: Record<
     label: "Chop Seas",
     shortLabel: "Chop",
     plainEnglishMeaning:
-      "The market is mixed, unstable, or directionless. Fakeouts are more likely.",
+      "Signals are mixed, unstable, or directionless. Moves are more prone to false starts.",
     scoringRule:
       "Weather 45–55, or major disagreement between signals (e.g. strong trend but weak breadth / rising volatility)",
     visualTone: "Unstable, messy, uncertain.",
@@ -91,7 +91,7 @@ export const WEATHER_CONDITIONS: Record<
     label: "Headwind",
     shortLabel: "Headwind",
     plainEnglishMeaning:
-      "The asset or layer is facing pressure from its surrounding environment.",
+      "Pressure from the broader market or sector is weighing on current conditions.",
     scoringRule:
       "Weak local Index/evidence, weak parent backdrop plus soft local evidence, or the Market QQQ 200-day headwind path",
     visualTone: "Resistance, pressure, struggle.",
@@ -100,7 +100,7 @@ export const WEATHER_CONDITIONS: Record<
     defaultIcon: WindReversed,
     dynamicGraphicKey: "headwind",
     recommendedUserMessage:
-      "This name may be fighting pressure from its sector, industry, or broader market.",
+      "Current conditions are facing pressure from the surrounding market backdrop.",
   },
   tailwind: {
     id: "tailwind",
@@ -131,7 +131,8 @@ export const WEATHER_CONDITIONS: Record<
     severity: "positive",
     defaultIcon: Hurricane,
     dynamicGraphicKey: "rotation-current",
-    recommendedUserMessage: "Capital appears to be rotating into this group.",
+    recommendedUserMessage:
+      "Capital appears to be rotating into the selected sector or industry.",
   },
   "calm-waters": {
     id: "calm-waters",

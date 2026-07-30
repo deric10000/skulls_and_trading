@@ -45,6 +45,12 @@ export interface WeatherEvidenceRow {
   tone?: "positive" | "neutral" | "warning" | "negative";
 }
 
+export interface WeatherDataPoint {
+  label: string;
+  value: string;
+  detail: string;
+}
+
 /** How a condition reads emotionally / how strongly to flag it. */
 export type WeatherSeverity =
   | "positive"
@@ -104,6 +110,8 @@ export interface WeatherLayerReading {
   subScores: WeatherSubScores;
   /** Compact card projection of the same facts used by `explanation`. */
   summary?: string;
+  /** Completed-cycle long-horizon context; null when evidence is unavailable. */
+  longTermTrend?: string | null;
   explanation: string; // short, beginner-friendly
   why: string; // the "why" line
   climateContext: ClimateContext;
@@ -117,6 +125,8 @@ export interface WeatherLayerReading {
   availability?: "available" | "unavailable";
   unavailableReason?: "independent-industry-weather-unavailable";
   evidence?: WeatherEvidenceRow[];
+  /** Completed-cycle market facts shown as reusable chips in Advanced Details. */
+  dataPoints?: WeatherDataPoint[];
   pillarScores?: Record<string, number>;
 }
 

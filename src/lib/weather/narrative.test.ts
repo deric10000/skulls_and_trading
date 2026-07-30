@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildLongTermTrend,
+  buildWeatherDataPoints,
   buildWeatherNarrative,
   buildWeatherSummary,
   type WeatherNarrativeFacts,
@@ -139,6 +141,88 @@ describe("Weather V2 user narrative", () => {
     expect(copy).toContain("RSI is 59");
   });
 
+  it("names the stock and its actual sector in Headwind summary and detail copy", () => {
+    const facts: WeatherNarrativeFacts = {
+      parentLabel: "Communication Services",
+      price: 335.9,
+      ema10: 336.78,
+      ema20: 343.55,
+      sma50: 358.45,
+      rsi14: 40,
+    };
+    const detail = buildWeatherNarrative({
+      conditionId: "headwind",
+      layer: "stock",
+      label: "GOOG",
+      coverage: "complete",
+      facts,
+    });
+    const summary = buildWeatherSummary({
+      conditionId: "headwind",
+      layer: "stock",
+      label: "GOOG",
+      coverage: "complete",
+      facts,
+    });
+    expect(detail).toMatch(
+      /^GOOG is facing pressure from the Communication Services sector\./,
+    );
+    expect(summary).toMatch(
+      /^GOOG is facing pressure from the Communication Services sector\./,
+    );
+    expect(detail).not.toMatch(/asset|layer|surrounding environment/i);
+    expect(summary).not.toMatch(/asset|layer|surrounding environment/i);
+  });
+
+  it("names the broader market as the parent of a Sector Headwind", () => {
+    expect(
+      buildWeatherSummary({
+        conditionId: "headwind",
+        layer: "sector",
+        label: "Technology",
+        coverage: "complete",
+        facts: { price: 100, ema20: 105 },
+      }),
+    ).toMatch(/^Technology is facing pressure from the broader market\./);
+  });
+
+  it("names a Sector directly in forecasts, summaries, and relative-strength details", () => {
+    const facts: WeatherNarrativeFacts = {
+      price: 109.52,
+      ema20: 109.53,
+      rsVsSpy20d: 4.5,
+      rsi14: 47,
+    };
+    expect(
+      buildWeatherNarrative({
+        conditionId: "chop-seas",
+        layer: "sector",
+        label: "Communication Services",
+        coverage: "complete",
+        facts,
+      }),
+    ).toMatch(/^Communication Services is mixed/);
+    expect(
+      buildWeatherSummary({
+        conditionId: "chop-seas",
+        layer: "sector",
+        label: "Communication Services",
+        coverage: "complete",
+        facts,
+      }),
+    ).toMatch(/^Communication Services has mixed signals/);
+    const points = buildWeatherDataPoints({
+      layer: "sector",
+      label: "Communication Services",
+      facts,
+    });
+    expect(
+      points.find((point) => point.label === "20-day RS vs S&P 500")?.detail,
+    ).toBe(
+      "Over 20 sessions, Communication Services has outperformed the S&P 500 by 4.5%.",
+    );
+  });
+
   it("does not invent evidence that is unavailable", () => {
     const copy = narrative("risk-on-tide", { vix: 17.2 });
     expect(copy).toContain("VIX");
@@ -156,5 +240,134 @@ describe("Weather V2 user narrative", () => {
         facts: {},
       }),
     ).toContain("approved industry ETF");
+  });
+
+  it("reports both approved Market long-term benchmarks with their exact average types", () => {
+    expect(
+      buildLongTermTrend({
+        layer: "market",
+        label: "Market",
+        coverage: "complete",
+        facts: {
+          price: 729.54,
+          sma200: 699.52,
+          qqqPrice: 661.63,
+          qqqEma200: 651.73,
+        },
+      }),
+    ).toBe(
+      "The S&P 500 is 4.3% above its 200-day SMA. The Nasdaq 100 is 1.5% above its 200-day EMA.",
+    );
+  });
+
+  it("adds short-term contrast only when both short EMAs support it", () => {
+    expect(
+      buildLongTermTrend({
+        layer: "stock",
+        label: "GOOG",
+        coverage: "complete",
+        facts: {
+          price: 335.9,
+          sma200: 324.39,
+          ema10: 336.78,
+          ema20: 343.55,
+        },
+      }),
+    ).toBe(
+      "GOOG is 3.5% above its 200-day SMA despite short-term weakness.",
+    );
+  });
+
+  it("hides missing trend evidence except for the explicit unmapped Industry state", () => {
+    expect(
+      buildLongTermTrend({
+        layer: "stock",
+        label: "NEW",
+        coverage: "partial",
+        facts: { price: 10 },
+      }),
+    ).toBeNull();
+    expect(
+      buildLongTermTrend({
+        layer: "industry",
+        label: "Interactive Media & Services",
+        coverage: "insufficient",
+        facts: {},
+      }),
+    ).toBe(
+      "A reliable long-term trend is not available for this industry.",
+    );
+  });
+
+  it("projects only available completed-cycle facts into Advanced Details chips", () => {
+    const points = buildWeatherDataPoints({
+      layer: "market",
+      label: "Market",
+      facts: {
+        price: 620,
+        ema20: 600,
+        rsi14: 61.2,
+        sectorSpdrAboveSma50: 8 / 11,
+        sectorSpdrAboveSma50FreshCount: 11,
+        qqqPrice: 515,
+        qqqEma200: 500,
+      },
+    });
+    expect(points).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ label: "Price", value: "$620.00" }),
+        expect.objectContaining({ label: "20-day EMA", value: "$600.00" }),
+        expect.objectContaining({ label: "RSI (14)", value: "61.2" }),
+        expect.objectContaining({
+          label: "Sectors above 50-day SMA",
+          value: "8/11",
+        }),
+        expect.objectContaining({
+          label: "Nasdaq-100 200-day EMA",
+          value: "$500.00",
+        }),
+      ]),
+    );
+    expect(points.some((point) => point.label === "VIX")).toBe(false);
+  });
+
+  it("explains each moving average relative to the completed-cycle price", () => {
+    const points = buildWeatherDataPoints({
+      layer: "stock",
+      label: "GOOG",
+      facts: {
+        price: 100,
+        ema10: 105,
+        sma200: 80,
+      },
+    });
+    expect(points.find((point) => point.label === "10-day EMA")?.detail).toContain(
+      "Price is 4.8% below this level",
+    );
+    expect(
+      points.find((point) => point.label === "200-day SMA")?.detail,
+    ).toContain("Price is 25.0% above this level");
+  });
+
+  it("adds investor context to momentum, participation, and volatility facts", () => {
+    const points = buildWeatherDataPoints({
+      layer: "market",
+      label: "Market",
+      facts: {
+        rsi14: 28,
+        vix: 27,
+        sectorSpdrAboveSma50: 3 / 11,
+        sectorSpdrAboveSma50FreshCount: 11,
+      },
+    });
+    expect(points.find((point) => point.label === "RSI (14)")?.detail).toContain(
+      "oversold",
+    );
+    expect(points.find((point) => point.label === "VIX")?.detail).toContain(
+      "elevated",
+    );
+    expect(
+      points.find((point) => point.label === "Sectors above 50-day SMA")?.detail,
+    ).toContain("narrow intermediate participation");
   });
 });

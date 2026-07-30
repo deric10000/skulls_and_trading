@@ -14,8 +14,10 @@ import { ensureWeatherTaxonomyAwaiting } from "../lib/weather/hydrateTaxonomy";
 import { SearchableSelect } from "./SearchableSelect";
 import { NeedsDataReviewFlag } from "./NeedsDataReviewFlag";
 import { ForgeToast } from "./forge/ForgeToast";
+import { ForgePill } from "./ForgePill";
+import { Tooltip } from "./Tooltip";
 import { WeatherEvidence } from "./WeatherEvidence";
-import { CaretLeft, CaretRight, Timer } from "../lib/icons";
+import { CaretDown, CaretLeft, CaretRight, Timer } from "../lib/icons";
 import {
   getMarketSession,
   resolveWeatherGraphic,
@@ -494,31 +496,64 @@ export function MarketFlowWidget({
               <>
                 <WeatherEvidence reading={detailReading} />
                 {detailReading.availability !== "unavailable" ? (
-                  <>
+                  <div
+                    className={
+                      showAdvanced
+                        ? "watch-plan-section is-expanded"
+                        : "watch-plan-section"
+                    }
+                  >
                     <button
                       type="button"
-                      className="btn btn--secondary btn--sm"
+                      className="watch-plan-section-toggle"
                       aria-expanded={showAdvanced}
+                      aria-controls={`weather-advanced-${selectedLayer}`}
                       onClick={() => setShowAdvanced((current) => !current)}
                     >
-                      {showAdvanced ? "Hide Advanced Details" : "Advanced Details"}
+                      <span className="config-label forge-label">
+                        Advanced Details
+                      </span>
+                      <CaretDown
+                        className="watch-plan-section-caret"
+                        aria-hidden
+                        weight="regular"
+                      />
                     </button>
                     {showAdvanced ? (
-                      <div className="weather-advanced">
-                        <p className="weather-score-line">
-                          Weather Index {formatDecimals(detailReading.score)}/100
-                        </p>
-                        <p className="weather-score-line">
-                          Coverage: {detailReading.coverage ?? "partial"} · Model:
-                          Weather V2
-                        </p>
-                        <p className="weather-score-line">
-                          Evidence as of{" "}
-                          {new Date(detailReading.lastUpdated).toLocaleString()}
-                        </p>
+                      <div
+                        id={`weather-advanced-${selectedLayer}`}
+                        className="watch-plan-section-body"
+                      >
+                        <div className="weather-advanced">
+                          {detailReading.dataPoints?.length ? (
+                            <div className="watch-summary-chip-group">
+                              <span className="config-label forge-label">
+                                Weather Data Points
+                              </span>
+                              <div className="forge-box-body">
+                                {detailReading.dataPoints.map((point) => (
+                                  <Tooltip
+                                    key={`${point.label}-${point.value}`}
+                                    title={`${point.label} ${point.value}`}
+                                    body={point.detail}
+                                    wide
+                                  >
+                                    <ForgePill>
+                                      {point.label} {point.value}
+                                    </ForgePill>
+                                  </Tooltip>
+                                ))}
+                              </div>
+                            </div>
+                          ) : null}
+                          <p className="weather-score-line">
+                            Coverage: {detailReading.coverage ?? "partial"} · Model:
+                            Weather V2
+                          </p>
+                        </div>
                       </div>
                     ) : null}
-                  </>
+                  </div>
                 ) : null}
               </>
             ) : (
@@ -538,9 +573,18 @@ export function MarketFlowWidget({
                 </div>
               </>
             )}
-            <p className="weather-climate">
-              <strong>Climate:</strong> {detailReading.climateContext.note}
-            </p>
+            {detailReading.modelVersion === "v2" ? (
+              detailReading.longTermTrend ? (
+                <p className="weather-climate">
+                  <strong>Long-term trend:</strong>{" "}
+                  {detailReading.longTermTrend}
+                </p>
+              ) : null
+            ) : (
+              <p className="weather-climate">
+                <strong>Climate:</strong> {detailReading.climateContext.note}
+              </p>
+            )}
             <p className="weather-disclaimer">{WEATHER_SNAPSHOT_DISCLAIMER}</p>
           </div>
         </div>

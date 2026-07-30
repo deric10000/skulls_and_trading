@@ -149,6 +149,8 @@ export function buildMarketV2Reading(
       sectorSpdrAboveSma50: weather?.sectorSpdrAboveSma50,
       sectorSpdrAboveSma50FreshCount:
         weather?.sectorSpdrAboveSma50FreshCount,
+      qqqPrice: qqq?.price,
+      qqqEma200: qqq?.ema200,
       qqq200Headwind: qqq200?.headwind,
       qqq200Break: qqq200?.break,
     },

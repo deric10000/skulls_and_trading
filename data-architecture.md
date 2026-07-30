@@ -323,10 +323,21 @@ Details exposes Index, coverage, `weatherModelVersion`, and evidence timestamp.
 V2 adapters also project those completed-cycle observables into the pure
 `weather/narrative.ts` builder. It owns the market-language
 `WeatherLayerReading.summary` overview projection and
-`WeatherLayerReading.explanation` detail projection. Both use the same typed
-facts and exhaustive condition registry. The builder performs no I/O, omits
+`WeatherLayerReading.explanation` detail projection, plus the
+`WeatherLayerReading.longTermTrend` projection (SPY 200-day SMA + QQQ 200-day
+EMA for Market; instrument 200-day SMA for other readable layers), and its
+`WeatherLayerReading.dataPoints` Advanced Details projection. Data points are
+formatted from only the completed-cycle facts already used by the reading and
+render through the shared `ForgePill` + `Tooltip`. Their deterministic detail
+copy describes the value relative to its applicable price, benchmark, or norm;
+opening Advanced Details performs no fetch and cannot change scoring. All
+projections use the same typed facts and
+exhaustive condition registry. The builder performs no I/O, omits
 unavailable facts, and never substitutes internal pillar scores for real-world
-evidence. These projections rebuild with
+evidence. Narrative context carries the known parent relationship so Stock and
+Industry conditions name their actual Sector and Sector conditions name the
+broader Market; user copy must not fall back to abstract phrases such as
+“asset or layer” or “surrounding environment.” These projections rebuild with
 each published cycle and for newly augmented watch stocks without changing the
 pull cadence or adding UI-triggered provider requests. V2 readings stamp a
 `narrativeVersion` so future template revisions remain auditable.

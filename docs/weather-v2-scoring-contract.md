@@ -264,6 +264,12 @@ language.
 - Summaries select only the strongest one or two available facts and target
   three rendered lines. They are not character slices of the detailed forecast
   and may never introduce evidence absent from that same reading.
+- `WeatherLayerReading.longTermTrend` is a third deterministic projection:
+  Market reports SPY versus its 200-day SMA and QQQ versus its 200-day EMA;
+  Sector, mapped Industry, and Stock report their instrument versus its
+  200-day SMA. Short-term contrast is included only when both 10- and 20-day
+  EMA relationships support it. Missing evidence is omitted; an unmapped
+  Industry receives the approved unavailable explanation.
 - V2 readings stamp `narrativeVersion: "v1"` so later template changes can be
   versioned without silently changing the interpretation of historical output.
 - Narrative generation performs no fetch and does not change Worker cadence,

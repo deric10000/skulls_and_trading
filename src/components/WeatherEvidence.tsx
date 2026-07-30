@@ -1,5 +1,5 @@
 import type { WeatherLayerReading } from "../lib/weather";
-import { formatCheckTime } from "../lib/format";
+import { formatCheckTime, formatDecimals } from "../lib/format";
 
 export function WeatherCheckedAt({
   reading,
@@ -29,8 +29,11 @@ export function WeatherEvidence({
       {reading.availability !== "unavailable" && reading.evidence?.length ? (
         <div className="watch-summary-my-plan weather-score-section">
           <span className="config-label forge-label">
-            Skulls and Trading Weather Scores
+            Skulls and Trading Weather Index
           </span>
+          <p className="weather-score-line">
+            Total <strong>{formatDecimals(reading.score)}/100</strong>
+          </p>
           <div className="weather-evidence-grid">
             {reading.evidence.map((row) => (
               <span className="weather-evidence-item" key={row.label}>
