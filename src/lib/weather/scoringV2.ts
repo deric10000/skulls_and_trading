@@ -14,6 +14,7 @@ import type {
   WeatherV2Layer,
   WeatherV2Pillars,
   WeatherV2PillarScore,
+  VolumeParticipationInputs,
 } from "./scoringV2Types";
 
 const clamp = (value: number, min = 0, max = 100) =>
@@ -162,6 +163,14 @@ export function computeMomentum(
     components.push(clamp(50 + 4 * inputs.change5dPct));
   }
   return aggregate(components, 2);
+}
+
+export function computeVolumeParticipation(
+  inputs: VolumeParticipationInputs,
+): WeatherV2PillarScore | null {
+  if (!present(inputs.relativeVolume) || inputs.relativeVolume < 0) return null;
+  // 1× average volume is neutral; each ±1× moves participation by 25 points.
+  return aggregate([clamp(50 + 25 * (inputs.relativeVolume - 1))], 1);
 }
 
 export function computeRelativeStrength(

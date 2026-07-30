@@ -33,6 +33,11 @@ export interface WeatherBenchmarkObservable {
   rsVsSpy20d?: number;
 }
 
+export interface WeatherSymbolObservable extends WeatherBenchmarkObservable {
+  rsVsSector5d?: number;
+  rsVsSector20d?: number;
+}
+
 export interface WeatherBenchmarksPayload {
   status: "complete" | "provisional" | "insufficient";
   completedAt?: string;
@@ -63,6 +68,7 @@ export interface MarketCyclePayload {
   >;
   context: MarketContext | null;
   weatherBenchmarks?: WeatherBenchmarksPayload;
+  weatherSymbolObservables?: Record<string, WeatherSymbolObservable>;
   errors: string[];
 }
 

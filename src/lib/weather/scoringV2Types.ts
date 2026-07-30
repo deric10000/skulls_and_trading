@@ -77,6 +77,10 @@ export interface MomentumInputs {
   change5dPct?: number | null;
 }
 
+export interface VolumeParticipationInputs {
+  relativeVolume?: number | null;
+}
+
 export interface RelativeStrengthInputs {
   layer: "sector" | "industry" | "stock";
   rsVsSpy5d?: number | null;

@@ -167,7 +167,10 @@ export function buildLiveWeatherSnapshot(
   };
 }
 
-/** One stock-layer reading — cascade tilt from industry → sector → market. */
+/**
+ * V1-only stock cascade tilt. Deprecated for V2 scoring; keep until the
+ * separately approved FreeTier UI/getMarketWeather flip retires v1.
+ */
 export function buildStockReading(args: {
   ticker: string;
   sector?: string | null;

@@ -14,6 +14,7 @@ import type {
 import type {
   MarketCyclePayload,
   WeatherBenchmarksPayload,
+  WeatherSymbolObservable,
 } from "./client";
 import { sanitizeFundamentals } from "../forge/metricSanity";
 import { mapYahooTaxonomy } from "../weather/yahooTaxonomy";
@@ -62,6 +63,7 @@ const technicalsByTimeframe = new Map<
 >();
 let marketContext: MarketContext | null = null;
 let weatherBenchmarks: WeatherBenchmarksPayload | null = null;
+const weatherSymbolObservables = new Map<string, WeatherSymbolObservable>();
 let marketCycle: Pick<
   MarketCyclePayload,
   "cycleAsOf" | "completedAt" | "publishedAt" | "nextCycleAt"
@@ -202,6 +204,7 @@ export function resetLiveCache(): void {
   tickerDirtyAt.clear();
   marketContext = null;
   weatherBenchmarks = null;
+  weatherSymbolObservables.clear();
   marketCycle = null;
   budgets = [];
   for (const hook of liveCacheResetHooks) hook();
@@ -226,6 +229,12 @@ export function applyMarketCycle(cycle: MarketCyclePayload): void {
   }
   if (cycle.context) marketContext = cycle.context;
   weatherBenchmarks = cycle.weatherBenchmarks ?? null;
+  weatherSymbolObservables.clear();
+  for (const [ticker, observable] of Object.entries(
+    cycle.weatherSymbolObservables ?? {},
+  )) {
+    weatherSymbolObservables.set(ticker.toUpperCase(), observable);
+  }
   marketCycle = {
     cycleAsOf: cycle.cycleAsOf,
     completedAt: cycle.completedAt,
@@ -242,6 +251,13 @@ export function getMarketCycleMeta(): typeof marketCycle {
 /** Parallel V2 input projection; FreeTier Weather UI remains on v1. */
 export function getLiveWeatherBenchmarks(): WeatherBenchmarksPayload | null {
   return weatherBenchmarks;
+}
+
+/** Per-symbol V2 projection from the same closed daily bars as technicals. */
+export function getLiveWeatherSymbolObservable(
+  ticker: string,
+): WeatherSymbolObservable | undefined {
+  return weatherSymbolObservables.get(ticker.toUpperCase());
 }
 
 export function setLiveQuotes(next: Record<string, TickerQuote>): void {

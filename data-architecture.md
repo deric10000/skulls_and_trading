@@ -301,6 +301,13 @@ FreeTier's visible `getMarketWeather` path remains on the v1 snapshot (and
 `SECTOR_TILT` cascade) until a separate UI flip. Do not use registered-peer
 baskets for Industry independence.
 
+Stock V2 consumes the ticker's existing `liveCache` daily technicals/1D
+indicators plus `weatherSymbolObservables`, a per-registered-symbol projection
+from the same completed daily bars. Cycle publish adds SPY and mapped
+GICS-sector SPDR relative strength when those benchmarks exist; missing values
+remain omitted. FreeTier UI and `getMarketWeather` remain on v1 until a separate
+flip.
+
 ### Add-time taxonomy hydrate (Weather UI only)
 
 Newly added non-seeded tickers still get quote-on-add + symbol registration for

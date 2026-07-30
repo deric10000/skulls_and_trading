@@ -12,9 +12,11 @@ import {
 } from "./convictionDispatch";
 import {
   derivePublishedWeatherBenchmarks,
+  deriveWeatherSymbolObservables,
   WEATHER_BENCHMARK_FETCH_ORDER,
   type PublishedWeatherBenchmarks,
   type WeatherBenchmarkObservable,
+  type WeatherSymbolObservable,
 } from "./weatherBenchmarks";
 
 const REGISTRY_PREFIX = "market:registry:";
@@ -73,6 +75,7 @@ interface TechnicalShard {
     string,
     Partial<Record<CandleTime, TimeframedIndicatorsPayload>>
   >;
+  weatherSymbolObservables: Record<string, WeatherBenchmarkObservable>;
   errors: string[];
 }
 
@@ -162,6 +165,7 @@ export interface MarketCyclePayload {
   >;
   context: Record<string, unknown> | null;
   weatherBenchmarks: PublishedWeatherBenchmarks;
+  weatherSymbolObservables: Record<string, WeatherSymbolObservable>;
   errors: string[];
 }
 
@@ -604,6 +608,7 @@ export async function handleMarketCycleApi(
         fundamentals: filter(cycle.fundamentals),
         technicals: filter(cycle.technicals),
         byTimeframe: filter(cycle.byTimeframe),
+        weatherSymbolObservables: filter(cycle.weatherSymbolObservables ?? {}),
         errors: cycle.errors.filter((error) => {
           if (!error.includes(":")) return true;
           const symbol = error.split(":", 1)[0] ?? "";
@@ -727,6 +732,7 @@ async function writeTechnicalShard(
     quotes: {},
     technicals: {},
     byTimeframe: {},
+    weatherSymbolObservables: {},
     errors: [],
   };
   for (const row of rows) {
@@ -737,6 +743,10 @@ async function writeTechnicalShard(
     shard.quotes[row.symbol] = row.bundle.quote;
     shard.technicals[row.symbol] = row.bundle.technicals;
     shard.byTimeframe[row.symbol] = row.bundle.byTimeframe;
+    if (row.bundle.weatherBenchmark) {
+      shard.weatherSymbolObservables[row.symbol] =
+        row.bundle.weatherBenchmark;
+    }
   }
   await env.MARKET_CACHE.put(
     techShardKey(manifest.cycleAsOf, index),
@@ -1011,6 +1021,10 @@ async function publishCycle(
     cycleKey,
     "json",
   );
+  const weatherBenchmarks = derivePublishedWeatherBenchmarks(
+    weatherShard?.values ?? {},
+    weatherShard?.completedAt,
+  );
   const payload: MarketCyclePayload = {
     schemaVersion: 1,
     complete: true,
@@ -1038,9 +1052,14 @@ async function publishCycle(
       ...techShards.map((shard) => shard.byTimeframe),
     ),
     context: context.context,
-    weatherBenchmarks: derivePublishedWeatherBenchmarks(
-      weatherShard?.values ?? {},
-      weatherShard?.completedAt,
+    weatherBenchmarks,
+    weatherSymbolObservables: deriveWeatherSymbolObservables(
+      Object.assign(
+        {},
+        ...techShards.map((shard) => shard.weatherSymbolObservables ?? {}),
+      ),
+      fundamentalValues,
+      weatherBenchmarks,
     ),
     errors: [
       ...techShards.flatMap((shard) => shard.errors),

@@ -68,8 +68,73 @@ export interface WeatherBenchmarkObservable {
   rsVsSpy20d?: number;
 }
 
-function finite(value: number | null | undefined): value is number {
+export interface WeatherSymbolObservable extends WeatherBenchmarkObservable {
+  rsVsSector5d?: number;
+  rsVsSector20d?: number;
+}
+
+export function finite(value: number | null | undefined): value is number {
   return typeof value === "number" && Number.isFinite(value);
+}
+
+const YAHOO_SECTOR_TO_GICS: Record<string, keyof typeof GICS_SECTOR_TO_SPDR> = {
+  "basic materials": "Materials",
+  "communication services": "Communication Services",
+  "consumer cyclical": "Consumer Discretionary",
+  "consumer defensive": "Consumer Staples",
+  energy: "Energy",
+  "financial services": "Financials",
+  financial: "Financials",
+  financials: "Financials",
+  healthcare: "Health Care",
+  "health care": "Health Care",
+  industrials: "Industrials",
+  "real estate": "Real Estate",
+  technology: "Information Technology",
+  "information technology": "Information Technology",
+  utilities: "Utilities",
+  materials: "Materials",
+  "consumer discretionary": "Consumer Discretionary",
+  "consumer staples": "Consumer Staples",
+};
+
+function mappedSectorSpdr(providerSector: unknown): string | undefined {
+  if (typeof providerSector !== "string") return undefined;
+  const normalized = providerSector.trim().toLowerCase();
+  const gics = YAHOO_SECTOR_TO_GICS[normalized];
+  return gics ? GICS_SECTOR_TO_SPDR[gics] : undefined;
+}
+
+/** Publish-only RS enrichment; missing SPY/sector observations stay omitted. */
+export function deriveWeatherSymbolObservables(
+  values: Record<string, WeatherBenchmarkObservable>,
+  fundamentals: Record<string, Record<string, unknown>>,
+  benchmarks: PublishedWeatherBenchmarks,
+): Record<string, WeatherSymbolObservable> {
+  const output: Record<string, WeatherSymbolObservable> = {};
+  const spy = benchmarks.benchmarks.SPY;
+  for (const [symbol, observable] of Object.entries(values)) {
+    const sectorSpdr = mappedSectorSpdr(fundamentals[symbol]?.providerSector);
+    const sector = sectorSpdr
+      ? benchmarks.benchmarks[sectorSpdr]
+      : undefined;
+    output[symbol] = {
+      ...observable,
+      ...(finite(observable.return5dPct) && finite(spy?.return5dPct)
+        ? { rsVsSpy5d: observable.return5dPct - spy.return5dPct }
+        : {}),
+      ...(finite(observable.return20dPct) && finite(spy?.return20dPct)
+        ? { rsVsSpy20d: observable.return20dPct - spy.return20dPct }
+        : {}),
+      ...(finite(observable.return5dPct) && finite(sector?.return5dPct)
+        ? { rsVsSector5d: observable.return5dPct - sector.return5dPct }
+        : {}),
+      ...(finite(observable.return20dPct) && finite(sector?.return20dPct)
+        ? { rsVsSector20d: observable.return20dPct - sector.return20dPct }
+        : {}),
+    };
+  }
+  return output;
 }
 
 function returnPct(closes: number[], sessions: number): number | undefined {

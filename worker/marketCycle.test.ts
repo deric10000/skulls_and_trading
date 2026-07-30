@@ -166,6 +166,7 @@ describe("market cycle scale and completeness", () => {
       fundamentals: {},
       technicals: {},
       byTimeframe: {},
+      weatherSymbolObservables: {},
       context: {},
       weatherBenchmarks: {
         status: "insufficient" as const,
@@ -222,6 +223,7 @@ describe("market cycle scale and completeness", () => {
       fundamentals: values,
       technicals: values,
       byTimeframe: values,
+      weatherSymbolObservables: values,
       context: {},
       weatherBenchmarks: {
         status: "complete",
@@ -250,10 +252,16 @@ describe("market cycle scale and completeness", () => {
       "user-8",
     );
     const body = (await response?.json()) as {
-      cycle: { symbols: string[]; quotes: Record<string, unknown>; errors: string[] };
+      cycle: {
+        symbols: string[];
+        quotes: Record<string, unknown>;
+        weatherSymbolObservables: Record<string, unknown>;
+        errors: string[];
+      };
     };
     expect(body.cycle.symbols).toEqual(allowed);
     expect(Object.keys(body.cycle.quotes)).toEqual(allowed);
+    expect(Object.keys(body.cycle.weatherSymbolObservables)).toEqual(allowed);
     expect(body.cycle.errors).toEqual(["T0320: visible"]);
   });
 

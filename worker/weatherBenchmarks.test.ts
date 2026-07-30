@@ -3,6 +3,7 @@ import type { OhlcvBar } from "./indicators";
 import {
   buildWeatherBenchmarkObservable,
   derivePublishedWeatherBenchmarks,
+  deriveWeatherSymbolObservables,
   SECTOR_SPDR_SYMBOLS,
   WEATHER_BENCHMARK_SYMBOLS,
 } from "./weatherBenchmarks";
@@ -95,5 +96,29 @@ describe("weather benchmark projection", () => {
     });
     expect(published.status).toBe("insufficient");
     expect(published.sectorSpdrOutperforming).toBeUndefined();
+  });
+});
+
+describe("registered-symbol weather projection", () => {
+  it("derives RS vs SPY and mapped sector SPDR when present", () => {
+    const benchmarks = derivePublishedWeatherBenchmarks({
+      SPY: { asOf: "2026-07-29", price: 600, return5dPct: 2, return20dPct: 5 },
+      XLK: { asOf: "2026-07-29", price: 220, return5dPct: 3, return20dPct: 7 },
+    });
+    expect(deriveWeatherSymbolObservables(
+      {
+        AAPL: {
+          asOf: "2026-07-29", price: 210,
+          return5dPct: 4, return20dPct: 9,
+        },
+      },
+      { AAPL: { providerSector: "Technology" } },
+      benchmarks,
+    ).AAPL).toMatchObject({
+      rsVsSpy5d: 2,
+      rsVsSpy20d: 4,
+      rsVsSector5d: 1,
+      rsVsSector20d: 2,
+    });
   });
 });
