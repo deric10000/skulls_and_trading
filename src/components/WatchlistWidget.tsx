@@ -7,6 +7,7 @@ import {
 } from "../state/AppState";
 import { asyncSearchTickers, dataSource } from "../lib/datasource";
 import { getLiveQuote, subscribeLiveCache } from "../lib/market/liveCache";
+import { useMobileDetailScroll } from "../lib/useMobileDetailScroll";
 import {
   formatChange,
   formatCheckCountdown,
@@ -1427,6 +1428,7 @@ export function WatchlistWidget({
   // Read-only (home) selection is local to this widget so it never mutates the
   // global selected ticker that drives the dashboard. Defaults to none selected.
   const [localSelected, setLocalSelected] = useState<string | null>(null);
+  useMobileDetailScroll(localSelected);
   // Which portfolio/watchlist is shown. Portfolios (live-connected accounts) are
   // read-only; only a watchlist can add/remove tickers. Preview mode is scoped
   // to the forge strategy's applied sources.

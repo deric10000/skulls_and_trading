@@ -47,6 +47,14 @@ uses the same completed-cycle facts as the detail forecast and is limited to
 three rendered lines; do not create ticker-, screenshot-, or condition-instance
 copy in `MarketFlowWidget`.
 
+## Mobile master-to-detail scroll
+
+Page-level mobile drill-ins use `useMobileDetailScroll` so replacing a scrolled
+master/card list with a detail view always starts at the top of the document.
+Current adopters are Current Watch stock details, Market Weather layer details,
+and Strategy Forge details/tabs. The hook is mobile-only; do not reset desktop
+scroll or reset while users interact inside an already-open detail view.
+
 These components are **shared and considered stable**. Reuse them as-is.
 Do not restyle, restructure, or "improve" them as a side effect of an
 unrelated task. Only change them when the user explicitly asks, and only the

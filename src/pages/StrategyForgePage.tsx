@@ -5,6 +5,7 @@ import { StrategyList } from "../components/StrategyList";
 import { Tabs, type TabItem } from "../components/Tabs";
 import { WatchlistWidget } from "../components/WatchlistWidget";
 import { CaretLeft } from "../lib/icons";
+import { useMobileDetailScroll } from "../lib/useMobileDetailScroll";
 import { useWorkspaceState } from "../state/AppState";
 
 type ForgeDetailTab = "configure" | "watch";
@@ -32,6 +33,9 @@ export function StrategyForgePage() {
   );
   const [drilledIn, setDrilledIn] = useState(false);
   const [detailTab, setDetailTab] = useState<ForgeDetailTab>("configure");
+  useMobileDetailScroll(
+    drilledIn && selectedId ? `${selectedId}:${detailTab}` : null,
+  );
 
   useEffect(() => {
     if (typeof window === "undefined") return;

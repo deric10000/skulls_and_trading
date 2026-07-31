@@ -32,6 +32,7 @@ import {
   formatCheckTime,
   formatDecimals,
 } from "../lib/format";
+import { useMobileDetailScroll } from "../lib/useMobileDetailScroll";
 import type {
   MarketWeatherLayer,
   WeatherLayerReading,
@@ -429,6 +430,7 @@ export function MarketFlowWidget({
 
   const [selectedLayer, setSelectedLayer] = useState<MarketWeatherLayer | null>(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
+  useMobileDetailScroll(selectedLayer);
 
   const openLayerDetail = useCallback(
     (layer: MarketWeatherLayer) => {
