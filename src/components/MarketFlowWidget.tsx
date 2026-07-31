@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useWorkspaceState } from "../state/AppState";
 import { dataSource } from "../lib/datasource";
 import { getWatchMarketWeather } from "../lib/datasource/freeTier";
@@ -33,6 +33,10 @@ import {
   formatDecimals,
 } from "../lib/format";
 import { useMobileDetailScroll } from "../lib/useMobileDetailScroll";
+import {
+  reconcileWeatherSelection,
+  type WeatherSelection,
+} from "../lib/weather/selection";
 import type {
   MarketWeatherLayer,
   WeatherLayerReading,
@@ -350,12 +354,7 @@ export function MarketFlowWidget({
   // The cascade selection. Stock is the leaf: picking a name pins its sector +
   // industry. It lives entirely inside Market Weather — never mutates Current
   // Watch.
-  type Selection = {
-    sector: string | null;
-    industry: string | null;
-    stock: string | null;
-  };
-  const selectionForStock = useCallback((ticker: string | null): Selection => {
+  const selectionForStock = useCallback((ticker: string | null): WeatherSelection => {
     const info = ticker ? dataSource.getTickerInfo(ticker) : undefined;
     if (ticker && (info?.sector || info?.industry)) {
       return {
@@ -387,12 +386,24 @@ export function MarketFlowWidget({
 
   // The watch-driven base = the focused name (or the first watch name).
   // Selecting a name in Current Watch refocuses every layer; local dropdown /
-  // Prev-Next overrides then persist until the base changes again.
+  // Prev-Next overrides persist across live refreshes until the base changes.
   const baseTicker = focusTicker?.toUpperCase() ?? watchTickers[0] ?? null;
-  const [sel, setSel] = useState<Selection>(() => selectionForStock(baseTicker));
+  const [sel, setSel] = useState<WeatherSelection>(() =>
+    selectionForStock(baseTicker),
+  );
+  const previousBaseTicker = useRef(baseTicker);
   useEffect(() => {
-    setSel(selectionForStock(baseTicker));
-  }, [baseTicker, selectionForStock]);
+    setSel((current) =>
+      reconcileWeatherSelection({
+        current,
+        baseTicker,
+        previousBaseTicker: previousBaseTicker.current,
+        availableStocks: stockList,
+        selectionForStock,
+      }),
+    );
+    previousBaseTicker.current = baseTicker;
+  }, [baseTicker, selectionForStock, stockList]);
 
   // Sector change → first industry in that sector (alpha) → first watch name in
   // that industry (or disabled if none).
