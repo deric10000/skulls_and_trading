@@ -30,6 +30,37 @@ export function formatCheckTime(iso: string): string {
   }).format(when);
 }
 
+/** Completed-market observation cutoff; date-only inputs never shift across ET. */
+export function formatMarketDataThrough(dateKey: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateKey);
+  if (!match) return formatCheckTime(dateKey);
+  const [, year, month, day] = match;
+  const when = new Date(`${year}-${month}-${day}T12:00:00.000Z`);
+  const currentEtYear = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    year: "numeric",
+  }).format(new Date());
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    month: "short",
+    day: "numeric",
+    ...(year === currentEtYear ? {} : { year: "numeric" as const }),
+  }).format(when);
+}
+
+export function formatWeatherProvenance(args: {
+  dataAsOf?: string;
+  updatedAt: string;
+  staleInputs?: string[];
+}): string {
+  const timing = args.dataAsOf
+    ? `Market data through ${formatMarketDataThrough(args.dataAsOf)} close · Updated ${formatCheckTime(args.updatedAt)}`
+    : `Updated ${formatCheckTime(args.updatedAt)}`;
+  return args.staleInputs?.length
+    ? `${timing} · Carried forward: ${args.staleInputs.join(", ")}`
+    : timing;
+}
+
 /** mm:ss (or h:mm:ss) countdown shared by Current Watch + Market Weather. */
 export function formatCheckCountdown(ms: number): string {
   const totalSeconds = Math.max(0, Math.ceil(ms / 1000));

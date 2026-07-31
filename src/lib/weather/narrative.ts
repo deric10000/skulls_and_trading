@@ -4,6 +4,7 @@ import type {
   WeatherCoverage,
   WeatherDataPoint,
 } from "./types";
+import type { WeatherV2ConditionReason } from "./scoringV2Types";
 
 export interface WeatherNarrativeFacts {
   /** Named parent context for user-facing layer relationships. */
@@ -95,6 +96,7 @@ function contextualMeaning(
   layer: MarketWeatherLayer,
   label: string,
   facts: WeatherNarrativeFacts,
+  conditionReason?: WeatherV2ConditionReason,
 ): string {
   const name = namedSubject(layer, label);
   switch (conditionId) {
@@ -108,17 +110,25 @@ function contextualMeaning(
       return `${name} is pushing through resistance with volume and participation.`;
     case "headwind":
       if (layer === "market") {
-        return facts.qqq200Headwind
+        return conditionReason === "qqq-headwind" || facts.qqq200Headwind
           ? "The broader market is facing pressure from weakness in large-cap growth."
-          : "The broader market is facing pressure.";
+          : "The broader market's own conditions are facing pressure.";
       }
-      if (layer === "sector") {
-        return `${label} is facing pressure from the broader market.`;
+      if (conditionReason === "weak-parent-headwind") {
+        return layer === "sector"
+          ? `${label}'s signals are soft while the broader market is also under pressure.`
+          : facts.parentLabel
+            ? `${label}'s signals are soft while ${facts.parentLabel} is also under pressure.`
+            : `${label}'s signals are soft while its broader backdrop is also under pressure.`;
       }
-      if (facts.parentLabel) {
-        return `${label} is facing pressure from the ${facts.parentLabel} sector.`;
+      if (conditionReason === "local-and-parent-headwind") {
+        return layer === "sector"
+          ? `${label}'s technical conditions are weak, and the broader market is adding pressure.`
+          : facts.parentLabel
+            ? `${label}'s technical conditions are weak, and ${facts.parentLabel} is adding pressure.`
+            : `${label}'s technical conditions are weak, and its broader backdrop is adding pressure.`;
       }
-      return `${label} is facing pressure from its broader market backdrop.`;
+      return `${label}'s own technical conditions are facing pressure.`;
     case "tailwind":
       return `${name} has a supportive backdrop, although momentum is not yet explosive.`;
     case "rotation-current":
@@ -139,6 +149,7 @@ function contextualSummaryMeaning(
   layer: MarketWeatherLayer,
   label: string,
   facts: WeatherNarrativeFacts,
+  conditionReason?: WeatherV2ConditionReason,
 ): string {
   const name = namedSubject(layer, label);
   switch (conditionId) {
@@ -151,7 +162,13 @@ function contextualSummaryMeaning(
     case "breakout-wind":
       return `${name} is breaking resistance with confirmation.`;
     case "headwind":
-      return contextualMeaning(conditionId, layer, label, facts);
+      return contextualMeaning(
+        conditionId,
+        layer,
+        label,
+        facts,
+        conditionReason,
+      );
     case "tailwind":
       return `${name} has a constructive backdrop.`;
     case "rotation-current":
@@ -484,6 +501,7 @@ export function buildWeatherSummary(args: {
   label: string;
   coverage: WeatherCoverage;
   facts: WeatherNarrativeFacts;
+  conditionReason?: WeatherV2ConditionReason;
 }): string {
   if (args.coverage === "insufficient") {
     return args.layer === "industry"
@@ -501,6 +519,7 @@ export function buildWeatherSummary(args: {
     args.layer,
     args.label,
     args.facts,
+    args.conditionReason,
   );
   return evidence
     ? `${meaning} ${evidence}.`
@@ -669,6 +688,7 @@ export function buildWeatherNarrative(args: {
   label: string;
   coverage: WeatherCoverage;
   facts: WeatherNarrativeFacts;
+  conditionReason?: WeatherV2ConditionReason;
 }): string {
   if (args.coverage === "insufficient") {
     return args.layer === "industry"
@@ -680,6 +700,7 @@ export function buildWeatherNarrative(args: {
     args.layer,
     args.label,
     args.facts,
+    args.conditionReason,
   );
   const evidence = evidenceSentence(
     args.conditionId,

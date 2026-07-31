@@ -141,7 +141,7 @@ describe("Weather V2 user narrative", () => {
     expect(copy).toContain("RSI is 59");
   });
 
-  it("names the stock and its actual sector in Headwind summary and detail copy", () => {
+  it("attributes a local Stock Headwind to the stock, not its supportive parent", () => {
     const facts: WeatherNarrativeFacts = {
       parentLabel: "Communication Services",
       price: 335.9,
@@ -156,6 +156,7 @@ describe("Weather V2 user narrative", () => {
       label: "GOOG",
       coverage: "complete",
       facts,
+      conditionReason: "local-headwind",
     });
     const summary = buildWeatherSummary({
       conditionId: "headwind",
@@ -163,18 +164,16 @@ describe("Weather V2 user narrative", () => {
       label: "GOOG",
       coverage: "complete",
       facts,
+      conditionReason: "local-headwind",
     });
-    expect(detail).toMatch(
-      /^GOOG is facing pressure from the Communication Services sector\./,
-    );
-    expect(summary).toMatch(
-      /^GOOG is facing pressure from the Communication Services sector\./,
-    );
+    expect(detail).toMatch(/^GOOG's own technical conditions are facing pressure\./);
+    expect(summary).toMatch(/^GOOG's own technical conditions are facing pressure\./);
+    expect(detail).not.toContain("Communication Services is adding pressure");
     expect(detail).not.toMatch(/asset|layer|surrounding environment/i);
     expect(summary).not.toMatch(/asset|layer|surrounding environment/i);
   });
 
-  it("names the broader market as the parent of a Sector Headwind", () => {
+  it("names the broader market only for a parent-driven Sector Headwind", () => {
     expect(
       buildWeatherSummary({
         conditionId: "headwind",
@@ -182,8 +181,29 @@ describe("Weather V2 user narrative", () => {
         label: "Technology",
         coverage: "complete",
         facts: { price: 100, ema20: 105 },
+        conditionReason: "weak-parent-headwind",
       }),
-    ).toMatch(/^Technology is facing pressure from the broader market\./);
+    ).toMatch(
+      /^Technology's signals are soft while the broader market is also under pressure\./,
+    );
+  });
+
+  it("describes combined local and Sector pressure without implying either alone", () => {
+    const copy = buildWeatherSummary({
+      conditionId: "headwind",
+      layer: "stock",
+      label: "GOOG",
+      coverage: "complete",
+      facts: {
+        parentLabel: "Communication Services",
+        price: 100,
+        ema20: 105,
+      },
+      conditionReason: "local-and-parent-headwind",
+    });
+    expect(copy).toMatch(
+      /^GOOG's technical conditions are weak, and Communication Services is adding pressure\./,
+    );
   });
 
   it("names a Sector directly in forecasts, summaries, and relative-strength details", () => {

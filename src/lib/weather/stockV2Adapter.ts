@@ -74,7 +74,10 @@ function levelFromPriceDistance(
 export function buildStockV2Reading(
   inputs: StockV2AdapterInputs,
 ): StockV2Reading {
-  const price = inputs.price ?? inputs.observable?.price;
+  // The Weather observable and its moving averages share one completed daily
+  // cutoff. A newer general quote is fallback-only so structure never mixes
+  // premarket/intraday price with completed-daily evidence.
+  const price = inputs.observable?.price ?? inputs.price;
   const daily = inputs.dailyIndicators;
   const technicals = inputs.technicals;
   const observableFreshness = inputs.observable?.freshness ?? "fresh";

@@ -35,8 +35,11 @@ V2 detail cards display the reading's deterministic `longTermTrend` projection
 under the label `Long-term trend`; they do not render the legacy generic
 `Climate` note. Missing non-Industry evidence hides the section, while an
 unmapped Industry uses the approved unavailable explanation.
-`WeatherCheckedAt` owns the `Checked as of …` timestamp treatment inside detail
-evidence cards; overview cards intentionally omit it. Do not repeat
+`WeatherCheckedAt` owns the provenance treatment inside detail evidence cards:
+`Market data through … close` comes from conservative `dataAsOf`, while
+`Updated …` comes from cycle-publication `lastUpdated`; carried-forward inputs
+are disclosed when present. Never collapse these into one ambiguous "Checked
+as of" claim. Overview cards intentionally omit provenance. Do not repeat
 `reading.why` when it merely restates those same evidence values.
 Overview cards consume the typed, deterministic `reading.summary` projection
 and fall back to `reading.explanation` only for legacy readings. Summary copy

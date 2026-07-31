@@ -91,7 +91,7 @@ export const WEATHER_CONDITIONS: Record<
     label: "Headwind",
     shortLabel: "Headwind",
     plainEnglishMeaning:
-      "Pressure from the broader market or sector is weighing on current conditions.",
+      "Local weakness, sometimes compounded by a weak broader backdrop, is weighing on current conditions.",
     scoringRule:
       "Weak local Index/evidence, weak parent backdrop plus soft local evidence, or the Market QQQ 200-day headwind path",
     visualTone: "Resistance, pressure, struggle.",
@@ -100,7 +100,7 @@ export const WEATHER_CONDITIONS: Record<
     defaultIcon: WindReversed,
     dynamicGraphicKey: "headwind",
     recommendedUserMessage:
-      "Current conditions are facing pressure from the surrounding market backdrop.",
+      "Current conditions are facing pressure from weak local evidence or the surrounding market backdrop.",
   },
   tailwind: {
     id: "tailwind",
