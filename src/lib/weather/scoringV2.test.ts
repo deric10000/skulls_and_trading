@@ -22,6 +22,8 @@ import type {
 
 const condition = (result: WeatherV2Classification) =>
   result.kind === "condition" ? result.conditionId : result.kind;
+const reason = (result: WeatherV2Classification) =>
+  result.kind === "condition" ? result.reason : undefined;
 
 const market = (
   overrides: Partial<ClassifyWeatherV2Inputs> = {},
@@ -155,7 +157,7 @@ describe("Weather V2 golden fixtures G1-G18", () => {
   });
 
   it("G6: weak parent backdrop creates Stock Headwind", () => {
-    expect(condition(classifyWeatherV2({
+    const result = classifyWeatherV2({
       layer: "stock",
       coverage: "complete",
       pillars: {
@@ -167,7 +169,9 @@ describe("Weather V2 golden fixtures G1-G18", () => {
       },
       weatherIndex: 51.5,
       higherLayerIndex: 30,
-    }))).toBe("headwind");
+    });
+    expect(condition(result)).toBe("headwind");
+    expect(reason(result)).toBe("weak-parent-headwind");
   });
 
   it("G7: no RSP and fewer than 6 fresh SPDRs is Market insufficient", () => {
@@ -215,10 +219,12 @@ describe("Weather V2 golden fixtures G1-G18", () => {
   });
 
   it("G11: QQQ slightly below EMA200 contributes Market Headwind", () => {
-    expect(condition(classifyWeatherV2(market({
+    const result = classifyWeatherV2(market({
       pillars: { structure: 48, participation: 50, risk: 55, momentum: 55 },
       qqq200: computeQqq200Support(-0.5),
-    })))).toBe("headwind");
+    }));
+    expect(condition(result)).toBe("headwind");
+    expect(reason(result)).toBe("qqq-headwind");
   });
 
   it("G12: exact confirmed QQQ break path emits Red Sky Warning", () => {
@@ -275,6 +281,44 @@ describe("Weather V2 golden fixtures G1-G18", () => {
       hasMinimumStructure: false,
     })).toBe("insufficient");
     expect(condition(classifyWeatherV2(market()))).toBe("risk-on-tide");
+  });
+});
+
+describe("Weather V2 condition reasons", () => {
+  it("keeps a locally weak Stock independent from a Risk-On parent", () => {
+    const result = classifyWeatherV2({
+      layer: "stock",
+      coverage: "complete",
+      pillars: {
+        structure: 30,
+        relativeStrength: 40,
+        participation: 44,
+        risk: 55,
+        momentum: 42,
+      },
+      weatherIndex: 40.3,
+      higherLayerIndex: 70,
+    });
+    expect(condition(result)).toBe("headwind");
+    expect(reason(result)).toBe("local-headwind");
+  });
+
+  it("records when local and weak-parent Headwind paths both pass", () => {
+    const result = classifyWeatherV2({
+      layer: "stock",
+      coverage: "complete",
+      pillars: {
+        structure: 40,
+        relativeStrength: 42,
+        participation: 44,
+        risk: 55,
+        momentum: 45,
+      },
+      weatherIndex: 44,
+      higherLayerIndex: 35,
+    });
+    expect(condition(result)).toBe("headwind");
+    expect(reason(result)).toBe("local-and-parent-headwind");
   });
 });
 

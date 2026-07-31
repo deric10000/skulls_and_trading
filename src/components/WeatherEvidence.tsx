@@ -1,5 +1,8 @@
 import type { WeatherLayerReading } from "../lib/weather";
-import { formatCheckTime, formatDecimals } from "../lib/format";
+import {
+  formatDecimals,
+  formatWeatherProvenance,
+} from "../lib/format";
 
 export function WeatherCheckedAt({
   reading,
@@ -8,7 +11,11 @@ export function WeatherCheckedAt({
 }) {
   return (
     <span className="watch-field-label watch-field-label--right weather-checked-at">
-      Checked as of {formatCheckTime(reading.lastUpdated)}
+      {formatWeatherProvenance({
+        dataAsOf: reading.dataAsOf,
+        updatedAt: reading.lastUpdated,
+        staleInputs: reading.staleInputs,
+      })}
     </span>
   );
 }

@@ -31,6 +31,17 @@ describe("Stock V2 adapter", () => {
     expect(reading.pillars.participation).toBe(60);
   });
 
+  it("uses the completed Weather price instead of a newer general quote", () => {
+    const reading = buildStockV2Reading({
+      ticker: "AAPL",
+      price: 110,
+      technicals,
+      observable: { ...observable, price: 100, ema20: 105 },
+    });
+    expect(reading.narrativeFacts.price).toBe(100);
+    expect(reading.narrativeFacts.ema20).toBe(105);
+  });
+
   it("is insufficient without the Structure floor", () => {
     const reading = buildStockV2Reading({
       ticker: "AAPL", price: 100,
@@ -78,7 +89,9 @@ describe("Stock V2 adapter", () => {
       sectorWeatherIndex: 30,
     });
     expect(reading.condition).toMatchObject({
-      kind: "condition", conditionId: "headwind",
+      kind: "condition",
+      conditionId: "headwind",
+      reason: "weak-parent-headwind",
     });
   });
 });

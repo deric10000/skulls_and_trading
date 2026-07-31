@@ -33,6 +33,27 @@ export type WeatherConditionId =
   | "red-sky-warning"
   | "mixed-signals";
 
+/** Auditable V2 precedence path behind a branded condition. */
+export type WeatherV2ConditionReason =
+  | "rogue-move"
+  | "cycle-deterioration"
+  | "support-break-with-weak-parent"
+  | "qqq-support-break"
+  | "confirmed-breakout"
+  | "improving-relative-strength"
+  | "local-risk-off"
+  | "local-risk-on"
+  | "local-headwind"
+  | "weak-parent-headwind"
+  | "local-and-parent-headwind"
+  | "qqq-headwind"
+  | "balanced-local-conditions"
+  | "constructive-local-conditions"
+  | "index-range-chop"
+  | "pillar-disagreement-chop"
+  | "index-range-and-pillar-disagreement-chop"
+  | "no-prior-condition-matched";
+
 export type WeatherCoverage =
   | "insufficient"
   | "provisional"
@@ -107,6 +128,8 @@ export interface WeatherLayerReading {
   score: number; // 0–100 weather score
   confidence: number; // 0–100
   conditionId: WeatherConditionId;
+  /** V2 classifier path used to produce reason-aware narrative copy. */
+  conditionReason?: WeatherV2ConditionReason;
   subScores: WeatherSubScores;
   /** Compact card projection of the same facts used by `explanation`. */
   summary?: string;
@@ -116,11 +139,16 @@ export interface WeatherLayerReading {
   why: string; // the "why" line
   climateContext: ClimateContext;
   dynamicGraphicKey: WeatherConditionId;
+  /** When the reading projection finished publishing. */
   lastUpdated: string; // ISO timestamp
+  /** Conservative cutoff of the market observations used by this reading. */
+  dataAsOf?: string;
+  /** Carried-forward inputs included in the reading, shown only when present. */
+  staleInputs?: string[];
   /** V2 evidence contract. Omitted only by legacy/mock V1 projections. */
   modelVersion?: "v1" | "v2";
   /** Deterministic copy-template version for historical replay/audit. */
-  narrativeVersion?: "v1";
+  narrativeVersion?: "v1" | "v2";
   coverage?: WeatherCoverage;
   availability?: "available" | "unavailable";
   unavailableReason?: "independent-industry-weather-unavailable";

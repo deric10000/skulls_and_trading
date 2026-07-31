@@ -10,6 +10,7 @@ import type {
   StructureInputs,
   StructureRelationScore,
   WeatherV2Classification,
+  WeatherV2ConditionReason,
   WeatherV2Coverage,
   WeatherV2Layer,
   WeatherV2Pillars,
@@ -307,8 +308,9 @@ function confirmation(inputs: ClassifyWeatherV2Inputs): number | undefined {
 function branded(
   coverage: Exclude<WeatherV2Coverage, "insufficient">,
   conditionId: Extract<WeatherV2Classification, { kind: "condition" }>["conditionId"],
+  reason: WeatherV2ConditionReason,
 ): WeatherV2Classification {
-  return { kind: "condition", coverage, conditionId };
+  return { kind: "condition", coverage, conditionId, reason };
 }
 
 export function classifyWeatherV2(
@@ -339,7 +341,7 @@ export function classifyWeatherV2(
         inputs.absoluteReturnAtrMultiple >= 1) ||
       (present(inputs.volumeRatio) && inputs.volumeRatio > 2)
     );
-  if (rogue) return branded(coverage, "rogue-wave");
+  if (rogue) return branded(coverage, "rogue-wave", "rogue-move");
 
   const deteriorating =
     inputs.hasPriorFreshV2Cycle === true &&
@@ -363,7 +365,15 @@ export function classifyWeatherV2(
     present(structure) &&
     structure <= 45;
   if (deteriorating || backdropBreak || qqqBreak) {
-    return branded(coverage, "red-sky-warning");
+    return branded(
+      coverage,
+      "red-sky-warning",
+      deteriorating
+        ? "cycle-deterioration"
+        : backdropBreak
+          ? "support-break-with-weak-parent"
+          : "qqq-support-break",
+    );
   }
 
   if (
@@ -375,7 +385,7 @@ export function classifyWeatherV2(
     inputs.volumeRatio >= 1.2 &&
     inputs.breakingResistance === true
   ) {
-    return branded(coverage, "breakout-wind");
+    return branded(coverage, "breakout-wind", "confirmed-breakout");
   }
 
   if (
@@ -388,7 +398,11 @@ export function classifyWeatherV2(
     present(confirm) &&
     confirm >= 55
   ) {
-    return branded(coverage, "rotation-current");
+    return branded(
+      coverage,
+      "rotation-current",
+      "improving-relative-strength",
+    );
   }
 
   if (
@@ -400,7 +414,7 @@ export function classifyWeatherV2(
     present(risk) &&
     risk <= 40
   ) {
-    return branded(coverage, "risk-off-storm");
+    return branded(coverage, "risk-off-storm", "local-risk-off");
   }
 
   if (
@@ -414,7 +428,7 @@ export function classifyWeatherV2(
     present(momentum) &&
     momentum >= 55
   ) {
-    return branded(coverage, "risk-on-tide");
+    return branded(coverage, "risk-on-tide", "local-risk-on");
   }
 
   const directHeadwind =
@@ -440,7 +454,14 @@ export function classifyWeatherV2(
       (present(pillars.participation) && pillars.participation < 50)
     );
   if (directHeadwind || higherLayerHeadwind || qqqHeadwind) {
-    return branded(coverage, "headwind");
+    const reason: WeatherV2ConditionReason = qqqHeadwind
+      ? "qqq-headwind"
+      : directHeadwind && higherLayerHeadwind
+        ? "local-and-parent-headwind"
+        : higherLayerHeadwind
+          ? "weak-parent-headwind"
+          : "local-headwind";
+    return branded(coverage, "headwind", reason);
   }
 
   const values = Object.values(pillars).filter(present);
@@ -468,7 +489,9 @@ export function classifyWeatherV2(
     inputs.lostSupport !== true &&
     !hasSpecialtyEventFlag &&
     !(inputs.layer === "market" && inputs.qqq200?.break === true);
-  if (calm) return branded(coverage, "calm-waters");
+  if (calm) {
+    return branded(coverage, "calm-waters", "balanced-local-conditions");
+  }
 
   if (
     weatherIndex >= 55 &&
@@ -481,12 +504,22 @@ export function classifyWeatherV2(
     confirm >= 48 &&
     !(inputs.layer === "market" && inputs.qqq200?.headwind === true)
   ) {
-    return branded(coverage, "tailwind");
+    return branded(coverage, "tailwind", "constructive-local-conditions");
   }
 
-  if ((weatherIndex >= 45 && weatherIndex <= 55) || spread >= 35) {
-    return branded(coverage, "chop-seas");
+  const indexRangeChop = weatherIndex >= 45 && weatherIndex <= 55;
+  const pillarDisagreementChop = spread >= 35;
+  if (indexRangeChop || pillarDisagreementChop) {
+    return branded(
+      coverage,
+      "chop-seas",
+      indexRangeChop && pillarDisagreementChop
+        ? "index-range-and-pillar-disagreement-chop"
+        : indexRangeChop
+          ? "index-range-chop"
+          : "pillar-disagreement-chop",
+    );
   }
 
-  return branded(coverage, "mixed-signals");
+  return branded(coverage, "mixed-signals", "no-prior-condition-matched");
 }

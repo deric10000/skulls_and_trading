@@ -264,14 +264,24 @@ language.
 - Summaries select only the strongest one or two available facts and target
   three rendered lines. They are not character slices of the detailed forecast
   and may never introduce evidence absent from that same reading.
+- Every branded classification carries a typed reason identifying the exact
+  precedence path that fired. Headwind distinguishes local weakness,
+  weak-parent contribution, combined local/parent pressure, and the Market-only
+  QQQ path. Narrative copy attributes pressure to a parent only when the
+  weak-parent path actually passed.
+- `dataAsOf` is the conservative ET market-date cutoff of the observations used
+  by the reading. `lastUpdated` is the cycle publication time. The UI shows
+  these as separate facts and discloses carried-forward `staleInputs`; it never
+  presents publication time as the market observation cutoff.
 - `WeatherLayerReading.longTermTrend` is a third deterministic projection:
   Market reports SPY versus its 200-day SMA and QQQ versus its 200-day EMA;
   Sector, mapped Industry, and Stock report their instrument versus its
   200-day SMA. Short-term contrast is included only when both 10- and 20-day
   EMA relationships support it. Missing evidence is omitted; an unmapped
   Industry receives the approved unavailable explanation.
-- V2 readings stamp `narrativeVersion: "v1"` so later template changes can be
-  versioned without silently changing the interpretation of historical output.
+- Reason-aware V2 readings stamp `narrativeVersion: "v2"`; legacy projections
+  may retain `v1`. Later template changes are versioned without silently
+  changing the interpretation of historical output.
 - Narrative generation performs no fetch and does not change Worker cadence,
   classification thresholds, cycle publication, or symbol registration.
 - A later completed cycle deterministically rebuilds the narrative from its

@@ -336,11 +336,24 @@ exhaustive condition registry. The builder performs no I/O, omits
 unavailable facts, and never substitutes internal pillar scores for real-world
 evidence. Narrative context carries the known parent relationship so Stock and
 Industry conditions name their actual Sector and Sector conditions name the
-broader Market; user copy must not fall back to abstract phrases such as
+broader Market. A typed classifier reason distinguishes local weakness,
+weak-parent contribution, combined pressure, and special Market paths; user
+copy attributes pressure to a parent only when that path actually passed and
+must not fall back to abstract phrases such as
 “asset or layer” or “surrounding environment.” These projections rebuild with
 each published cycle and for newly augmented watch stocks without changing the
 pull cadence or adding UI-triggered provider requests. V2 readings stamp a
 `narrativeVersion` so future template revisions remain auditable.
+
+Weather observation provenance is distinct from cycle publication provenance.
+Each V2 `WeatherLayerReading` projects `dataAsOf` as the conservative ET market
+date shared by the observations used in that layer, while `lastUpdated` remains
+the cycle/shard publication time. The UI labels both facts and lists any
+`staleInputs` carried forward. A general intraday quote is fallback-only for
+Stock Weather: when a completed `weatherSymbolObservable` exists, its price and
+moving-average evidence share that same completed-daily cutoff. When that
+observable is unavailable, fallback inputs may support a partial reading but
+must not produce a completed-market-close `dataAsOf` claim.
 
 ### Add-time taxonomy hydrate (Weather UI only)
 

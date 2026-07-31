@@ -36,6 +36,7 @@ import type {
   WeatherEvidenceRow,
   WeatherLayerReading,
 } from "./types";
+import { earliestWeatherObservationDate } from "./provenance";
 
 const PILLAR_LABELS: Record<string, string> = {
   structure: "Structure",
@@ -73,6 +74,8 @@ function toReading(args: {
   pillars: WeatherV2Pillars;
   weatherIndexScore: number | null;
   lastUpdated: string;
+  dataAsOf?: string;
+  staleInputs?: string[];
   narrativeFacts: WeatherNarrativeFacts;
   parentLabel?: string;
 }): WeatherLayerReading {
@@ -80,6 +83,10 @@ function toReading(args: {
     args.classification.kind === "industry-unavailable" ||
     args.classification.kind === "insufficient";
   const id = conditionId(args.classification);
+  const conditionReason =
+    args.classification.kind === "condition"
+      ? args.classification.reason
+      : undefined;
   const availableEvidence = evidenceRows(args.pillars);
   const narrativeFacts = {
     ...args.narrativeFacts,
@@ -98,6 +105,7 @@ function toReading(args: {
             ? 55
             : 0,
     conditionId: id,
+    ...(conditionReason ? { conditionReason } : {}),
     subScores: {
       trend: 0,
       breadth: 0,
@@ -111,6 +119,7 @@ function toReading(args: {
       label: args.label,
       coverage: args.coverage,
       facts: narrativeFacts,
+      conditionReason,
     }),
     longTermTrend: buildLongTermTrend({
       layer: args.layer,
@@ -124,6 +133,7 @@ function toReading(args: {
       label: args.label,
       coverage: args.coverage,
       facts: narrativeFacts,
+      conditionReason,
     }),
     why:
       availableEvidence.length > 0
@@ -136,8 +146,10 @@ function toReading(args: {
     },
     dynamicGraphicKey: id,
     lastUpdated: args.lastUpdated,
+    ...(args.dataAsOf ? { dataAsOf: args.dataAsOf } : {}),
+    ...(args.staleInputs?.length ? { staleInputs: args.staleInputs } : {}),
     modelVersion: "v2",
-    narrativeVersion: "v1",
+    narrativeVersion: "v2",
     coverage: args.coverage,
     availability: unavailable ? "unavailable" : "available",
     ...(args.classification.kind === "industry-unavailable"
@@ -168,6 +180,10 @@ export function buildLiveV2WeatherSnapshot(
   const weather = getLiveWeatherBenchmarks();
   const generatedAt =
     weather?.completedAt ?? context?.asOf ?? new Date().toISOString();
+  const marketDataAsOf = earliestWeatherObservationDate([
+    context?.asOf,
+    ...Object.values(weather?.benchmarks ?? {}).map((item) => item.asOf),
+  ]);
   const marketV2 = buildMarketV2Reading(context, weather);
   const market = toReading({
     layer: "market",
@@ -177,6 +193,8 @@ export function buildLiveV2WeatherSnapshot(
     pillars: marketV2.pillars,
     weatherIndexScore: marketV2.weatherIndexScore,
     lastUpdated: generatedAt,
+    dataAsOf: marketDataAsOf,
+    staleInputs: weather?.staleSymbols,
     narrativeFacts: marketV2.narrativeFacts,
   });
   const sectors: Record<string, WeatherLayerReading> = {};
@@ -184,6 +202,9 @@ export function buildLiveV2WeatherSnapshot(
     higherLayerIndex: marketV2.weatherIndex ?? undefined,
   })) {
     const label = sector.sector ?? "Sector";
+    const sectorObservable = sector.spdr
+      ? weather?.benchmarks[sector.spdr]
+      : undefined;
     sectors[label] = toReading({
       layer: "sector",
       label,
@@ -192,6 +213,14 @@ export function buildLiveV2WeatherSnapshot(
       pillars: sector.pillars,
       weatherIndexScore: sector.weatherIndexScore,
       lastUpdated: generatedAt,
+      dataAsOf: earliestWeatherObservationDate([
+        sectorObservable?.asOf,
+        weather?.benchmarks.SPY?.asOf,
+      ]),
+      staleInputs:
+        sector.spdr && sectorObservable?.freshness === "stale"
+          ? [sector.spdr]
+          : undefined,
       narrativeFacts: sector.narrativeFacts,
       parentLabel: "broader market",
     });
@@ -209,6 +238,8 @@ export function buildLiveV2WeatherSnapshot(
       pillars: industry.pillars,
       weatherIndexScore: industry.weatherIndexScore,
       lastUpdated: generatedAt,
+      dataAsOf: sectors[item.sector]?.dataAsOf,
+      staleInputs: sectors[item.sector]?.staleInputs,
       narrativeFacts: industry.narrativeFacts,
       parentLabel: item.sector,
     });
@@ -242,16 +273,19 @@ export function addLiveV2Stocks(
     const technicals: TechnicalSnapshot | undefined = getLiveTechnicals(ticker);
     const dailyIndicators: TimeframedIndicators | undefined =
       getLiveTechnicalsByTimeframe(ticker)?.["1D"];
+    const observable = getLiveWeatherSymbolObservable(ticker);
     const sectorIndex =
       row.sector && GICS_SECTORS.includes(row.sector as (typeof GICS_SECTORS)[number])
         ? snapshot.sectors[row.sector]?.score
         : undefined;
     const stock = buildStockV2Reading({
       ticker,
-      price: getLiveQuote(ticker)?.lastPrice,
+      // Weather structure is a completed-daily-bar model. Prefer its matching
+      // completed observation over a newer intraday/premarket quote.
+      price: observable?.price ?? getLiveQuote(ticker)?.lastPrice,
       technicals,
       dailyIndicators,
-      observable: getLiveWeatherSymbolObservable(ticker),
+      observable,
       sectorWeatherIndex: sectorIndex,
     });
     stocks[ticker] = toReading({
@@ -262,6 +296,11 @@ export function addLiveV2Stocks(
       pillars: stock.pillars,
       weatherIndexScore: stock.weatherIndexScore,
       lastUpdated: snapshot.generatedAt,
+      // Only the Weather observable identifies the completed daily bar that
+      // owns this structure. Quote/technical timestamps are cycle or intraday
+      // stamps and must not be presented as a completed-market-close cutoff.
+      dataAsOf: earliestWeatherObservationDate([observable?.asOf]),
+      staleInputs: observable?.freshness === "stale" ? [ticker] : undefined,
       narrativeFacts: stock.narrativeFacts,
       parentLabel: row.sector ?? undefined,
     });

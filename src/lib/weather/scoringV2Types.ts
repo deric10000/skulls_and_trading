@@ -1,4 +1,9 @@
-import type { MarketWeatherLayer } from "./types";
+import type {
+  MarketWeatherLayer,
+  WeatherV2ConditionReason,
+} from "./types";
+
+export type { WeatherV2ConditionReason } from "./types";
 
 export type WeatherV2Layer = MarketWeatherLayer;
 export type WeatherV2Coverage =
@@ -150,6 +155,7 @@ export type WeatherV2Classification =
       kind: "condition";
       coverage: Exclude<WeatherV2Coverage, "insufficient">;
       conditionId: WeatherV2ConditionId;
+      reason: WeatherV2ConditionReason;
     }
   | { kind: "insufficient"; coverage: "insufficient" }
   | {
