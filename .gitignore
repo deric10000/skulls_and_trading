@@ -10,6 +10,10 @@ dist
 # Local Cloudflare Worker secrets for `wrangler dev` (never commit secrets)
 .dev.vars
 .dev.vars.*
+# Local Wrangler / Miniflare runtime state (KV cache, bundles — never commit)
+.wrangler/
+# Supabase CLI link/version cache (never commit)
+supabase/.temp/
 # Ignore Cursor's machine-specific data (projects, transcripts, plugin cache),
 # but keep the shared project rules under version control so they ship with the
 # repo for everyone.
