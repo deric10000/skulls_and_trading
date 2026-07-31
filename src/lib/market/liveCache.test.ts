@@ -9,8 +9,10 @@ import {
   isConvictionScoreReady,
   markStrategyConvictionDirty,
   resetLiveCache,
+  resolveNextCycleEtaAt,
   setLastDataPullAt,
   setLiveQuotes,
+  synthesizeNextCycleEtaAt,
 } from "./liveCache";
 import type { MarketCyclePayload } from "./client";
 import type { MarketContext } from "../../types";
@@ -201,5 +203,27 @@ describe("hasUsableLiveQuote", () => {
       },
     });
     expect(hasUsableLiveQuote("ZED")).toBe(true);
+  });
+});
+
+describe("resolveNextCycleEtaAt", () => {
+  it("keeps a future published nextCycleAt", () => {
+    const now = Date.parse("2026-07-31T13:20:00.000Z");
+    expect(
+      resolveNextCycleEtaAt("2026-07-31T14:00:00.000Z", now),
+    ).toEqual({
+      etaAt: "2026-07-31T14:00:00.000Z",
+      overdue: false,
+    });
+  });
+
+  it("falls back when published nextCycleAt is already past", () => {
+    const now = Date.parse("2026-07-31T13:20:00.000Z");
+    expect(
+      resolveNextCycleEtaAt("2026-07-31T10:00:00.000Z", now),
+    ).toEqual({
+      etaAt: synthesizeNextCycleEtaAt(now),
+      overdue: true,
+    });
   });
 });

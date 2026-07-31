@@ -393,6 +393,24 @@ export function synthesizeNextCycleEtaAt(nowMs: number = Date.now()): string {
 }
 
 /**
+ * Prefer a future published `nextCycleAt`; if it is missing or already past
+ * (stale published cycle / delayed Worker), fall back to the next UTC hour.
+ */
+export function resolveNextCycleEtaAt(
+  nextCycleAt: string | null | undefined,
+  nowMs: number = Date.now(),
+): { etaAt: string; overdue: boolean } {
+  const cycleMs = nextCycleAt ? Date.parse(nextCycleAt) : NaN;
+  if (Number.isFinite(cycleMs) && cycleMs > nowMs) {
+    return { etaAt: nextCycleAt!, overdue: false };
+  }
+  return {
+    etaAt: synthesizeNextCycleEtaAt(nowMs),
+    overdue: Number.isFinite(cycleMs) && cycleMs <= nowMs,
+  };
+}
+
+/**
  * Countdown target for Weather pending UI: soft-queue eta while pending,
  * else published `nextCycleAt` after registration (logout-durable path),
  * else synthesized next-hour boundary so the countdown never blanks.
@@ -410,13 +428,7 @@ export function resolveWeatherTaxonomyEtaAt(
   if (Number.isFinite(soft) && soft > nowMs) {
     return readiness!.etaAt;
   }
-  const cycle = marketCycle?.nextCycleAt
-    ? Date.parse(marketCycle.nextCycleAt)
-    : NaN;
-  if (Number.isFinite(cycle) && cycle > nowMs) {
-    return marketCycle!.nextCycleAt;
-  }
-  return synthesizeNextCycleEtaAt(nowMs);
+  return resolveNextCycleEtaAt(marketCycle?.nextCycleAt, nowMs).etaAt;
 }
 
 export function setLiveTechnicals(
