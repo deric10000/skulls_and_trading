@@ -149,6 +149,9 @@ describe("Weather V2 user narrative", () => {
       ema20: 343.55,
       sma50: 358.45,
       rsi14: 40,
+      // A low parent score alone is not proof that the parent-pressure path
+      // passed; the typed classifier reason remains authoritative.
+      higherLayerIndex: 40,
     };
     const detail = buildWeatherNarrative({
       conditionId: "headwind",
@@ -169,6 +172,8 @@ describe("Weather V2 user narrative", () => {
     expect(detail).toMatch(/^GOOG's own technical conditions are facing pressure\./);
     expect(summary).toMatch(/^GOOG's own technical conditions are facing pressure\./);
     expect(detail).not.toContain("Communication Services is adding pressure");
+    expect(detail).not.toContain("surrounding market backdrop is weak");
+    expect(summary).not.toContain("surrounding market backdrop is weak");
     expect(detail).not.toMatch(/asset|layer|surrounding environment/i);
     expect(summary).not.toMatch(/asset|layer|surrounding environment/i);
   });

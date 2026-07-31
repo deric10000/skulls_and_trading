@@ -320,6 +320,7 @@ function evidenceSentence(
   layer: MarketWeatherLayer,
   label: string,
   facts: WeatherNarrativeFacts,
+  conditionReason?: WeatherV2ConditionReason,
 ): string {
   const structure = movingAverageClause(layer, label, facts);
   const momentum = momentumClause(facts);
@@ -379,9 +380,11 @@ function evidenceSentence(
       return joinClauses([
         structure,
         relativeStrength,
+        (conditionReason === "weak-parent-headwind" ||
+          conditionReason === "local-and-parent-headwind") &&
         finite(facts.higherLayerIndex) && facts.higherLayerIndex < 45
           ? "the surrounding market backdrop is weak"
-          : facts.qqq200Headwind
+          : conditionReason === "qqq-headwind" && facts.qqq200Headwind
             ? "the Nasdaq 100 is below its 200-day moving average"
             : null,
         momentum,
@@ -418,6 +421,7 @@ function summaryEvidence(
   layer: MarketWeatherLayer,
   label: string,
   facts: WeatherNarrativeFacts,
+  conditionReason?: WeatherV2ConditionReason,
 ): string {
   const structure = movingAverageClause(layer, label, facts);
   const momentum = momentumClause(facts);
@@ -462,9 +466,11 @@ function summaryEvidence(
     case "headwind":
       return joinClauses([
         structure,
+        (conditionReason === "weak-parent-headwind" ||
+          conditionReason === "local-and-parent-headwind") &&
         finite(facts.higherLayerIndex) && facts.higherLayerIndex < 45
           ? "the surrounding market backdrop is weak"
-          : facts.qqq200Headwind
+          : conditionReason === "qqq-headwind" && facts.qqq200Headwind
             ? "the Nasdaq 100 is below its 200-day moving average"
             : null,
         relativeStrength,
@@ -513,6 +519,7 @@ export function buildWeatherSummary(args: {
     args.layer,
     args.label,
     args.facts,
+    args.conditionReason,
   );
   const meaning = contextualSummaryMeaning(
     args.conditionId,
@@ -707,6 +714,7 @@ export function buildWeatherNarrative(args: {
     args.layer,
     args.label,
     args.facts,
+    args.conditionReason,
   );
   return evidence ? `${meaning} ${evidence}.` : meaning;
 }

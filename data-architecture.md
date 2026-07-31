@@ -351,7 +351,9 @@ date shared by the observations used in that layer, while `lastUpdated` remains
 the cycle/shard publication time. The UI labels both facts and lists any
 `staleInputs` carried forward. A general intraday quote is fallback-only for
 Stock Weather: when a completed `weatherSymbolObservable` exists, its price and
-moving-average evidence share that same completed-daily cutoff.
+moving-average evidence share that same completed-daily cutoff. When that
+observable is unavailable, fallback inputs may support a partial reading but
+must not produce a completed-market-close `dataAsOf` claim.
 
 ### Add-time taxonomy hydrate (Weather UI only)
 

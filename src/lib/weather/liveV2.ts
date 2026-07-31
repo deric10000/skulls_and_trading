@@ -296,12 +296,10 @@ export function addLiveV2Stocks(
       pillars: stock.pillars,
       weatherIndexScore: stock.weatherIndexScore,
       lastUpdated: snapshot.generatedAt,
-      dataAsOf: earliestWeatherObservationDate([
-        observable?.asOf,
-        dailyIndicators?.asOf,
-        technicals?.asOf,
-        getLiveQuote(ticker)?.asOf,
-      ]),
+      // Only the Weather observable identifies the completed daily bar that
+      // owns this structure. Quote/technical timestamps are cycle or intraday
+      // stamps and must not be presented as a completed-market-close cutoff.
+      dataAsOf: earliestWeatherObservationDate([observable?.asOf]),
       staleInputs: observable?.freshness === "stale" ? [ticker] : undefined,
       narrativeFacts: stock.narrativeFacts,
       parentLabel: row.sector ?? undefined,

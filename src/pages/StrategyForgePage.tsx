@@ -33,9 +33,7 @@ export function StrategyForgePage() {
   );
   const [drilledIn, setDrilledIn] = useState(false);
   const [detailTab, setDetailTab] = useState<ForgeDetailTab>("configure");
-  useMobileDetailScroll(
-    drilledIn && selectedId ? `${selectedId}:${detailTab}` : null,
-  );
+  useMobileDetailScroll(drilledIn && selectedId ? selectedId : null);
 
   useEffect(() => {
     if (typeof window === "undefined") return;

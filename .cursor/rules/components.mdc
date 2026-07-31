@@ -52,7 +52,7 @@ copy in `MarketFlowWidget`.
 Page-level mobile drill-ins use `useMobileDetailScroll` so replacing a scrolled
 master/card list with a detail view always starts at the top of the document.
 Current adopters are Current Watch stock details, Market Weather layer details,
-and Strategy Forge details/tabs. The hook is mobile-only; do not reset desktop
+and Strategy Forge details. The hook is mobile-only; do not reset desktop
 scroll or reset while users interact inside an already-open detail view.
 
 These components are **shared and considered stable**. Reuse them as-is.
