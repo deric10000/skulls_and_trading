@@ -6,6 +6,7 @@ import {
   getLiveCacheGeneration,
   getMarketCycleMeta,
   getWeatherTaxonomyReadiness,
+  resolveNextCycleEtaAt,
   resolveWeatherTaxonomyEtaAt,
   subscribeLiveCache,
   synthesizeNextCycleEtaAt,
@@ -193,8 +194,6 @@ export function MarketFlowWidget({
   // name that has mapped GICS sector/industry (client-side; no Yahoo fan-out).
   const session = getMarketSession();
   const cycleMeta = useMemo(() => getMarketCycleMeta(), [liveGeneration]);
-  const nextWeatherAt =
-    cycleMeta?.nextCycleAt ?? synthesizeNextCycleEtaAt();
   const lastWeatherAt =
     cycleMeta?.completedAt ?? cycleMeta?.publishedAt ?? cycleMeta?.cycleAsOf ?? null;
 
@@ -203,13 +202,28 @@ export function MarketFlowWidget({
     return () => window.clearInterval(timer);
   }, []);
 
+  const nextCycleResolution = resolveNextCycleEtaAt(
+    cycleMeta?.nextCycleAt,
+    countdownNow,
+  );
+  const nextWeatherAt = nextCycleResolution.etaAt;
   const weatherCountdown = formatCheckCountdown(
     Date.parse(nextWeatherAt) - countdownNow,
   );
   const scheduleLastLabel = lastWeatherAt
     ? formatCheckTime(lastWeatherAt)
     : "Waiting on first cycle";
-  const scheduleNextLabel = `${formatCheckTime(nextWeatherAt)} (${weatherCountdown})`;
+  const scheduleNextLabel = nextCycleResolution.overdue
+    ? `Delayed — retrying (${weatherCountdown})`
+    : `${formatCheckTime(nextWeatherAt)} (${weatherCountdown})`;
+
+  // When the published next-cycle time is already past, keep the schedule toast
+  // visible so a stuck 0:00 countdown is not hidden behind a collapsed Timer.
+  useEffect(() => {
+    if (!nextCycleResolution.overdue || !scheduleToastCollapsed) return;
+    writeWeatherScheduleCollapsed(false);
+    setScheduleToastCollapsed(false);
+  }, [nextCycleResolution.overdue, scheduleToastCollapsed]);
 
   function setScheduleCollapsed(collapsed: boolean) {
     writeWeatherScheduleCollapsed(collapsed);

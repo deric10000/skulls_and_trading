@@ -12,6 +12,7 @@ import {
   resolveRegistryWriteMode,
   selectActiveGlobalSymbols,
   shardCapacityPlan,
+  TECH_SYMBOLS_PER_TICK,
   weatherBenchmarkRunMode,
   type WeatherBenchmarkShard,
 } from "./marketCycle";
@@ -54,6 +55,7 @@ describe("market cycle scale and completeness", () => {
       retrySlotsPerPhase: 2,
       maxExternalSubrequestsPerShard: 30,
     });
+    expect(TECH_SYMBOLS_PER_TICK).toBe(3);
   });
 
   it("treats partial shard markers as retryable", () => {

@@ -35,6 +35,8 @@ const PUBLISHED_CYCLE_REFERENCE_KEY = "market:cycle:published:key";
 export const MAX_SYMBOLS_PER_USER = 40;
 export const MAX_GLOBAL_SYMBOLS = 800;
 export const SHARD_SIZE = 30;
+/** Per-minute Yahoo chart pulls for tech shards — small so a timeout still checkpoints. */
+export const TECH_SYMBOLS_PER_TICK = 3;
 export const SHARD_MINUTES_PER_PHASE = 29;
 const MAX_CONCURRENCY = 6;
 const HOUR_MS = 60 * 60_000;
@@ -722,7 +724,32 @@ async function writeTechnicalShard(
     index * SHARD_SIZE,
     (index + 1) * SHARD_SIZE,
   );
-  const rows = await mapWithConcurrency(symbols, async (symbol) => {
+  const key = techShardKey(manifest.cycleAsOf, index);
+  const existing = await env.MARKET_CACHE.get<TechnicalShard>(key, "json");
+  const shard: TechnicalShard = {
+    index,
+    completedAt: existing?.completedAt ?? "",
+    quotes: { ...(existing?.quotes ?? {}) },
+    technicals: { ...(existing?.technicals ?? {}) },
+    byTimeframe: { ...(existing?.byTimeframe ?? {}) },
+    weatherSymbolObservables: {
+      ...(existing?.weatherSymbolObservables ?? {}),
+    },
+    errors: [],
+  };
+  if (hasCompleteTechnicalShard(symbols, shard)) {
+    return;
+  }
+  const missing = symbols.filter(
+    (symbol) =>
+      !(
+        shard.quotes[symbol] &&
+        shard.technicals[symbol] &&
+        shard.byTimeframe[symbol]
+      ),
+  );
+  const batch = missing.slice(0, TECH_SYMBOLS_PER_TICK);
+  const rows = await mapWithConcurrency(batch, async (symbol) => {
     try {
       const bundle = await fetchCronTechnicalBundle(
         symbol,
@@ -743,15 +770,6 @@ async function writeTechnicalShard(
       };
     }
   });
-  const shard: TechnicalShard = {
-    index,
-    completedAt: new Date().toISOString(),
-    quotes: {},
-    technicals: {},
-    byTimeframe: {},
-    weatherSymbolObservables: {},
-    errors: [],
-  };
   for (const row of rows) {
     if (!row.bundle) {
       if (row.error) shard.errors.push(row.error);
@@ -765,10 +783,28 @@ async function writeTechnicalShard(
         row.bundle.weatherBenchmark;
     }
   }
-  await env.MARKET_CACHE.put(
-    techShardKey(manifest.cycleAsOf, index),
-    JSON.stringify(shard),
-    { expirationTtl: SHARD_TTL_SECONDS },
+  for (const symbol of missing.slice(batch.length)) {
+    shard.errors.push(`${symbol}: technical deferred to later minute`);
+  }
+  shard.completedAt = new Date().toISOString();
+  await env.MARKET_CACHE.put(key, JSON.stringify(shard), {
+    expirationTtl: SHARD_TTL_SECONDS,
+  });
+  console.log(
+    JSON.stringify({
+      event: "market_cycle_phase",
+      phase: "technical_checkpoint",
+      shardIndex: index,
+      fetchedSymbols: batch,
+      completeSymbols: symbols.filter(
+        (symbol) =>
+          shard.quotes[symbol] &&
+          shard.technicals[symbol] &&
+          shard.byTimeframe[symbol],
+      ).length,
+      expectedSymbols: symbols.length,
+      errors: shard.errors,
+    }),
   );
 }
 
@@ -1143,6 +1179,24 @@ async function publishCycle(
  * fundamentals value exist.
  */
 export async function runScheduledMarketCycle(
+  env: MarketCycleEnv,
+  scheduledTime: number,
+): Promise<void> {
+  try {
+    await runScheduledMarketCycleInner(env, scheduledTime);
+  } catch (error) {
+    console.error(
+      JSON.stringify({
+        event: "market_cycle_fatal",
+        scheduledTime: new Date(scheduledTime).toISOString(),
+        detail: error instanceof Error ? error.message : String(error),
+      }),
+    );
+    throw error;
+  }
+}
+
+async function runScheduledMarketCycleInner(
   env: MarketCycleEnv,
   scheduledTime: number,
 ): Promise<void> {
