@@ -25,9 +25,11 @@
     "@phosphor-icons/react": "^2.1.10",
     "@supabase/supabase-js": "^2.110.6",
     "embla-carousel-react": "^8.6.0",
+    "fflate": "^0.8.3",
     "lightweight-charts": "^5.2.0",
     "react": "19.2.7",
-    "react-dom": "19.2.7"
+    "react-dom": "19.2.7",
+    "read-excel-file": "^6.0.3"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260721.1",

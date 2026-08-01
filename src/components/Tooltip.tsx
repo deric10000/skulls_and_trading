@@ -35,32 +35,20 @@ export function Tooltip({
   body,
   children,
   wide,
+  desktopOnly = false,
 }: {
   title?: string;
   body: ReactNode;
   children: ReactNode;
   wide?: boolean;
+  /** Hover/focus help only; leaves the wrapped action untouched on mobile. */
+  desktopOnly?: boolean;
 }) {
   const id = useId();
   const isMobile = useIsMobile();
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLSpanElement>(null);
   const tipRef = useRef<HTMLSpanElement>(null);
-
-  function clearDesktopInlineStyles() {
-    const tip = tipRef.current;
-    if (!tip) return;
-    tip.style.position = "";
-    tip.style.display = "";
-    tip.style.left = "";
-    tip.style.right = "";
-    tip.style.top = "";
-    tip.style.bottom = "";
-    tip.style.transform = "";
-    tip.style.maxHeight = "";
-    tip.style.overflowY = "";
-    tip.style.zIndex = "";
-  }
 
   /**
    * Desktop/tablet only — fixed-position the portaled tip relative to the
@@ -73,14 +61,8 @@ export function Tooltip({
     const wrap = wrapRef.current;
     if (!tip || !wrap) return;
 
-    tip.style.position = "fixed";
-    tip.style.display = "flex";
-    tip.style.zIndex = "60";
-    tip.style.maxHeight = "";
-    tip.style.overflowY = "";
-    tip.style.transform = "none";
-    tip.style.right = "auto";
-    tip.style.bottom = "auto";
+    tip.style.cssText =
+      "position:fixed;display:flex;z-index:60;max-height:none;overflow-y:visible;transform:none;right:auto;bottom:auto";
 
     const trigger = wrap.getBoundingClientRect();
     const vw = window.innerWidth;
@@ -117,13 +99,6 @@ export function Tooltip({
     tip.style.top = `${top}px`;
   }
 
-  function scheduleDesktopPosition() {
-    if (isMobile) return;
-    requestAnimationFrame(() => {
-      requestAnimationFrame(positionDesktopTooltip);
-    });
-  }
-
   function openDesktop() {
     if (isMobile) return;
     setOpen(true);
@@ -132,19 +107,20 @@ export function Tooltip({
   function closeDesktop() {
     if (isMobile) return;
     setOpen(false);
-    clearDesktopInlineStyles();
   }
 
   // Position after the portaled tip mounts / when open toggles on desktop.
   useEffect(() => {
     if (!open || isMobile) return;
-    scheduleDesktopPosition();
+    requestAnimationFrame(() => requestAnimationFrame(positionDesktopTooltip));
   }, [open, isMobile, title, body, wide]);
 
   // Drop desktop inline offsets when switching to the mobile sheet.
   useEffect(() => {
-    if (isMobile) clearDesktopInlineStyles();
-  }, [isMobile]);
+    if (!isMobile) return;
+    tipRef.current?.removeAttribute("style");
+    if (desktopOnly) setOpen(false);
+  }, [desktopOnly, isMobile]);
 
   // Mobile: close on any tap outside this tooltip's own wrap.
   useEffect(() => {
@@ -200,7 +176,7 @@ export function Tooltip({
     <span
       ref={wrapRef}
       className={open ? "tooltip-wrap is-open" : "tooltip-wrap"}
-      aria-describedby={id}
+      aria-describedby={desktopOnly && isMobile ? undefined : id}
       onMouseEnter={openDesktop}
       onMouseLeave={closeDesktop}
       onFocus={openDesktop}
@@ -211,7 +187,8 @@ export function Tooltip({
         closeDesktop();
       }}
       onClick={() => {
-        if (isMobile) setOpen((prev) => !prev);
+        if (isMobile && !desktopOnly) setOpen((prev) => !prev);
+        if (!isMobile && desktopOnly) setOpen(false);
       }}
     >
       {children}

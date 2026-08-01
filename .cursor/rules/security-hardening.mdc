@@ -36,3 +36,13 @@ same Supabase project when env vars match.
 > Admin Captain instead?"
 
 Do not silently put real-data persistence back on the B1 demo cookie.
+
+## Portfolio file imports
+
+CSV/XLSX portfolio imports are authenticated Beta-only financial data. Inspect
+and parse raw files locally, retain only the explicit transaction allowlist, and
+never upload, store, or log raw files, filenames, extra columns, or rejected cell
+values. Server persistence revalidates normalized rows behind RLS and an
+optimistic revision. Brokerage credentials, account/routing numbers, names,
+addresses, and other PII are not supported fields; extra columns are stripped,
+not heuristically classified.

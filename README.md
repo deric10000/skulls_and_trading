@@ -33,7 +33,9 @@ MARKET_AUTH_REQUIRED=false   # open market proxy while iterating locally
 ### Supabase (required for Beta sign-in / saves)
 
 1. Create a free Supabase project.
-2. Run [`supabase/schema.sql`](supabase/schema.sql) in the SQL editor.
+2. Run [`supabase/schema.sql`](supabase/schema.sql) in the SQL editor, then apply
+   the ordered files in [`supabase/migrations`](supabase/migrations) that are not
+   already present in the target project.
 3. Insert invite codes, e.g.  
    `insert into public.invite_codes (code, note) values ('BETA-YOURCODE', 'pilot');`
 4. After your first signup, promote Admin:  

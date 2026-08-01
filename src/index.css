@@ -2442,6 +2442,25 @@ select.input:hover:not(:disabled) {
   margin-bottom: var(--space-3);
 }
 
+.watch-empty-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: calc(-1 * var(--space-1)) 0 var(--space-3);
+}
+
+.watch-edit-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+.watch-edit-toolbar-destructive-wrap {
+  display: inline-flex;
+  margin-left: auto;
+}
+
 .portfolio-field {
   position: relative;
   min-width: 0;
@@ -2484,6 +2503,49 @@ select.input:hover:not(:disabled) {
 .portfolio-source-add-row .icon-btn svg {
   width: 18px;
   height: 18px;
+}
+
+.portfolio-source-group {
+  display: block;
+  padding: 0.45rem 0.75rem 0.25rem;
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.watch-archive-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+}
+
+.watch-archive-actions p {
+  margin: var(--space-1) 0 0;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+
+.watch-archive-action-buttons {
+  display: flex;
+  flex: 0 0 auto;
+  gap: var(--space-2);
+}
+
+@media (max-width: 767px) {
+  .watch-archive-actions,
+  .watch-archive-action-buttons {
+    align-items: stretch;
+    flex-direction: column;
+  }
 }
 
 .watch-source-type-picker {
@@ -2638,9 +2700,22 @@ select.input:hover:not(:disabled) {
   width: 50%;
 }
 
+.watch-item--editing .watch-mvqty-col:last-child {
+  align-items: flex-end;
+  margin-left: auto;
+  text-align: right;
+}
+
 .watch-qty-edit {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
   width: 100%;
+}
+
+.watch-qty-edit .watch-qty-input {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .watch-qty-input {
@@ -2757,6 +2832,58 @@ button.checkbox:disabled {
 
 /* Decorative mark inside a parent control — no hover chrome of its own. */
 span.checkbox {
+  cursor: inherit;
+}
+
+/* App radio — the circular single-choice counterpart to Checkbox. */
+.radio {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: rgb(86 182 240 / 0.1);
+  color: var(--info);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.radio-indicator {
+  width: 18px;
+  height: 18px;
+  border: 2px solid currentColor;
+  border-radius: 50%;
+  box-sizing: border-box;
+}
+
+.radio.is-checked .radio-indicator::after {
+  content: "";
+  display: block;
+  width: 8px;
+  height: 8px;
+  margin: 3px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.radio.is-checked {
+  background: rgb(86 182 240 / 0.22);
+}
+
+button.radio:hover:not(:disabled) {
+  background: rgb(86 182 240 / 0.28);
+}
+
+button.radio:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+span.radio {
   cursor: inherit;
 }
 
@@ -2965,6 +3092,102 @@ span.checkbox {
   scrollbar-gutter: auto;
 }
 
+.watch-order-helper {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  min-height: 32px;
+  margin: 0;
+  padding: 0.4rem var(--space-3);
+  border-bottom: 1px solid var(--forge-table-border);
+  background: var(--forge-table-row-alt);
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
+.watch-order-add-actions {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.watch-order-action {
+  min-height: 28px;
+  padding: 0.25rem 0.7rem;
+  border-radius: var(--radius-sm);
+}
+
+.watch-order-action--buy {
+  border-color: rgb(62 213 152 / 0.35);
+  background: rgb(62 213 152 / 0.12);
+  color: var(--positive);
+}
+
+.watch-order-action--buy:hover:not(:disabled) {
+  background: rgb(62 213 152 / 0.2);
+}
+
+.watch-order-action--sell {
+  border-color: rgb(255 107 107 / 0.35);
+  background: rgb(255 107 107 / 0.12);
+  color: var(--negative);
+}
+
+.watch-order-action--sell:hover:not(:disabled) {
+  background: rgb(255 107 107 / 0.2);
+}
+
+.watch-order-ticker-row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+
+.watch-order-ticker-search {
+  width: 100%;
+  min-width: 0;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.watch-order-ticker-search .portfolio-ticker-name {
+  text-transform: none;
+}
+
+.watch-order-row-error {
+  width: 100%;
+  max-width: 100%;
+}
+
+.forge-table.watch-qty-order-table .watch-qty-order-row .watch-order-row-messages {
+  grid-column: 1 / -1;
+  gap: 0.25rem;
+  width: 100%;
+}
+
+.watch-order-row-messages .row-message {
+  margin: 0;
+}
+
+.row-message {
+  margin: 0.35rem 0 0;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  font-weight: 400;
+  line-height: 1.45;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+}
+
+.row-message--error {
+  color: var(--negative);
+}
+
+.row-message--warning {
+  color: var(--warning);
+}
+
 /* Beat `.forge-table-row` (later in this file) — that rule's 7-col template +
    min-height would otherwise win and flex-shrink would crush rows on mobile. */
 .forge-table.watch-qty-order-table .watch-qty-order-row {
@@ -2973,14 +3196,15 @@ span.checkbox {
   /* Label hugs; qty/total/fill share leftover equally; date/time hugs
      and sits on the trailing edge (same gap as other columns). */
   grid-template-columns:
-    max-content
-    minmax(5.75rem, 1fr)
-    minmax(5.75rem, 1fr)
-    minmax(5.75rem, 1fr)
+    minmax(11rem, 1.4fr)
+    minmax(4.75rem, 0.6fr)
+    minmax(4.75rem, 0.6fr)
+    minmax(5.25rem, 0.7fr)
+    minmax(13.5rem, 1.35fr)
     max-content;
-  column-gap: 1rem;
+  column-gap: 0.75rem;
   row-gap: 0.65rem;
-  align-items: end;
+  align-items: start;
   min-height: 0;
   height: auto;
   padding: var(--space-3);
@@ -2996,19 +3220,31 @@ span.checkbox {
 }
 
 .forge-table.watch-qty-order-table .watch-qty-order-row .forge-table-cell--order {
-  min-width: 9.5rem;
+  min-width: 0;
 }
 
 /* Beat `.input { min-width: 0 }` so datetime-local shows full date + time. */
 .forge-table.watch-qty-order-table .watch-qty-order-row .forge-table-cell--datetime {
-  width: max-content;
+  width: 100%;
   min-width: 0;
-  justify-self: end;
+  justify-self: stretch;
+}
+
+.forge-table.watch-qty-order-table .watch-qty-order-row .forge-table-cell--actions {
+  align-items: flex-end;
+  justify-content: flex-start;
+}
+
+.watch-order-row-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
 }
 
 .forge-table.watch-qty-order-table .watch-qty-order-row .watch-fill-datetime {
-  width: max-content;
-  min-width: 17rem;
+  width: 100%;
+  min-width: 13.5rem;
   max-width: none;
   font-variant-numeric: normal;
 }
@@ -3032,6 +3268,11 @@ span.checkbox {
     min-width: 0;
     grid-column: 1 / -1;
     justify-self: stretch;
+  }
+
+  .forge-table.watch-qty-order-table .watch-qty-order-row .forge-table-cell--actions {
+    grid-column: 1 / -1;
+    justify-self: end;
   }
 
   .forge-table.watch-qty-order-table .watch-qty-order-row .watch-fill-datetime {
@@ -3066,6 +3307,187 @@ span.checkbox {
 
 .watch-empty-guide-toast .forge-toast-body > p + p {
   margin-top: 0.45rem;
+}
+
+.watch-import-flow {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  overflow: auto;
+  min-height: 0;
+  padding: 0 var(--space-4) var(--space-4);
+}
+
+.watch-import-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.watch-import-choice-grid,
+.watch-import-file-row,
+.watch-import-opening-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2);
+  align-items: end;
+}
+
+.watch-import-choice-grid .btn {
+  justify-content: flex-start;
+  text-align: left;
+  white-space: normal;
+}
+
+.watch-import-choice-grid .btn.is-active,
+.watch-import-issues .btn.is-active {
+  border-color: var(--accent-strong);
+  color: var(--accent-strong);
+  background: rgb(241 178 74 / 0.12);
+}
+
+.watch-import-warning {
+  margin-top: var(--space-1);
+}
+
+.watch-import-warning .watch-import-choice-grid {
+  margin-top: var(--space-2);
+}
+
+.watch-import-note,
+.watch-import-requirements {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.watch-import-requirements {
+  padding-left: 1.15rem;
+}
+
+.watch-import-requirements ul {
+  margin: var(--space-1) 0 0;
+  padding-left: 1.15rem;
+}
+
+.watch-import-requirements li + li {
+  margin-top: 0.2rem;
+}
+
+.watch-import-radio-list {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-1);
+}
+
+.watch-import-radio-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: 0.25rem 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-strong);
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.watch-import-radio-row:hover {
+  background: rgb(86 182 240 / 0.06);
+}
+
+.watch-import-file-picker {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.watch-import-file-name {
+  flex: 1 1 12rem;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.watch-import-download {
+  margin-left: auto;
+}
+
+.watch-import-opening-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.watch-import-opening-grid .watch-import-note {
+  grid-column: 1 / -1;
+}
+
+.watch-import-report {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.watch-import-report span {
+  padding: 0.3rem 0.5rem;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  font-size: 0.78rem;
+}
+
+.watch-import-issues {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.watch-import-issue {
+  display: grid;
+  grid-template-columns: 4.5rem minmax(0, 1fr);
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+.watch-import-issue > span:first-child {
+  color: var(--warning);
+  font-weight: 600;
+}
+
+@media (max-width: 767px) {
+  .watch-import-flow {
+    padding-inline: var(--space-3);
+  }
+
+  .watch-import-choice-grid,
+  .watch-import-file-row,
+  .watch-import-opening-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .watch-import-download {
+    margin-left: 0;
+  }
+
+  .watch-order-ticker-search {
+    width: 100%;
+  }
 }
 
 .watchlist-snapshot {

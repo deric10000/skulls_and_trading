@@ -1,5 +1,18 @@
 # Data Architecture
 
+## Current Watch normalized transaction boundary
+
+Current Watch’s transaction/import/recovery contract is defined in
+[`docs/current-watch-import-foundations.md`](docs/current-watch-import-foundations.md).
+The current portfolio projection remains in `user_state.portfolios`; new import
+history is normalized in `portfolio_transactions` and committed with optimistic
+revision checking. Raw spreadsheet files are local-only and never become an
+application source of truth. Archived portfolios live outside the active
+portfolio collection, preventing scoring and market-data consumers from
+including them. Imported historical events remain unscored until the separate
+reconstruction pipeline can bind them to effective strategy versions and
+immutable market cycles.
+
 How mock data is modeled today and how it gets swapped for real-time market and
 brokerage data later. Pairs with the enforceable rule in
 `.cursor/rules/data-architecture.mdc` (this file is the long-form reference;

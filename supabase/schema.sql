@@ -1159,3 +1159,7 @@ end
 $$;
 
 select public.refresh_scoring_projections(user_id) from public.user_state;
+
+-- Current Watch normalized transaction/import/recovery foundation.
+-- Apply after this bootstrap schema from:
+-- migrations/20260731170000_current_watch_import_foundations.sql

@@ -70,6 +70,7 @@ specific thing they ask for — never bundle in extra tweaks.
 | Account | `.site-account`, `.chip--soon` | Demo / Beta chip (Closed Beta tooltip) + `LinkButton` "Sign Out" (link-button, **never** a filled button). |
 | `LinkButton` | `src/components/LinkButton.tsx` | Renders `.btn.btn--link`. |
 | `Checkbox` | `src/components/Checkbox.tsx` | The one on/off checkbox: `.checkbox` / `.is-checked`, 28×28 blue info square + Phosphor Square/CheckSquare (22px). No native `<input type="checkbox">` or parallel check icons. `decorative` for marks inside a parent control. Supports `disabled` (used for Future Capability email/text/browser toggles). Adopters: category conviction toggle, Forge Strategy Cadence (**Enable Notifications** + session-close multi-select in `.forge-session-checks`). |
+| `Radio` | `src/components/Radio.tsx` | The single-choice counterpart to `Checkbox`: `.radio` / `.is-checked`, 28×28 circular blue info control with a circular selected indicator. Use `decorative` when a parent row owns `role="radio"` and the click. Do not substitute checkbox tiles for mutually exclusive choices. |
 | `SiteFooter` | `src/components/SiteFooter.tsx` | Single shared footer in `AppShell`; content + behavior. Never add a second footer. |
 | Home widgets | `HeroCard` (Helm), `MarketFlowWidget`, `WatchlistWidget`, `Tabs` | Internal markup, content, and visual styling. **Helm** (`HeroCard`): two in-card pages via stock `.weather-prevnext` (**The Helm** / **About**); lands on **The Helm** by default. `.panel-head` title follows the active page; stock `.chip` beside the title shows the captain name (`captainName`, fallback `captain.handle`) in `.helm-title-row` on The Helm only. **About** = existing club manifesto + preview; **The Helm** = hub shell with `HelmBadgesSection` (onboarding milestone badges + `HelmMetrics` progress metrics in the `.helm-metrics-slot`) + panel-head `.icon-btn` with `MapTrifold` (Onboarding → `openOnboardingModal`, Helm page only). Desktop/tablet: toggle beside the eyebrow row (`.hero-eyebrow-row`). Mobile: sticky `.helm-nav-footer.strategy-dock` while the Helm tab is active (`mobileNavDock`). Home mobile tab label stays **Helm** (short). About seeded-book CTAs remain icon `.btn`s including ghost **Onboarding** (`MapTrifold`). **Market Weather** empty Sector/Industry/Stock: informational `.weather-empty-copy` **Pending weather check** + shared `formatCheckCountdown` while taxonomy hydrate / next cycle is outstanding; `NeedsDataReviewFlag` (“No Sector/Industry associated”) only after a hard miss/unmapped Yahoo taxonomy — never during wait. Content-only — no locked chrome restyle. |
 | `NeedsDataReviewFlag` | `src/components/NeedsDataReviewFlag.tsx` | Layer-3 critical-gap flag (Warning + “Needs Data Review.” tooltip). Weather adopters: only after completed taxonomy attempt fails — not while pending. |
@@ -80,6 +81,7 @@ specific thing they ask for — never bundle in extra tweaks.
 | `Tooltip` / `InfoTip` | `src/components/Tooltip.tsx` | Desktop hover/focus reveal (portaled; stock `.tooltip*` only); mobile tap-to-toggle bottom sheet + close button (see "Tooltip standard" below). |
 | `ComingSoonOverlay` | `src/components/ComingSoonOverlay.tsx` | Full-viewport fixed scrim portaled to `document.body` (scroll locked) + panel matching `.modal-card` / Forge title+body type. **States:** (1) `coming-soon` (default) — filled HardHat (`--warning`) + Closed Beta trust copy; no close/actions; header stays above for TopNav; wraps page children as inert; adopters Dashboard, Ships, Captain Profile. (2) `legal` — filled Warning + disclaimer + primary “Accept and Continue”; `coming-soon-overlay--gate` until acknowledged. Ephemeral dismissible notice (old Helm “Review alignment”) is archived at `archived/DismissibleComingSoonNotice.tsx` — do not reintroduce without an adopter. Desktop/tablet: centered. Mobile: panel under `--app-header-h`. Do not one-off a parallel scrim/panel. |
 | `ActionFooter` | `src/components/ActionFooter.tsx` | Reports its own height as `--sticky-footer-h` (see App shell below) — don't remove without checking consumers. |
+| `ForgeTableModal` submission guard | `src/components/forge/ForgeTableModal.tsx` | `doneDisabled` is the shared blocking state for review flows whose final action is not safe yet (including Current Watch import/removal). Keep the existing shell and footer; do not create a parallel disabled-submit modal. |
 | `OnboardingModal` | `src/components/OnboardingModal.tsx` | First-login walkthrough modal ("Onboarding" — not the Helm). Reopenable on demand via `AppState.openOnboardingModal` — triggers: About page ghost **Onboarding** button and The Helm panel-head `MapTrifold` `.icon-btn`. Forge modal chrome + `MapTrifold` title icon + shared `Stepper` (accent) under the header. Steps live in the exported `ONBOARDING_STEPS` registry — entries flagged `underConstruction` (Dashboard, Captain Profile) stay hidden until ready; visible steps: Welcome, Strategies, Current Watch, Market Weather, Disclaimer. Guide steps follow the Welcome blueprint (gold `.eyebrow`, bold white `h1`, `.lede` paragraphs over the hero backdrop art in `.onboarding-canvas`); the Disclaimer step reuses the legal panel's `.coming-soon-head`/`.coming-soon-trust` look. Footer: `.strategy-footer.onboarding-actions` bar (plain classes, NOT the `ActionFooter` component — must not clobber `--sticky-footer-h`) with the stock `.weather-prevnext` toggle on **every** step — bounded, so Previous disables on the first step and Next on the last (shared `.weather-prevnext-btn:disabled` state). The primary **Acknowledge** button lives **in the Disclaimer step's body** (under the paragraph, `btn--primary btn--block`) so users can't fly past it from the footer; it fires `acknowledgeLegal()` + `dismissOnboardingModal()`. Desktop/tablet: the card is a fixed `min(90vh, 100%)` height so the footer toggle's hit area never moves between steps. X/backdrop dismisses without acknowledging — on first login `AuthedApp` then pops the standalone legal modal, so the disclaimer is never skippable; on a manual reopen (legal already cleared) X/backdrop just dismisses. Rendered when `AppState.onboardingModalOpen` = the first-login gate `needsOnboardingModal` (`user_state.flags.onboardingSeen`) **OR** a manual reopen (`openOnboardingModal`). Don't add a second first-run surface. |
 | `Stepper` | `src/components/Stepper.tsx` | The design's numbered progress stepper (26px discs, flexing connector lines, completed steps swap the number for a filled `CheckCircle`) — resurrected from the Forge's "Steps To Setup Your Strategy" strip; styling is the existing `.forge-stepper` block (`--info` blue / `--accent` gold index tones). `StepItem.active` marks the step in view (white semibold label, `aria-current="step"`); optional `onSelectStep` makes steps clickable jump targets (`.forge-step-btn` invisible button chrome). Mobile (< 768px): collapses to a single nowrap disc row showing only the active step's label, with shrunken connectors. Adopters: `OnboardingModal` (accent, clickable). Reuse it for any progress strip instead of hand-rolling one. |
 
@@ -143,6 +145,44 @@ unchanged.
 (`tone="info"`, dismiss stays until closed; `sessionStorage` per source id).
 Portfolio copy = paper book + forge/apply/edit steps; watchlist copy = track
 without size yet. Do not invent a parallel empty-state banner.
+
+**Current Watch Edit/import/recovery:** Empty sources place stock small-button
+actions below the source switcher; they enter the existing Edit Mode and focus
+Cash or ticker search. Edit tools are a compact icon row under search: simulated
+transaction rows, portfolio-only CSV/XLSX import, and the destructive source
+action floated right. Each edit-tool icon uses the stock `Tooltip` with
+`desktopOnly`; mobile taps must open the action directly, never a tooltip sheet.
+The batch icon tooltip reads **Batch Transactions** and its modal title is
+**Simulate batch transactions**; the normal qty/cash Update path keeps
+**Review simulated changes**. The batch modal keeps persistent guidance in a
+dark helper strip below the Buy/Sell toolbar: Buy may introduce a supported new
+ticker through the established reversible add-to-portfolio path; Sell remains
+limited to current holdings. Typing must never insert helper copy later or
+shift the transaction rows. Validation belongs in a full-row message region
+beneath the transaction's cells and never becomes a banner. Each issue uses its
+own shared `RowMessage` (`error` or `warning`), and multiple issues stack. The
+owning row grows naturally and pushes later rows down. Transaction-row actions use the
+Strategy Forge table convention:
+the dedicated Actions cell is the final cell in every row. Import is a lazy
+`CurrentWatchImportModal` using
+`ForgeTableModal`; file inspection/parsing stays in its dedicated worker.
+Current Watch ticker entry and simulated order ticker entry share
+`CurrentWatchTickerSearch` and the existing `.portfolio-ticker-suggestions`
+droplist; do not regress order entry to a native datalist. Import apply mode is
+a stacked `Radio` list and file selection is an explicit button plus local
+filename. Limits, accepted columns, scoring availability, and privacy live in
+one collapsed **File requirements** disclosure beside file selection. Reuse
+the stock `.watch-plan-section` disclosure; its expanded body is one unboxed
+semantic bullet list.
+Archived sources remain in the same custom source droplist under an Archived
+group, show `Archived · Nd` (or `Removes today`), and render the existing watch
+read-only with Restore/Delete actions. Do not feed archived sources into active
+portfolio/scoring consumers. Fractional quantities use the existing compact qty
+input with whole-share stepping by default. A Phosphor `Divide` icon using the
+stock gold Forge close-button chrome switches fractional entry on or off. It is
+the penultimate transaction-row action before Delete and appears beside Qty on
+the ticker card in Edit Mode. Desktop uses the stock tooltip; mobile taps act
+directly. Trim trailing zeros in display.
 
 **Check schedule stamp:** when ≥1 strategy is applied, panel-head upper right
 shows stock count + Phosphor `Timer` `.icon-btn` (from `src/lib/icons`). Schedule
@@ -571,6 +611,9 @@ one-off popover.
   clear it the same way, not with a hardcoded offset.
 - **Adding a new tooltip trigger:** wrap it in `<Tooltip>` (or use `<InfoTip>`
   for the info-icon case) — don't add new hover/tap-reveal CSS per instance.
+- **Desktop-only action labels:** pass `desktopOnly` when a mobile tap must
+  perform the wrapped action immediately. The same stock tooltip appears on
+  desktop hover/focus; mobile omits `aria-describedby` and never opens a sheet.
 
 ## Status chip coloring (`.chip.status--*`)
 

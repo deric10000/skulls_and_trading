@@ -9,6 +9,7 @@ import type {
   StatusType,
   TransactionActionClass,
 } from "../../types";
+import { isScorablePortfolioTransaction } from "../finance/portfolioTransactions";
 import type { HelmTimeframeBounds } from "../finance/helmTimeframe";
 import { etIsoDate } from "../finance/portfolioSnapshotSeries";
 import { STATUS_TONE } from "../status";
@@ -234,6 +235,7 @@ function hadQtyFillOnAsOf(
   if (!ledger?.length) return false;
   const sym = ticker.toUpperCase();
   for (const tx of ledger) {
+    if (!isScorablePortfolioTransaction(tx)) continue;
     if (tx.kind !== "qty") continue;
     if (tx.portfolioId !== portfolioId) continue;
     if (tx.ticker.toUpperCase() !== sym) continue;
@@ -396,6 +398,7 @@ export function countActions(
   };
 
   for (const tx of ledger) {
+    if (!isScorablePortfolioTransaction(tx)) continue;
     if (tx.portfolioId !== portfolioId) continue;
     if (!inBounds(tx.filledAt, bounds)) continue;
     if (strategyIds && strategyIds.length > 0) {
@@ -496,6 +499,7 @@ export function computeAverageHoldTime(input: {
       .filter(
         (tx): tx is Extract<PortfolioTransaction, { kind: "qty" }> =>
           tx.kind === "qty" &&
+          isScorablePortfolioTransaction(tx) &&
           tx.portfolioId === input.portfolioId &&
           tx.ticker.toUpperCase() === ticker &&
           qtyFillMatchesStrategy(tx, input.strategyIds),
@@ -665,6 +669,7 @@ export function computeZoneFollowedImpact(
   let considered = 0;
 
   for (const tx of ledger) {
+    if (!isScorablePortfolioTransaction(tx)) continue;
     if (tx.kind !== "qty") continue;
     if (tx.portfolioId !== portfolioId) continue;
     if (!inBounds(tx.filledAt, bounds)) continue;
@@ -726,6 +731,7 @@ export function hadQtyFillInBucket(input: {
   const end = Date.parse(input.checkedAtIso);
   if (Number.isNaN(start) || Number.isNaN(end)) return false;
   for (const tx of input.ledger) {
+    if (!isScorablePortfolioTransaction(tx)) continue;
     if (tx.kind !== "qty") continue;
     if (tx.portfolioId !== input.portfolioId) continue;
     if (tx.ticker.toUpperCase() !== ticker) continue;

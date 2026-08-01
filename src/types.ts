@@ -284,13 +284,20 @@ export interface ShareFillEvent {
   fillPrice: number;
   /** ISO — floored to 15m candle close (EST) for fill-price proximity. */
   filledAt: string;
-  source: "mock" | "live";
+  source: "mock" | "live" | "import";
   /** Discriminator when stored in the unified ledger (`qty`). */
   kind?: "qty";
   actionClass?: TransactionActionClass;
   strategyIds?: string[];
   /** Layer 3 zone statuses active at fill time (read-only stamp). */
   zoneHints?: StatusType[];
+  /** Stable batch/fingerprint metadata for idempotent normalized persistence. */
+  importBatchId?: string;
+  fingerprint?: string;
+  timeZone?: string;
+  /** Cash sequence stamps used by normalized replay validation. */
+  cashBefore?: number;
+  cashAfter?: number;
 }
 
 /** Cash edit recorded from Current Watch portfolio edit mode. */
@@ -302,10 +309,13 @@ export interface CashTransactionEvent {
   cashAfter: number;
   deltaCash: number;
   filledAt: string;
-  source: "mock" | "live";
+  source: "mock" | "live" | "import";
   actionClass?: TransactionActionClass;
   strategyIds?: string[];
   zoneHints?: StatusType[];
+  importBatchId?: string;
+  fingerprint?: string;
+  timeZone?: string;
 }
 
 /** Unified portfolio ledger entry (qty fills + cash edits). */
@@ -322,6 +332,9 @@ export interface PendingQtyOrder {
   sharesAfter: number;
   fillPrice: number;
   filledAt: string;
+  timeZone?: string;
+  cashBefore?: number;
+  cashAfter?: number;
 }
 
 /** Manual cash bump reviewed before confirm (deposit / withdrawal). */
@@ -331,6 +344,7 @@ export interface PendingCashEdit {
   cashAfter: number;
   deltaCash: number;
   filledAt: string;
+  timeZone?: string;
 }
 
 // Holding-level facts that belong to a specific portfolio (cost basis, size, and
@@ -360,6 +374,35 @@ export interface Portfolio {
    * on watchlists. Included in Current Watch running Total.
    */
   cashAvailable?: number;
+  /** Immutable creation boundary used to separate in-app vs prior history. */
+  createdAt?: string;
+  /** Optimistic-concurrency revision; increments after confirmed edits/imports. */
+  revision?: number;
+  /** Recoverable removal state. Archived sources are read-only and unscored. */
+  archivedAt?: string;
+  purgeAt?: string;
+  /** Normalized recovery record identity; archived UI ids are presentation-only. */
+  archiveId?: number;
+  sourcePortfolioId?: string;
+  archiveReason?: "portfolio_removed" | "replace_import" | "history_removed";
+}
+
+export interface StrategyVersionRecord {
+  id: string;
+  strategyId: string;
+  version: number;
+  effectiveFrom: string;
+  effectiveTo?: string;
+  snapshot: Strategy;
+}
+
+export interface StrategyApplicationEpisode {
+  id: string;
+  strategyId: string;
+  portfolioId: string;
+  appliedAt: string;
+  removedAt?: string;
+  strategyVersionId?: string;
 }
 
 export type Timeframe = "Swing" | "Long Term" | "Speculation";

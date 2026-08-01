@@ -43,6 +43,13 @@ export function normalizePortfolioTransactions(
   return out;
 }
 
+/** Imported history is preserved for analysis but not scored until reconstruction. */
+export function isScorablePortfolioTransaction(
+  transaction: PortfolioTransaction,
+): boolean {
+  return transaction.source !== "import";
+}
+
 /** Heuristic action class from a qty delta — not Position Size rule evaluation. */
 export function classifyQtyAction(input: {
   sharesBefore: number;
