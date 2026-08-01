@@ -2,6 +2,7 @@ import type { Portfolio, PortfolioTransaction } from "../../types";
 import type { ImportSanitizationReport } from "../import/portfolioImport";
 import { getSupabase } from "../auth/supabaseClient";
 import { roundQuantity } from "../finance/currentWatchTransactions";
+import { serializeWorkspaceMutation } from "./workspaceMutationQueue";
 
 interface PortfolioTransactionRow {
   id: string;
@@ -143,24 +144,27 @@ export interface CommitPortfolioBatchInput {
 
 export async function commitPortfolioTransactionBatch(
   input: CommitPortfolioBatchInput,
+  userId: string,
 ): Promise<number> {
-  const { data, error } = await getSupabase().rpc(
-    "commit_portfolio_transaction_batch",
-    {
-      p_portfolio_id: input.portfolioId,
-      p_expected_revision: input.expectedRevision,
-      p_portfolio: input.portfolio,
-      p_transactions: input.transactions,
-      p_batch: input.batch,
-    },
-  );
-  if (error) {
-    if (error.message.includes("portfolio_revision_conflict")) {
-      throw new Error("PORTFOLIO_REVISION_CONFLICT");
+  return serializeWorkspaceMutation(userId, async () => {
+    const { data, error } = await getSupabase().rpc(
+      "commit_portfolio_transaction_batch",
+      {
+        p_portfolio_id: input.portfolioId,
+        p_expected_revision: input.expectedRevision,
+        p_portfolio: input.portfolio,
+        p_transactions: input.transactions,
+        p_batch: input.batch,
+      },
+    );
+    if (error) {
+      if (error.message.includes("portfolio_revision_conflict")) {
+        throw new Error("PORTFOLIO_REVISION_CONFLICT");
+      }
+      throw new Error("IMPORT_COMMIT_FAILED");
     }
-    throw new Error("IMPORT_COMMIT_FAILED");
-  }
-  return Number(data);
+    return Number(data);
+  });
 }
 
 interface PortfolioArchiveRow {
@@ -205,36 +209,39 @@ export async function loadPortfolioArchives(userId: string): Promise<Portfolio[]
 export async function archivePortfolioSource(
   portfolioId: string,
   expectedRevision: number,
+  userId: string,
 ): Promise<Portfolio> {
-  const { data, error } = await getSupabase().rpc("archive_portfolio_source", {
-    p_portfolio_id: portfolioId,
-    p_expected_revision: expectedRevision,
-  });
-  if (error) {
-    if (error.message.includes("portfolio_revision_conflict")) {
-      throw new Error("PORTFOLIO_REVISION_CONFLICT");
+  return serializeWorkspaceMutation(userId, async () => {
+    const { data, error } = await getSupabase().rpc("archive_portfolio_source", {
+      p_portfolio_id: portfolioId,
+      p_expected_revision: expectedRevision,
+    });
+    if (error) {
+      if (error.message.includes("portfolio_revision_conflict")) {
+        throw new Error("PORTFOLIO_REVISION_CONFLICT");
+      }
+      throw new Error("PORTFOLIO_ARCHIVE_FAILED");
     }
-    throw new Error("PORTFOLIO_ARCHIVE_FAILED");
-  }
-  const result = data as {
-    archiveId?: number;
-    portfolio?: Portfolio;
-    reason?: Portfolio["archiveReason"];
-    archivedAt?: string;
-    purgeAt?: string;
-  };
-  if (!result.portfolio || !result.archiveId || !result.archivedAt || !result.purgeAt) {
-    throw new Error("PORTFOLIO_ARCHIVE_FAILED");
-  }
-  return {
-    ...result.portfolio,
-    id: `archive:${result.archiveId}`,
-    archiveId: result.archiveId,
-    sourcePortfolioId: result.portfolio.id,
-    archiveReason: result.reason,
-    archivedAt: result.archivedAt,
-    purgeAt: result.purgeAt,
-  };
+    const result = data as {
+      archiveId?: number;
+      portfolio?: Portfolio;
+      reason?: Portfolio["archiveReason"];
+      archivedAt?: string;
+      purgeAt?: string;
+    };
+    if (!result.portfolio || !result.archiveId || !result.archivedAt || !result.purgeAt) {
+      throw new Error("PORTFOLIO_ARCHIVE_FAILED");
+    }
+    return {
+      ...result.portfolio,
+      id: `archive:${result.archiveId}`,
+      archiveId: result.archiveId,
+      sourcePortfolioId: result.portfolio.id,
+      archiveReason: result.reason,
+      archivedAt: result.archivedAt,
+      purgeAt: result.purgeAt,
+    };
+  });
 }
 
 export interface RestoredPortfolioArchive {

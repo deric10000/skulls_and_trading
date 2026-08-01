@@ -27,7 +27,8 @@ contracts below.
 - `TICKERS` (company facts) and   `PORTFOLIOS[].holdings` (holding facts) in
   `src/data.ts` are authoritative. **Derive, don't duplicate.** Optional
   `Portfolio.cashAvailable` is settled cash for Current Watch running totals —
-  editable on portfolio sources via `updatePortfolioCash` (not watchlists).
+  editable on portfolio sources through the atomic Current Watch Update path
+  (not watchlists).
 - `INITIAL_WATCHLIST`, `TICKER_ANALYSIS`, `LOG_ENTRIES`, `DEFAULT_ASSIGNMENTS`,
   and `POSITIONS` are **derived** — never hand-edit them; edit the registries.
 - Keep derivation transforms (e.g. `watchlistFromHoldings()`) **pure**.
@@ -78,7 +79,13 @@ covered by that strategy's `appliedPortfolioIds` for the same source.
 - Post-auth market boot remains fingerprinted/single-flight and overlaps
   registry + KV-cycle reads. Do not remove warming fallbacks or alter
   endpoints/providers/payloads/cadence.
-- `user_state` writes stay debounced + serialized per user and must remain
+- `user_state` compatibility writes stay debounced and share one per-user
+  mutation queue with narrow portfolio RPCs; entering Current Watch Edit Mode
+  flushes the latest pending save before pausing. Manual Update remains a draft
+  until `commit_current_watch_edit` atomically advances the server revision,
+  projection, normalized/compatibility ledger, assignments, and requested
+  history archives. Import/archive require a clean Edit Mode; import previews
+  use a durable base and rebuild after revision conflict. Payloads remain
   ≤256 KiB. Unbounded histories belong in normalized RLS tables.
 
 ## Going live (Pass 2 — FreeTier)
@@ -222,9 +229,10 @@ covered by that strategy's `appliedPortfolioIds` for the same source.
   `metrics.cashAdded` / `cashWithdrawn` from same-day cash ledger rows.
   Check-driven path also appends `forge_check_events` (status + hold-inaction)
   for Plan Adherence (holds stay backend-tracked; Total Actions is ledger-only;
-  Average Hold Time uses qty share episodes). Editable portfolio cash (`updatePortfolioCash`) +
-  `PortfolioTransaction` ledger in `share_fills` (qty + cash; cash rows are
-  manual deposit/withdrawal only).
+  Average Hold Time uses qty share episodes). Editable portfolio cash and its
+  `PortfolioTransaction` ledger in `share_fills` commit together through the
+  atomic Current Watch Update path (qty + cash; cash rows are manual
+  deposit/withdrawal only).
 - Cadence: Check = 1h/2h/4h/Daily/Weekly/Monthly + any combination of 4
   intraday session-closes. **15m/30m disabled** ("Future Capability");
   fundamentals refresh daily through the cron cycle. Checks are core behavior;

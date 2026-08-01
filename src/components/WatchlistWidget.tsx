@@ -70,8 +70,6 @@ import {
 } from "../lib/finance/timestamps";
 import type {
   LogEntry,
-  PendingCashEdit,
-  PendingQtyOrder,
   Portfolio,
   PortfolioHolding,
   RuleCategory,
@@ -1080,53 +1078,6 @@ function previewWatchItem(ticker: string): WatchlistItem | null {
   };
 }
 
-function buildPendingQtyOrders(
-  baseline: Record<string, number>,
-  drafts: Record<string, number>,
-): PendingQtyOrder[] {
-  const filledAt = estimateFillTimestamp();
-  const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
-  const tickers = new Set([...Object.keys(baseline), ...Object.keys(drafts)]);
-  const orders: PendingQtyOrder[] = [];
-  for (const ticker of tickers) {
-    const before = baseline[ticker] ?? 0;
-    const after = drafts[ticker] ?? before;
-    const delta = after - before;
-    const side = qtySideFromDelta(delta);
-    if (!side) continue;
-    const quote = dataSource.getQuote(ticker);
-    orders.push({
-      ticker,
-      side,
-      deltaShares: Math.abs(delta),
-      sharesBefore: before,
-      sharesAfter: after,
-      fillPrice: roundMoney(quote?.lastPrice ?? 0),
-      filledAt,
-      timeZone,
-    });
-  }
-  return orders.sort((a, b) => a.ticker.localeCompare(b.ticker));
-}
-
-function buildPendingCashEdit(
-  cashOffset: number,
-  cashBaseline: number,
-  qtyImpact: number,
-): PendingCashEdit | null {
-  if (Math.abs(cashOffset) < 0.005) return null;
-  const cashBefore = roundMoney(cashBaseline + qtyImpact);
-  const cashAfter = roundMoney(cashBefore + cashOffset);
-  return {
-    side: cashOffset > 0 ? "deposit" : "withdrawal",
-    cashBefore,
-    cashAfter,
-    deltaCash: roundMoney(cashOffset),
-    filledAt: estimateFillTimestamp(),
-    timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
-  };
-}
-
 export function WatchlistWidget({
   readOnly = false,
   previewStrategyId,
@@ -1166,24 +1117,21 @@ export function WatchlistWidget({
     archivePortfolioSource,
     restorePortfolioSource,
     deletePortfolioSourcePermanently,
-    archiveTickerHistory,
     restoreTickerHistory,
     strategies,
     getAppliedStrategiesForTicker,
     getStrategyChipBreakdown,
     addTickerToPortfolio,
     setTickerEnabledForStrategy,
-    applyQtyOrders,
+    commitCurrentWatchEdit,
     applyPortfolioTransactionBatch,
-    updatePortfolioCash,
+    loadPortfolioImportBase,
     persistWatchEditMarks,
-    bumpPortfolioRevision,
     removeTickerFromPortfolio,
     captureWatchEditSnapshot,
     restoreWatchEditSnapshot,
     recordWatchEditStrategyHistory,
     createPortfolioSource,
-    shareFills,
     setSelectedPortfolioId,
     watchStrategyScopeId,
     setWatchStrategyScopeId,
@@ -1263,9 +1211,19 @@ export function WatchlistWidget({
     active: boolean;
     snapshot: WatchEditSnapshot | null;
   }>({ active: false, snapshot: null });
+  /** In-flight Update only — cleared when settled and when the edit session ends. */
+  const editCommitRef = useRef<
+    Promise<Awaited<ReturnType<typeof commitCurrentWatchEdit>>> | null
+  >(null);
+  /** Stays true after a durable apply until the edit session ends (survives render sync). */
+  const editSessionCommittedRef = useRef(false);
   const restoreWatchEditSnapshotRef = useRef(restoreWatchEditSnapshot);
-  editCleanupRef.current = { active: editMode, snapshot: editSnapshot };
+  editCleanupRef.current = {
+    active: editMode && !editSessionCommittedRef.current,
+    snapshot: editSnapshot,
+  };
   restoreWatchEditSnapshotRef.current = restoreWatchEditSnapshot;
+  const [editCommitBusy, setEditCommitBusy] = useState(false);
   const [discardConfirmOpen, setDiscardConfirmOpen] = useState(false);
   const [archiveConfirmOpen, setArchiveConfirmOpen] = useState(false);
   const [permanentDeleteOpen, setPermanentDeleteOpen] = useState(false);
@@ -1301,8 +1259,19 @@ export function WatchlistWidget({
   useEffect(
     () => () => {
       const session = editCleanupRef.current;
-      if (session.active && session.snapshot) {
-        restoreWatchEditSnapshotRef.current(session.snapshot);
+      const snapshot = session.snapshot;
+      const pendingCommit = editCommitRef.current;
+      if (pendingCommit) {
+        void pendingCommit.then((result) => {
+          if (result.status !== "applied" && snapshot) {
+            restoreWatchEditSnapshotRef.current(snapshot);
+          }
+          setWatchEditPersistencePaused(false);
+        });
+        return;
+      }
+      if (session.active && snapshot && !editSessionCommittedRef.current) {
+        restoreWatchEditSnapshotRef.current(snapshot);
       }
       setWatchEditPersistencePaused(false);
     },
@@ -1559,6 +1528,9 @@ export function WatchlistWidget({
   }, [items, focusedStrategy, livePortfolio, getStrategyChipBreakdown]);
 
   function enterEditMode() {
+    editCommitRef.current = null;
+    editSessionCommittedRef.current = false;
+    setEditCommitBusy(false);
     setWatchEditPersistencePaused(true);
     const baseline: Record<string, number> = {};
     for (const item of items) baseline[item.ticker] = item.shares;
@@ -1595,6 +1567,10 @@ export function WatchlistWidget({
   }
 
   function cancelEditMode() {
+    editCommitRef.current = null;
+    editSessionCommittedRef.current = false;
+    setEditCommitBusy(false);
+    editCleanupRef.current = { active: false, snapshot: null };
     setEditMode(false);
     setEditDraft("");
     setEditToast(null);
@@ -1624,7 +1600,6 @@ export function WatchlistWidget({
           .sort()
       : [];
     if (editSnapshot) recordWatchEditStrategyHistory(editSnapshot);
-    bumpPortfolioRevision(selectedSource.id);
     cancelEditMode();
     if (shouldReportUntracked && currentUntracked.length > 0) {
       setUntrackedToastTickers(currentUntracked);
@@ -1661,11 +1636,11 @@ export function WatchlistWidget({
     return false;
   }
 
-  const pendingQtyOrders = useMemo(
-    () =>
-      editMode ? buildPendingQtyOrders(qtyBaseline, qtyDrafts) : [],
-    [editMode, qtyBaseline, qtyDrafts],
-  );
+  const qtyIsDirty =
+    editMode &&
+    Object.keys(qtyDrafts).some(
+      (ticker) => qtyDrafts[ticker] !== (qtyBaseline[ticker] ?? 0),
+    );
 
   const editMarkPrice = useCallback((ticker: string) => {
     const quote = dataSource.getQuote(ticker);
@@ -1703,7 +1678,7 @@ export function WatchlistWidget({
 
   const editIsDirty =
     editMode &&
-    (pendingQtyOrders.length > 0 ||
+    (qtyIsDirty ||
       cashIsDirty ||
       (editSnapshot != null && hasStructuralEdits(editSnapshot)));
 
@@ -1737,28 +1712,11 @@ export function WatchlistWidget({
     return true;
   }
 
-  function commitCashIfDirty(options?: {
-    recordManual?: boolean;
-      filledAt?: string;
-      timeZone?: string;
-    transactionCashBefore?: number;
-  }) {
-    if (!cashIsDirty) return;
-    const recordManual =
-      options?.recordManual ?? Math.abs(cashOffset) >= 0.005;
-    updatePortfolioCash(selectedSource.id, cashDraft, {
-      recordTransaction: recordManual,
-      filledAt: options?.filledAt,
-      timeZone: options?.timeZone,
-      transactionCashBefore:
-        options?.transactionCashBefore ??
-        (recordManual
-          ? roundMoney(cashBaseline + qtyImpact)
-          : undefined),
-    });
-  }
-
   function requestCancelEdit() {
+    if (editCommitBusy) {
+      showEditToast("Saving changes — wait for Update to finish.");
+      return;
+    }
     if (editIsDirty) {
       setDiscardConfirmOpen(true);
       return;
@@ -1767,45 +1725,98 @@ export function WatchlistWidget({
   }
 
   function confirmDiscardEdit() {
+    if (editCommitBusy) {
+      showEditToast("Saving changes — wait for Update to finish.");
+      return;
+    }
     if (editSnapshot) restoreWatchEditSnapshot(editSnapshot);
     cancelEditMode();
   }
 
-  function requestUpdateOrders() {
-    if (!editIsDirty) return;
-    const orders = pendingQtyOrders;
-    const cash = buildPendingCashEdit(cashOffset, cashBaseline, qtyImpact);
+  function cancelPendingReview() {
+    if (editCommitBusy) return;
+    setPendingReview(null);
+  }
+
+  async function preparePendingReview() {
+    const { buildCurrentWatchPendingReview } = await import(
+      "../lib/finance/currentWatchEditWorkflow"
+    );
+    return buildCurrentWatchPendingReview({
+      baseline: qtyBaseline,
+      drafts: qtyDrafts,
+      cashOffset,
+      cashBaseline,
+      qtyImpact,
+      getLastPrice: editMarkPrice,
+      filledAt: estimateFillTimestamp(),
+      timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+    });
+  }
+
+  function commitReviewedEdit(
+    input: Parameters<typeof commitCurrentWatchEdit>[0],
+  ) {
+    setEditCommitBusy(true);
+    const pending = commitCurrentWatchEdit(input)
+      .catch(() => ({ status: "failed" as const }))
+      .then((result) => {
+        if (result.status === "applied") {
+          // Survive render sync of editCleanupRef until cancelEditMode clears the session.
+          editSessionCommittedRef.current = true;
+          editCleanupRef.current = { active: false, snapshot: null };
+        }
+        return result;
+      })
+      .finally(() => {
+        if (editCommitRef.current === pending) {
+          editCommitRef.current = null;
+        }
+        setEditCommitBusy(false);
+      });
+    editCommitRef.current = pending;
+    return pending;
+  }
+
+  async function requestUpdateOrders() {
+    if (!editIsDirty || editCommitBusy) return;
+    const { orders, cash } = await preparePendingReview();
     if (orders.length === 0 && !cash) {
       // Structural edits only — no simulated order review.
-      commitCashIfDirty({ recordManual: false });
-      if (pendingHistoryRemovalTickers.size > 0) {
-        void commitHistoryRemovals().then((success) => {
-          if (success) {
-            finishSuccessfulEdit();
-            persistWatchEditMarks();
-          }
-        });
-      } else {
-        finishSuccessfulEdit();
-        persistWatchEditMarks();
-      }
+      void commitReviewedEdit({
+        portfolioId: selectedSource.id,
+        orders: [],
+        cash: null,
+        finalCash: cashDraft,
+        historyRemovalTickers: Array.from(pendingHistoryRemovalTickers),
+      }).then(handleCommittedWatchEdit);
       return;
     }
     setPendingReview({ orders, cash });
   }
 
-  async function commitHistoryRemovals(): Promise<boolean> {
-    for (const ticker of pendingHistoryRemovalTickers) {
-      const archived = await archiveTickerHistory(selectedSource.id, ticker);
-      if (!archived) {
-        setEditToast("History was not removed. Cancel to restore the staged ticker and try again.");
-        return false;
-      }
-      setTickerHistoryRecovery((current) => [
-        ...current.filter((item) => item.ticker !== ticker),
-        { ticker, archiveId: archived.archiveId, purgeAt: archived.purgeAt },
-      ]);
+  function handleCommittedWatchEdit(
+    result: Awaited<ReturnType<typeof commitCurrentWatchEdit>>,
+  ) {
+    if (result.status !== "applied") {
+      showEditToast(
+        result.status === "conflict"
+          ? "This portfolio changed elsewhere. Cancel and reopen Edit Mode."
+          : "Changes weren’t saved. Review them and try again.",
+      );
+      return false;
     }
+    setTickerHistoryRecovery((current) => [
+      ...current.filter(
+        (item) =>
+          !result.historyArchives.some(
+            (archive) => archive.ticker === item.ticker,
+          ),
+      ),
+      ...result.historyArchives,
+    ]);
+    finishSuccessfulEdit();
+    persistWatchEditMarks();
     return true;
   }
 
@@ -1814,41 +1825,39 @@ export function WatchlistWidget({
   ) {
     const result = await applyPortfolioTransactionBatch(input);
     if (result === "applied") {
-      if (editSnapshot) recordWatchEditStrategyHistory(editSnapshot);
-      cancelEditMode();
       persistWatchEditMarks();
     }
     return result;
   }
 
-  function addPendingOrder(side: "buy" | "sell") {
+  function requestImport() {
+    cancelEditMode();
+    setImportOpen(true);
+  }
+
+  function requestArchive() {
+    cancelEditMode();
+    setArchiveConfirmOpen(true);
+  }
+
+  async function addPendingOrder(side: "buy" | "sell") {
     const holding = selectedSource.holdings[0];
-    const ticker = holding?.ticker ?? "";
-    const sharesBefore = holding?.shares ?? 0;
-    const deltaShares = side === "sell" ? Math.min(1, sharesBefore) : 1;
+    const { buildAdditionalPendingOrder } = await import(
+      "../lib/finance/currentWatchEditWorkflow"
+    );
+    const order = buildAdditionalPendingOrder({
+      side,
+      ticker: holding?.ticker ?? "",
+      sharesBefore: holding?.shares ?? 0,
+      lastPrice: dataSource.getQuote(holding?.ticker ?? "")?.lastPrice ?? 0,
+      filledAt: estimateFillTimestamp(),
+      timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+    });
     setPendingReview((current) =>
       current
         ? {
             ...current,
-            orders: [
-              ...current.orders,
-              {
-                ticker,
-                side,
-                deltaShares,
-                sharesBefore,
-                sharesAfter:
-                  side === "buy"
-                    ? roundQuantity(sharesBefore + deltaShares)
-                    : roundQuantity(Math.max(0, sharesBefore - deltaShares)),
-                fillPrice: roundMoney(
-                  dataSource.getQuote(ticker)?.lastPrice ?? 0,
-                ),
-                filledAt: estimateFillTimestamp(),
-                timeZone:
-                  Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
-              },
-            ],
+            orders: [...current.orders, order],
           }
         : current,
     );
@@ -1860,82 +1869,27 @@ export function WatchlistWidget({
       return;
     }
     const { orders, cash } = pendingReview;
-    if (
-      orders.some(
-        (order) =>
-          !/^[A-Z][A-Z0-9.-]{0,9}$/.test(order.ticker) ||
-          !(order.deltaShares > 0) ||
-          !(order.fillPrice > 0) ||
-          order.sharesAfter < 0 ||
-          (order.side === "sell" && order.deltaShares > order.sharesBefore),
-      )
-    ) {
-      setEditToast("Review ticker, quantity, holdings, and fill price before confirming.");
+    const { reviewCurrentWatchTimeline } = await import(
+      "../lib/finance/currentWatchEditWorkflow"
+    );
+    const reviewed = reviewCurrentWatchTimeline({
+      orders,
+      cash,
+      startingCash: selectedSource.cashAvailable ?? 0,
+    });
+    if ("error" in reviewed) {
+      setEditToast(reviewed.error);
       return;
     }
-    let timelineCash = roundMoney(selectedSource.cashAvailable ?? 0);
-    let cashTransactionBefore = timelineCash;
-    let cashTransactionAfter = timelineCash;
-    const reviewedOrders = new Map<number, PendingQtyOrder>();
-    const timeline = [
-      ...orders.map((order, index) => ({ kind: "qty" as const, order, index })),
-      ...(cash ? [{ kind: "cash" as const, cash, index: -1 }] : []),
-    ].sort((left, right) => {
-      const leftAt = left.kind === "qty" ? left.order.filledAt : left.cash.filledAt;
-      const rightAt = right.kind === "qty" ? right.order.filledAt : right.cash.filledAt;
-      return Date.parse(leftAt) - Date.parse(rightAt) || left.index - right.index;
+    const result = await commitReviewedEdit({
+      portfolioId: selectedSource.id,
+      orders: reviewed.orders,
+      cash: reviewed.cash,
+      finalCash: reviewed.finalCash,
+      historyRemovalTickers: Array.from(pendingHistoryRemovalTickers),
     });
-    for (const event of timeline) {
-      if (event.kind === "cash") {
-        cashTransactionBefore = timelineCash;
-        timelineCash = roundMoney(timelineCash + event.cash.deltaCash);
-        cashTransactionAfter = timelineCash;
-      } else {
-        const cashBefore = timelineCash;
-        const tradeValue = roundMoney(
-          event.order.deltaShares * event.order.fillPrice,
-        );
-        timelineCash = roundMoney(
-          event.order.side === "sell"
-            ? timelineCash + tradeValue
-            : timelineCash - tradeValue,
-        );
-        reviewedOrders.set(event.index, {
-          ...event.order,
-          cashBefore,
-          cashAfter: timelineCash,
-        });
-      }
-      if (timelineCash < 0) {
-        setEditToast(
-          "Not enough cash at that point in the reviewed timeline. Move the deposit earlier or reduce the purchase.",
-        );
-        return;
-      }
-    }
-    const orderedReviewedOrders = orders.map(
-      (order, index) => reviewedOrders.get(index) ?? order,
-    );
-    const finalCash = timelineCash;
-    // History archival is the only fallible remote step in this confirmation.
-    // Complete it before recording fills so a failed archive cannot leave
-    // normalized transactions behind for an edit the user can still cancel.
-    if (!(await commitHistoryRemovals())) return;
-    if (orderedReviewedOrders.length > 0) {
-      applyQtyOrders(selectedSource.id, orderedReviewedOrders);
-    }
-    if (orderedReviewedOrders.length > 0 || cash) {
-      updatePortfolioCash(selectedSource.id, finalCash, {
-        recordTransaction: Boolean(cash),
-        filledAt: cash?.filledAt,
-        timeZone: cash?.timeZone,
-        transactionCashBefore: cashTransactionBefore,
-        transactionCashAfter: cashTransactionAfter,
-      });
-    }
-    setPendingReview(null);
-    finishSuccessfulEdit();
-    persistWatchEditMarks();
+    if (result?.status === "applied") setPendingReview(null);
+    handleCommittedWatchEdit(result);
   }
 
   // Leave drill-in if the focused strategy filter hides the selected ticker.
@@ -2428,15 +2382,15 @@ export function WatchlistWidget({
             <CurrentWatchEditToolbar
               isWatchlist={isWatchlistSource}
               sourceLabel={selectedSource.label}
-              onTransactions={() =>
-                setPendingReview({
-                  orders: pendingQtyOrders,
-                  cash: null,
-                  isBatch: true,
-                })
-              }
-              onImport={() => setImportOpen(true)}
-              onArchive={() => setArchiveConfirmOpen(true)}
+              onTransactions={() => {
+                void preparePendingReview().then(({ orders, cash }) =>
+                  setPendingReview({ orders, cash, isBatch: true }),
+                );
+              }}
+              onImport={requestImport}
+              onArchive={requestArchive}
+              dirty={editIsDirty}
+              onBlocked={showEditToast}
             />
           </Suspense>
         </div>
@@ -2970,6 +2924,7 @@ export function WatchlistWidget({
                       type="button"
                       className="btn btn--small btn--link forge-cancel-btn"
                       onClick={requestCancelEdit}
+                      disabled={editCommitBusy}
                     >
                       <X aria-hidden weight="bold" /> Cancel
                     </button>
@@ -2977,9 +2932,10 @@ export function WatchlistWidget({
                       type="button"
                       className="btn btn--small btn--solid"
                       onClick={requestUpdateOrders}
-                      disabled={!editIsDirty}
+                      disabled={!editIsDirty || editCommitBusy}
                     >
-                      <Plus aria-hidden weight="regular" /> Update
+                      <Plus aria-hidden weight="regular" />{" "}
+                      {editCommitBusy ? "Saving…" : "Update"}
                     </button>
                   </>
                 )}
@@ -2995,9 +2951,13 @@ export function WatchlistWidget({
         <ForgeTableModal
           title="Unsaved changes"
           titleId="watch-discard-title"
-          onCancel={() => setDiscardConfirmOpen(false)}
+          onCancel={() => {
+            if (editCommitBusy) return;
+            setDiscardConfirmOpen(false);
+          }}
           onDone={confirmDiscardEdit}
           doneLabel="Discard"
+          doneDisabled={editCommitBusy}
           intro="You have unsaved changes on this watch. Discard them and leave edit mode?"
         />
       ) : null}
@@ -3053,7 +3013,7 @@ export function WatchlistWidget({
             getMarkPrice={(ticker) => dataSource.getQuote(ticker)?.lastPrice ?? 0}
             searchTickers={asyncSearchTickers}
             onChange={setPendingReview}
-            onCancel={() => setPendingReview(null)}
+            onCancel={cancelPendingReview}
             onConfirm={() => void confirmPendingOrders()}
             onAdd={addPendingOrder}
             onAddTicker={addBatchTicker}
@@ -3064,9 +3024,7 @@ export function WatchlistWidget({
         <Suspense fallback={null}>
           <CurrentWatchImportModal
             portfolio={selectedSource}
-            existingTransactions={shareFills.filter(
-              (transaction) => transaction.portfolioId === selectedSource.id,
-            )}
+            existingTransactions={[]}
             existingTrackedTickers={Array.from(
               new Set(
                 portfolios.flatMap((source) =>
@@ -3074,11 +3032,9 @@ export function WatchlistWidget({
                 ),
               ),
             )}
-            currentPortfolioTickers={selectedSource.holdings.map(
-              (holding) => holding.ticker,
-            )}
             isKnownTicker={(ticker) => Boolean(dataSource.getTickerInfo(ticker))}
             getMarkPrice={(ticker) => dataSource.getQuote(ticker)?.lastPrice ?? 0}
+            onRefreshBase={() => loadPortfolioImportBase(selectedSource.id)}
             onCancel={() => setImportOpen(false)}
             onCommit={commitImport}
           />

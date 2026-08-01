@@ -19,9 +19,9 @@ import {
   loadPortfolioArchives,
   mergePortfolioLedgers,
 } from "./portfolioLedger";
+import { serializeWorkspaceMutation } from "./workspaceMutationQueue";
 
 export const WORKSPACE_PAYLOAD_BUDGET_BYTES = 256 * 1024;
-const workspaceWriteChains = new Map<string, Promise<void>>();
 
 /** One-shot per-user UI markers (persisted in user_state.flags). */
 export interface UserFlags {
@@ -139,6 +139,13 @@ export async function loadUserWorkspace(
   };
 }
 
+/** Waits for older account writes before reading a canonical transaction base. */
+export function loadUserWorkspaceSerialized(
+  userId: string,
+): Promise<UserWorkspace> {
+  return serializeWorkspaceMutation(userId, () => loadUserWorkspace(userId));
+}
+
 function workspacePayload(workspace: UserWorkspace, userId: string) {
   return {
     user_id: userId,
@@ -192,17 +199,9 @@ export function saveUserWorkspaceSerialized(
   workspace: UserWorkspace,
   userId: string,
 ): Promise<void> {
-  const previous = workspaceWriteChains.get(userId) ?? Promise.resolve();
-  const next = previous
-    .catch(() => undefined)
-    .then(() => saveUserWorkspace(workspace, userId));
-  workspaceWriteChains.set(userId, next);
-  void next.finally(() => {
-    if (workspaceWriteChains.get(userId) === next) {
-      workspaceWriteChains.delete(userId);
-    }
-  });
-  return next;
+  return serializeWorkspaceMutation(userId, () =>
+    saveUserWorkspace(workspace, userId),
+  );
 }
 
 export interface TickerMark {

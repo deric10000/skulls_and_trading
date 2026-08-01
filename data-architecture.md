@@ -6,7 +6,10 @@ Current Watch’s transaction/import/recovery contract is defined in
 [`docs/current-watch-import-foundations.md`](docs/current-watch-import-foundations.md).
 The current portfolio projection remains in `user_state.portfolios`; new import
 history is normalized in `portfolio_transactions` and committed with optimistic
-revision checking. Raw spreadsheet files are local-only and never become an
+revision checking. Manual Current Watch updates use a narrow atomic RPC: browser
+state remains a reversible draft until the server commits the portfolio
+projection, compatibility and normalized ledger, assignment changes, recovery
+archives, and next portfolio revision together. Raw spreadsheet files are local-only and never become an
 application source of truth. Archived portfolios live outside the active
 portfolio collection, preventing scoring and market-data consumers from
 including them. Imported historical events remain unscored until the separate
@@ -81,9 +84,9 @@ so they stay swappable later.
 `Portfolio.cashAvailable` is the settled cash balance for Current Watch running
 totals (holdings market value + cash). Seeded on demo portfolios; watchlists and
 new sources default to `0`. **Editable** on portfolio sources in Current Watch
-edit mode via `AppState.updatePortfolioCash` (clamped ≥ 0; persists with
-`user_state`). Watchlists stay display-only / 0. Not used to re-derive
-`ALLOCATIONS`.
+edit mode; Update commits the reviewed cash, holding, ledger, strategy, and
+revision changes atomically. Watchlists stay display-only / 0. Not used to
+re-derive `ALLOCATIONS`.
 
 ### Portfolio transaction ledger (`user_state.share_fills`)
 
@@ -169,8 +172,10 @@ providers, payloads, completeness gates, and cadence remain unchanged.
 
 Helm Progress history reads go through `lib/helm/progressHistory.ts`, which
 dedupes identical in-flight query groups and records row counts/duration.
-Workspace writes retain the `user_state` schema and debounce, but serialize per
-trusted user so an older response cannot win; serialized payloads have a
+Workspace writes retain the `user_state` schema and debounce, but all broad
+workspace saves and narrow portfolio mutation RPCs serialize through one queue
+per trusted user so an older snapshot cannot win. Current Watch flushes the
+latest pending broad save before Edit Mode pauses. Serialized payloads have a
 256 KiB growth ceiling. Append-only histories remain in normalized RLS tables.
 
 ## 3. Going live (Pass 2 — FreeTier live market data)

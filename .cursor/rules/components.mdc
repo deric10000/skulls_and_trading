@@ -154,7 +154,10 @@ action floated right. Each edit-tool icon uses the stock `Tooltip` with
 `desktopOnly`; mobile taps must open the action directly, never a tooltip sheet.
 The batch icon tooltip reads **Batch Transactions** and its modal title is
 **Simulate batch transactions**; the normal qty/cash Update path keeps
-**Review simulated changes**. The batch modal keeps persistent guidance in a
+**Review simulated changes**. While an Update commit is in flight, Cancel,
+Discard, and review X/backdrop dismiss are blocked; a durable apply marks the
+edit session committed so unmount restore cannot overwrite it, and the
+in-flight commit promise is cleared when the session ends. The batch modal keeps persistent guidance in a
 dark helper strip below the Buy/Sell toolbar: Buy may introduce a supported new
 ticker through the established reversible add-to-portfolio path; Sell remains
 limited to current holdings. Typing must never insert helper copy later or
@@ -231,8 +234,9 @@ untracked and asks the Captain to apply a strategy for their next check.
 a compact `.watch-cash-input` (same compact figure patterns as qty — `font:
 inherit`, tokens only). Draft participates in dirty/Cancel/Update like qty;
 manual cash bumps open the review modal as Simulated Cash Deposit / Withdrawal
-with an editable date/time; `updatePortfolioCash` persists + appends a `cash`
-ledger transaction only for that manual slice (qty-driven cash does not). Qty
+with an editable date/time; the atomic Current Watch Update persists the balance
+and appends a `cash` ledger transaction only for that manual slice (qty-driven
+cash does not). Qty
 edits simulate paper buys/sells at last price against that cash draft (buys
 spend, sells free cash) and review as Simulated Buy / Sell Order with editable
 fill price + date/time. Confirm writes ledger stamps + refreshes daily

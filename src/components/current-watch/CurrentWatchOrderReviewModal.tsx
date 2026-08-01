@@ -50,12 +50,13 @@ export function CurrentWatchOrderReviewModal({
   searchTickers: (query: string) => Promise<CurrentWatchTickerSearchProps["suggestions"]>;
   onChange: (review: PendingEditReview) => void;
   onCancel: () => void;
-  onConfirm: () => void;
+  onConfirm: () => void | Promise<void>;
   onAdd: (side: "buy" | "sell") => void;
   onAddTicker: (
     ticker: string,
   ) => "added" | "exists" | "no-data" | "budget";
 }) {
+  const [submitting, setSubmitting] = useState(false);
   const [tickerErrors, setTickerErrors] = useState<Record<number, string>>({});
   const [quantityDrafts, setQuantityDrafts] = useState<Record<string, string>>(
     {},
@@ -159,10 +160,19 @@ export function CurrentWatchOrderReviewModal({
           : "Review simulated changes"
       }
       titleId="qty-order-review-title"
-      onCancel={onCancel}
-      onDone={onConfirm}
-      doneLabel="Confirm"
-      doneDisabled={(review.orders.length === 0 && !review.cash) || hasInvalidOrder}
+      onCancel={() => {
+        // Block X/backdrop dismiss while Confirm is committing — Discard must
+        // not race a durable apply.
+        if (submitting) return;
+        onCancel();
+      }}
+      onDone={() => {
+        if (submitting) return;
+        setSubmitting(true);
+        void Promise.resolve(onConfirm()).finally(() => setSubmitting(false));
+      }}
+      doneLabel={submitting ? "Saving…" : "Confirm"}
+      doneDisabled={submitting || (review.orders.length === 0 && !review.cash) || hasInvalidOrder}
       intro="Set the date and time for each simulated buy, sell, deposit, or withdrawal. Adjust fill prices before confirming."
       stableTabs={review.isBatch}
       stableTabsTableMin={240}

@@ -30,12 +30,16 @@ export function CurrentWatchEditToolbar({
   onTransactions,
   onImport,
   onArchive,
+  dirty,
+  onBlocked,
 }: {
   isWatchlist: boolean;
   sourceLabel: string;
   onTransactions: () => void;
   onImport: () => void;
   onArchive: () => void;
+  dirty: boolean;
+  onBlocked: (message: string) => void;
 }) {
   return (
     <div className="watch-edit-toolbar" aria-label="Edit tools">
@@ -47,7 +51,7 @@ export function CurrentWatchEditToolbar({
             </button>
           </Tooltip>
           <Tooltip body="Import Transactions" desktopOnly>
-            <button type="button" className="icon-btn" aria-label="Import Transactions" onClick={onImport}>
+            <button type="button" className="icon-btn" aria-label="Import Transactions" onClick={() => dirty ? onBlocked("Update or Cancel before importing transactions.") : onImport()}>
               <FileArrowUp aria-hidden weight="regular" />
             </button>
           </Tooltip>
@@ -59,7 +63,7 @@ export function CurrentWatchEditToolbar({
             type="button"
             className="icon-btn icon-btn--danger watch-edit-toolbar-destructive"
             aria-label={`Remove ${sourceLabel}`}
-            onClick={onArchive}
+            onClick={() => dirty ? onBlocked("Update or Cancel before removing this portfolio.") : onArchive()}
           >
             <Trash aria-hidden weight="regular" />
           </button>

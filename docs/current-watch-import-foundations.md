@@ -33,9 +33,19 @@ New normalized tables are read-only to authenticated clients. Import, manual
 transaction, archive, restore, permanent-delete, and strategy-history writes
 run only through narrow server functions that re-derive stored fingerprints and
 classification fields instead of trusting browser-supplied metadata.
-Confirmed manual events normalize in the same database transaction that saves
-their `user_state` projection, so a partial client/network failure cannot leave
-holdings and the ledger disagreeing.
+Confirmed manual events use `commit_current_watch_edit`. The RPC locks the
+portfolio revision and `user_state`, replays share/cash continuity, validates
+the final projection, applies only Current Watch strategy assignment fields,
+archives requested ticker history, advances the server-owned revision, and
+saves the compatibility ledger in one database transaction. Its trigger
+normalizes the manual ledger before that transaction can commit. The browser
+does not publish the optimistic projection or leave Edit Mode until the RPC
+succeeds.
+
+Broad compatibility saves and narrow portfolio RPCs share one per-account
+mutation queue. Entering Edit Mode flushes the latest pending compatibility
+save before persistence pauses. This prevents an older debounced workspace
+snapshot from landing after an import, manual update, or archive.
 
 ## Import privacy and lifecycle
 
@@ -62,6 +72,12 @@ holdings and the ledger disagreeing.
 ## Replay and review invariants
 
 - Import mode has no default; the user chooses append or replace.
+- Import and portfolio archive cannot start while Edit Mode is dirty. The user
+  must Update or Cancel first; neither operation implicitly saves or discards a
+  draft.
+- Import preview loads a durable portfolio/revision/ledger base after older
+  workspace writes finish. A revision conflict reloads that base and rebuilds
+  the preview for another explicit review.
 - Replace requires full-history replay from zero or an explicit opening cash/time
   boundary. Opening positions are Buy rows at that boundary in this split.
 - Quantity stores six decimals and displays without trailing zeros. Manual entry
@@ -79,8 +95,18 @@ holdings and the ledger disagreeing.
 
 ## Recovery and scoring boundaries
 
-- Edit Mode pauses workspace persistence until Update, or until Cancel restores
-  the captured snapshot.
+- Edit Mode pauses workspace persistence until an acknowledged Update, or until
+  Cancel restores the captured portfolio, revision, strategy assignments, and
+  portfolio-scoped compatibility ledger snapshot. The cleanup snapshot is a
+  rollback defense; reviewed transactions remain drafts until commit succeeds.
+  If the widget unmounts during Update, cleanup waits for that commit and
+  restores the snapshot only after failure, never after a durable success.
+  A successful apply marks the edit session committed so later render sync
+  cannot re-arm snapshot restore; Cancel/Discard/review close are blocked while
+  a commit is in flight; the in-flight commit promise is cleared when the
+  session ends so a prior apply cannot skip restore on a later edit session.
+- Batch Transactions includes any staged manual cash deposit or withdrawal in
+  the same review; opening Batch cannot silently drop a dirty cash draft.
 - Archived sources live outside active `portfolios`, excluding them structurally
   from cadence, provider registration, Weather, Forge, Helm, and scoring.
 - Portfolio/removal and replace-import archives expire after 30 days. A daily
@@ -96,7 +122,8 @@ holdings and the ledger disagreeing.
 
 This local implementation does not authorize a production migration. Rollout:
 
-1. apply `20260731170000_current_watch_import_foundations.sql`;
+1. apply `20260731170000_current_watch_import_foundations.sql`, then
+   `20260801193000_atomic_current_watch_edits.sql`;
 2. verify RLS with two isolated Beta accounts;
 3. verify direct table writes are denied and stale-revision, duplicate-batch,
    invalid-time-zone, and invalid-math payloads are rejected;

@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { Portfolio, PortfolioTransaction } from "../../types";
 import {
   IMPORT_FILE_BYTES,
@@ -54,23 +54,30 @@ export function CurrentWatchImportModal({
   portfolio,
   existingTransactions,
   existingTrackedTickers,
-  currentPortfolioTickers,
   isKnownTicker,
   getMarkPrice,
+  onRefreshBase,
   onCancel,
   onCommit,
 }: {
   portfolio: Portfolio;
   existingTransactions: PortfolioTransaction[];
   existingTrackedTickers: string[];
-  currentPortfolioTickers: string[];
   isKnownTicker: (ticker: string) => boolean;
   getMarkPrice: (ticker: string) => number;
+  onRefreshBase: () => Promise<{
+    portfolio: Portfolio;
+    transactions: PortfolioTransaction[];
+  } | null>;
   onCancel: () => void;
   onCommit: (
     input: CommitPortfolioBatchInput,
   ) => Promise<"applied" | "conflict" | "failed">;
 }) {
+  const [basePortfolio, setBasePortfolio] = useState(portfolio);
+  const [baseTransactions, setBaseTransactions] = useState(existingTransactions);
+  const [baseReady, setBaseReady] = useState(false);
+  const initialRefreshBase = useRef(onRefreshBase);
   const [mode, setMode] = useState<ImportMode | null>(null);
   const [replaceBasis, setReplaceBasis] = useState<ReplaceBasis | null>(null);
   const [file, setFile] = useState<File | null>(null);
@@ -88,6 +95,33 @@ export function CurrentWatchImportModal({
   const [unsupportedTickers, setUnsupportedTickers] = useState<Set<string>>(
     () => new Set(),
   );
+
+  useEffect(() => {
+    let cancelled = false;
+    setBusy(true);
+    void initialRefreshBase.current()
+      .then((base) => {
+        if (cancelled) return;
+        if (base) {
+          setBasePortfolio(base.portfolio);
+          setBaseTransactions(base.transactions);
+          setBaseReady(true);
+        } else {
+          setError("The saved portfolio could not be loaded. Close and try again.");
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setError("The saved portfolio could not be loaded. Close and try again.");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setBusy(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   const [tickerValidationUnavailable, setTickerValidationUnavailable] =
     useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -107,7 +141,7 @@ export function CurrentWatchImportModal({
     );
     const unknown = tickers.filter(
       (ticker) =>
-        !currentPortfolioTickers.includes(ticker) &&
+        !basePortfolio.holdings.some((holding) => holding.ticker === ticker) &&
         !isKnownTicker(ticker),
     );
     if (unknown.length > 0) {
@@ -188,37 +222,43 @@ export function CurrentWatchImportModal({
   }, [mode, replaceBasis, openingAt, confirmedTimeZone, openingCash]);
 
   const preview = useMemo(() => {
-    if (!normalized || !mode) return null;
-    const basePortfolio =
+    if (!baseReady || !normalized || !mode) return null;
+    const replayBase =
       mode === "replace"
-        ? { ...portfolio, holdings: [], cashAvailable: 0 }
-        : portfolio;
+        ? { ...basePortfolio, holdings: [], cashAvailable: 0 }
+        : basePortfolio;
     return replayPortfolioTransactions({
-      portfolio: basePortfolio,
+      portfolio: replayBase,
       openingState,
       transactions: normalized.transactions,
       existingFingerprints:
         mode === "append"
-          ? new Set(existingTransactions.flatMap((row) => (row.fingerprint ? [row.fingerprint] : [])))
+          ? new Set(baseTransactions.flatMap((row) => (row.fingerprint ? [row.fingerprint] : [])))
           : new Set(),
-      existingTransactions: mode === "append" ? existingTransactions : [],
+      existingTransactions: mode === "append" ? baseTransactions : [],
       markPrice: getMarkPrice,
     });
   }, [
     normalized,
     mode,
-    portfolio,
+    basePortfolio,
     replaceBasis,
     openingState,
-    existingTransactions,
+    baseTransactions,
+    baseReady,
     getMarkPrice,
   ]);
 
   const budgetBlockedTickers = useMemo(() => {
     if (!normalized) return new Set<string>();
-    const existing = new Set(existingTrackedTickers.map((ticker) => ticker.toUpperCase()));
+    const existing = new Set([
+      ...existingTrackedTickers.map((ticker) => ticker.toUpperCase()),
+      ...basePortfolio.holdings.map((holding) => holding.ticker.toUpperCase()),
+    ]);
     if (mode === "replace") {
-      for (const ticker of currentPortfolioTickers) existing.delete(ticker.toUpperCase());
+      for (const holding of basePortfolio.holdings) {
+        existing.delete(holding.ticker.toUpperCase());
+      }
     }
     const incoming = Array.from(
       new Set(
@@ -227,9 +267,10 @@ export function CurrentWatchImportModal({
     ).filter((ticker) => !existing.has(ticker));
     const remaining = Math.max(0, 40 - existing.size);
     return new Set(incoming.slice(remaining));
-  }, [normalized, existingTrackedTickers, currentPortfolioTickers, mode]);
+  }, [normalized, existingTrackedTickers, basePortfolio, mode]);
 
   const setupBlocked =
+    !baseReady ||
     !mode ||
     tickerValidationUnavailable ||
     !normalized ||
@@ -263,14 +304,14 @@ export function CurrentWatchImportModal({
         )
       : normalized.transactions;
     const finalPreview = replayPortfolioTransactions({
-      portfolio: mode === "replace" ? { ...portfolio, holdings: [], cashAvailable: 0 } : portfolio,
+      portfolio: mode === "replace" ? { ...basePortfolio, holdings: [], cashAvailable: 0 } : basePortfolio,
       openingState,
       transactions: includedTransactions,
       existingFingerprints:
         mode === "append"
-          ? new Set(existingTransactions.flatMap((row) => (row.fingerprint ? [row.fingerprint] : [])))
+          ? new Set(baseTransactions.flatMap((row) => (row.fingerprint ? [row.fingerprint] : [])))
           : new Set(),
-      existingTransactions: mode === "append" ? existingTransactions : [],
+      existingTransactions: mode === "append" ? baseTransactions : [],
       markPrice: getMarkPrice,
     });
     if (finalPreview.issues.length > 0 || finalPreview.ledger.length === 0) {
@@ -279,8 +320,8 @@ export function CurrentWatchImportModal({
       return;
     }
     const result = await onCommit({
-      portfolioId: portfolio.id,
-      expectedRevision: portfolio.revision ?? 0,
+      portfolioId: basePortfolio.id,
+      expectedRevision: basePortfolio.revision ?? 0,
       portfolio: finalPreview.portfolio,
       transactions: finalPreview.ledger,
       batch: {
@@ -299,7 +340,15 @@ export function CurrentWatchImportModal({
       setRawRows(null);
       onCancel();
     } else if (result === "conflict") {
-      setError("This portfolio changed in another session. Close, reopen, and review the import again.");
+      const refreshed = await onRefreshBase().catch(() => null);
+      if (refreshed) {
+        setBasePortfolio(refreshed.portfolio);
+        setBaseTransactions(refreshed.transactions);
+        setActiveBatchId(batchId());
+        setError("This portfolio changed in another session. The preview has been refreshed against the latest saved portfolio; review it again before importing.");
+      } else {
+        setError("This portfolio changed in another session. Close and reopen the import to review the latest saved portfolio.");
+      }
     } else {
       setError("The import was not saved. Your portfolio has not changed.");
     }
