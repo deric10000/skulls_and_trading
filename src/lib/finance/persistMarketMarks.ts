@@ -6,6 +6,7 @@
 
 import type { Portfolio, PortfolioTransaction, Strategy } from "../../types";
 import { dataSource } from "../datasource";
+import { isScorablePortfolioTransaction } from "./portfolioTransactions";
 import { portfolioRunningTotals } from "../finance/portfolioTotals";
 import {
   etIsoDate,
@@ -148,6 +149,7 @@ function cashFlowMetrics(
   let cashAdded = 0;
   let cashWithdrawn = 0;
   for (const tx of ledger) {
+    if (!isScorablePortfolioTransaction(tx)) continue;
     if (tx.kind !== "cash" || tx.portfolioId !== portfolioId) continue;
     if (tx.filledAt.slice(0, 10) !== asOf) continue;
     if (tx.deltaCash > 0) cashAdded += tx.deltaCash;

@@ -102,6 +102,7 @@ import {
   fetchStrategyCheckState,
   fetchTickerMarks,
   loadUserWorkspace,
+  loadUserWorkspaceSerialized,
   requestServerStrategyFirstCheck,
   saveUserWorkspaceSerialized,
   upsertTickerMarks,
@@ -114,16 +115,29 @@ import {
   type UserWorkspace,
 } from "../lib/userStore";
 import {
+  archivePortfolioSource as persistPortfolioArchive,
+  archivePortfolioTickerHistory as persistTickerHistoryArchive,
+  commitPortfolioTransactionBatch,
+  deletePortfolioArchivePermanently as persistPermanentArchiveDelete,
+  loadPortfolioArchives,
+  restorePortfolioArchive as persistPortfolioRestore,
+  restorePortfolioTickerHistory as persistTickerHistoryRestore,
+  type CommitPortfolioBatchInput,
+} from "../lib/userStore/portfolioLedger";
+import type { CommitCurrentWatchEditResult } from "../lib/userStore/currentWatchEditStore";
+import {
   presentConvictionRun,
   type ConvictionErrorCategory,
   type ConvictionRunPresentation,
 } from "../lib/forge/convictionRunState";
 import { sanitizeStrategyPatch } from "../lib/userStore/strategyMerge";
+import { scheduleStrategyHistory } from "../lib/userStore/strategyHistory";
 import type {
   Bucket,
   CaptainProfile,
   LogEntry,
   PageId,
+  PendingCashEdit,
   PendingQtyOrder,
   Portfolio,
   PortfolioTransaction,
@@ -132,19 +146,10 @@ import type {
   Strategy,
   WatchlistItem,
 } from "../types";
-import {
-  nextAverageCost,
-  openPnlPercent,
-} from "../lib/finance/averageCost";
+import { openPnlPercent } from "../lib/finance/averageCost";
 import { portfolioWeightPct } from "../lib/finance/portfolioWeight";
 import { persistBookAndConvictionMarks } from "../lib/finance/persistMarketMarks";
 import { persistForgeCheckEvents } from "../lib/forge/persistCheckEvents";
-import {
-  classifyCashAction,
-  classifyQtyAction,
-  zoneHintsFromStatuses,
-} from "../lib/finance/portfolioTransactions";
-import { estimateFillTimestamp } from "../lib/finance/timestamps";
 import {
   PERF_MARK,
   measureAsync,
@@ -200,17 +205,17 @@ function cloneHoldings(
 /** Session snapshot so Current Watch Cancel can discard in-edit mutations. */
 export type WatchEditSnapshot = {
   portfolioId: string;
+  revision: number;
   holdings: Portfolio["holdings"];
   /** Settled cash at enter-edit (portfolios only). */
   cashAvailable: number;
   /** strategyId → tickerExclusions[portfolioId] at enter-edit time. */
   tickerExclusionsByStrategy: Record<string, string[]>;
+  /** strategyId → applied portfolio ids at enter-edit time. */
+  appliedPortfolioIdsByStrategy: Record<string, string[]>;
+  /** Portfolio-scoped compatibility ledger at enter-edit time. */
+  transactions: PortfolioTransaction[];
 };
-
-function clampCash(value: number): number {
-  if (!Number.isFinite(value)) return 0;
-  return Math.max(0, value);
-}
 
 type LogDraft = Pick<LogEntry, "title" | "note" | "strategy">;
 
@@ -292,6 +297,19 @@ export interface AppStateValue {
 
   /** Live portfolio holdings (persisted per Beta user). */
   portfolios: Portfolio[];
+  /** Recoverable sources kept separate so active scoring cannot consume them. */
+  archivedPortfolios: Portfolio[];
+  setWatchEditPersistencePaused: (paused: boolean) => void;
+  archivePortfolioSource: (
+    portfolioId: string,
+  ) => Promise<"archived" | "conflict" | "failed">;
+  restorePortfolioSource: (portfolioId: string) => Promise<boolean>;
+  deletePortfolioSourcePermanently: (portfolioId: string) => Promise<boolean>;
+  archiveTickerHistory: (
+    portfolioId: string,
+    ticker: string,
+  ) => Promise<{ archiveId: number; purgeAt: string } | null>;
+  restoreTickerHistory: (archiveId: number) => Promise<boolean>;
   setTickerEnabledForStrategy: (
     portfolioId: string,
     ticker: string,
@@ -306,34 +324,26 @@ export interface AppStateValue {
     portfolioId: string,
     ticker: string,
   ) => "added" | "exists" | "no-data" | "budget";
-  /** Set share count on a holding (portfolios; watchlists ignore in UI). */
-  updateHoldingShares: (
-    portfolioId: string,
-    ticker: string,
-    shares: number,
-  ) => void;
-  /**
-   * Set settled cash on a portfolio source (clamped ≥ 0). Optionally append a
-   * cash ledger transaction when the value changes (manual deposit/withdrawal).
-   */
-  updatePortfolioCash: (
-    portfolioId: string,
-    cashAvailable: number,
-    options?: {
-      recordTransaction?: boolean;
-      filledAt?: string;
-      /** Ledger cashBefore when recording a manual deposit/withdrawal slice. */
-      transactionCashBefore?: number;
-    },
-  ) => void;
-  /**
-   * Session-only: confirm review-modal qty orders (average-cost + fill ledger).
-   * LIVE later: POST fills to the brokerage API, then refresh holdings.
-   */
-  applyQtyOrders: (
-    portfolioId: string,
-    orders: PendingQtyOrder[],
-  ) => void;
+  /** Atomically persist a reviewed Current Watch edit and server revision. */
+  commitCurrentWatchEdit: (input: {
+    portfolioId: string;
+    orders: PendingQtyOrder[];
+    cash: PendingCashEdit | null;
+    finalCash: number;
+    historyRemovalTickers: string[];
+  }) => Promise<
+    | ({ status: "applied" } & CommitCurrentWatchEditResult)
+    | { status: "conflict" | "failed" }
+  >;
+  /** Atomically persist and publish a reviewed normalized import batch. */
+  applyPortfolioTransactionBatch: (
+    input: CommitPortfolioBatchInput,
+  ) => Promise<"applied" | "conflict" | "failed">;
+  /** Read the durable portfolio + ledger used to build an import preview. */
+  loadPortfolioImportBase: (portfolioId: string) => Promise<{
+    portfolio: Portfolio;
+    transactions: PortfolioTransaction[];
+  } | null>;
   /** After edit confirm: refresh daily book marks (incl. cashAdded metrics). */
   persistWatchEditMarks: () => void;
   /** Confirmed fill / cash ledger for this session (mock; later from API). */
@@ -352,6 +362,8 @@ export interface AppStateValue {
   captureWatchEditSnapshot: (portfolioId: string) => WatchEditSnapshot | null;
   /** Restore a Current Watch edit-session snapshot (session-only). */
   restoreWatchEditSnapshot: (snapshot: WatchEditSnapshot) => void;
+  /** Persist strategy-version boundaries created by a confirmed watch edit. */
+  recordWatchEditStrategyHistory: (snapshot: WatchEditSnapshot) => void;
 
   // ---- Strategy Forge chip library (reusable rule chips) ----
   chipLibrary: RuleChip[];
@@ -466,6 +478,7 @@ function applyWorkspaceToSetters(
   workspace: UserWorkspace,
   setters: {
     setPortfolios: (p: Portfolio[]) => void;
+    setArchivedPortfolios: (p: Portfolio[]) => void;
     setStrategies: (s: Strategy[]) => void;
     setChipLibrary: (c: RuleChip[]) => void;
     setWatchlist: (w: WatchlistItem[]) => void;
@@ -478,6 +491,7 @@ function applyWorkspaceToSetters(
   },
 ) {
   setters.setPortfolios(clonePortfolios(workspace.portfolios));
+  setters.setArchivedPortfolios(clonePortfolios(workspace.archivedPortfolios));
   setters.setStrategies(workspace.strategies);
   setters.setChipLibrary(workspace.chipLibrary);
   setters.setWatchlist(workspace.watchlist);
@@ -558,6 +572,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     emptyWorkspace().chipLibrary,
   );
   const [portfolios, setPortfolios] = useState<Portfolio[]>([]);
+  const [archivedPortfolios, setArchivedPortfolios] = useState<Portfolio[]>([]);
   const [shareFills, setShareFills] = useState<PortfolioTransaction[]>([]);
   const [logsByTicker, setLogsByTicker] = useState<Record<string, LogEntry[]>>(
     {},
@@ -583,6 +598,12 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     StrategyCheckRunRecord[]
   >([]);
   const persistEnabled = useRef(false);
+  const [watchEditPersistencePaused, setWatchEditPersistencePausedState] =
+    useState(false);
+  const setWatchEditPersistencePaused = useCallback((paused: boolean) => {
+    if (paused) persistWorkspaceDebounced.flush();
+    setWatchEditPersistencePausedState(paused);
+  }, []);
   const invalidTimeToastKey = useRef("");
   const immediateCheckTimers = useRef(
     new Map<string, ReturnType<typeof window.setTimeout>>(),
@@ -712,6 +733,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     const timeframeMigrations = consumeTimeframeMigrations();
     applyWorkspaceToSetters(workspace, {
       setPortfolios,
+      setArchivedPortfolios,
       setStrategies,
       setChipLibrary,
       setWatchlist,
@@ -1148,12 +1170,14 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (
       !persistEnabled.current ||
+      watchEditPersistencePaused ||
       !isAuthenticated ||
       demoMode ||
       !userProfile?.id
     ) return;
     persistWorkspaceDebounced({
       portfolios,
+      archivedPortfolios,
       strategies,
       chipLibrary,
       watchlist,
@@ -1174,6 +1198,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     isAuthenticated,
     demoMode,
     userProfile?.id,
+    watchEditPersistencePaused,
   ]);
 
   useEffect(() => {
@@ -1266,6 +1291,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     const empty = emptyWorkspace(name?.trim() || "Captain");
     applyWorkspaceToSetters(empty, {
       setPortfolios,
+      setArchivedPortfolios,
       setStrategies,
       setChipLibrary,
       setWatchlist,
@@ -1310,6 +1336,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     const empty = emptyWorkspace();
     applyWorkspaceToSetters(empty, {
       setPortfolios,
+      setArchivedPortfolios,
       setStrategies,
       setChipLibrary,
       setWatchlist,
@@ -1434,241 +1461,41 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
           ...current,
         ];
       });
-      markTickerConvictionDirty(portfolioId, ticker);
-      setFlags((current) => ({
-        ...current,
-        tickerConvictionDirtyAt: getTickerConvictionDirtyMap(),
-      }));
-      void registerPortfolioMarketSymbols([ticker], "add");
-      enqueueWeatherTaxonomyHydrate([ticker]);
-      void fetchMarketQuotes([ticker]).then((result) => {
-        const quote = result?.quotes[ticker];
-        if (!quote || !(quote.lastPrice > 0)) return;
-        setLiveQuotes({ [ticker]: quote });
-        setWatchlist((current) =>
-          current.map((item) =>
-            item.ticker === ticker
-              ? { ...item, price: quote.lastPrice }
-              : item,
-          ),
-        );
-        void upsertTickerMarks(
-          [
-            {
-              ticker,
-              lastPrice: quote.lastPrice,
-              asOf: quote.asOf,
-              source: quote.source,
-            },
-          ],
-          userIdRef.current,
-        );
-      });
+      if (!watchEditPersistencePaused) {
+        markTickerConvictionDirty(portfolioId, ticker);
+        setFlags((current) => ({
+          ...current,
+          tickerConvictionDirtyAt: getTickerConvictionDirtyMap(),
+        }));
+        void registerPortfolioMarketSymbols([ticker], "add");
+        enqueueWeatherTaxonomyHydrate([ticker]);
+        void fetchMarketQuotes([ticker]).then((result) => {
+          const quote = result?.quotes[ticker];
+          if (!quote || !(quote.lastPrice > 0)) return;
+          setLiveQuotes({ [ticker]: quote });
+          setWatchlist((current) =>
+            current.map((item) =>
+              item.ticker === ticker
+                ? { ...item, price: quote.lastPrice }
+                : item,
+            ),
+          );
+          void upsertTickerMarks(
+            [
+              {
+                ticker,
+                lastPrice: quote.lastPrice,
+                asOf: quote.asOf,
+                source: quote.source,
+              },
+            ],
+            userIdRef.current,
+          );
+        });
+      }
       return "added";
     },
-    [portfolios, strategies, adminBypass],
-  );
-
-  const updateHoldingShares = useCallback(
-    (portfolioId: string, ticker: string, shares: number) => {
-      const nextShares = Number.isFinite(shares) ? Math.max(0, shares) : 0;
-      setPortfolios((current) =>
-        current.map((item) =>
-          item.id !== portfolioId
-            ? item
-            : {
-                ...item,
-                holdings: item.holdings.map((holding) =>
-                  holding.ticker !== ticker
-                    ? holding
-                    : { ...holding, shares: nextShares },
-                ),
-              },
-        ),
-      );
-      setWatchlist((current) =>
-        current.map((item) =>
-          item.ticker !== ticker ? item : { ...item, shares: nextShares },
-        ),
-      );
-    },
-    [],
-  );
-
-  const applyQtyOrders = useCallback(
-    (portfolioId: string, orders: PendingQtyOrder[]) => {
-      if (orders.length === 0) return;
-      const portfolio = portfolios.find((p) => p.id === portfolioId);
-      const applied = strategies.filter((s) =>
-        (s.appliedPortfolioIds ?? []).includes(portfolioId),
-      );
-      const appliedIds = applied.map((s) => s.id);
-      const alignment = portfolio
-        ? measureSync(
-            "portfolio-alignment",
-            () =>
-              computePortfolioAlignment(portfolio, buckets, applied, {
-                caller: "order-fill",
-              }),
-            { caller: "order-fill" },
-          )
-        : null;
-
-      const fills: PortfolioTransaction[] = orders.map((order) => {
-        const holding = portfolio?.holdings.find(
-          (h) => h.ticker === order.ticker,
-        );
-        const live =
-          alignment?.byTicker[order.ticker.toUpperCase()] ??
-          alignment?.byTicker[order.ticker];
-        return {
-          id: nextId("fill"),
-          kind: "qty" as const,
-          portfolioId,
-          ticker: order.ticker,
-          side: order.side,
-          deltaShares: order.deltaShares,
-          sharesBefore: order.sharesBefore,
-          sharesAfter: order.sharesAfter,
-          fillPrice: order.fillPrice,
-          filledAt: order.filledAt || estimateFillTimestamp(),
-          source: "mock" as const,
-          actionClass: classifyQtyAction({
-            sharesBefore: order.sharesBefore,
-            sharesAfter: order.sharesAfter,
-          }),
-          strategyIds: holding?.strategyIds?.length
-            ? [...holding.strategyIds]
-            : appliedIds,
-          // Layer 3 zones live on resolved flags — not only holding.status
-          // (often an L1 band). Impact needs these stamps.
-          zoneHints: zoneHintsFromStatuses([
-            live?.resolved.primary,
-            ...(live?.resolved.categoryFlags ?? []),
-            holding?.status,
-          ]),
-        };
-      });
-
-      setShareFills((current) => {
-        const next = [...fills, ...current];
-        shareFillsRef.current = next;
-        return next;
-      });
-
-      setPortfolios((current) =>
-        current.map((item) => {
-          if (item.id !== portfolioId) return item;
-          let holdings = item.holdings;
-          for (const order of orders) {
-            holdings = holdings.map((holding) => {
-              if (holding.ticker !== order.ticker) return holding;
-              const avgPrice = nextAverageCost({
-                sharesBefore: order.sharesBefore,
-                avgBefore: holding.avgPrice,
-                side: order.side,
-                deltaShares: order.deltaShares,
-                fillPrice: order.fillPrice,
-                sharesAfter: order.sharesAfter,
-              });
-              const quote = dataSource.getQuote(order.ticker);
-              const last = quote?.lastPrice ?? 0;
-              return {
-                ...holding,
-                shares: order.sharesAfter,
-                avgPrice,
-                openPnlPct: openPnlPercent(last, avgPrice),
-              };
-            });
-          }
-          return { ...item, holdings };
-        }),
-      );
-
-      if (true) {
-        // mirror watchlist for all Beta portfolios
-        setWatchlist((current) => {
-          let next = current;
-          for (const order of orders) {
-            next = next.map((row) => {
-              if (row.ticker !== order.ticker) return row;
-              const holdingAvg = nextAverageCost({
-                sharesBefore: order.sharesBefore,
-                avgBefore: row.avgPrice,
-                side: order.side,
-                deltaShares: order.deltaShares,
-                fillPrice: order.fillPrice,
-                sharesAfter: order.sharesAfter,
-              });
-              const quote = dataSource.getQuote(order.ticker);
-              const last = quote?.lastPrice ?? row.price;
-              return {
-                ...row,
-                shares: order.sharesAfter,
-                avgPrice: holdingAvg,
-                changePct: openPnlPercent(last, holdingAvg),
-                price: last,
-              };
-            });
-          }
-          return next;
-        });
-      }
-    },
-    [nextId, portfolios, strategies, buckets],
-  );
-
-  const updatePortfolioCash = useCallback(
-    (
-      portfolioId: string,
-      cashAvailable: number,
-      options?: {
-        recordTransaction?: boolean;
-        filledAt?: string;
-        transactionCashBefore?: number;
-      },
-    ) => {
-      const nextCash = clampCash(cashAvailable);
-      const portfolio = portfolios.find((item) => item.id === portfolioId);
-      if (!portfolio || portfolio.type === "watchlist") return;
-      const cashBefore =
-        options?.transactionCashBefore != null
-          ? clampCash(options.transactionCashBefore)
-          : (portfolio.cashAvailable ?? 0);
-      setPortfolios((current) =>
-        current.map((item) =>
-          item.id !== portfolioId || item.type === "watchlist"
-            ? item
-            : { ...item, cashAvailable: nextCash },
-        ),
-      );
-      if (options?.recordTransaction && nextCash !== cashBefore) {
-        const appliedIds = strategies
-          .filter((s) => (s.appliedPortfolioIds ?? []).includes(portfolioId))
-          .map((s) => s.id);
-        const tx: PortfolioTransaction = {
-          id: nextId("cash"),
-          kind: "cash",
-          portfolioId,
-          cashBefore,
-          cashAfter: nextCash,
-          deltaCash: nextCash - cashBefore,
-          filledAt: options.filledAt ?? new Date().toISOString(),
-          source: "mock",
-          actionClass: classifyCashAction({
-            cashBefore,
-            cashAfter: nextCash,
-          }),
-          strategyIds: appliedIds,
-        };
-        setShareFills((current) => {
-          const next = [tx, ...current];
-          shareFillsRef.current = next;
-          return next;
-        });
-      }
-    },
-    [nextId, portfolios, strategies],
+    [portfolios, strategies, adminBypass, watchEditPersistencePaused],
   );
 
   const persistWatchEditMarks = useCallback(() => {
@@ -1682,8 +1509,18 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
           ),
         ),
       ];
+      void registerPortfolioMarketSymbols(tickers, "replace");
       if (tickers.length === 0 && nextPortfolios.every((p) => (p.cashAvailable ?? 0) <= 0)) {
         return;
+      }
+      enqueueWeatherTaxonomyHydrate(tickers);
+      void fetchMarketQuotes(tickers).then((result) => {
+        if (result) setLiveQuotes(result.quotes);
+      });
+      for (const strategy of nextStrategies) {
+        if ((strategy.appliedPortfolioIds ?? []).length > 0) {
+          requestImmediateStrategyCheck(strategy.id);
+        }
       }
       void persistBookAndConvictionMarks(
         nextPortfolios,
@@ -1692,6 +1529,285 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         { ledger: shareFillsRef.current, userId: userIdRef.current },
       );
     }, 0);
+  }, [requestImmediateStrategyCheck]);
+
+  const commitCurrentWatchEdit = useCallback(
+    async (input: {
+      portfolioId: string;
+      orders: PendingQtyOrder[];
+      cash: PendingCashEdit | null;
+      finalCash: number;
+      historyRemovalTickers: string[];
+    }): Promise<
+      | ({ status: "applied" } & CommitCurrentWatchEditResult)
+      | { status: "conflict" | "failed" }
+    > => {
+      const portfolio = portfoliosRef.current.find(
+        (item) => item.id === input.portfolioId,
+      );
+      if (!portfolio) return { status: "failed" };
+      const currentStrategies = strategiesRef.current;
+      const applied = currentStrategies.filter((strategy) =>
+        (strategy.appliedPortfolioIds ?? []).includes(input.portfolioId),
+      );
+      const appliedStrategyIds = applied.map((strategy) => strategy.id);
+      const alignment = measureSync(
+        "portfolio-alignment",
+        () =>
+          computePortfolioAlignment(portfolio, buckets, applied, {
+            caller: "order-fill",
+          }),
+        { caller: "order-fill" },
+      );
+      const { executeCurrentWatchEdit } = await import(
+        "../lib/finance/currentWatchEditWorkflow"
+      );
+      const outcome = await executeCurrentWatchEdit({
+        portfolio,
+        strategies: currentStrategies,
+        alignment,
+        appliedStrategyIds,
+        getLastPrice: (ticker) => dataSource.getQuote(ticker)?.lastPrice ?? 0,
+        ...input,
+        nextId,
+        userId:
+          isAuthenticated && !demoMode && userIdRef.current
+            ? userIdRef.current
+            : null,
+      });
+      if (outcome.status !== "applied") return outcome;
+      const nextPortfolio = outcome.portfolio;
+      const transactions = outcome.transactions;
+      const holdings = nextPortfolio.holdings;
+      const durable = outcome.durable;
+
+      const committedPortfolio = {
+        ...nextPortfolio,
+        revision: durable.revision,
+      };
+      setPortfolios((current) =>
+        current.map((item) =>
+          item.id === input.portfolioId ? committedPortfolio : item,
+        ),
+      );
+      const removedHistory = new Set(
+        input.historyRemovalTickers.map((ticker) => ticker.toUpperCase()),
+      );
+      setShareFills((current) => {
+        const retained = current.filter(
+          (transaction) =>
+            transaction.portfolioId !== input.portfolioId ||
+            transaction.kind !== "qty" ||
+            !removedHistory.has(transaction.ticker.toUpperCase()),
+        );
+        const next = [...transactions, ...retained];
+        shareFillsRef.current = next;
+        return next;
+      });
+      setWatchlist((current) => {
+        const byTicker = new Map(current.map((row) => [row.ticker, row]));
+        return holdings.map((holding) => {
+          const prior = byTicker.get(holding.ticker);
+          const info = dataSource.getTickerInfo(holding.ticker);
+          return {
+            ...(prior ?? {
+              ticker: holding.ticker,
+              name: info
+                ? `${info.company} · ${info.category}`
+                : holding.ticker,
+              price: info?.lastPrice ?? 0,
+            }),
+            shares: holding.shares,
+            avgPrice: holding.avgPrice,
+            changePct: holding.openPnlPct,
+            status: holding.status,
+            conviction: holding.conviction,
+            reason: holding.reason,
+          };
+        });
+      });
+      return { status: "applied", ...durable };
+    },
+    [buckets, demoMode, isAuthenticated, nextId],
+  );
+
+  const applyPortfolioTransactionBatch = useCallback(
+    async (
+      input: CommitPortfolioBatchInput,
+    ): Promise<"applied" | "conflict" | "failed"> => {
+      try {
+        if (!userIdRef.current) return "failed";
+        const revision = await commitPortfolioTransactionBatch(
+          input,
+          userIdRef.current,
+        );
+        const nextPortfolio = { ...input.portfolio, revision };
+        setPortfolios((current) =>
+          current.map((portfolio) =>
+            portfolio.id === input.portfolioId ? nextPortfolio : portfolio,
+          ),
+        );
+        setShareFills((current) => {
+          const ids = new Set(input.transactions.map((row) => row.id));
+          const retained = current.filter(
+            (row) =>
+              !ids.has(row.id) &&
+              !(
+                input.batch.mode === "replace" &&
+                row.portfolioId === input.portfolioId
+              ),
+          );
+          const next = [
+            ...input.transactions,
+            ...retained,
+          ];
+          shareFillsRef.current = next;
+          return next;
+        });
+        if (input.batch.mode === "replace" && userIdRef.current) {
+          setArchivedPortfolios(
+            await loadPortfolioArchives(userIdRef.current),
+          );
+        }
+        return "applied";
+      } catch (error) {
+        if (error instanceof Error && error.message === "PORTFOLIO_REVISION_CONFLICT") {
+          return "conflict";
+        }
+        return "failed";
+      }
+    },
+    [],
+  );
+
+  const loadPortfolioImportBase = useCallback(async (portfolioId: string) => {
+    if (!userIdRef.current) {
+      const portfolio = portfoliosRef.current.find(
+        (item) => item.id === portfolioId,
+      );
+      return portfolio
+        ? {
+            portfolio,
+            transactions: shareFillsRef.current.filter(
+              (transaction) => transaction.portfolioId === portfolioId,
+            ),
+          }
+        : null;
+    }
+    const workspace = await loadUserWorkspaceSerialized(userIdRef.current);
+    const portfolio = workspace.portfolios.find((item) => item.id === portfolioId);
+    return portfolio
+      ? {
+          portfolio,
+          transactions: workspace.shareFills.filter(
+            (transaction) => transaction.portfolioId === portfolioId,
+          ),
+        }
+      : null;
+  }, []);
+
+  const archivePortfolioSource = useCallback(
+    async (portfolioId: string): Promise<"archived" | "conflict" | "failed"> => {
+      const portfolio = portfoliosRef.current.find((item) => item.id === portfolioId);
+      if (!portfolio || !userIdRef.current) return "failed";
+      try {
+        const archived = await persistPortfolioArchive(
+          portfolioId,
+          portfolio.revision ?? 0,
+          userIdRef.current,
+        );
+        setPortfolios((current) => current.filter((item) => item.id !== portfolioId));
+        setArchivedPortfolios((current) => [
+          archived,
+          ...current.filter((item) => item.id !== portfolioId),
+        ]);
+        setStrategies((current) =>
+          current.map((strategy) => ({
+            ...strategy,
+            appliedPortfolioIds: (strategy.appliedPortfolioIds ?? []).filter(
+              (id) => id !== portfolioId,
+            ),
+          })),
+        );
+        setShareFills((current) => {
+          const next = current.filter((row) => row.portfolioId !== portfolioId);
+          shareFillsRef.current = next;
+          return next;
+        });
+        return "archived";
+      } catch (error) {
+        return error instanceof Error && error.message === "PORTFOLIO_REVISION_CONFLICT"
+          ? "conflict"
+          : "failed";
+      }
+    },
+    [],
+  );
+
+  const restorePortfolioSource = useCallback(async (portfolioId: string) => {
+    const archived = archivedPortfolios.find((item) => item.id === portfolioId);
+    if (!archived?.archiveId || !userIdRef.current) return false;
+    try {
+      await persistPortfolioRestore(archived.archiveId);
+      const workspace = await loadUserWorkspace(userIdRef.current);
+      setPortfolios(clonePortfolios(workspace.portfolios));
+      setArchivedPortfolios(clonePortfolios(workspace.archivedPortfolios));
+      setStrategies(workspace.strategies);
+      setShareFills(workspace.shareFills);
+      shareFillsRef.current = workspace.shareFills;
+      return true;
+    } catch {
+      return false;
+    }
+  }, [archivedPortfolios]);
+
+  const deletePortfolioSourcePermanently = useCallback(async (portfolioId: string) => {
+    const archived = archivedPortfolios.find((item) => item.id === portfolioId);
+    if (!archived?.archiveId) return false;
+    try {
+      await persistPermanentArchiveDelete(archived.archiveId);
+      setArchivedPortfolios((current) => current.filter((item) => item.id !== portfolioId));
+      return true;
+    } catch {
+      return false;
+    }
+  }, [archivedPortfolios]);
+
+  const archiveTickerHistory = useCallback(
+    async (portfolioId: string, ticker: string) => {
+      try {
+        const archived = await persistTickerHistoryArchive(portfolioId, ticker);
+        setShareFills((current) => {
+          const next = current.filter(
+            (row) =>
+              !(
+                row.portfolioId === portfolioId &&
+                row.kind === "qty" &&
+                row.ticker === ticker
+              ),
+          );
+          shareFillsRef.current = next;
+          return next;
+        });
+        return archived;
+      } catch {
+        return null;
+      }
+    },
+    [],
+  );
+
+  const restoreTickerHistory = useCallback(async (archiveId: number) => {
+    if (!userIdRef.current) return false;
+    try {
+      await persistTickerHistoryRestore(archiveId);
+      const workspace = await loadUserWorkspace(userIdRef.current);
+      setShareFills(workspace.shareFills);
+      shareFillsRef.current = workspace.shareFills;
+      return true;
+    } catch {
+      return false;
+    }
   }, []);
 
   const removeTickerFromPortfolio = useCallback(
@@ -1734,6 +1850,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
           type,
           cashAvailable: 0,
           holdings: [],
+          createdAt: new Date().toISOString(),
+          revision: 0,
         },
       ]);
       return id;
@@ -1746,16 +1864,25 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       const portfolio = portfolios.find((item) => item.id === portfolioId);
       if (!portfolio) return null;
       const tickerExclusionsByStrategy: Record<string, string[]> = {};
+      const appliedPortfolioIdsByStrategy: Record<string, string[]> = {};
       for (const strategy of strategies) {
         tickerExclusionsByStrategy[strategy.id] = [
           ...(strategy.tickerExclusions?.[portfolioId] ?? []),
         ];
+        appliedPortfolioIdsByStrategy[strategy.id] = [
+          ...(strategy.appliedPortfolioIds ?? []),
+        ];
       }
       return {
         portfolioId,
+        revision: portfolio.revision ?? 0,
         holdings: cloneHoldings(portfolio.holdings),
         cashAvailable: portfolio.cashAvailable ?? 0,
         tickerExclusionsByStrategy,
+        appliedPortfolioIdsByStrategy,
+        transactions: shareFillsRef.current
+          .filter((transaction) => transaction.portfolioId === portfolioId)
+          .map((transaction) => ({ ...transaction })),
       };
     },
     [portfolios, strategies],
@@ -1765,9 +1892,12 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     (snapshot: WatchEditSnapshot) => {
       const {
         portfolioId,
+        revision,
         holdings,
         cashAvailable,
         tickerExclusionsByStrategy,
+        appliedPortfolioIdsByStrategy,
+        transactions,
       } = snapshot;
       const nextHoldings = cloneHoldings(holdings);
 
@@ -1777,6 +1907,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
             ? item
             : {
                 ...item,
+                revision,
                 holdings: nextHoldings,
                 cashAvailable:
                   item.type === "watchlist"
@@ -1793,9 +1924,26 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
           const exclusions = { ...(strategy.tickerExclusions ?? {}) };
           if (nextList.length === 0) delete exclusions[portfolioId];
           else exclusions[portfolioId] = [...nextList];
-          return { ...strategy, tickerExclusions: exclusions };
+          return {
+            ...strategy,
+            tickerExclusions: exclusions,
+            appliedPortfolioIds: [
+              ...(appliedPortfolioIdsByStrategy[strategy.id] ?? []),
+            ],
+          };
         }),
       );
+
+      setShareFills((current) => {
+        const next = [
+          ...transactions.map((transaction) => ({ ...transaction })),
+          ...current.filter(
+            (transaction) => transaction.portfolioId !== portfolioId,
+          ),
+        ];
+        shareFillsRef.current = next;
+        return next;
+      });
 
       if (true) {  // mirror watchlist for all Beta portfolios
         setWatchlist((current) => {
@@ -1834,6 +1982,35 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     [],
   );
 
+  const recordWatchEditStrategyHistory = useCallback(
+    (snapshot: WatchEditSnapshot) => {
+      for (const strategy of strategiesRef.current) {
+        const beforeExclusions =
+          snapshot.tickerExclusionsByStrategy[strategy.id];
+        const beforeApplied =
+          snapshot.appliedPortfolioIdsByStrategy[strategy.id];
+        if (!beforeExclusions || !beforeApplied) continue;
+        const exclusions = { ...(strategy.tickerExclusions ?? {}) };
+        if (beforeExclusions.length === 0) delete exclusions[snapshot.portfolioId];
+        else exclusions[snapshot.portfolioId] = [...beforeExclusions];
+        const previous = {
+          ...strategy,
+          tickerExclusions: exclusions,
+          appliedPortfolioIds: [...beforeApplied],
+        };
+        if (
+          JSON.stringify(previous.tickerExclusions ?? {}) !==
+            JSON.stringify(strategy.tickerExclusions ?? {}) ||
+          JSON.stringify([...beforeApplied].sort()) !==
+            JSON.stringify([...(strategy.appliedPortfolioIds ?? [])].sort())
+        ) {
+          scheduleStrategyHistory(previous, strategy);
+        }
+      }
+    },
+    [],
+  );
+
   const createStrategy = useCallback(() => {
     const id = nextId("strategy");
     // New blank strategies start with empty rule sets, the built-in
@@ -1858,6 +2035,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       technicalsInterval: "1D",
     };
     setStrategies((current) => [...current, strategy]);
+    scheduleStrategyHistory(null, strategy);
     return id;
   }, [nextId]);
 
@@ -1868,6 +2046,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     if (!currentStrategy) return;
     const safePatch = sanitizeStrategyPatch(currentStrategy, patch);
     if (Object.keys(safePatch).length === 0) return;
+    scheduleStrategyHistory(currentStrategy, { ...currentStrategy, ...safePatch });
     setStrategies((current) =>
       current.map((strategy) => {
         if (strategy.id !== id) return strategy;
@@ -1883,6 +2062,15 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   }, [requestImmediateStrategyCheck]);
 
   const deleteStrategy = useCallback((id: string) => {
+    const currentStrategy = strategiesRef.current.find(
+      (strategy) => strategy.id === id && !strategy.isDefault,
+    );
+    if (currentStrategy) {
+      scheduleStrategyHistory(currentStrategy, {
+        ...currentStrategy,
+        appliedPortfolioIds: [],
+      });
+    }
     setStrategies((current) =>
       current.filter((strategy) => {
         if (strategy.id !== id) return true;
@@ -1932,6 +2120,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         appliedPortfolioIds: [],
       };
       setStrategies((current) => [...current, copy]);
+      scheduleStrategyHistory(null, copy);
       markStrategyConvictionDirty(newId);
       return newId;
     },
@@ -1952,6 +2141,14 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         };
       }),
     );
+    const current = strategiesRef.current.find((strategy) => strategy.id === id);
+    if (current) {
+      scheduleStrategyHistory(current, {
+        ...original,
+        appliedPortfolioIds: current.appliedPortfolioIds ?? [],
+        tickerExclusions: current.tickerExclusions ?? {},
+      });
+    }
     markStrategyConvictionDirty(id);
     requestImmediateStrategyCheck(id);
   }, [requestImmediateStrategyCheck]);
@@ -2041,7 +2238,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
           return { ...next, tickerExclusions: exclusions };
         }),
       );
-      if (enabled) {
+      if (enabled && !watchEditPersistencePaused) {
         markTickerConvictionDirty(portfolioId, ticker);
         markStrategyConvictionDirty(strategyId);
         setFlags((current) => ({
@@ -2052,7 +2249,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         requestImmediateStrategyCheck(strategyId);
       }
     },
-    [requestImmediateStrategyCheck],
+    [requestImmediateStrategyCheck, watchEditPersistencePaused],
   );
 
   const validServerLatestResults = useMemo(
@@ -2656,17 +2853,25 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       updateChipInLibrary,
       buckets,
       portfolios,
+      archivedPortfolios,
+      setWatchEditPersistencePaused,
+      archivePortfolioSource,
+      restorePortfolioSource,
+      deletePortfolioSourcePermanently,
+      archiveTickerHistory,
+      restoreTickerHistory,
       setTickerEnabledForStrategy,
       addTickerToPortfolio,
-      updateHoldingShares,
-      updatePortfolioCash,
-      applyQtyOrders,
+      commitCurrentWatchEdit,
+      applyPortfolioTransactionBatch,
+      loadPortfolioImportBase,
       persistWatchEditMarks,
       shareFills,
       removeTickerFromPortfolio,
       createPortfolioSource,
       captureWatchEditSnapshot,
       restoreWatchEditSnapshot,
+      recordWatchEditStrategyHistory,
       getPortfolioAlignment,
       getStockAlignment,
       getAppliedStrategiesForTicker,
@@ -2734,15 +2939,16 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       portfolios,
       setTickerEnabledForStrategy,
       addTickerToPortfolio,
-      updateHoldingShares,
-      updatePortfolioCash,
-      applyQtyOrders,
+      applyPortfolioTransactionBatch,
+      loadPortfolioImportBase,
       persistWatchEditMarks,
+      commitCurrentWatchEdit,
       shareFills,
       removeTickerFromPortfolio,
       createPortfolioSource,
       captureWatchEditSnapshot,
       restoreWatchEditSnapshot,
+      recordWatchEditStrategyHistory,
       getPortfolioAlignment,
       getStockAlignment,
       getAppliedStrategiesForTicker,

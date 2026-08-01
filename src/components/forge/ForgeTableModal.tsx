@@ -28,6 +28,7 @@ export function ForgeTableModal({
   onCancel,
   onDone,
   doneLabel = "Update",
+  doneDisabled = false,
   intro,
   addAction,
   totalLabel,
@@ -58,6 +59,8 @@ export function ForgeTableModal({
   onDone: () => void;
   /** Primary footer button label (default: Update). */
   doneLabel?: string;
+  /** Prevent final submission while a review flow still has blocking issues. */
+  doneDisabled?: boolean;
   /** Short intro line (left side of the intro row). */
   intro?: ReactNode;
   /** Primary add control (right side of the intro row) — button or ActionMenu. */
@@ -157,6 +160,7 @@ export function ForgeTableModal({
                 type="button"
                 className="btn btn--small btn--solid"
                 onClick={onDone}
+                disabled={doneDisabled}
               >
                 <Plus aria-hidden weight="regular" /> {doneLabel}
               </button>

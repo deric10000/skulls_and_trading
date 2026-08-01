@@ -14,9 +14,14 @@ import { getSupabase } from "../auth/supabaseClient";
 import { normalizePortfolioTransactions } from "../finance/portfolioTransactions";
 import { measureAsync, perfValue } from "../performance/marks";
 import { mergeStrategiesForHydrate } from "./strategyMerge";
+import {
+  loadNormalizedPortfolioTransactions,
+  loadPortfolioArchives,
+  mergePortfolioLedgers,
+} from "./portfolioLedger";
+import { serializeWorkspaceMutation } from "./workspaceMutationQueue";
 
 export const WORKSPACE_PAYLOAD_BUDGET_BYTES = 256 * 1024;
-const workspaceWriteChains = new Map<string, Promise<void>>();
 
 /** One-shot per-user UI markers (persisted in user_state.flags). */
 export interface UserFlags {
@@ -45,6 +50,7 @@ export interface UserFlags {
 
 export interface UserWorkspace {
   portfolios: Portfolio[];
+  archivedPortfolios: Portfolio[];
   strategies: Strategy[];
   chipLibrary: RuleChip[];
   watchlist: WatchlistItem[];
@@ -63,6 +69,7 @@ export function emptyWorkspace(captainName = "Captain"): UserWorkspace {
   }));
   return {
     portfolios: [],
+    archivedPortfolios: [],
     strategies,
     chipLibrary: [...CHIP_LIBRARY_SEED],
     watchlist: [],
@@ -79,11 +86,11 @@ export async function loadUserWorkspace(
 ): Promise<UserWorkspace> {
   const supabase = getSupabase();
 
-  const { data, error } = await supabase
-    .from("user_state")
-    .select("*")
-    .eq("user_id", userId)
-    .maybeSingle();
+  const [{ data, error }, normalizedTransactions, archivedPortfolios] = await Promise.all([
+    supabase.from("user_state").select("*").eq("user_id", userId).maybeSingle(),
+    loadNormalizedPortfolioTransactions(userId),
+    loadPortfolioArchives(userId),
+  ]);
 
   const fallback = emptyWorkspace(captainName);
   if (error) {
@@ -108,6 +115,7 @@ export async function loadUserWorkspace(
 
   return {
     portfolios,
+    archivedPortfolios,
     strategies,
     chipLibrary:
       ((data.chip_library as RuleChip[])?.length
@@ -123,9 +131,19 @@ export async function loadUserWorkspace(
         captainName ||
         fallback.captain.handle,
     },
-    shareFills: normalizePortfolioTransactions(data.share_fills),
+    shareFills: mergePortfolioLedgers(
+      normalizePortfolioTransactions(data.share_fills),
+      normalizedTransactions,
+    ),
     flags: (data.flags as UserFlags) ?? {},
   };
+}
+
+/** Waits for older account writes before reading a canonical transaction base. */
+export function loadUserWorkspaceSerialized(
+  userId: string,
+): Promise<UserWorkspace> {
+  return serializeWorkspaceMutation(userId, () => loadUserWorkspace(userId));
 }
 
 function workspacePayload(workspace: UserWorkspace, userId: string) {
@@ -137,7 +155,9 @@ function workspacePayload(workspace: UserWorkspace, userId: string) {
     watchlist: workspace.watchlist,
     logs_by_ticker: workspace.logsByTicker,
     captain: workspace.captain,
-    share_fills: workspace.shareFills,
+    // Imported rows live in normalized persistence and must not re-inflate the
+    // legacy workspace blob on each autosave.
+    share_fills: workspace.shareFills.filter((row) => row.source !== "import"),
     flags: workspace.flags,
     updated_at: new Date().toISOString(),
   };
@@ -179,17 +199,9 @@ export function saveUserWorkspaceSerialized(
   workspace: UserWorkspace,
   userId: string,
 ): Promise<void> {
-  const previous = workspaceWriteChains.get(userId) ?? Promise.resolve();
-  const next = previous
-    .catch(() => undefined)
-    .then(() => saveUserWorkspace(workspace, userId));
-  workspaceWriteChains.set(userId, next);
-  void next.finally(() => {
-    if (workspaceWriteChains.get(userId) === next) {
-      workspaceWriteChains.delete(userId);
-    }
-  });
-  return next;
+  return serializeWorkspaceMutation(userId, () =>
+    saveUserWorkspace(workspace, userId),
+  );
 }
 
 export interface TickerMark {

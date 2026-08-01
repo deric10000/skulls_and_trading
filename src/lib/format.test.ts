@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   formatMarketDataThrough,
   formatWeatherProvenance,
@@ -10,12 +10,18 @@ describe("market-data cutoff formatting", () => {
   });
 
   it("separates observation, publication, and carried-forward provenance", () => {
-    expect(formatWeatherProvenance({
-      dataAsOf: "2026-07-30",
-      updatedAt: "2026-07-31T08:29:00.000Z",
-      staleInputs: ["IWM"],
-    })).toBe(
-      "Market data through Jul 30 close · Updated 4:29 AM EDT · Carried forward: IWM",
-    );
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-31T12:00:00.000Z"));
+    try {
+      expect(formatWeatherProvenance({
+        dataAsOf: "2026-07-30",
+        updatedAt: "2026-07-31T08:29:00.000Z",
+        staleInputs: ["IWM"],
+      })).toBe(
+        "Market data through Jul 30 close · Updated 4:29 AM EDT · Carried forward: IWM",
+      );
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

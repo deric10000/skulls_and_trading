@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { createPortal } from "react-dom";
 import {
   useMarketState,
@@ -28,19 +36,16 @@ import {
 } from "../lib/forge/status";
 import {
   isUntrackedHolding,
-  isTickerEnabledForStrategy,
   shouldScoreTickerWithStrategy,
   untrackedHoldings,
 } from "../lib/forge/tickerStrategy";
 import { STATUS_TONE } from "../lib/status";
 import { WatchAlignLabel, WatchConvictionHead, WatchConvictionMeter } from "./StatusBadge";
-import { Checkbox } from "./Checkbox";
 import { ForgePill } from "./ForgePill";
 import {
   CaretDown,
   CaretLeft,
   Info,
-  MagnifyingGlass,
   PencilSimple,
   Plus,
   Timer,
@@ -59,15 +64,12 @@ import {
   roundMoney,
   simulatedEditCash,
 } from "../lib/finance/editCashFromQty";
+import { roundQuantity } from "../lib/finance/currentWatchTransactions";
 import {
   estimateFillTimestamp,
-  fromDatetimeLocalValue,
-  toDatetimeLocalValue,
 } from "../lib/finance/timestamps";
 import type {
   LogEntry,
-  PendingCashEdit,
-  PendingQtyOrder,
   Portfolio,
   PortfolioHolding,
   RuleCategory,
@@ -82,9 +84,67 @@ import { ForgeTableModal } from "./forge/ForgeTableModal";
 import { ActionFooter } from "./ActionFooter";
 import { StrategyScopeSelect } from "./StrategyScopeSelect";
 import { Tooltip } from "./Tooltip";
+import type { PendingEditReview } from "./current-watch/CurrentWatchOrderReviewModal";
+import type { TickerRemovalChoice } from "./current-watch/CurrentWatchRecoveryModals";
 
 /** Closed Beta: hide under-conviction Watch Summary detail until Dashboard ships. */
 const SHOW_WATCH_SUMMARY_DETAIL = false;
+
+const CurrentWatchImportModal = lazy(() =>
+  import("./current-watch/CurrentWatchImportModal").then((module) => ({
+    default: module.CurrentWatchImportModal,
+  })),
+);
+const CurrentWatchTickerSearch = lazy(() =>
+  import("./current-watch/CurrentWatchTickerSearch").then((module) => ({
+    default: module.CurrentWatchTickerSearch,
+  })),
+);
+const CurrentWatchOrderReviewModal = lazy(() =>
+  import("./current-watch/CurrentWatchOrderReviewModal").then((module) => ({
+    default: module.CurrentWatchOrderReviewModal,
+  })),
+);
+const CurrentWatchRecoveryModals = lazy(() =>
+  import("./current-watch/CurrentWatchRecoveryModals").then((module) => ({
+    default: module.CurrentWatchRecoveryModals,
+  })),
+);
+const CurrentWatchArchivedSourceActions = lazy(() =>
+  import("./current-watch/CurrentWatchRecoveryModals").then((module) => ({
+    default: module.CurrentWatchArchivedSourceActions,
+  })),
+);
+const CurrentWatchTickerHistoryRecovery = lazy(() =>
+  import("./current-watch/CurrentWatchRecoveryModals").then((module) => ({
+    default: module.CurrentWatchTickerHistoryRecovery,
+  })),
+);
+const WatchQtyInput = lazy(() =>
+  import("./current-watch/WatchQtyInput").then((module) => ({
+    default: module.WatchQtyInput,
+  })),
+);
+const WatchStrategyEditPicker = lazy(() =>
+  import("./current-watch/WatchStrategyEditPicker").then((module) => ({
+    default: module.WatchStrategyEditPicker,
+  })),
+);
+const CurrentWatchEmptyActions = lazy(() =>
+  import("./current-watch/CurrentWatchEditActions").then((module) => ({
+    default: module.CurrentWatchEmptyActions,
+  })),
+);
+const CurrentWatchEditToolbar = lazy(() =>
+  import("./current-watch/CurrentWatchEditActions").then((module) => ({
+    default: module.CurrentWatchEditToolbar,
+  })),
+);
+const CurrentWatchAddTickerModal = lazy(() =>
+  import("./current-watch/CurrentWatchAddTickerModal").then((module) => ({
+    default: module.CurrentWatchAddTickerModal,
+  })),
+);
 
 const EMPTY_GUIDE_STORAGE_PREFIX = "st-empty-watch-guide:";
 
@@ -805,6 +865,21 @@ function WatchSummary({
 
 const DEFAULT_SOURCE_ID = dataSource.getPortfolios()[0]?.id ?? "";
 
+function archiveDaysLabel(source: Portfolio): string {
+  if (!source.purgeAt) return "Archived";
+  const days = Math.max(
+    0,
+    Math.ceil((Date.parse(source.purgeAt) - Date.now()) / (24 * 60 * 60 * 1000)),
+  );
+  return days === 0 ? "Archived · Removes today" : `Archived · ${days}d`;
+}
+
+function archiveContextLabel(source: Portfolio): string {
+  return source.archiveReason === "replace_import"
+    ? `Before import · ${archiveDaysLabel(source)}`
+    : archiveDaysLabel(source);
+}
+
 /** Current Watch / Watch Preview source switcher — optional create row. */
 function PortfolioSourceSwitcher({
   id,
@@ -812,6 +887,7 @@ function PortfolioSourceSwitcher({
   value,
   onChange,
   onCreateRequest,
+  disabled = false,
 }: {
   id: string;
   sources: Portfolio[];
@@ -819,6 +895,7 @@ function PortfolioSourceSwitcher({
   onChange: (id: string) => void;
   /** Opens the Watchlist vs Portfolio modal with the typed name. Omit in preview. */
   onCreateRequest?: (label: string) => void;
+  disabled?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [createDraft, setCreateDraft] = useState("");
@@ -863,11 +940,17 @@ function PortfolioSourceSwitcher({
         className="input multiselect-trigger"
         aria-haspopup="listbox"
         aria-expanded={open}
-        onClick={() => setOpen((current) => !current)}
+        disabled={disabled}
+        onClick={() => {
+          if (!disabled) setOpen((current) => !current);
+        }}
       >
         <span className="multiselect-value">
           {selected ? (
-            <span>{selected.label}</span>
+            <span>
+              {selected.label}
+              {selected.archivedAt ? ` · ${archiveContextLabel(selected)}` : ""}
+            </span>
           ) : (
             <span className="multiselect-placeholder">Select…</span>
           )}
@@ -910,10 +993,16 @@ function PortfolioSourceSwitcher({
               </button>
             </li>
           ) : null}
-          {sources.map((source) => {
+          {sources.map((source, index) => {
             const isSelected = source.id === value;
+            const prior = sources[index - 1];
+            const group = source.archivedAt ? "Archived" : "Active";
+            const priorGroup = prior?.archivedAt ? "Archived" : "Active";
             return (
-              <li key={source.id} className="portfolio-ticker-suggestion">
+              <li key={source.id} className="portfolio-ticker-suggestion" role="presentation">
+                {index === 0 || group !== priorGroup ? (
+                  <span className="portfolio-source-group">{group}</span>
+                ) : null}
                 <button
                   type="button"
                   className={
@@ -928,7 +1017,9 @@ function PortfolioSourceSwitcher({
                     setOpen(false);
                   }}
                 >
-                  <span className="portfolio-ticker-symbol">{source.label}</span>
+                  <span className="portfolio-ticker-symbol">
+                    {source.label}{source.archivedAt ? ` · ${archiveContextLabel(source)}` : ""}
+                  </span>
                   <span className="portfolio-ticker-name">
                     {source.type === "watchlist" ? "Watchlist" : "Portfolio"}
                   </span>
@@ -987,316 +1078,6 @@ function previewWatchItem(ticker: string): WatchlistItem | null {
   };
 }
 
-/** Read-only Current Watch row used in the add-confirm modal. */
-function WatchItemPreviewCard({ item }: { item: WatchlistItem }) {
-  const owned = item.shares > 0;
-  const markPriceLive = usableMarkPrice(item.ticker);
-  const priceNeedsReview = markPriceLive == null;
-  const markPrice = markPriceLive ?? 0;
-  const marketValue = markPrice * item.shares;
-  const totalPnl = openPnlTotal(markPrice, item.avgPrice, item.shares);
-  const changePct = openPnlPercent(markPrice, item.avgPrice);
-  const changeUp = changePct >= 0;
-  const changeClass = changeUp ? "watch-change--up" : "watch-change--down";
-
-  return (
-    <div className="watch-item select-card watch-item--preview">
-      <div className="watch-select">
-        <span className="watch-head">
-          <span className="watch-id">
-            <span className="watch-ticker">{item.ticker}</span>
-            <span className="watch-name">{item.name}</span>
-          </span>
-          {owned ? (
-            <span className="watch-mvqty">
-              <span className="watch-field-label">Market Value | Qty</span>
-              <span className="watch-figure watch-figure--strong">
-                {formatPrice(marketValue)}
-              </span>
-              <span className="watch-figure">{item.shares}</span>
-            </span>
-          ) : null}
-        </span>
-
-        <span className="watch-body">
-          <span className="watch-metrics">
-            {owned ? (
-              <span className="watch-metric-pair">
-                <span className="watch-metric">
-                  <span className="watch-field-label">Last Price</span>
-                  <span className="watch-figure watch-figure--strong">
-                    {priceNeedsReview ? (
-                      <NeedsDataReviewFlag />
-                    ) : (
-                      formatPrice(markPrice)
-                    )}
-                  </span>
-                </span>
-                <span className="watch-metric">
-                  <span className="watch-field-label">Avg. Price</span>
-                  <span className="watch-figure">{formatPrice(item.avgPrice)}</span>
-                </span>
-              </span>
-            ) : (
-              <span className="watch-metric">
-                <span className="watch-field-label">Last Price</span>
-                <span className="watch-figure watch-figure--strong">
-                  {priceNeedsReview ? (
-                    <NeedsDataReviewFlag />
-                  ) : (
-                    formatPrice(markPrice)
-                  )}
-                </span>
-              </span>
-            )}
-            {owned ? (
-              <span className="watch-metric">
-                <span className="watch-field-label">{"Open P&L% | Total"}</span>
-                <span className="watch-pnl">
-                  <span className={`watch-figure watch-figure--medium ${changeClass}`}>
-                    {formatChange(changePct)}
-                  </span>
-                  <span className={`watch-figure ${changeClass}`}>
-                    {formatPrice(totalPnl)}
-                  </span>
-                </span>
-              </span>
-            ) : null}
-          </span>
-
-          <span className="watch-conviction-box">
-            {untrackedHoldingLabel()}
-          </span>
-        </span>
-      </div>
-    </div>
-  );
-}
-
-/** Qty field — local string draft while focused so caret/select behave normally. */
-function WatchQtyInput({
-  ticker,
-  shares,
-  onCommit,
-}: {
-  ticker: string;
-  shares: number;
-  /** Return false to reject (e.g. not enough cash) and revert the field. */
-  onCommit: (shares: number) => boolean;
-}) {
-  const [draft, setDraft] = useState<string | null>(null);
-  const display = draft ?? String(shares);
-
-  function commit(raw: string): boolean {
-    const next =
-      raw.trim() === "" ? 0 : Number.parseInt(raw, 10);
-    const value = Number.isFinite(next) ? Math.max(0, next) : 0;
-    return onCommit(value);
-  }
-
-  return (
-    <label className="watch-qty-edit">
-      <span className="visually-hidden">Share quantity for {ticker}</span>
-      <input
-        type="number"
-        className="input watch-qty-input"
-        min={0}
-        step={1}
-        inputMode="numeric"
-        autoComplete="off"
-        value={display}
-        onFocus={() => setDraft(String(shares))}
-        onChange={(event) => {
-          const raw = event.target.value;
-          // Allow empty while typing; reject non-integers (e.g. "1e").
-          if (raw !== "" && !/^\d+$/.test(raw)) return;
-          setDraft(raw);
-          // Commit as soon as the value is a number (typing or stepper) so
-          // dirty / Update enable without waiting for blur.
-          if (raw !== "" && !commit(raw)) {
-            setDraft(String(shares));
-          }
-        }}
-        onBlur={(event) => {
-          if (!commit(event.target.value)) {
-            setDraft(String(shares));
-            return;
-          }
-          setDraft(null);
-        }}
-        onKeyDown={(event) => {
-          if (event.key === "Enter") {
-            event.currentTarget.blur();
-          }
-        }}
-      />
-    </label>
-  );
-}
-
-function buildPendingQtyOrders(
-  baseline: Record<string, number>,
-  drafts: Record<string, number>,
-): PendingQtyOrder[] {
-  const filledAt = estimateFillTimestamp();
-  const tickers = new Set([...Object.keys(baseline), ...Object.keys(drafts)]);
-  const orders: PendingQtyOrder[] = [];
-  for (const ticker of tickers) {
-    const before = baseline[ticker] ?? 0;
-    const after = drafts[ticker] ?? before;
-    const delta = after - before;
-    const side = qtySideFromDelta(delta);
-    if (!side) continue;
-    const quote = dataSource.getQuote(ticker);
-    orders.push({
-      ticker,
-      side,
-      deltaShares: Math.abs(delta),
-      sharesBefore: before,
-      sharesAfter: after,
-      fillPrice: roundMoney(quote?.lastPrice ?? 0),
-      filledAt,
-    });
-  }
-  return orders.sort((a, b) => a.ticker.localeCompare(b.ticker));
-}
-
-function buildPendingCashEdit(
-  cashOffset: number,
-  cashBaseline: number,
-  qtyImpact: number,
-): PendingCashEdit | null {
-  if (Math.abs(cashOffset) < 0.005) return null;
-  const cashBefore = roundMoney(cashBaseline + qtyImpact);
-  const cashAfter = roundMoney(cashBefore + cashOffset);
-  return {
-    side: cashOffset > 0 ? "deposit" : "withdrawal",
-    cashBefore,
-    cashAfter,
-    deltaCash: roundMoney(cashOffset),
-    filledAt: estimateFillTimestamp(),
-  };
-}
-
-type PendingEditReview = {
-  orders: PendingQtyOrder[];
-  cash: PendingCashEdit | null;
-};
-
-/** Edit-mode strategy picker — ticker-suggestion droplist chrome + checkbox. */
-function WatchStrategyEditPicker({
-  ticker,
-  portfolioId,
-  strategies,
-  holding,
-  onToggle,
-}: {
-  ticker: string;
-  portfolioId: string;
-  strategies: Strategy[];
-  holding: PortfolioHolding | undefined;
-  onToggle: (strategyId: string, enabled: boolean) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const rootRef = useRef<HTMLDivElement>(null);
-  const enabledCount = strategies.filter((strategy) =>
-    holding
-      ? isTickerEnabledForStrategy(holding, strategy, portfolioId)
-      : false,
-  ).length;
-
-  useEffect(() => {
-    if (!open) return;
-    const onDoc = (event: MouseEvent) => {
-      if (rootRef.current && !rootRef.current.contains(event.target as Node)) {
-        setOpen(false);
-      }
-    };
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setOpen(false);
-    };
-    document.addEventListener("mousedown", onDoc);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onDoc);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [open]);
-
-  return (
-    <div
-      className={open ? "watch-strategy-edit is-open" : "watch-strategy-edit"}
-      ref={rootRef}
-    >
-      <span className="watch-field-label">Strategies</span>
-      <button
-        type="button"
-        className="input multiselect-trigger watch-strategy-edit-trigger"
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        aria-label={`Strategies for ${ticker}`}
-        onClick={() => setOpen((current) => !current)}
-      >
-        <span className="multiselect-value">
-          {strategies.length === 0 ? (
-            <span className="multiselect-placeholder">No strategies applied</span>
-          ) : enabledCount > 0 ? (
-            <span>
-              {enabledCount} of {strategies.length} on
-            </span>
-          ) : (
-            <span className="multiselect-placeholder">Select strategies…</span>
-          )}
-        </span>
-        <CaretDown className="multiselect-caret" aria-hidden weight="regular" />
-      </button>
-      {open ? (
-        <ul
-          className="multiselect-menu portfolio-ticker-suggestions watch-strategy-edit-menu"
-          role="listbox"
-          aria-multiselectable="true"
-          aria-label={`Strategies for ${ticker}`}
-        >
-          {strategies.map((strategy) => {
-            const on = holding
-              ? isTickerEnabledForStrategy(holding, strategy, portfolioId)
-              : false;
-            return (
-              <li key={strategy.id} className="portfolio-ticker-suggestion">
-                <button
-                  type="button"
-                  className={
-                    on ? "multiselect-option is-selected" : "multiselect-option"
-                  }
-                  role="option"
-                  aria-selected={on}
-                  onClick={() => onToggle(strategy.id, !on)}
-                >
-                  <span className="portfolio-ticker-symbol">{strategy.name}</span>
-                </button>
-                <Checkbox
-                  checked={on}
-                  aria-label={
-                    on
-                      ? `Remove ${strategy.name} from ${ticker}`
-                      : `Add ${strategy.name} to ${ticker}`
-                  }
-                  onCheckedChange={(next) => onToggle(strategy.id, next)}
-                />
-              </li>
-            );
-          })}
-          {strategies.length === 0 ? (
-            <li className="multiselect-empty">
-              Apply a strategy to this list in Strategy Forge first.
-            </li>
-          ) : null}
-        </ul>
-      ) : null}
-    </div>
-  );
-}
-
 export function WatchlistWidget({
   readOnly = false,
   previewStrategyId,
@@ -1331,17 +1112,25 @@ export function WatchlistWidget({
     selectTicker,
     logsByTicker,
     portfolios,
+    archivedPortfolios,
+    setWatchEditPersistencePaused,
+    archivePortfolioSource,
+    restorePortfolioSource,
+    deletePortfolioSourcePermanently,
+    restoreTickerHistory,
     strategies,
     getAppliedStrategiesForTicker,
     getStrategyChipBreakdown,
     addTickerToPortfolio,
     setTickerEnabledForStrategy,
-    applyQtyOrders,
-    updatePortfolioCash,
+    commitCurrentWatchEdit,
+    applyPortfolioTransactionBatch,
+    loadPortfolioImportBase,
     persistWatchEditMarks,
     removeTickerFromPortfolio,
     captureWatchEditSnapshot,
     restoreWatchEditSnapshot,
+    recordWatchEditStrategyHistory,
     createPortfolioSource,
     setSelectedPortfolioId,
     watchStrategyScopeId,
@@ -1379,7 +1168,9 @@ export function WatchlistWidget({
     const applied = new Set(previewStrategy.appliedPortfolioIds ?? []);
     return portfolios.filter((source) => applied.has(source.id));
   }, [previewStrategy, portfolios]);
-  const availableSources = isPreview ? previewSources : portfolios;
+  const availableSources = isPreview
+    ? previewSources
+    : [...portfolios, ...archivedPortfolios];
   const [editMode, setEditMode] = useState(false);
   const [editDraft, setEditDraft] = useState("");
   const [editToast, setEditToast] = useState<string | null>(null);
@@ -1391,7 +1182,6 @@ export function WatchlistWidget({
   );
   const [emptyGuideDismissed, setEmptyGuideDismissed] = useState(false);
   const [scheduleToastCollapsed, setScheduleToastCollapsed] = useState(false);
-  const [tickerSuggestionsOpen, setTickerSuggestionsOpen] = useState(false);
   const [editSuggestions, setEditSuggestions] = useState<
     { symbol: string; name: string }[]
   >([]);
@@ -1400,6 +1190,9 @@ export function WatchlistWidget({
   const [qtyBaseline, setQtyBaseline] = useState<Record<string, number>>({});
   /** In-session qty drafts — committed only via Update → review modal. */
   const [qtyDrafts, setQtyDrafts] = useState<Record<string, number>>({});
+  const [fractionalTickers, setFractionalTickers] = useState<Set<string>>(
+    () => new Set(),
+  );
   /** Settled cash at enter-edit (portfolios only). */
   const [cashBaseline, setCashBaseline] = useState(0);
   /**
@@ -1414,16 +1207,75 @@ export function WatchlistWidget({
   const [editSnapshot, setEditSnapshot] = useState<WatchEditSnapshot | null>(
     null,
   );
+  const editCleanupRef = useRef<{
+    active: boolean;
+    snapshot: WatchEditSnapshot | null;
+  }>({ active: false, snapshot: null });
+  /** In-flight Update only — cleared when settled and when the edit session ends. */
+  const editCommitRef = useRef<
+    Promise<Awaited<ReturnType<typeof commitCurrentWatchEdit>>> | null
+  >(null);
+  /** Stays true after a durable apply until the edit session ends (survives render sync). */
+  const editSessionCommittedRef = useRef(false);
+  const restoreWatchEditSnapshotRef = useRef(restoreWatchEditSnapshot);
+  editCleanupRef.current = {
+    active: editMode && !editSessionCommittedRef.current,
+    snapshot: editSnapshot,
+  };
+  restoreWatchEditSnapshotRef.current = restoreWatchEditSnapshot;
+  const [editCommitBusy, setEditCommitBusy] = useState(false);
   const [discardConfirmOpen, setDiscardConfirmOpen] = useState(false);
+  const [archiveConfirmOpen, setArchiveConfirmOpen] = useState(false);
+  const [permanentDeleteOpen, setPermanentDeleteOpen] = useState(false);
+  const [recoveryBusy, setRecoveryBusy] = useState(false);
+  const [removeTickerRequest, setRemoveTickerRequest] = useState<string | null>(null);
+  const [pendingHistoryRemovalTickers, setPendingHistoryRemovalTickers] =
+    useState<Set<string>>(() => new Set());
+  const [tickerHistoryRecovery, setTickerHistoryRecovery] = useState<
+    Array<{ ticker: string; archiveId: number; purgeAt: string }>
+  >([]);
+  const [importOpen, setImportOpen] = useState(false);
   const [pendingSourceName, setPendingSourceName] = useState<string | null>(
     null,
   );
   const [pendingSourceType, setPendingSourceType] =
     useState<Portfolio["type"]>("watchlist");
+  const tickerSearchRef = useRef<HTMLInputElement>(null);
+  const cashInputRef = useRef<HTMLInputElement>(null);
+  const pendingEditFocusRef = useRef<"cash" | "ticker" | null>(null);
+  const setTickerSearchRef = useCallback((element: HTMLInputElement | null) => {
+    tickerSearchRef.current = element;
+    if (!element || pendingEditFocusRef.current !== "ticker") return;
+    pendingEditFocusRef.current = null;
+    element.scrollIntoView({ behavior: "smooth", block: "center" });
+    element.focus();
+  }, []);
   const [isMobile, setIsMobile] = useState(
     () =>
       typeof window !== "undefined" &&
       window.matchMedia("(max-width: 767px)").matches,
+  );
+
+  useEffect(
+    () => () => {
+      const session = editCleanupRef.current;
+      const snapshot = session.snapshot;
+      const pendingCommit = editCommitRef.current;
+      if (pendingCommit) {
+        void pendingCommit.then((result) => {
+          if (result.status !== "applied" && snapshot) {
+            restoreWatchEditSnapshotRef.current(snapshot);
+          }
+          setWatchEditPersistencePaused(false);
+        });
+        return;
+      }
+      if (session.active && snapshot && !editSessionCommittedRef.current) {
+        restoreWatchEditSnapshotRef.current(snapshot);
+      }
+      setWatchEditPersistencePaused(false);
+    },
+    [setWatchEditPersistencePaused],
   );
   // Read-only (home) selection is local to this widget so it never mutates the
   // global selected ticker that drives the dashboard. Defaults to none selected.
@@ -1456,6 +1308,7 @@ export function WatchlistWidget({
       holdings: [],
     };
   const isWatchlistSource = selectedSource.type === "watchlist";
+  const isArchivedSource = Boolean(selectedSource.archivedAt);
   const isDefaultSource = selectedSource.id === DEFAULT_SOURCE_ID;
   const livePortfolio = portfolios.find((item) => item.id === selectedSource.id);
 
@@ -1507,8 +1360,16 @@ export function WatchlistWidget({
   // separate instance and must not clobber the shared selection.
   useEffect(() => {
     if (isPreview) return;
-    setSelectedPortfolioId(selectedSource.id);
-  }, [isPreview, selectedSource.id, setSelectedPortfolioId]);
+    setSelectedPortfolioId(
+      isArchivedSource ? (portfolios[0]?.id ?? null) : selectedSource.id,
+    );
+  }, [
+    isPreview,
+    isArchivedSource,
+    portfolios,
+    selectedSource.id,
+    setSelectedPortfolioId,
+  ]);
 
   useEffect(() => {
     if (isPreview) {
@@ -1521,7 +1382,6 @@ export function WatchlistWidget({
     setEditToast(null);
     setAddedTickersDuringEdit([]);
     setUntrackedToastTickers([]);
-    setTickerSuggestionsOpen(false);
     setAddPreview(null);
     setQtyBaseline({});
     setQtyDrafts({});
@@ -1530,10 +1390,19 @@ export function WatchlistWidget({
     setPendingReview(null);
     setEditSnapshot(null);
     setDiscardConfirmOpen(false);
+    setRemoveTickerRequest(null);
+    setPendingHistoryRemovalTickers(new Set());
+    setTickerHistoryRecovery([]);
+    setWatchEditPersistencePaused(false);
     setPendingSourceName(null);
     setEmptyGuideDismissed(readEmptyGuideDismissed(selectedSource.id));
     setScheduleToastCollapsed(readScheduleToastCollapsed(selectedSource.id));
-  }, [selectedSource.id, isPreview, setWatchStrategyScopeId]);
+  }, [
+    selectedSource.id,
+    isPreview,
+    setWatchStrategyScopeId,
+    setWatchEditPersistencePaused,
+  ]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -1572,19 +1441,19 @@ export function WatchlistWidget({
   // Non-default sources: keep a local mirror synced from session AppState
   // portfolios (so adds in edit mode show up without hitting the static seed).
   const [watchlistItems, setWatchlistItems] = useState<WatchlistItem[]>(() =>
-    (livePortfolio?.holdings ?? []).map(watchItemFromHolding),
+    (livePortfolio?.holdings ?? selectedSource.holdings).map(watchItemFromHolding),
   );
   useEffect(() => {
     if (isDefaultSource) return;
     const rebuild = () => {
       setWatchlistItems(
-        (livePortfolio?.holdings ?? []).map(watchItemFromHolding),
+        (livePortfolio?.holdings ?? selectedSource.holdings).map(watchItemFromHolding),
       );
     };
     rebuild();
     // Quotes hydrate/refresh after holdings — rebuild so Last Price tracks liveCache.
     return subscribeLiveCache(rebuild);
-  }, [isDefaultSource, livePortfolio, lastDataPullAtByStrategyId]);
+  }, [isDefaultSource, livePortfolio, selectedSource.holdings, lastDataPullAtByStrategyId]);
 
   // The list to render: the default portfolio mirrors live app state (already
   // decorated with computed alignment); other sources use session holdings
@@ -1592,7 +1461,9 @@ export function WatchlistWidget({
   const items = useMemo<WatchlistItem[]>(() => {
     if (isDefaultSource) return watchlist;
     const base = watchlistItems;
-    const byTicker = getPortfolioAlignment(selectedSource.id).byTicker;
+    const byTicker = isArchivedSource
+      ? {}
+      : getPortfolioAlignment(selectedSource.id).byTicker;
     return base.map((item) => {
       const aligned = byTicker[item.ticker];
       return aligned
@@ -1609,6 +1480,7 @@ export function WatchlistWidget({
     watchlist,
     watchlistItems,
     selectedSource,
+    isArchivedSource,
     getPortfolioAlignment,
   ]);
 
@@ -1656,10 +1528,21 @@ export function WatchlistWidget({
   }, [items, focusedStrategy, livePortfolio, getStrategyChipBreakdown]);
 
   function enterEditMode() {
+    editCommitRef.current = null;
+    editSessionCommittedRef.current = false;
+    setEditCommitBusy(false);
+    setWatchEditPersistencePaused(true);
     const baseline: Record<string, number> = {};
     for (const item of items) baseline[item.ticker] = item.shares;
     setQtyBaseline(baseline);
     setQtyDrafts({ ...baseline });
+    setFractionalTickers(
+      new Set(
+        items
+          .filter((item) => !Number.isInteger(item.shares))
+          .map((item) => item.ticker),
+      ),
+    );
     const cash = selectedSource.cashAvailable ?? 0;
     setCashBaseline(cash);
     setCashOffset(0);
@@ -1669,20 +1552,41 @@ export function WatchlistWidget({
     setEditMode(true);
   }
 
+  function enterEditAndFocus(target: "cash" | "ticker") {
+    pendingEditFocusRef.current = target;
+    if (!editMode) enterEditMode();
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        const element = target === "cash" ? cashInputRef.current : tickerSearchRef.current;
+        if (!element) return;
+        pendingEditFocusRef.current = null;
+        element?.scrollIntoView({ behavior: "smooth", block: "center" });
+        element?.focus();
+      });
+    });
+  }
+
   function cancelEditMode() {
+    editCommitRef.current = null;
+    editSessionCommittedRef.current = false;
+    setEditCommitBusy(false);
+    editCleanupRef.current = { active: false, snapshot: null };
     setEditMode(false);
     setEditDraft("");
     setEditToast(null);
     setAddedTickersDuringEdit([]);
-    setTickerSuggestionsOpen(false);
     setAddPreview(null);
     setQtyBaseline({});
     setQtyDrafts({});
+    setFractionalTickers(new Set());
     setCashBaseline(0);
     setCashOffset(0);
     setPendingReview(null);
     setEditSnapshot(null);
     setDiscardConfirmOpen(false);
+    setRemoveTickerRequest(null);
+    setPendingHistoryRemovalTickers(new Set());
+    setWatchEditPersistencePaused(false);
   }
 
   function finishSuccessfulEdit() {
@@ -1695,6 +1599,7 @@ export function WatchlistWidget({
           .map((holding) => holding.ticker.toUpperCase())
           .sort()
       : [];
+    if (editSnapshot) recordWatchEditStrategyHistory(editSnapshot);
     cancelEditMode();
     if (shouldReportUntracked && currentUntracked.length > 0) {
       setUntrackedToastTickers(currentUntracked);
@@ -1719,15 +1624,23 @@ export function WatchlistWidget({
       ) {
         return true;
       }
+      const baselineApplied =
+        snapshot.appliedPortfolioIdsByStrategy[strategyId] ?? [];
+      if (
+        JSON.stringify([...baselineApplied].sort()) !==
+        JSON.stringify([...(strategy?.appliedPortfolioIds ?? [])].sort())
+      ) {
+        return true;
+      }
     }
     return false;
   }
 
-  const pendingQtyOrders = useMemo(
-    () =>
-      editMode ? buildPendingQtyOrders(qtyBaseline, qtyDrafts) : [],
-    [editMode, qtyBaseline, qtyDrafts],
-  );
+  const qtyIsDirty =
+    editMode &&
+    Object.keys(qtyDrafts).some(
+      (ticker) => qtyDrafts[ticker] !== (qtyBaseline[ticker] ?? 0),
+    );
 
   const editMarkPrice = useCallback((ticker: string) => {
     const quote = dataSource.getQuote(ticker);
@@ -1765,13 +1678,18 @@ export function WatchlistWidget({
 
   const editIsDirty =
     editMode &&
-    (pendingQtyOrders.length > 0 ||
+    (qtyIsDirty ||
       cashIsDirty ||
       (editSnapshot != null && hasStructuralEdits(editSnapshot)));
 
   function commitQtyDraft(ticker: string, nextShares: number): boolean {
     const prev = qtyDrafts[ticker] ?? qtyBaseline[ticker] ?? 0;
-    const next = Math.max(0, Math.floor(nextShares));
+    const next = Math.max(
+      0,
+      fractionalTickers.has(ticker)
+        ? roundQuantity(nextShares)
+        : Math.floor(nextShares),
+    );
     if (next === prev) return true;
 
     if (next > prev && editMarkPrice(ticker) <= 0) {
@@ -1794,26 +1712,11 @@ export function WatchlistWidget({
     return true;
   }
 
-  function commitCashIfDirty(options?: {
-    recordManual?: boolean;
-    filledAt?: string;
-    transactionCashBefore?: number;
-  }) {
-    if (!cashIsDirty) return;
-    const recordManual =
-      options?.recordManual ?? Math.abs(cashOffset) >= 0.005;
-    updatePortfolioCash(selectedSource.id, cashDraft, {
-      recordTransaction: recordManual,
-      filledAt: options?.filledAt,
-      transactionCashBefore:
-        options?.transactionCashBefore ??
-        (recordManual
-          ? roundMoney(cashBaseline + qtyImpact)
-          : undefined),
-    });
-  }
-
   function requestCancelEdit() {
+    if (editCommitBusy) {
+      showEditToast("Saving changes — wait for Update to finish.");
+      return;
+    }
     if (editIsDirty) {
       setDiscardConfirmOpen(true);
       return;
@@ -1822,42 +1725,171 @@ export function WatchlistWidget({
   }
 
   function confirmDiscardEdit() {
+    if (editCommitBusy) {
+      showEditToast("Saving changes — wait for Update to finish.");
+      return;
+    }
     if (editSnapshot) restoreWatchEditSnapshot(editSnapshot);
     cancelEditMode();
   }
 
-  function requestUpdateOrders() {
-    if (!editIsDirty) return;
-    const orders = pendingQtyOrders;
-    const cash = buildPendingCashEdit(cashOffset, cashBaseline, qtyImpact);
+  function cancelPendingReview() {
+    if (editCommitBusy) return;
+    setPendingReview(null);
+  }
+
+  async function preparePendingReview() {
+    const { buildCurrentWatchPendingReview } = await import(
+      "../lib/finance/currentWatchEditWorkflow"
+    );
+    return buildCurrentWatchPendingReview({
+      baseline: qtyBaseline,
+      drafts: qtyDrafts,
+      cashOffset,
+      cashBaseline,
+      qtyImpact,
+      getLastPrice: editMarkPrice,
+      filledAt: estimateFillTimestamp(),
+      timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+    });
+  }
+
+  function commitReviewedEdit(
+    input: Parameters<typeof commitCurrentWatchEdit>[0],
+  ) {
+    setEditCommitBusy(true);
+    const pending = commitCurrentWatchEdit(input)
+      .catch(() => ({ status: "failed" as const }))
+      .then((result) => {
+        if (result.status === "applied") {
+          // Survive render sync of editCleanupRef until cancelEditMode clears the session.
+          editSessionCommittedRef.current = true;
+          editCleanupRef.current = { active: false, snapshot: null };
+        }
+        return result;
+      })
+      .finally(() => {
+        if (editCommitRef.current === pending) {
+          editCommitRef.current = null;
+        }
+        setEditCommitBusy(false);
+      });
+    editCommitRef.current = pending;
+    return pending;
+  }
+
+  async function requestUpdateOrders() {
+    if (!editIsDirty || editCommitBusy) return;
+    const { orders, cash } = await preparePendingReview();
     if (orders.length === 0 && !cash) {
       // Structural edits only — no simulated order review.
-      commitCashIfDirty({ recordManual: false });
-      finishSuccessfulEdit();
+      void commitReviewedEdit({
+        portfolioId: selectedSource.id,
+        orders: [],
+        cash: null,
+        finalCash: cashDraft,
+        historyRemovalTickers: Array.from(pendingHistoryRemovalTickers),
+      }).then(handleCommittedWatchEdit);
       return;
     }
     setPendingReview({ orders, cash });
   }
 
-  function confirmPendingOrders() {
+  function handleCommittedWatchEdit(
+    result: Awaited<ReturnType<typeof commitCurrentWatchEdit>>,
+  ) {
+    if (result.status !== "applied") {
+      showEditToast(
+        result.status === "conflict"
+          ? "This portfolio changed elsewhere. Cancel and reopen Edit Mode."
+          : "Changes weren’t saved. Review them and try again.",
+      );
+      return false;
+    }
+    setTickerHistoryRecovery((current) => [
+      ...current.filter(
+        (item) =>
+          !result.historyArchives.some(
+            (archive) => archive.ticker === item.ticker,
+          ),
+      ),
+      ...result.historyArchives,
+    ]);
+    finishSuccessfulEdit();
+    persistWatchEditMarks();
+    return true;
+  }
+
+  async function commitImport(
+    input: Parameters<typeof applyPortfolioTransactionBatch>[0],
+  ) {
+    const result = await applyPortfolioTransactionBatch(input);
+    if (result === "applied") {
+      persistWatchEditMarks();
+    }
+    return result;
+  }
+
+  function requestImport() {
+    cancelEditMode();
+    setImportOpen(true);
+  }
+
+  function requestArchive() {
+    cancelEditMode();
+    setArchiveConfirmOpen(true);
+  }
+
+  async function addPendingOrder(side: "buy" | "sell") {
+    const holding = selectedSource.holdings[0];
+    const { buildAdditionalPendingOrder } = await import(
+      "../lib/finance/currentWatchEditWorkflow"
+    );
+    const order = buildAdditionalPendingOrder({
+      side,
+      ticker: holding?.ticker ?? "",
+      sharesBefore: holding?.shares ?? 0,
+      lastPrice: dataSource.getQuote(holding?.ticker ?? "")?.lastPrice ?? 0,
+      filledAt: estimateFillTimestamp(),
+      timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+    });
+    setPendingReview((current) =>
+      current
+        ? {
+            ...current,
+            orders: [...current.orders, order],
+          }
+        : current,
+    );
+  }
+
+  async function confirmPendingOrders() {
     if (!pendingReview) {
       cancelEditMode();
       return;
     }
     const { orders, cash } = pendingReview;
-    if (orders.length > 0) {
-      applyQtyOrders(selectedSource.id, orders);
+    const { reviewCurrentWatchTimeline } = await import(
+      "../lib/finance/currentWatchEditWorkflow"
+    );
+    const reviewed = reviewCurrentWatchTimeline({
+      orders,
+      cash,
+      startingCash: selectedSource.cashAvailable ?? 0,
+    });
+    if ("error" in reviewed) {
+      setEditToast(reviewed.error);
+      return;
     }
-    if (cashIsDirty) {
-      commitCashIfDirty({
-        recordManual: Boolean(cash),
-        filledAt: cash?.filledAt,
-        transactionCashBefore: cash?.cashBefore,
-      });
-    }
-    setPendingReview(null);
-    finishSuccessfulEdit();
-    persistWatchEditMarks();
+    const result = await commitReviewedEdit({
+      portfolioId: selectedSource.id,
+      orders: reviewed.orders,
+      cash: reviewed.cash,
+      finalCash: reviewed.finalCash,
+      historyRemovalTickers: Array.from(pendingHistoryRemovalTickers),
+    });
+    if (result?.status === "applied") setPendingReview(null);
+    handleCommittedWatchEdit(result);
   }
 
   // Leave drill-in if the focused strategy filter hides the selected ticker.
@@ -1880,7 +1912,6 @@ export function WatchlistWidget({
   function openAddPreview(raw?: string) {
     const next = (raw ?? editDraft).trim().toUpperCase();
     if (!next) return;
-    setTickerSuggestionsOpen(false);
     const preview = previewWatchItem(next);
     if (!preview) {
       showEditToast("No Data");
@@ -1912,7 +1943,16 @@ export function WatchlistWidget({
         : [...current, addPreview.ticker],
     );
     setEditDraft("");
-    setTickerSuggestionsOpen(false);
+  }
+
+  function addBatchTicker(ticker: string) {
+    const result = addTickerToPortfolio(selectedSource.id, ticker);
+    if (result === "added") {
+      setAddedTickersDuringEdit((current) =>
+        current.includes(ticker) ? current : [...current, ticker],
+      );
+    }
+    return result;
   }
 
   function confirmCreateSource() {
@@ -1924,8 +1964,30 @@ export function WatchlistWidget({
   }
 
   function handleRemove(ticker: string) {
+    if (!isWatchlistSource) {
+      setRemoveTickerRequest(ticker);
+      return;
+    }
     removeTickerFromPortfolio(selectedSource.id, ticker);
     setLocalSelected((current) => (current === ticker ? null : current));
+  }
+
+  function applyTickerRemoval(choice: TickerRemovalChoice) {
+    if (!removeTickerRequest) return;
+    const ticker = removeTickerRequest;
+    if (choice === "sell") {
+      setFractionalTickers((current) => new Set(current).add(ticker));
+      commitQtyDraft(ticker, 0);
+    } else {
+      removeTickerFromPortfolio(selectedSource.id, ticker);
+      if (choice === "history") {
+        setPendingHistoryRemovalTickers((current) => new Set(current).add(ticker));
+        setEditToast(
+          "History removal staged. Cancel editing to undo, or Update to archive it for 30 days.",
+        );
+      }
+    }
+    setRemoveTickerRequest(null);
   }
 
   // Read-only detail view: a condensed, read-only summary of the selected ticker
@@ -2053,7 +2115,11 @@ export function WatchlistWidget({
   );
 
   const showEmptyGuide =
-    !editMode && !isPreview && items.length === 0 && !emptyGuideDismissed;
+    !editMode &&
+    !isPreview &&
+    !isArchivedSource &&
+    items.length === 0 &&
+    !emptyGuideDismissed;
 
   function dismissEmptyGuide() {
     writeEmptyGuideDismissed(selectedSource.id);
@@ -2159,6 +2225,7 @@ export function WatchlistWidget({
             sources={availableSources}
             value={portfolio}
             onChange={setPortfolio}
+            disabled={editMode}
             onCreateRequest={
               isPreview
                 ? undefined
@@ -2169,7 +2236,7 @@ export function WatchlistWidget({
             }
           />
         </div>
-        {isPreview ? null : (
+        {isPreview || isArchivedSource ? null : (
           <button
             type="button"
             className={editMode ? "icon-btn icon-btn--active" : "icon-btn"}
@@ -2191,7 +2258,6 @@ export function WatchlistWidget({
               enterEditMode();
               setEditDraft("");
               setEditToast(null);
-              setTickerSuggestionsOpen(false);
               setAddPreview(null);
             }}
           >
@@ -2199,6 +2265,34 @@ export function WatchlistWidget({
           </button>
         )}
       </div>
+      {!isPreview && !isArchivedSource && !editMode && selectedSource.holdings.length === 0 ? (
+        <Suspense fallback={null}>
+          <CurrentWatchEmptyActions
+            isWatchlist={isWatchlistSource}
+            onDeposit={() => enterEditAndFocus("cash")}
+            onTicker={() => enterEditAndFocus("ticker")}
+          />
+        </Suspense>
+      ) : null}
+      {isArchivedSource ? (
+        <Suspense fallback={null}>
+          <CurrentWatchArchivedSourceActions
+            archiveLabel={archiveContextLabel(selectedSource)}
+            busy={recoveryBusy}
+            onRestore={() => {
+              setRecoveryBusy(true);
+              void restorePortfolioSource(selectedSource.id).then((restored) => {
+                setRecoveryBusy(false);
+                if (restored) {
+                  setPortfolio(selectedSource.sourcePortfolioId ?? selectedSource.id);
+                  persistWatchEditMarks();
+                } else showEditToast("This portfolio could not be restored.");
+              });
+            }}
+            onDelete={() => setPermanentDeleteOpen(true)}
+          />
+        </Suspense>
+      ) : null}
       {showScheduleChrome && !scheduleToastCollapsed ? (
         <div className="forge-toast-stack watch-schedule-toast">
           <ForgeToast
@@ -2272,86 +2366,45 @@ export function WatchlistWidget({
       ) : null}
       {editMode ? (
         <div className="portfolio-edit-add">
-          <div className="portfolio-field portfolio-ticker-lookup">
-            <label className="visually-hidden" htmlFor="portfolio-ticker-lookup">
-              Look up a ticker
-            </label>
-            <div className="chip-search-field">
-              <MagnifyingGlass
-                className="chip-search-icon"
-                aria-hidden
-                weight="regular"
-              />
-              <input
-                id="portfolio-ticker-lookup"
-                className="input chip-search-input"
-                placeholder="Search ticker…"
-                value={editDraft}
-                maxLength={8}
-                autoComplete="off"
-                onChange={(event) => {
-                  setEditDraft(event.target.value.toUpperCase());
-                  setTickerSuggestionsOpen(true);
-                }}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") {
-                    event.preventDefault();
-                    openAddPreview();
-                  }
-                  if (event.key === "Escape") {
-                    setTickerSuggestionsOpen(false);
-                  }
-                }}
-              />
-            </div>
-            {tickerSuggestionsOpen && editSuggestions.length > 0 ? (
-              <ul
-                className="multiselect-menu portfolio-ticker-suggestions"
-                role="listbox"
-                aria-label="Matching tickers"
-              >
-                {editSuggestions.map((hit) => (
-                  <li key={hit.symbol} className="portfolio-ticker-suggestion">
-                    <button
-                      type="button"
-                      className="multiselect-option"
-                      role="option"
-                      onClick={() => {
-                        setEditDraft(hit.symbol);
-                        setTickerSuggestionsOpen(false);
-                      }}
-                    >
-                      <span className="portfolio-ticker-symbol">{hit.symbol}</span>
-                      <span className="portfolio-ticker-name">{hit.name}</span>
-                    </button>
-                    <button
-                      type="button"
-                      className="icon-btn"
-                      aria-label={`Add ${hit.symbol}`}
-                      onClick={() => openAddPreview(hit.symbol)}
-                    >
-                      <Plus aria-hidden weight="regular" />
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            ) : null}
-          </div>
+          <Suspense fallback={null}>
+            <CurrentWatchTickerSearch
+              id="portfolio-ticker-lookup"
+              label="Look up a ticker"
+              value={editDraft}
+              suggestions={editSuggestions}
+              inputRef={setTickerSearchRef}
+              maxLength={8}
+              onValueChange={setEditDraft}
+              onSelect={setEditDraft}
+              onSubmit={() => openAddPreview()}
+              onAction={openAddPreview}
+            />
+            <CurrentWatchEditToolbar
+              isWatchlist={isWatchlistSource}
+              sourceLabel={selectedSource.label}
+              onTransactions={() => {
+                void preparePendingReview().then(({ orders, cash }) =>
+                  setPendingReview({ orders, cash, isBatch: true }),
+                );
+              }}
+              onImport={requestImport}
+              onArchive={requestArchive}
+              dirty={editIsDirty}
+              onBlocked={showEditToast}
+            />
+          </Suspense>
         </div>
       ) : null}
       {addPreview ? (
-        <ForgeTableModal
-          title={`Add ${addPreview.ticker}?`}
-          titleId="watch-add-preview-title"
-          onCancel={() => setAddPreview(null)}
-          onDone={confirmAddPreview}
-          doneLabel="Add"
-          intro="Preview how this name will appear on Current Watch."
-        >
-          <div className="forge-table watch-add-preview">
-            <WatchItemPreviewCard item={addPreview} />
-          </div>
-        </ForgeTableModal>
+        <Suspense fallback={null}>
+          <CurrentWatchAddTickerModal
+            item={addPreview}
+            markPrice={usableMarkPrice(addPreview.ticker)}
+            untrackedLabel={untrackedHoldingLabel()}
+            onCancel={() => setAddPreview(null)}
+            onAdd={confirmAddPreview}
+          />
+        </Suspense>
       ) : null}
       {editToast ? (
         <div className="forge-toast-stack portfolio-edit-toast">
@@ -2374,6 +2427,27 @@ export function WatchlistWidget({
             </p>
           </ForgeToast>
         </div>
+      ) : null}
+      {tickerHistoryRecovery.length > 0 ? (
+        <Suspense fallback={null}>
+          <CurrentWatchTickerHistoryRecovery
+            recoveries={tickerHistoryRecovery}
+            onDismiss={(archiveId) =>
+              setTickerHistoryRecovery((current) =>
+                current.filter((item) => item.archiveId !== archiveId),
+              )
+            }
+            onRestore={(archiveId) => {
+              void restoreTickerHistory(archiveId).then((restored) => {
+                if (restored) {
+                  setTickerHistoryRecovery((current) =>
+                    current.filter((item) => item.archiveId !== archiveId),
+                  );
+                } else showEditToast("Ticker history could not be restored.");
+              });
+            }}
+          />
+        </Suspense>
       ) : null}
       {readOnly && !editMode && showScopeChip ? (
         // Mobile Current Watch + Forge Watch Preview: gold scope chip.
@@ -2495,11 +2569,22 @@ export function WatchlistWidget({
                   <span className="watch-mvqty-col">
                     <span className="watch-field-label">Qty</span>
                     {canEditQty ? (
-                      <WatchQtyInput
-                        ticker={item.ticker}
-                        shares={displayShares}
-                        onCommit={(next) => commitQtyDraft(item.ticker, next)}
-                      />
+                      <Suspense fallback={<span className="watch-figure">{displayShares}</span>}>
+                        <WatchQtyInput
+                          ticker={item.ticker}
+                          shares={displayShares}
+                          fractional={fractionalTickers.has(item.ticker)}
+                          onFractionalChange={(enabled) =>
+                            setFractionalTickers((current) => {
+                              const next = new Set(current);
+                              if (enabled) next.add(item.ticker);
+                              else if (Number.isInteger(displayShares)) next.delete(item.ticker);
+                              return next;
+                            })
+                          }
+                          onCommit={(next) => commitQtyDraft(item.ticker, next)}
+                        />
+                      </Suspense>
                     ) : (
                       <span className="watch-figure">{displayShares}</span>
                     )}
@@ -2605,20 +2690,22 @@ export function WatchlistWidget({
               ? isUntrackedHolding(holding, selectedSource.id, strategies)
               : rowStrategies.length === 0;
           const convictionOrStrategies = editMode ? (
-            <WatchStrategyEditPicker
-              ticker={item.ticker}
-              portfolioId={selectedSource.id}
-              strategies={appliedStrategies}
-              holding={holding}
-              onToggle={(strategyId, enabled) =>
-                setTickerEnabledForStrategy(
-                  selectedSource.id,
-                  item.ticker,
-                  strategyId,
-                  enabled,
-                )
-              }
-            />
+            <Suspense fallback={null}>
+              <WatchStrategyEditPicker
+                ticker={item.ticker}
+                portfolioId={selectedSource.id}
+                strategies={appliedStrategies}
+                holding={holding}
+                onToggle={(strategyId, enabled) =>
+                  setTickerEnabledForStrategy(
+                    selectedSource.id,
+                    item.ticker,
+                    strategyId,
+                    enabled,
+                  )
+                }
+              />
+            </Suspense>
           ) : untracked ? (
             <span className="watch-conviction-box">
               {untrackedHoldingLabel()}
@@ -2759,7 +2846,8 @@ export function WatchlistWidget({
                 <span className="watch-totals-stat watch-metric">
                   <span className="watch-field-label">Cash</span>
                   {editMode ? (
-                    <input
+                      <input
+                      ref={cashInputRef}
                       type="number"
                       className="input watch-qty-input watch-cash-input"
                       min={0}
@@ -2836,6 +2924,7 @@ export function WatchlistWidget({
                       type="button"
                       className="btn btn--small btn--link forge-cancel-btn"
                       onClick={requestCancelEdit}
+                      disabled={editCommitBusy}
                     >
                       <X aria-hidden weight="bold" /> Cancel
                     </button>
@@ -2843,9 +2932,10 @@ export function WatchlistWidget({
                       type="button"
                       className="btn btn--small btn--solid"
                       onClick={requestUpdateOrders}
-                      disabled={!editIsDirty}
+                      disabled={!editIsDirty || editCommitBusy}
                     >
-                      <Plus aria-hidden weight="regular" /> Update
+                      <Plus aria-hidden weight="regular" />{" "}
+                      {editCommitBusy ? "Saving…" : "Update"}
                     </button>
                   </>
                 )}
@@ -2861,219 +2951,94 @@ export function WatchlistWidget({
         <ForgeTableModal
           title="Unsaved changes"
           titleId="watch-discard-title"
-          onCancel={() => setDiscardConfirmOpen(false)}
+          onCancel={() => {
+            if (editCommitBusy) return;
+            setDiscardConfirmOpen(false);
+          }}
           onDone={confirmDiscardEdit}
           doneLabel="Discard"
+          doneDisabled={editCommitBusy}
           intro="You have unsaved changes on this watch. Discard them and leave edit mode?"
         />
       ) : null}
+      {removeTickerRequest || archiveConfirmOpen || permanentDeleteOpen ? (
+        <Suspense fallback={null}>
+          <CurrentWatchRecoveryModals
+            sourceLabel={selectedSource.label}
+            removeTicker={removeTickerRequest}
+            archiveOpen={archiveConfirmOpen}
+            permanentDeleteOpen={permanentDeleteOpen}
+            busy={recoveryBusy}
+            onCloseTicker={() => setRemoveTickerRequest(null)}
+            onApplyTicker={applyTickerRemoval}
+            onCloseArchive={() => setArchiveConfirmOpen(false)}
+            onArchive={() => {
+              setRecoveryBusy(true);
+              void archivePortfolioSource(selectedSource.id).then((result) => {
+                setRecoveryBusy(false);
+                setArchiveConfirmOpen(false);
+                if (result === "archived") {
+                  cancelEditMode();
+                  setPortfolio(selectedSource.id);
+                  persistWatchEditMarks();
+                } else {
+                  showEditToast(
+                    result === "conflict"
+                      ? "This portfolio changed elsewhere. Reopen it before removing."
+                      : "This portfolio was not removed.",
+                  );
+                }
+              });
+            }}
+            onClosePermanentDelete={() => setPermanentDeleteOpen(false)}
+            onPermanentDelete={() => {
+              setRecoveryBusy(true);
+              void deletePortfolioSourcePermanently(selectedSource.id).then((deleted) => {
+                setRecoveryBusy(false);
+                setPermanentDeleteOpen(false);
+                if (deleted) setPortfolio(portfolios[0]?.id ?? "");
+                else showEditToast("The archive was not deleted.");
+              });
+            }}
+          />
+        </Suspense>
+      ) : null}
       {pendingReview ? (
-        <ForgeTableModal
-          title="Review simulated changes"
-          titleId="qty-order-review-title"
-          onCancel={() => setPendingReview(null)}
-          onDone={confirmPendingOrders}
-          doneLabel="Confirm"
-          intro="Set the date and time for each simulated buy, sell, deposit, or withdrawal. Adjust fill prices before confirming."
-        >
-          <div className="forge-table watch-qty-order-table" role="table">
-            {pendingReview.orders.map((order, index) => (
-              <div
-                key={order.ticker}
-                className="forge-table-row watch-qty-order-row"
-                role="row"
-              >
-                <div className="forge-table-cell forge-table-cell--order" role="cell">
-                  <span className="watch-field-label">
-                    {order.side === "buy"
-                      ? "Simulated Buy Order"
-                      : "Simulated Sell Order"}
-                  </span>
-                  <span className="watch-figure watch-figure--strong">
-                    {order.ticker}
-                  </span>
-                </div>
-                <label className="forge-table-cell" role="cell">
-                  <span className="watch-field-label">
-                    Qty {order.side === "buy" ? "bought" : "sold"}
-                  </span>
-                  <input
-                    type="number"
-                    className="input watch-qty-input"
-                    min={1}
-                    step={1}
-                    value={order.deltaShares}
-                    onChange={(event) => {
-                      const next = Number.parseInt(event.target.value, 10);
-                      if (!Number.isFinite(next) || next < 1) return;
-                      setPendingReview((current) =>
-                        current
-                          ? {
-                              ...current,
-                              orders: current.orders.map((row, i) =>
-                                i !== index
-                                  ? row
-                                  : {
-                                      ...row,
-                                      deltaShares: next,
-                                      sharesAfter:
-                                        row.side === "buy"
-                                          ? row.sharesBefore + next
-                                          : Math.max(
-                                              0,
-                                              row.sharesBefore - next,
-                                            ),
-                                    },
-                              ),
-                            }
-                          : current,
-                      );
-                    }}
-                  />
-                </label>
-                <label className="forge-table-cell" role="cell">
-                  <span className="watch-field-label">Total qty</span>
-                  <input
-                    type="number"
-                    className="input watch-qty-input"
-                    min={0}
-                    step={1}
-                    value={order.sharesAfter}
-                    onChange={(event) => {
-                      const after = Number.parseInt(event.target.value, 10);
-                      if (!Number.isFinite(after) || after < 0) return;
-                      const delta = after - order.sharesBefore;
-                      const side = qtySideFromDelta(delta);
-                      if (!side) return;
-                      setPendingReview((current) =>
-                        current
-                          ? {
-                              ...current,
-                              orders: current.orders.map((row, i) =>
-                                i !== index
-                                  ? row
-                                  : {
-                                      ...row,
-                                      side,
-                                      deltaShares: Math.abs(delta),
-                                      sharesAfter: after,
-                                    },
-                              ),
-                            }
-                          : current,
-                      );
-                    }}
-                  />
-                </label>
-                <label className="forge-table-cell" role="cell">
-                  <span className="watch-field-label">Fill price</span>
-                  <input
-                    type="number"
-                    className="input watch-qty-input"
-                    min={0}
-                    step={0.01}
-                    value={order.fillPrice}
-                    onChange={(event) => {
-                      const price = Number.parseFloat(event.target.value);
-                      if (!Number.isFinite(price) || price < 0) return;
-                      setPendingReview((current) =>
-                        current
-                          ? {
-                              ...current,
-                              orders: current.orders.map((row, i) =>
-                                i !== index
-                                  ? row
-                                  : { ...row, fillPrice: roundMoney(price) },
-                              ),
-                            }
-                          : current,
-                      );
-                    }}
-                  />
-                </label>
-                <label className="forge-table-cell forge-table-cell--datetime" role="cell">
-                  <span className="watch-field-label">Date / time</span>
-                  <input
-                    type="datetime-local"
-                    className="input watch-qty-input watch-fill-datetime"
-                    value={toDatetimeLocalValue(order.filledAt)}
-                    onChange={(event) => {
-                      const filledAt = fromDatetimeLocalValue(
-                        event.target.value,
-                      );
-                      setPendingReview((current) =>
-                        current
-                          ? {
-                              ...current,
-                              orders: current.orders.map((row, i) =>
-                                i !== index ? row : { ...row, filledAt },
-                              ),
-                            }
-                          : current,
-                      );
-                    }}
-                  />
-                </label>
-              </div>
-            ))}
-            {pendingReview.cash ? (
-              <div
-                className="forge-table-row watch-qty-order-row"
-                role="row"
-              >
-                <div className="forge-table-cell forge-table-cell--order" role="cell">
-                  <span className="watch-field-label">
-                    {pendingReview.cash.side === "deposit"
-                      ? "Simulated Cash Deposit"
-                      : "Simulated Cash Withdrawal"}
-                  </span>
-                  <span className="watch-figure watch-figure--strong">
-                    Cash
-                  </span>
-                </div>
-                <div className="forge-table-cell" role="cell">
-                  <span className="watch-field-label">Amount</span>
-                  <span className="watch-figure watch-figure--strong">
-                    {formatPrice(Math.abs(pendingReview.cash.deltaCash))}
-                  </span>
-                </div>
-                <div className="forge-table-cell" role="cell">
-                  <span className="watch-field-label">Before</span>
-                  <span className="watch-figure">
-                    {formatPrice(pendingReview.cash.cashBefore)}
-                  </span>
-                </div>
-                <div className="forge-table-cell" role="cell">
-                  <span className="watch-field-label">After</span>
-                  <span className="watch-figure">
-                    {formatPrice(pendingReview.cash.cashAfter)}
-                  </span>
-                </div>
-                <label className="forge-table-cell forge-table-cell--datetime" role="cell">
-                  <span className="watch-field-label">Date / time</span>
-                  <input
-                    type="datetime-local"
-                    className="input watch-qty-input watch-fill-datetime"
-                    value={toDatetimeLocalValue(pendingReview.cash.filledAt)}
-                    onChange={(event) => {
-                      const filledAt = fromDatetimeLocalValue(
-                        event.target.value,
-                      );
-                      setPendingReview((current) =>
-                        current?.cash
-                          ? {
-                              ...current,
-                              cash: { ...current.cash, filledAt },
-                            }
-                          : current,
-                      );
-                    }}
-                  />
-                </label>
-              </div>
-            ) : null}
-          </div>
-        </ForgeTableModal>
+        <Suspense fallback={null}>
+          <CurrentWatchOrderReviewModal
+            review={pendingReview}
+            holdings={selectedSource.holdings}
+            TickerSearch={CurrentWatchTickerSearch}
+            tickerOptions={items}
+            getMarkPrice={(ticker) => dataSource.getQuote(ticker)?.lastPrice ?? 0}
+            searchTickers={asyncSearchTickers}
+            onChange={setPendingReview}
+            onCancel={cancelPendingReview}
+            onConfirm={() => void confirmPendingOrders()}
+            onAdd={addPendingOrder}
+            onAddTicker={addBatchTicker}
+          />
+        </Suspense>
+      ) : null}
+      {importOpen && !isWatchlistSource ? (
+        <Suspense fallback={null}>
+          <CurrentWatchImportModal
+            portfolio={selectedSource}
+            existingTransactions={[]}
+            existingTrackedTickers={Array.from(
+              new Set(
+                portfolios.flatMap((source) =>
+                  source.holdings.map((holding) => holding.ticker),
+                ),
+              ),
+            )}
+            isKnownTicker={(ticker) => Boolean(dataSource.getTickerInfo(ticker))}
+            getMarkPrice={(ticker) => dataSource.getQuote(ticker)?.lastPrice ?? 0}
+            onRefreshBase={() => loadPortfolioImportBase(selectedSource.id)}
+            onCancel={() => setImportOpen(false)}
+            onCommit={commitImport}
+          />
+        </Suspense>
       ) : null}
     </section>
   );

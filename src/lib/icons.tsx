@@ -1,15 +1,14 @@
 /**
  * Icon system — Phosphor Icons (fill weight), the design system's single icon
- * source. Import icons from here (not directly from the package) so the set
- * stays curated and consistent. The global fill weight is set via
- * `IconContext` in `main.tsx`.
+ * source. Import general icons from here so the eager set stays curated and
+ * consistent. Specialist icons used only by lazy surfaces live in a dedicated
+ * `*Icon.ts` leaf module beside this file so they do not inflate this shared
+ * bundle. The global fill weight is set via `IconContext` in `main.tsx`.
  */
 import { forwardRef } from "react";
 import {
   Anchor,
   ArrowCounterClockwise,
-  ArrowFatLineUp,
-  ArrowsClockwise,
   BookmarkSimple,
   Briefcase,
   CaretDown,
@@ -24,7 +23,9 @@ import {
   Coins,
   Copy,
   CurrencyDollar,
+  DownloadSimple,
   Eye,
+  FileArrowUp,
   FloppyDisk,
   Hammer,
   HardHat,
@@ -41,7 +42,6 @@ import {
   Plus,
   Sailboat,
   Scissors,
-  SealPercent,
   ShieldStar,
   Siren,
   Skull,
@@ -80,8 +80,6 @@ WindReversed.displayName = "WindReversed";
 export {
   Anchor,
   ArrowCounterClockwise,
-  ArrowFatLineUp,
-  ArrowsClockwise,
   BookmarkSimple,
   Briefcase,
   CaretDown,
@@ -96,7 +94,9 @@ export {
   Coins,
   Copy,
   CurrencyDollar,
+  DownloadSimple,
   Eye,
+  FileArrowUp,
   FloppyDisk,
   Hammer,
   HardHat,
@@ -111,7 +111,6 @@ export {
   Plus,
   Sailboat,
   Scissors,
-  SealPercent,
   ShieldStar,
   Siren,
   Skull,

@@ -1,5 +1,14 @@
 # Skulls and Trading — Performance Budget & Asset Pipeline
 
+## Current Watch imports
+
+The Current Watch import modal is secondary and lazy-loaded. CSV/XLSX
+inspection and parsing run in a dedicated worker loaded only after file choice;
+spreadsheet libraries must not enter the signed-out or authenticated Home eager
+graph. Raw files are capped at 5 MB, XLSX expanded content at 25 MB, and parsing
+at 30 seconds. Future parser/template dependencies must pass existing chunk and
+route budgets.
+
 Companion to [`design-system.md`](design-system.md) and
 [`data-architecture.md`](data-architecture.md). This is the source of truth for
 **load performance**: image handling, code splitting, and the budgets every

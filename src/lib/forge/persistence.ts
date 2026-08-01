@@ -264,13 +264,37 @@ export function clearAllForgePersistence(): void {
   window.localStorage.removeItem(CHIP_LIBRARY_KEY);
 }
 
+export type CancelableDebounced<T extends (...args: never[]) => void> = (
+  (...args: Parameters<T>) => void
+) & { cancel: () => void; flush: () => void };
+
 export function debounce<T extends (...args: never[]) => void>(
   fn: T,
   ms: number,
-): (...args: Parameters<T>) => void {
+): CancelableDebounced<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
-  return (...args: Parameters<T>) => {
+  let pendingArgs: Parameters<T> | undefined;
+  const debounced = (...args: Parameters<T>) => {
     if (timer) clearTimeout(timer);
-    timer = setTimeout(() => fn(...args), ms);
+    pendingArgs = args;
+    timer = setTimeout(() => {
+      timer = undefined;
+      const nextArgs = pendingArgs;
+      pendingArgs = undefined;
+      if (nextArgs) fn(...nextArgs);
+    }, ms);
   };
+  debounced.cancel = () => {
+    if (timer) clearTimeout(timer);
+    timer = undefined;
+    pendingArgs = undefined;
+  };
+  debounced.flush = () => {
+    if (timer) clearTimeout(timer);
+    timer = undefined;
+    const nextArgs = pendingArgs;
+    pendingArgs = undefined;
+    if (nextArgs) fn(...nextArgs);
+  };
+  return debounced;
 }

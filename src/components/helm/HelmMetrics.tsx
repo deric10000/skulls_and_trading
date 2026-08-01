@@ -37,6 +37,7 @@ import {
   type SparkPoint,
 } from "../../lib/finance/portfolioSnapshotSeries";
 import { portfolioRunningTotals } from "../../lib/finance/portfolioTotals";
+import { isScorablePortfolioTransaction } from "../../lib/finance/portfolioTransactions";
 import { getLiveQuote } from "../../lib/market/liveCache";
 import {
   countActions,
@@ -149,6 +150,10 @@ export function HelmMetrics() {
     lastDataPullAtByStrategyId,
   } = useMarketState();
   const { userProfile } = useAuthState();
+  const scoringShareFills = useMemo(
+    () => shareFills.filter(isScorablePortfolioTransaction),
+    [shareFills],
+  );
 
   const portfolio = useMemo(
     () =>
@@ -381,7 +386,7 @@ export function HelmMetrics() {
           })),
           bookCheckDays,
           tickers,
-          ledger: shareFills,
+          ledger: scoringShareFills,
         }).filter((event) =>
           trackedTickerSet.has(event.ticker.toUpperCase()),
         ),
@@ -444,8 +449,51 @@ export function HelmMetrics() {
     trackedTickerSet,
     timeframeBounds.fromIso,
     timeframeBounds.toIso,
-    shareFills,
+    scoringShareFills,
     userProfile?.id,
+  ]);
+
+  const adherenceStrategyIds = watchStrategyScopeId
+    ? [watchStrategyScopeId]
+    : null;
+  const averageHoldTime = useMemo(() => {
+    if (!portfolio) return null;
+    const tickersInScope = portfolio.holdings
+      .filter((holding) => {
+        if (!trackedTickerSet.has(holding.ticker.toUpperCase())) return false;
+        if (!focusedStrategy) return true;
+        return shouldScoreTickerWithStrategy(
+          holding,
+          focusedStrategy,
+          portfolio.id,
+        );
+      })
+      .map((holding) => holding.ticker.toUpperCase());
+    // Include tickers that only appear in the ledger for closed episodes.
+    for (const tx of scoringShareFills) {
+      if (tx.kind !== "qty" || tx.portfolioId !== portfolio.id) continue;
+      const symbol = tx.ticker.toUpperCase();
+      if (trackedTickerSet.size > 0 && !trackedTickerSet.has(symbol)) continue;
+      if (!tickersInScope.includes(symbol)) tickersInScope.push(symbol);
+    }
+    const currentSharesByTicker: Record<string, number> = {};
+    for (const holding of portfolio.holdings) {
+      currentSharesByTicker[holding.ticker.toUpperCase()] = holding.shares;
+    }
+    return computeAverageHoldTime({
+      ledger: scoringShareFills,
+      portfolioId: portfolio.id,
+      currentSharesByTicker,
+      strategyIds: adherenceStrategyIds,
+      tickersInScope,
+      asOfDate: etIsoDate(),
+    });
+  }, [
+    portfolio,
+    scoringShareFills,
+    trackedTickerSet,
+    focusedStrategy,
+    adherenceStrategyIds,
   ]);
 
   if (!portfolio || !metrics || !alignment) {
@@ -577,9 +625,6 @@ export function HelmMetrics() {
   const showConvictionChange =
     todayDelta != null || sessions5Delta != null;
 
-  const adherenceStrategyIds = watchStrategyScopeId
-    ? [watchStrategyScopeId]
-    : null;
   const notificationSummary = adherenceLoaded
     ? summarizeNotificationCampaigns(
         checkEvents,
@@ -590,7 +635,7 @@ export function HelmMetrics() {
     : null;
   const actionCounts = adherenceLoaded
     ? countActions(
-        shareFills.filter(
+        scoringShareFills.filter(
           (transaction) =>
             transaction.kind === "cash" ||
             trackedTickerSet.has(transaction.ticker.toUpperCase()),
@@ -601,48 +646,9 @@ export function HelmMetrics() {
         timeframeBounds,
       )
     : null;
-  const averageHoldTime = useMemo(() => {
-    if (!portfolio) return null;
-    const tickersInScope = portfolio.holdings
-      .filter((holding) => {
-        if (!trackedTickerSet.has(holding.ticker.toUpperCase())) return false;
-        if (!focusedStrategy) return true;
-        return shouldScoreTickerWithStrategy(
-          holding,
-          focusedStrategy,
-          portfolio.id,
-        );
-      })
-      .map((holding) => holding.ticker.toUpperCase());
-    // Include tickers that only appear in the ledger for closed episodes.
-    for (const tx of shareFills) {
-      if (tx.kind !== "qty" || tx.portfolioId !== portfolio.id) continue;
-      const symbol = tx.ticker.toUpperCase();
-      if (trackedTickerSet.size > 0 && !trackedTickerSet.has(symbol)) continue;
-      if (!tickersInScope.includes(symbol)) tickersInScope.push(symbol);
-    }
-    const currentSharesByTicker: Record<string, number> = {};
-    for (const holding of portfolio.holdings) {
-      currentSharesByTicker[holding.ticker.toUpperCase()] = holding.shares;
-    }
-    return computeAverageHoldTime({
-      ledger: shareFills,
-      portfolioId: portfolio.id,
-      currentSharesByTicker,
-      strategyIds: adherenceStrategyIds,
-      tickersInScope,
-      asOfDate: etIsoDate(),
-    });
-  }, [
-    portfolio,
-    shareFills,
-    trackedTickerSet,
-    focusedStrategy,
-    adherenceStrategyIds,
-  ]);
   const zoneImpact = adherenceLoaded
     ? computeZoneFollowedImpact(
-        shareFills.filter(
+        scoringShareFills.filter(
           (transaction) =>
             transaction.kind === "cash" ||
             trackedTickerSet.has(transaction.ticker.toUpperCase()),
