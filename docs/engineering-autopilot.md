@@ -52,6 +52,7 @@ load every long-form document for every task.
 | Performance limits and verification | `performance-budget.md` | Changing assets, loading, rendering, bundles, caching, or performance-sensitive paths |
 | Strategy Forge behavior and scoring contract | `docs/strategy-forge.md` | Changing Forge authoring, scoring, cadence, statuses, or plan overlays |
 | Security and identity boundary (invite-only auth, RLS, secrets, STOP list) | `.cursor/rules/security-hardening.mdc` | Changing auth, persistence of personal or financial data, secrets, or external account connections |
+| Production data preservation, migrations, backfills, recovery, and Supabase/Cloudflare rollout | `docs/production-data-safety.md` | Changing persistent user data, database schema/functions, RLS, Workers, queues, bindings, storage, reconciliation, or production deployment |
 | Engineering risk, planning, verification, and approvals | `docs/engineering-autopilot.md` | Classifying and executing all repository work |
 | Enforceable task-specific gates | `.cursor/rules/*.mdc` | Automatically, according to the affected surface (`AGENTS.md` is the Codex entry point, not a gate) |
 

@@ -6,6 +6,7 @@
 import { handleMarketApi } from "./market";
 import {
   handleMarketCycleApi,
+  readHistoricalScoringCycle,
   runScheduledMarketCycle,
   type MarketCycleEnv,
 } from "./marketCycle";
@@ -84,6 +85,17 @@ export default {
       request.method === "GET"
     ) {
       return readInternalCycle(
+        request,
+        env.MARKET_CACHE,
+        env.INTERNAL_SCORING_SECRET,
+      );
+    }
+
+    if (
+      url.pathname === "/api/internal/historical-market-cycle" &&
+      request.method === "GET"
+    ) {
+      return readHistoricalScoringCycle(
         request,
         env.MARKET_CACHE,
         env.INTERNAL_SCORING_SECRET,

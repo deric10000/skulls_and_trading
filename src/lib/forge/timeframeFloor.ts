@@ -1,5 +1,5 @@
-import type { CandleInterval, RuleChip, Strategy } from "../../types";
-import { isTimeframedMetric } from "./metrics";
+import type { CandleInterval, RuleChip, Strategy } from "../../types.ts";
+import { isTimeframedMetric } from "./metrics.ts";
 
 export const MIN_TECHNICAL_TIME: CandleInterval = "1h";
 const SUB_HOUR = new Set(["15m", "30m"]);

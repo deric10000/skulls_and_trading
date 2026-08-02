@@ -3108,7 +3108,16 @@ span.radio {
 
 .watch-order-add-actions {
   display: flex;
+  align-items: center;
+  flex: 0 0 auto;
   gap: var(--space-2);
+}
+
+.watch-order-action-divider {
+  width: 1px;
+  height: 22px;
+  flex: 0 0 auto;
+  background: var(--border-soft);
 }
 
 .watch-order-action {
@@ -3135,6 +3144,17 @@ span.radio {
 
 .watch-order-action--sell:hover:not(:disabled) {
   background: rgb(255 107 107 / 0.2);
+}
+
+@media (max-width: 767px) {
+  .forge-table-intro:has(.watch-order-add-actions) {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .watch-order-add-actions {
+    justify-content: flex-end;
+  }
 }
 
 .watch-order-ticker-row {
@@ -3166,6 +3186,17 @@ span.radio {
 }
 
 .watch-order-row-messages .row-message {
+  margin: 0;
+}
+
+.watch-order-submit-error {
+  flex: 0 0 auto;
+  padding: var(--space-2) var(--space-3);
+  border-top: 1px solid var(--forge-table-border);
+  background: var(--forge-table-row-alt);
+}
+
+.watch-order-submit-error .row-message {
   margin: 0;
 }
 
@@ -3382,6 +3413,28 @@ span.radio {
   gap: var(--space-1);
 }
 
+.watch-import-cash-choice {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin-top: var(--space-2);
+}
+
+.watch-import-cash-choice .watch-import-radio-row > span,
+.watch-import-oversell-choice .watch-import-radio-row > span {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.watch-import-cash-choice .watch-import-radio-row small,
+.watch-import-oversell-choice .watch-import-radio-row small {
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  font-weight: 400;
+  line-height: 1.4;
+}
+
 .watch-import-radio-row {
   display: flex;
   align-items: center;
@@ -3468,6 +3521,49 @@ span.radio {
 .watch-import-issue > span:first-child {
   color: var(--warning);
   font-weight: 600;
+}
+
+.watch-import-issue .row-message {
+  margin: 0;
+  font-size: inherit;
+}
+
+.watch-import-batch-error {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.watch-import-support-hint {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+}
+
+.watch-import-flagged-table {
+  margin-top: var(--space-3);
+}
+
+.watch-import-flagged-table .watch-order-row-messages {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  align-items: flex-start;
+}
+
+.watch-import-inline-field {
+  display: block;
+  min-width: 0;
+}
+
+.watch-import-oversell-choice {
+  width: 100%;
+}
+
+.watch-import-qty-left {
+  display: grid;
+  gap: var(--space-1);
+  padding-left: calc(1.25rem + var(--space-2));
 }
 
 @media (max-width: 767px) {
@@ -6607,6 +6703,84 @@ select.forge-cell-input {
   padding: 0.4rem var(--space-3) 0;
   font-size: 0.76rem;
   color: var(--warning);
+}
+
+/* Secondary action strip pinned above Cancel / primary Done. Import uses
+   this for Confirm Edits + Exclude All Flagged while the body scrolls above. */
+.forge-table-action-bar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  flex-shrink: 0;
+  padding: var(--space-2) var(--space-3) 0;
+  border-top: 1px solid var(--border-soft);
+  background: var(--surface-1);
+}
+
+.forge-table-action-bar .btn {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+.watch-import-action-bar-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--space-2);
+  width: 100%;
+}
+
+.watch-import-action-bar-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+.watch-import-progress {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  width: 100%;
+}
+
+.watch-import-progress-copy {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.watch-import-progress-track {
+  height: 6px;
+  border-radius: 999px;
+  background: rgb(148 163 184 / 0.16);
+  overflow: hidden;
+}
+
+.watch-import-progress-bar {
+  height: 100%;
+  width: 0;
+  border-radius: inherit;
+  background: var(--info);
+  transition: width 160ms ease;
+}
+
+.watch-import-progress-bar.is-indeterminate {
+  width: 36%;
+  animation: watch-import-progress-slide 1.2s ease-in-out infinite;
+}
+
+@keyframes watch-import-progress-slide {
+  0% {
+    transform: translateX(-120%);
+  }
+  100% {
+    transform: translateX(320%);
+  }
 }
 
 .forge-table-actions {

@@ -1,6 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from "react";
 import { AppShell } from "./components/AppShell";
-import { ComingSoonOverlay } from "./components/ComingSoonOverlay";
 import { ForgeToast } from "./components/forge/ForgeToast";
 import { HomePage } from "./pages/HomePage";
 import { preloadWeatherV2, isWeatherV2Ready } from "./lib/datasource/freeTier";
@@ -30,6 +29,11 @@ const CaptainProfilePage = lazy(() =>
 const OnboardingModal = lazy(() =>
   import("./components/OnboardingModal").then((m) => ({
     default: m.OnboardingModal,
+  })),
+);
+const ComingSoonOverlay = lazy(() =>
+  import("./components/ComingSoonOverlay").then((m) => ({
+    default: m.ComingSoonOverlay,
   })),
 );
 // Budget notifications are non-blocking chrome and can hydrate after Home.
@@ -113,7 +117,9 @@ export default function AuthedApp() {
           <OnboardingModal />
         </Suspense>
       ) : needsLegalAck ? (
-        <ComingSoonOverlay variant="legal" onAcknowledge={acknowledgeLegal} />
+        <Suspense fallback={null}>
+          <ComingSoonOverlay variant="legal" onAcknowledge={acknowledgeLegal} />
+        </Suspense>
       ) : null}
       <Suspense fallback={null}>
         <MarketBudgetToasts />

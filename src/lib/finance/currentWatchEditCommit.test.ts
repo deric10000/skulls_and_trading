@@ -4,8 +4,11 @@ import { resolveStatus } from "../forge/status";
 import { buildCurrentWatchEditCommit } from "./currentWatchEditCommit";
 import {
   buildCurrentWatchPendingReview,
+  cashDraftForBatch,
+  currentWatchCommitFailureMessage,
   reviewCurrentWatchTimeline,
 } from "./currentWatchEditWorkflow";
+import { currentWatchCommitFailureReason } from "../userStore/currentWatchEditStore";
 
 const portfolio: Portfolio = {
   id: "portfolio-1",
@@ -138,5 +141,56 @@ describe("reviewCurrentWatchTimeline", () => {
     expect(reviewed.cash).toMatchObject({ cashBefore: 0, cashAfter: 500 });
     expect(reviewed.orders[0]).toMatchObject({ cashBefore: 500, cashAfter: 300 });
     expect(reviewed.finalCash).toBe(300);
+  });
+});
+
+describe("cashDraftForBatch", () => {
+  const cashDraft = {
+    side: "deposit" as const,
+    cashBefore: 0,
+    cashAfter: 500,
+    deltaCash: 500,
+    filledAt: "2026-08-01T15:00:00.000Z",
+    timeZone: "America/New_York",
+  };
+
+  it("carries a staged first deposit into Batch Transactions", () => {
+    expect(cashDraftForBatch(cashDraft, 0)).toEqual({
+      cash: cashDraft,
+      error: null,
+    });
+  });
+
+  it("blocks a later dirty cash draft instead of dropping it", () => {
+    expect(cashDraftForBatch(cashDraft, 1000)).toEqual({
+      cash: null,
+      error:
+        "Update or cancel the staged cash change before opening Batch Transactions.",
+    });
+  });
+});
+
+describe("Current Watch commit errors", () => {
+  it("identifies an environment missing the atomic save RPC", () => {
+    const reason = currentWatchCommitFailureReason({
+      code: "PGRST202",
+      message:
+        "Could not find the function public.commit_current_watch_edit in the schema cache",
+    });
+    expect(reason).toBe("schema-unavailable");
+    expect(currentWatchCommitFailureMessage("schema-unavailable")).toContain(
+      "database migrations",
+    );
+  });
+
+  it("distinguishes reconciliation failures from infrastructure failures", () => {
+    expect(
+      currentWatchCommitFailureReason({
+        message: "invalid_manual_cash_math",
+      }),
+    ).toBe("invalid-math");
+    expect(currentWatchCommitFailureReason({ message: "Failed to fetch" })).toBe(
+      "save-unavailable",
+    );
   });
 });

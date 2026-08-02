@@ -267,12 +267,27 @@ export type TransactionActionClass =
   | "withdrawal"
   | "unclassified";
 
+export type HistoricalReconstructionStatus =
+  | "pending"
+  | "scored"
+  | "unscored"
+  | "incomplete"
+  | "skipped";
+
+export interface HistoricalReconstructionStamp {
+  reconstructionStatus?: HistoricalReconstructionStatus;
+  reconstructionReason?: string;
+  reconstructionCycleKey?: string;
+  reconstructionCycleAsOf?: string;
+  reconstructedAt?: string;
+}
+
 /**
  * Session (later: API) record of a confirmed qty fill. Lives beside portfolios
  * so a live ledger can replace seed without reshaping holdings.
  * Prefer `PortfolioTransaction` for new code; legacy rows omit `kind`.
  */
-export interface ShareFillEvent {
+export interface ShareFillEvent extends HistoricalReconstructionStamp {
   id: string;
   portfolioId: string;
   ticker: string;
@@ -298,10 +313,16 @@ export interface ShareFillEvent {
   /** Cash sequence stamps used by normalized replay validation. */
   cashBefore?: number;
   cashAfter?: number;
+  /**
+   * Import-only: sell closes shares that were not yet accounted in this
+   * portfolio timeline (brokerage-held / missing earlier buys). Server trusts
+   * the client share sequence for this row when set.
+   */
+  untrackedClose?: boolean;
 }
 
 /** Cash edit recorded from Current Watch portfolio edit mode. */
-export interface CashTransactionEvent {
+export interface CashTransactionEvent extends HistoricalReconstructionStamp {
   id: string;
   kind: "cash";
   portfolioId: string;

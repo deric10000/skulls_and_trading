@@ -46,3 +46,10 @@ values. Server persistence revalidates normalized rows behind RLS and an
 optimistic revision. Brokerage credentials, account/routing numbers, names,
 addresses, and other PII are not supported fields; extra columns are stripped,
 not heuristically classified.
+
+## Production data preservation
+
+All Supabase and Cloudflare persistence, migration, backfill, binding, and
+deployment work must follow `.cursor/rules/production-data-safety.mdc`. RLS and
+tenant ownership are conservation invariants: a migration that preserves rows
+but changes who can access them is a data-loss incident and must stop rollout.

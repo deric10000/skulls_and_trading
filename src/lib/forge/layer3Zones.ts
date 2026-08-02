@@ -1,4 +1,4 @@
-import type { RuleChip, RuleTag, StatusType } from "../../types";
+import type { RuleChip, RuleTag, StatusType } from "../../types.ts";
 
 /**
  * Layer 3 zone overlays — Trim Zone / Add Zone / Go to Cash. Each stores

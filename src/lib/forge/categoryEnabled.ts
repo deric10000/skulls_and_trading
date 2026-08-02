@@ -1,6 +1,6 @@
-import { DEFAULT_CATEGORY_WEIGHTS } from "../../data";
-import type { CategoryWeights, RuleCategory, Strategy } from "../../types";
-import { CATEGORY_ORDER } from "./metrics";
+import { DEFAULT_CATEGORY_WEIGHTS } from "../../data.ts";
+import type { CategoryWeights, RuleCategory, Strategy } from "../../types.ts";
+import { CATEGORY_ORDER } from "./metrics.ts";
 
 /** Missing / undefined means the category contributes to conviction. */
 export function isCategoryEnabled(

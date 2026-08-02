@@ -1,0 +1,61 @@
+---
+description: Zero-data-loss gates for Supabase, Cloudflare, migrations, backfills, persistent storage, and production rollout
+globs: supabase/**,worker/**,wrangler.jsonc,src/lib/userStore/**,src/lib/datasource/**,src/state/**,scripts/deploy.mjs
+alwaysApply: true
+---
+
+# Production data safety
+
+Canonical contract: `docs/production-data-safety.md`. Read and follow it before
+planning or changing Supabase schema/functions/RLS, Cloudflare Workers/Queues/
+bindings/storage, persistent account state, migrations, backfills,
+reconciliation, or deployment configuration.
+
+## Hard gate
+
+Capability work must not delete, reset, silently replace, orphan, or make
+inaccessible any user-owned portfolio, holding, cash, transaction, history,
+custom strategy, strategy version/application, preference, archive, snapshot,
+or provenance record. User-approved deletion/retention flows are separate from
+schema evolution.
+
+If exact preservation cannot be demonstrated, **STOP the production action and
+notify the user**. Do not reduce this to a generic rollback note.
+
+## Required behavior
+
+- Classify the task as Level 3 and include the contract's data-safety manifest
+  in the plan or PR evidence.
+- Declare each affected store as authority, compatibility representation,
+  projection, or cache. Never create an accidental second authority.
+- Use expand → idempotent/resumable migrate → verified later contract. Do not
+  remove the old representation in the release that introduces its replacement.
+- Preserve unknown JSON fields and stable user/business IDs. Partial models must
+  not become full replacements.
+- Require canonical before/after conservation tests for protected facts; row
+  counts alone are insufficient for financial and strategy data.
+- Preserve old/new client, Worker, Edge Function, queue-message, and database
+  compatibility through the declared rollout window.
+- Treat Cloudflare KV/registries/manifests as rebuildable projections while
+  Supabase owns user facts. Binding or namespace replacement must copy and
+  verify data before cutover.
+- Require idempotency and duplicate/retry safety for queues, backfills, cron,
+  and reconstruction jobs.
+- For rewrites or destructive contract phases, verify a restorable recovery
+  point before production execution. A rollback must reconcile writes made
+  after that point.
+- Never log or export production financial/strategy payloads as migration
+  evidence. Use safe counts, opaque IDs, and invariant results.
+
+## Production boundary
+
+Implementation approval does not authorize a production migration, backfill,
+data reconciliation, Supabase function deploy, Cloudflare deploy, binding
+mutation, or destructive contract phase. Obtain explicit approval immediately
+before those actions. After approval, the acting engineer—not the product
+owner—executes the operational steps and reports evidence.
+
+After every production step, verify the active version, permissions/bindings,
+protected-data invariants, designated-test-account smoke behavior, and
+projection/background-job health. Stop on any unexplained drift.
+

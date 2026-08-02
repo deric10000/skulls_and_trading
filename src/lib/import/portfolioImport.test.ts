@@ -64,15 +64,75 @@ describe("portfolio import normalization", () => {
     expect(result.transactions).toEqual([]);
   });
 
-  it("requires a confirmed zone even when the date carries an offset", () => {
+  it("accepts an explicit UTC offset without asking for a redundant zone", () => {
     const result = normalizeImportRows(
       parseCsv(
         "Type,Ticker,Quantity,Price,Date / Time\nBuy,XYZ,1,10,2026-01-02T10:30:00-05:00",
       ),
       { batchId: "batch" },
     );
-    expect(result.requiresTimeZoneConfirmation).toBe(true);
-    expect(result.transactions).toEqual([]);
+    expect(result.requiresTimeZoneConfirmation).toBe(false);
+    expect(result.transactions).toHaveLength(1);
+    expect(result.transactions[0]).toMatchObject({
+      filledAt: "2026-01-02T15:30:00.000Z",
+      timeZone: "UTC",
+    });
+  });
+
+  it.each([
+    ["07/30/2026 18:31:17", "America/New_York", "2026-07-30T22:31:17.000Z"],
+    ["07/30/2026 6:31:17 PM", "America/New_York", "2026-07-30T22:31:17.000Z"],
+    ["07/30/2026 18:31:17 EDT", "", "2026-07-30T22:31:17.000Z"],
+  ])("normalizes common U.S. date/time input %s", (value, zone, expected) => {
+    expect(resolveImportDateTime(value, zone || normalizeImportTimeZone("EDT"))).toEqual({
+      iso: expected,
+      ambiguous: false,
+    });
+  });
+
+  it("ingests a Webull-shaped export without requiring template edits", () => {
+    const rows = parseCsv(
+      "Name,Symbol,Side,Status,Filled,Total Qty,Price,Avg Price,Time-in-Force,Placed Time,Filled Time\n" +
+        "Example Corp,XYZ,Buy,Filled,1.25,2,Market,10.527,DAY,07/30/2026 18:30:00 EDT,07/30/2026 18:31:17 EDT\n" +
+        "Example Corp,XYZ,Sell,Cancelled,0,1,Market,0,DAY,07/31/2026 10:00:00 EDT,07/31/2026 10:00:00 EDT\n" +
+        "Example Corp,XYZ,Sell,Cancelled,0.25,1,Market,11.10,DAY,07/31/2026 10:00:00 EDT,07/31/2026 10:01:00 EDT",
+    );
+    const result = normalizeImportRows(rows, { batchId: "batch" });
+    expect(result.detectedFormat).toBe("webull");
+    expect(result.requiresTimeZoneConfirmation).toBe(false);
+    expect(result.issues).toEqual([]);
+    expect(result.transactions).toHaveLength(2);
+    expect(result.transactions[0]).toMatchObject({
+      type: "buy",
+      ticker: "XYZ",
+      quantity: 1.25,
+      fillPrice: 10.53,
+      timeZone: "America/New_York",
+    });
+    expect(result.transactions[1]).toMatchObject({
+      type: "sell",
+      quantity: 0.25,
+      fillPrice: 11.1,
+    });
+    expect(result.report.rowsSkipped).toBe(1);
+    expect(result.report.ignoredColumnCount).toBe(5);
+  });
+
+  it("does not apply the 40-ticker market-data ceiling to closed historical symbols", () => {
+    const rows = [
+      ["Type", "Ticker", "Quantity", "Price", "Date / Time", "Time Zone"],
+      ...Array.from({ length: 41 }, (_, index) => [
+        "Buy",
+        `T${index}`,
+        1,
+        10,
+        `2026-01-02 10:${String(index).padStart(2, "0")}`,
+        "UTC",
+      ]),
+    ];
+    const result = normalizeImportRows(rows, { batchId: "batch" });
+    expect(result.report.distinctTickerCount).toBe(41);
+    expect(result.issues).toEqual([]);
   });
 
   it("blocks rather than truncates files above the row limit", () => {

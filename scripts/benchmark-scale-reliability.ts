@@ -10,6 +10,11 @@ import {
 } from "../supabase/functions/_shared/alignment";
 import { dispatchConvictionCycle } from "../worker/convictionDispatch";
 import {
+  HISTORICAL_CHUNK_SIZE,
+  reconstructHistoricalChunk,
+  type HistoricalTransactionRow,
+} from "../supabase/functions/_shared/historicalReconstruction";
+import {
   MAX_GLOBAL_SYMBOLS,
   MAX_SYMBOLS_PER_USER,
   shardCapacityPlan,
@@ -135,6 +140,68 @@ const edgeWallMs = performance.now() - wallStart;
 const cpu = process.cpuUsage(cpuStart);
 const edgeCpuMs = (cpu.user + cpu.system) / 1_000;
 
+const historicalPortfolio = {
+  ...workspaces[0]!.portfolios[0]!,
+  cashAvailable: 1_000_000,
+};
+const historicalTransactions: HistoricalTransactionRow[] = Array.from(
+  { length: HISTORICAL_CHUNK_SIZE },
+  (_, index) => ({
+    id: `import-scale:row:${index + 1}`,
+    portfolio_id: historicalPortfolio.id,
+    kind: "qty",
+    transaction_type: "buy",
+    ticker: historicalPortfolio.holdings[0]!.ticker,
+    quantity: 1,
+    fill_price: 100,
+    filled_at: new Date(Date.parse(cycle.cycleAsOf) + index * 1_000).toISOString(),
+    shares_before: 1 + index,
+    shares_after: 2 + index,
+    cash_before: 1_000_000 - index * 100,
+    cash_after: 1_000_000 - (index + 1) * 100,
+  }),
+);
+const historicalCpuStart = process.cpuUsage();
+const historicalWallStart = performance.now();
+const historicalOutput = await reconstructHistoricalChunk({
+  job: {
+    id: "history:import-scale",
+    user_id: "scale-user",
+    import_batch_id: "import-scale",
+    portfolio_id: historicalPortfolio.id,
+    score_window_start: "2026-07-20T20:00:00.000Z",
+    score_window_end: "2026-07-28T20:00:00.000Z",
+    working_portfolio: historicalPortfolio,
+    cursor_filled_at: null,
+    cursor_transaction_id: null,
+  },
+  transactions: historicalTransactions,
+  versions: strategies.map((strategy, index) => ({
+    id: `${strategy.id}:v1`,
+    strategy_id: strategy.id,
+    effective_from: "2026-07-20T20:00:00.000Z",
+    effective_to: null,
+    snapshot: strategy,
+  })),
+  applications: strategies.map((strategy) => ({
+    strategy_id: strategy.id,
+    portfolio_id: historicalPortfolio.id,
+    applied_at: "2026-07-20T20:00:00.000Z",
+    removed_at: null,
+  })),
+  tickerApplications: strategies.map((strategy) => ({
+    strategy_id: strategy.id,
+    portfolio_id: historicalPortfolio.id,
+    ticker: historicalPortfolio.holdings[0]!.ticker,
+    applied_at: "2026-07-20T20:00:00.000Z",
+    removed_at: null,
+  })),
+  fetchCycle: async () => cycle,
+});
+const historicalUsage = process.cpuUsage(historicalCpuStart);
+const historicalCpuMs = (historicalUsage.user + historicalUsage.system) / 1_000;
+const historicalWallMs = performance.now() - historicalWallStart;
+
 const forwardingCpuMs: number[] = [];
 const forwardingWallMs: number[] = [];
 const fetcher: typeof fetch = async () =>
@@ -189,6 +256,14 @@ const results = {
     releaseCpuGateMs: EDGE_CPU_RELEASE_GATE_MS,
     releaseWallGateMs: EDGE_WALL_RELEASE_GATE_MS,
   },
+  historicalReconstruction: {
+    rowsPerChunk: HISTORICAL_CHUNK_SIZE,
+    scoredRows: historicalOutput.results.filter((row) => row.status === "scored").length,
+    cpuMs: historicalCpuMs,
+    wallMs: historicalWallMs,
+    releaseCpuGateMs: EDGE_CPU_RELEASE_GATE_MS,
+    releaseWallGateMs: EDGE_WALL_RELEASE_GATE_MS,
+  },
   shardPlan,
 };
 
@@ -215,6 +290,15 @@ if (edgeCpuMs >= EDGE_CPU_RELEASE_GATE_MS) {
 }
 if (edgeWallMs >= EDGE_WALL_RELEASE_GATE_MS) {
   failures.push("Local Edge-adapter wall time exceeds 120 s release gate");
+}
+if (historicalOutput.results.length !== HISTORICAL_CHUNK_SIZE) {
+  failures.push("Historical reconstruction chunk did not process every row");
+}
+if (historicalCpuMs >= EDGE_CPU_RELEASE_GATE_MS) {
+  failures.push("Historical reconstruction CPU exceeds 1.5 s release gate");
+}
+if (historicalWallMs >= EDGE_WALL_RELEASE_GATE_MS) {
+  failures.push("Historical reconstruction wall time exceeds 120 s release gate");
 }
 if (
   shardPlan.retrySlotsPerPhase < 1 ||

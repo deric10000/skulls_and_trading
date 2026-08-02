@@ -43,10 +43,13 @@ export function normalizePortfolioTransactions(
   return out;
 }
 
-/** Imported history is preserved for analysis but not scored until reconstruction. */
+/** Imported history counts only after an evidence-backed reconstruction succeeds. */
 export function isScorablePortfolioTransaction(
   transaction: PortfolioTransaction,
 ): boolean {
+  if (transaction.reconstructionStatus) {
+    return transaction.reconstructionStatus === "scored";
+  }
   return transaction.source !== "import";
 }
 

@@ -14,7 +14,11 @@ import {
   type WatchEditSnapshot,
 } from "../state/AppState";
 import { asyncSearchTickers, dataSource } from "../lib/datasource";
-import { getLiveQuote, subscribeLiveCache } from "../lib/market/liveCache";
+import {
+  getLiveQuote,
+  setLiveQuotes,
+  subscribeLiveCache,
+} from "../lib/market/liveCache";
 import { useMobileDetailScroll } from "../lib/useMobileDetailScroll";
 import {
   formatChange,
@@ -1759,7 +1763,10 @@ export function WatchlistWidget({
   ) {
     setEditCommitBusy(true);
     const pending = commitCurrentWatchEdit(input)
-      .catch(() => ({ status: "failed" as const }))
+      .catch(() => ({
+        status: "failed" as const,
+        reason: "save-unavailable" as const,
+      }))
       .then((result) => {
         if (result.status === "applied") {
           // Survive render sync of editCleanupRef until cancelEditMode clears the session.
@@ -1795,15 +1802,33 @@ export function WatchlistWidget({
     setPendingReview({ orders, cash });
   }
 
+  async function requestBatchTransactions() {
+    const { orders, cash } = await preparePendingReview();
+    const { cashDraftForBatch } = await import(
+      "../lib/finance/currentWatchEditWorkflow"
+    );
+    const reviewedCash = cashDraftForBatch(cash, cashBaseline);
+    if (reviewedCash.error) {
+      showEditToast(reviewedCash.error);
+      return;
+    }
+    setPendingReview({ orders, cash: reviewedCash.cash, isBatch: true });
+  }
+
   function handleCommittedWatchEdit(
     result: Awaited<ReturnType<typeof commitCurrentWatchEdit>>,
   ) {
     if (result.status !== "applied") {
-      showEditToast(
-        result.status === "conflict"
-          ? "This portfolio changed elsewhere. Cancel and reopen Edit Mode."
-          : "Changes weren’t saved. Review them and try again.",
-      );
+      if (result.status === "conflict") {
+        showEditToast(
+          "This portfolio changed elsewhere. Cancel and reopen Edit Mode.",
+        );
+      } else {
+        void import("../lib/finance/currentWatchEditWorkflow").then(
+          ({ currentWatchCommitFailureMessage }) =>
+            showEditToast(currentWatchCommitFailureMessage(result.reason)),
+        );
+      }
       return false;
     }
     setTickerHistoryRecovery((current) => [
@@ -1824,7 +1849,7 @@ export function WatchlistWidget({
     input: Parameters<typeof applyPortfolioTransactionBatch>[0],
   ) {
     const result = await applyPortfolioTransactionBatch(input);
-    if (result === "applied") {
+    if (result.status === "applied") {
       persistWatchEditMarks();
     }
     return result;
@@ -1841,15 +1866,14 @@ export function WatchlistWidget({
   }
 
   async function addPendingOrder(side: "buy" | "sell") {
-    const holding = selectedSource.holdings[0];
     const { buildAdditionalPendingOrder } = await import(
       "../lib/finance/currentWatchEditWorkflow"
     );
     const order = buildAdditionalPendingOrder({
       side,
-      ticker: holding?.ticker ?? "",
-      sharesBefore: holding?.shares ?? 0,
-      lastPrice: dataSource.getQuote(holding?.ticker ?? "")?.lastPrice ?? 0,
+      ticker: "",
+      sharesBefore: 0,
+      lastPrice: 0,
       filledAt: estimateFillTimestamp(),
       timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
     });
@@ -1863,10 +1887,39 @@ export function WatchlistWidget({
     );
   }
 
-  async function confirmPendingOrders() {
+  function addPendingCashDeposit() {
+    setPendingReview((current) => {
+      if (!current || current.cash) return current;
+      const cashBefore = roundMoney(selectedSource.cashAvailable ?? 0);
+      return {
+        ...current,
+        cash: {
+          side: "deposit",
+          cashBefore,
+          cashAfter: cashBefore,
+          deltaCash: 0,
+          filledAt: estimateFillTimestamp(),
+          timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+        },
+      };
+    });
+  }
+
+  async function resolvePendingMarkPrice(ticker: string): Promise<number> {
+    const cached = dataSource.getQuote(ticker)?.lastPrice ?? 0;
+    if (cached > 0) return cached;
+    const { fetchMarketQuotes } = await import("../lib/market/client");
+    const result = await fetchMarketQuotes([ticker]);
+    const quote = result?.quotes[ticker.toUpperCase()];
+    if (!quote || !(quote.lastPrice > 0)) return 0;
+    setLiveQuotes({ [ticker.toUpperCase()]: quote });
+    return quote.lastPrice;
+  }
+
+  async function confirmPendingOrders(): Promise<string | null> {
     if (!pendingReview) {
       cancelEditMode();
-      return;
+      return null;
     }
     const { orders, cash } = pendingReview;
     const { reviewCurrentWatchTimeline } = await import(
@@ -1878,8 +1931,7 @@ export function WatchlistWidget({
       startingCash: selectedSource.cashAvailable ?? 0,
     });
     if ("error" in reviewed) {
-      setEditToast(reviewed.error);
-      return;
+      return reviewed.error;
     }
     const result = await commitReviewedEdit({
       portfolioId: selectedSource.id,
@@ -1888,8 +1940,18 @@ export function WatchlistWidget({
       finalCash: reviewed.finalCash,
       historyRemovalTickers: Array.from(pendingHistoryRemovalTickers),
     });
-    if (result?.status === "applied") setPendingReview(null);
-    handleCommittedWatchEdit(result);
+    if (result.status === "applied") {
+      setPendingReview(null);
+      handleCommittedWatchEdit(result);
+      return null;
+    }
+    const message = result.status === "conflict"
+      ? "This portfolio changed elsewhere. Cancel and reopen Edit Mode."
+      : (
+          await import("../lib/finance/currentWatchEditWorkflow")
+        ).currentWatchCommitFailureMessage(result.reason);
+    showEditToast(message);
+    return message;
   }
 
   // Leave drill-in if the focused strategy filter hides the selected ticker.
@@ -2382,11 +2444,7 @@ export function WatchlistWidget({
             <CurrentWatchEditToolbar
               isWatchlist={isWatchlistSource}
               sourceLabel={selectedSource.label}
-              onTransactions={() => {
-                void preparePendingReview().then(({ orders, cash }) =>
-                  setPendingReview({ orders, cash, isBatch: true }),
-                );
-              }}
+              onTransactions={() => void requestBatchTransactions()}
               onImport={requestImport}
               onArchive={requestArchive}
               dirty={editIsDirty}
@@ -3010,12 +3068,18 @@ export function WatchlistWidget({
             holdings={selectedSource.holdings}
             TickerSearch={CurrentWatchTickerSearch}
             tickerOptions={items}
-            getMarkPrice={(ticker) => dataSource.getQuote(ticker)?.lastPrice ?? 0}
+            resolveMarkPrice={resolvePendingMarkPrice}
             searchTickers={asyncSearchTickers}
-            onChange={setPendingReview}
+            onChange={(update) =>
+              setPendingReview((current) => {
+                if (!current) return current;
+                return typeof update === "function" ? update(current) : update;
+              })
+            }
             onCancel={cancelPendingReview}
-            onConfirm={() => void confirmPendingOrders()}
+            onConfirm={confirmPendingOrders}
             onAdd={addPendingOrder}
+            onAddCash={addPendingCashDeposit}
             onAddTicker={addBatchTicker}
           />
         </Suspense>
@@ -3024,12 +3088,15 @@ export function WatchlistWidget({
         <Suspense fallback={null}>
           <CurrentWatchImportModal
             portfolio={selectedSource}
-            existingTransactions={[]}
             existingTrackedTickers={Array.from(
               new Set(
-                portfolios.flatMap((source) =>
-                  source.holdings.map((holding) => holding.ticker),
-                ),
+                portfolios
+                  .filter((source) => source.id !== selectedSource.id)
+                  .flatMap((source) =>
+                    source.holdings
+                      .filter((holding) => holding.shares > 0)
+                      .map((holding) => holding.ticker),
+                  ),
               ),
             )}
             isKnownTicker={(ticker) => Boolean(dataSource.getTickerInfo(ticker))}

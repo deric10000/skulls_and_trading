@@ -1,8 +1,12 @@
 import type { Portfolio, PortfolioTransaction } from "../../types";
 import type { ImportSanitizationReport } from "../import/portfolioImport";
+import type { PortfolioImportCommitError } from "../import/portfolioImportCommitErrors";
 import { getSupabase } from "../auth/supabaseClient";
 import { roundQuantity } from "../finance/currentWatchTransactions";
+import type { TradeCashTreatment } from "../finance/currentWatchTransactions";
 import { serializeWorkspaceMutation } from "./workspaceMutationQueue";
+
+export type { PortfolioImportCommitError };
 
 interface PortfolioTransactionRow {
   id: string;
@@ -25,6 +29,21 @@ interface PortfolioTransactionRow {
   action_class: PortfolioTransaction["actionClass"];
   strategy_ids: string[] | null;
   zone_hints: PortfolioTransaction["zoneHints"] | null;
+  reconstruction_status?: PortfolioTransaction["reconstructionStatus"] | null;
+  reconstruction_reason?: string | null;
+  reconstruction_cycle_key?: string | null;
+  reconstruction_cycle_as_of?: string | null;
+  reconstructed_at?: string | null;
+}
+
+function reconstructionStamp(row: PortfolioTransactionRow) {
+  return {
+    reconstructionStatus: row.reconstruction_status ?? undefined,
+    reconstructionReason: row.reconstruction_reason ?? undefined,
+    reconstructionCycleKey: row.reconstruction_cycle_key ?? undefined,
+    reconstructionCycleAsOf: row.reconstruction_cycle_as_of ?? undefined,
+    reconstructedAt: row.reconstructed_at ?? undefined,
+  };
 }
 
 function numeric(value: number | string | null): number {
@@ -56,6 +75,7 @@ function transactionFromRow(row: PortfolioTransactionRow): PortfolioTransaction 
       importBatchId: row.import_batch_id ?? undefined,
       fingerprint: row.fingerprint,
       timeZone: row.time_zone,
+      ...reconstructionStamp(row),
     };
   }
   if (row.kind === "cash") {
@@ -76,6 +96,7 @@ function transactionFromRow(row: PortfolioTransactionRow): PortfolioTransaction 
       importBatchId: row.import_batch_id ?? undefined,
       fingerprint: row.fingerprint,
       timeZone: row.time_zone,
+      ...reconstructionStamp(row),
     };
   }
   return null;
@@ -85,14 +106,28 @@ function transactionFromRow(row: PortfolioTransactionRow): PortfolioTransaction 
 export async function loadNormalizedPortfolioTransactions(
   userId: string,
 ): Promise<PortfolioTransaction[]> {
-  const { data, error } = await getSupabase()
+  const primary = await getSupabase()
     .from("portfolio_transactions")
     .select(
-      "id,portfolio_id,kind,transaction_type,ticker,quantity,fill_price,amount,filled_at,time_zone,source,import_batch_id,fingerprint,shares_before,shares_after,cash_before,cash_after,action_class,strategy_ids,zone_hints",
+      "id,portfolio_id,kind,transaction_type,ticker,quantity,fill_price,amount,filled_at,time_zone,source,import_batch_id,fingerprint,shares_before,shares_after,cash_before,cash_after,action_class,strategy_ids,zone_hints,reconstruction_status,reconstruction_reason,reconstruction_cycle_key,reconstruction_cycle_as_of,reconstructed_at",
     )
     .eq("user_id", userId)
     .is("archived_at", null)
     .order("filled_at", { ascending: false });
+  let data: unknown[] | null = primary.data;
+  let error = primary.error;
+  if (error?.code === "42703") {
+    const legacy = await getSupabase()
+      .from("portfolio_transactions")
+      .select(
+        "id,portfolio_id,kind,transaction_type,ticker,quantity,fill_price,amount,filled_at,time_zone,source,import_batch_id,fingerprint,shares_before,shares_after,cash_before,cash_after,action_class,strategy_ids,zone_hints",
+      )
+      .eq("user_id", userId)
+      .is("archived_at", null)
+      .order("filled_at", { ascending: false });
+    data = legacy.data;
+    error = legacy.error;
+  }
   if (error) {
     // 42P01 = migration not applied. Keep the branch rollback-compatible.
     if (error.code !== "42P01") console.warn("normalized portfolio ledger fetch failed", error.message);
@@ -134,6 +169,7 @@ export interface CommitPortfolioBatchInput {
   batch: {
     id: string;
     mode: "append" | "replace";
+    cashTreatment: TradeCashTreatment;
     report: ImportSanitizationReport;
     replaceBasis?: "history" | "opening";
     openingCash?: number;
@@ -158,10 +194,24 @@ export async function commitPortfolioTransactionBatch(
       },
     );
     if (error) {
-      if (error.message.includes("portfolio_revision_conflict")) {
-        throw new Error("PORTFOLIO_REVISION_CONFLICT");
+      // Keep the typed error mapper off the signed-out/eager path; import only
+      // when a commit actually fails.
+      const {
+        PortfolioImportCommitError,
+        portfolioImportCommitErrorFromUnknown,
+      } = await import("../import/portfolioImportCommitErrors");
+      const mapped = portfolioImportCommitErrorFromUnknown(error, {
+        cashTreatment: input.batch.cashTreatment,
+      });
+      if (mapped.code === "revision-conflict") {
+        throw new PortfolioImportCommitError(
+          "revision-conflict",
+          mapped.message,
+          mapped.context,
+          "batch",
+        );
       }
-      throw new Error("IMPORT_COMMIT_FAILED");
+      throw mapped;
     }
     return Number(data);
   });

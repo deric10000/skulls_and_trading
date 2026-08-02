@@ -1,5 +1,5 @@
-import type { ResolvedStatus, RuleCategory, StatusType } from "../../types";
-import type { CategoryScore } from "./scoring";
+import type { ResolvedStatus, RuleCategory, StatusType } from "../../types.ts";
+import type { CategoryScore } from "./scoring.ts";
 
 // ---------------------------------------------------------------------------
 // Unified Forge status resolver — Layer 1 conviction band + Layer 2 category

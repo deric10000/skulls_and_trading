@@ -10,6 +10,7 @@ import {
   MAX_SYMBOLS_PER_USER,
   mergeRegistrySymbols,
   resolveRegistryWriteMode,
+  readHistoricalScoringCycle,
   selectActiveGlobalSymbols,
   shardCapacityPlan,
   TECH_SYMBOLS_PER_TICK,
@@ -227,6 +228,7 @@ describe("market cycle scale and completeness", () => {
     };
     const env = {
       MARKET_CACHE: {
+        get: vi.fn(async () => null),
         put: vi.fn(async (key: string) => {
           order.push(`put:${key}`);
         }),
@@ -245,6 +247,70 @@ describe("market cycle scale and completeness", () => {
     await commitPublishedCycle(env as never, payload, true);
     expect(order).not.toContain(`put:${payload.cycleKey}`);
     expect(order.at(-1)).toBe(`queue:${payload.cycleKey}`);
+  });
+
+  it("returns only an at-or-before scoring cycle and filters its symbols", async () => {
+    const values = new Map<string, string | ArrayBuffer>();
+    const cache = {
+      get: vi.fn(async (key: string, type?: string) => {
+        const value = values.get(key);
+        if (value == null) return null;
+        if (type === "json") {
+          return JSON.parse(String(value));
+        }
+        if (type === "arrayBuffer") return value;
+        return value;
+      }),
+      put: vi.fn(async (key: string, value: string | ArrayBuffer) => {
+        values.set(key, value);
+      }),
+    };
+    const payload = {
+      schemaVersion: 1 as const,
+      complete: true as const,
+      cycleKey: "market:cycle:complete:20260727T200000000Z",
+      cycleAsOf: "2026-07-27T20:00:00.000Z",
+      completedAt: "2026-07-27T20:59:00.000Z",
+      publishedAt: "2026-07-27T21:00:00.000Z",
+      nextCycleAt: "2026-07-27T22:00:00.000Z",
+      symbols: ["AAPL", "MSFT"],
+      quotes: {
+        AAPL: { ticker: "AAPL", lastPrice: 200, asOf: "2026-07-27T20:00:00.000Z", source: "live" as const, provider: "yahoo" as const },
+        MSFT: { ticker: "MSFT", lastPrice: 500, asOf: "2026-07-27T20:00:00.000Z", source: "live" as const, provider: "yahoo" as const },
+      },
+      fundamentals: { AAPL: {}, MSFT: {} },
+      technicals: { AAPL: {}, MSFT: {} },
+      byTimeframe: { AAPL: {}, MSFT: {} },
+      context: { asOf: "2026-07-27T20:00:00.000Z" },
+      weatherSymbolObservables: {},
+      weatherBenchmarks: {
+        status: "insufficient" as const,
+        expectedSymbols: [], freshSymbols: [], staleSymbols: [], missingSymbols: [],
+        freshnessBySymbol: {}, sourceCycleAsOfBySymbol: {}, benchmarks: {},
+        sectorSpdrOutperformingFreshCount: 0, sectorSpdrAboveSma50FreshCount: 0,
+      },
+      errors: [],
+    };
+    await commitPublishedCycle(
+      {
+        MARKET_CACHE: cache,
+        CONVICTION_CYCLE_QUEUE: { send: vi.fn(async () => undefined) },
+      } as never,
+      payload,
+      false,
+    );
+    const response = await readHistoricalScoringCycle(
+      new Request(
+        "https://example.test/api/internal/historical-market-cycle?at=2026-07-27T20%3A30%3A00.000Z&symbols=AAPL",
+        { headers: { "x-internal-scoring-secret": "secret" } },
+      ),
+      cache as never,
+      "secret",
+    );
+    expect(response.status).toBe(200);
+    const cycle = await response.json() as { quotes: Record<string, unknown>; cycleAsOf: string };
+    expect(cycle.cycleAsOf).toBe(payload.cycleAsOf);
+    expect(Object.keys(cycle.quotes)).toEqual(["AAPL"]);
   });
 
   it("filters a published 800-symbol cycle to one user's 40 symbols", async () => {

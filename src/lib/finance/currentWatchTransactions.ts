@@ -13,6 +13,11 @@ export const IMPORT_TICKER_LIMIT = 40;
 export const IMPORT_FILE_BYTES = 5 * 1024 * 1024;
 
 export type DraftTransactionType = "buy" | "sell" | "deposit" | "withdrawal";
+export type TradeCashTreatment = "apply" | "preserve";
+
+export type OversellPolicy = "clamp-to-held";
+/** Explicit import resolution when a sell exceeds accounted shares. */
+export type OversellResolution = "close-to-zero" | "set-qty-left";
 
 export interface DraftPortfolioTransaction {
   id: string;
@@ -26,6 +31,16 @@ export interface DraftPortfolioTransaction {
   source: "manual" | "import";
   importBatchId?: string;
   sourceRow?: number;
+  /**
+   * When a sell exceeds shares accounted for in this portfolio timeline,
+   * clamp the sale to the held quantity so the position ends at 0.
+   * Does not invent untracked shares — server share sequencing stays honest.
+   */
+  oversellPolicy?: OversellPolicy;
+  /** User-chosen oversell fix from the import flagged-row radios. */
+  oversellResolution?: OversellResolution;
+  /** Target shares after sell when oversellResolution is set-qty-left. */
+  targetSharesAfter?: number;
 }
 
 export interface OpeningPosition {
@@ -57,6 +72,11 @@ export interface TransactionIssue {
   sourceRow?: number;
   code: TransactionIssueCode;
   message: string;
+  ticker?: string;
+  availableShares?: number;
+  requiredShares?: number;
+  availableCash?: number;
+  requiredCash?: number;
 }
 
 export interface ReplayOptions {
@@ -66,6 +86,8 @@ export interface ReplayOptions {
   existingFingerprints?: ReadonlySet<string>;
   existingTransactions?: PortfolioTransaction[];
   markPrice?: (ticker: string) => number;
+  /** Whether imported buy/sell cash flow changes the portfolio's current cash. */
+  tradeCashTreatment?: TradeCashTreatment;
 }
 
 export interface ReplayResult {
@@ -136,12 +158,23 @@ function issue(
   transaction: DraftPortfolioTransaction,
   code: TransactionIssueCode,
   message: string,
+  extra: Partial<
+    Pick<
+      TransactionIssue,
+      | "ticker"
+      | "availableShares"
+      | "requiredShares"
+      | "availableCash"
+      | "requiredCash"
+    >
+  > = {},
 ): TransactionIssue {
   return {
     transactionId: transaction.id,
     sourceRow: transaction.sourceRow,
     code,
     message,
+    ...extra,
   };
 }
 
@@ -151,6 +184,7 @@ function issue(
  */
 export function replayPortfolioTransactions(options: ReplayOptions): ReplayResult {
   const { portfolio, openingState, existingFingerprints = new Set() } = options;
+  const tradeCashTreatment = options.tradeCashTreatment ?? "apply";
   const startingHoldings = openingState
     ? openingState.positions.map((position) => ({
         ...newHolding(position.ticker.trim().toUpperCase(), []),
@@ -241,7 +275,7 @@ export function replayPortfolioTransactions(options: ReplayOptions): ReplayResul
     }
 
     const ticker = transaction.ticker?.trim().toUpperCase() ?? "";
-    const quantity = roundQuantity(transaction.quantity ?? 0);
+    let quantity = roundQuantity(transaction.quantity ?? 0);
     const fillPrice = roundUsd(transaction.fillPrice ?? 0);
     if (!/^[A-Z][A-Z0-9.-]{0,9}$/.test(ticker)) {
       issues.push(issue(transaction, "invalid-ticker", "Review this ticker symbol."));
@@ -256,15 +290,108 @@ export function replayPortfolioTransactions(options: ReplayOptions): ReplayResul
       continue;
     }
 
-    const current = holdings.get(ticker) ?? newHolding(ticker, []);
+    let current = holdings.get(ticker) ?? newHolding(ticker, []);
     const side: QtySide = transaction.type;
+    let untrackedClose = false;
     if (side === "sell" && quantity > current.shares) {
-      issues.push(issue(transaction, "oversell", "This sale exceeds shares held at that point in the timeline."));
-      continue;
+      const held = current.shares;
+      if (transaction.oversellResolution === "close-to-zero") {
+        if (held > 0) {
+          quantity = held;
+        } else {
+          // Brokerage-held / missing earlier buys: treat sale as closing an
+          // untracked lot equal to the sold quantity, ending at 0.
+          untrackedClose = true;
+          current = {
+            ...current,
+            ticker,
+            shares: quantity,
+            avgPrice: fillPrice,
+          };
+          holdings.set(ticker, current);
+        }
+      } else if (
+        transaction.oversellResolution === "set-qty-left" &&
+        transaction.targetSharesAfter != null
+      ) {
+        const sharesAfterTarget = roundQuantity(transaction.targetSharesAfter);
+        if (held > 0) {
+          if (sharesAfterTarget >= 0 && sharesAfterTarget < held) {
+            quantity = roundQuantity(held - sharesAfterTarget);
+          } else {
+            issues.push(
+              issue(
+                transaction,
+                "oversell",
+                `Choose a total qty left from 0 up to (but not including) ${formatQuantity(held)}, or close the accounted position to 0.`,
+                {
+                  ticker,
+                  availableShares: held,
+                  requiredShares: quantity,
+                },
+              ),
+            );
+            continue;
+          }
+        } else if (sharesAfterTarget >= 0) {
+          untrackedClose = true;
+          const sharesBeforeUntracked = roundQuantity(quantity + sharesAfterTarget);
+          current = {
+            ...current,
+            ticker,
+            shares: sharesBeforeUntracked,
+            avgPrice: fillPrice,
+          };
+          holdings.set(ticker, current);
+        } else {
+          issues.push(
+            issue(
+              transaction,
+              "oversell",
+              `Choose a total qty left of 0 or more for this untracked ${ticker} sell, or close it to 0.`,
+              {
+                ticker,
+                availableShares: held,
+                requiredShares: quantity,
+              },
+            ),
+          );
+          continue;
+        }
+      } else if (transaction.oversellPolicy === "clamp-to-held" && held > 0) {
+        quantity = held;
+      } else {
+        issues.push(
+          issue(
+            transaction,
+            "oversell",
+            held > 0
+              ? `This ${ticker} sale of ${formatQuantity(quantity)} exceeds the ${formatQuantity(held)} shares held in this portfolio at that point in the timeline.`
+              : `This ${ticker} sale exceeds shares held in this portfolio at that point in the timeline. No ${ticker} shares are accounted for yet.`,
+            {
+              ticker,
+              availableShares: held,
+              requiredShares: quantity,
+            },
+          ),
+        );
+        continue;
+      }
     }
     const tradeValue = roundUsd(quantity * fillPrice);
-    if (side === "buy" && tradeValue > cash) {
-      issues.push(issue(transaction, "insufficient-cash", "Add a deposit or opening cash before this purchase."));
+    if (tradeCashTreatment === "apply" && side === "buy" && tradeValue > cash) {
+      issues.push(
+        issue(
+          transaction,
+          "insufficient-cash",
+          `Add a deposit or opening cash before this ${ticker} purchase.`,
+          {
+            ticker,
+            availableCash: cash,
+            requiredCash: tradeValue,
+          },
+        ),
+      );
       continue;
     }
     const sharesBefore = current.shares;
@@ -272,7 +399,9 @@ export function replayPortfolioTransactions(options: ReplayOptions): ReplayResul
       side === "buy" ? sharesBefore + quantity : sharesBefore - quantity,
     );
     const cashBefore = cash;
-    cash = roundUsd(side === "buy" ? cash - tradeValue : cash + tradeValue);
+    if (tradeCashTreatment === "apply") {
+      cash = roundUsd(side === "buy" ? cash - tradeValue : cash + tradeValue);
+    }
     const avgPrice = nextAverageCost({
       sharesBefore,
       avgBefore: current.avgPrice,
@@ -311,6 +440,7 @@ export function replayPortfolioTransactions(options: ReplayOptions): ReplayResul
       timeZone: transaction.timeZone,
       cashBefore,
       cashAfter: cash,
+      ...(untrackedClose ? { untrackedClose: true } : {}),
     });
     validTransactionIds.push(transaction.id);
   }
