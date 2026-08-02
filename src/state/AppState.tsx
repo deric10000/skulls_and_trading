@@ -344,7 +344,7 @@ export interface AppStateValue {
   applyPortfolioTransactionBatch: (
     input: CommitPortfolioBatchInput,
   ) => Promise<
-    | { status: "applied" }
+    | { status: "applied"; revision: number; portfolio: Portfolio }
     | { status: "conflict" }
     | { status: "failed"; error: PortfolioImportCommitError }
   >;
@@ -1647,7 +1647,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     async (
       input: CommitPortfolioBatchInput,
     ): Promise<
-      | { status: "applied" }
+      | { status: "applied"; revision: number; portfolio: Portfolio }
       | { status: "conflict" }
       | { status: "failed"; error: PortfolioImportCommitError }
     > => {
@@ -1698,7 +1698,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
             await loadPortfolioArchives(userIdRef.current),
           );
         }
-        return { status: "applied" };
+        return { status: "applied", revision, portfolio: nextPortfolio };
       } catch (error) {
         const {
           PortfolioImportCommitError,

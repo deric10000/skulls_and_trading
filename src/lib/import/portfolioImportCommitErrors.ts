@@ -21,6 +21,7 @@ export type PortfolioImportCommitCode =
   | "average-cost-mismatch"
   | "ticker-limit"
   | "invalid-batch"
+  | "batch-too-large"
   | "reconstruction-enqueue-failed"
   | "unexpected";
 
@@ -198,10 +199,16 @@ function formatMessage(
       return "The saved holdings projection no longer matches this import preview. Refresh the portfolio and review the updated preview.";
     case "average-cost-mismatch":
       return "The average-cost projection no longer matches this import preview. Refresh the portfolio and review the updated preview.";
-    case "ticker-limit":
+    case "ticker-limit": {
+      if (context.resultingCount != null && context.limit != null) {
+        return `Adding these holdings would create ${context.resultingCount} active tickers, above the ${context.limit}-ticker market-data limit. Remove tracked tickers or exclude some import rows, then retry.`;
+      }
       return "Adding these holdings would exceed the 40 active-ticker limit. Remove tracked tickers or exclude some import rows, then retry.";
+    }
     case "invalid-batch":
       return "This import batch is invalid. Close the import, choose the file again, and retry.";
+    case "batch-too-large":
+      return "This import is too large to save in one step (common with hundreds of brokerage rows). Split the file into smaller batches — for example under 100 executed rows — then import each batch. Your portfolio has not changed.";
     case "reconstruction-enqueue-failed":
       return "Historical scoring could not be queued with this import, so nothing was saved. Retry the import. Your portfolio has not changed.";
     case "unexpected":
@@ -247,7 +254,7 @@ function codeFromServerToken(token: string): PortfolioImportCommitCode | null {
     case "invalid_batch":
       return "invalid-batch";
     case "invalid_transaction_count":
-      return "invalid-batch";
+      return "batch-too-large";
     case "invalid_replace_basis":
       return "invalid-batch";
     case "invalid_opening_cash":
@@ -348,6 +355,22 @@ export function portfolioImportCommitErrorFromUnknown(
     return new PortfolioImportCommitError(
       "network-unavailable",
       formatMessage("network-unavailable", detailContext),
+      detailContext,
+      "batch",
+    );
+  }
+
+  // Supabase/Postgres cancel large commit work under statement_timeout (57014).
+  // Surface a fixable batch-size message instead of a generic retry.
+  if (
+    supabaseLike?.code === "57014" ||
+    lower.includes("statement timeout") ||
+    lower.includes("canceling statement due to statement timeout") ||
+    lower.includes("cancelling statement due to statement timeout")
+  ) {
+    return new PortfolioImportCommitError(
+      "batch-too-large",
+      formatMessage("batch-too-large", detailContext),
       detailContext,
       "batch",
     );

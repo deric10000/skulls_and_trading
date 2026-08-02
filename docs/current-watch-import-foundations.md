@@ -183,9 +183,23 @@ raise stable exception names (`insufficient_cash`, `invalid_trade_cash_math`,
 `oversell`, `portfolio_revision_conflict`, …) with an optional JSON DETAIL that
 may include only safe fields: `code`, `sourceRow`, `ticker`, `transactionType`,
 `filledAt`, cash/share amounts, and ticker-limit counts. The client maps those
-codes through `portfolioImportCommitErrors.ts` into user-facing copy. Raw SQL,
-stack traces, and unconstrained database prose never reach the modal. Preserve-
-cash commits require this migration; until it is applied, preserve-mode cash
+codes through `portfolioImportCommitErrors.ts` into user-facing copy. Statement
+timeouts and oversize batches map to an actionable split-batch message
+(`batch-too-large`), not a generic retry. Append imports with more than 100
+retained rows use in-app chunking (`portfolioImportChunks.ts`): chronological
+slices of 100 staged locally via **Import next 100** (max three / 300 rows),
+then **Finish** persists every staged chunk against the same progressive book
+used while staging (no mid-Finish server refresh — that can diverge and false-
+flag later chunks). Each chunk is rebatched to a fresh `batchId:row:N`.
+**Cancel** discards unsaved staging; rows already saved by a partial Finish
+remain. Progress shows elapsed while preparing/saving and
+`X of Y rows ready` / saved after each stage. Full-file Import is disabled on
+that path; rows beyond 300 must be split outside the app. Preview reports active-ticker count; the 40-ticker
+ceiling counts only holdings with shares > 0 across the workspace (closed
+symbols do not consume the budget). The commit RPC validates distinct time
+zones once and allows up to 120s per chunk. Raw SQL, stack traces, and
+unconstrained database prose never reach the modal. Preserve-cash commits
+require the cash-treatment migration; until it is applied, preserve-mode cash
 math rejects with a schema-update-required message while the portfolio stays
 unchanged.
 

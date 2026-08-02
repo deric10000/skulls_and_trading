@@ -2,6 +2,8 @@ import type { CSSProperties, ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Plus, X } from "../../lib/icons";
 
+const DEFAULT_DONE_ICON = <Plus aria-hidden weight="regular" />;
+
 /**
  * Shared chrome for Strategy Forge table modals (Rule Chips, Tags, Layer 3
  * zones, …) and any other full-viewport editor that needs the same shell
@@ -29,6 +31,7 @@ export function ForgeTableModal({
   onDone,
   doneLabel = "Update",
   doneDisabled = false,
+  doneIcon,
   intro,
   addAction,
   totalLabel,
@@ -62,6 +65,11 @@ export function ForgeTableModal({
   doneLabel?: string;
   /** Prevent final submission while a review flow still has blocking issues. */
   doneDisabled?: boolean;
+  /**
+   * Icon before the primary Done label. Defaults to Plus. Pass `null` for
+   * no icon (e.g. Finish / Close on import).
+   */
+  doneIcon?: ReactNode;
   /** Short intro line (left side of the intro row). */
   intro?: ReactNode;
   /** Primary add control (right side of the intro row) — button or ActionMenu. */
@@ -72,7 +80,7 @@ export function ForgeTableModal({
   caution?: ReactNode;
   /**
    * Optional secondary action strip pinned above Cancel / primary Done
-   * (e.g. import Confirm Edits + Exclude Flagged). Keep chrome shared —
+   * (e.g. import Confirm Edits + Exclude All Flagged). Keep chrome shared —
    * put modal-specific buttons in this slot, not a parallel footer.
    */
   actionBar?: ReactNode;
@@ -173,7 +181,8 @@ export function ForgeTableModal({
                 onClick={onDone}
                 disabled={doneDisabled}
               >
-                <Plus aria-hidden weight="regular" /> {doneLabel}
+                {doneIcon === undefined ? DEFAULT_DONE_ICON : doneIcon}
+                {doneLabel}
               </button>
             </div>
           </>

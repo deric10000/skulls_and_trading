@@ -24,7 +24,14 @@ import type { CommitPortfolioBatchInput } from "../../lib/userStore/portfolioLed
 import { fetchMarketQuotes } from "../../lib/market/client";
 import { Dropdown } from "../Dropdown";
 import { ForgeTableModal } from "../forge/ForgeTableModal";
-import { CaretDown, CheckCircle, DownloadSimple, Trash, X } from "../../lib/icons";
+import {
+  CaretDown,
+  CheckCircle,
+  Copy,
+  DownloadSimple,
+  Trash,
+  X,
+} from "../../lib/icons";
 import { Radio } from "../Radio";
 import { RowMessage } from "../RowMessage";
 import {
@@ -33,10 +40,29 @@ import {
 } from "../../lib/userStore/historicalReconstructionStore";
 import { HistoricalReconstructionToast } from "./HistoricalReconstructionToast";
 import {
+  IMPORT_IN_APP_ROW_CAP,
+  chunkActionLabel,
+  nextImportChunk,
+  orderDraftTransactionsForImport,
+  preparedProgressCopy,
+  rebatchDraftForCommit,
+  rebatchLedgerForCommit,
+  resultingActiveTickerCount,
+  usesChunkedAppendImport,
+} from "../../lib/import/portfolioImportChunks";
+import {
   ImportFlaggedRowsEditor,
   canConfirmFlaggedImportEdits,
   type PendingOversellChoice,
 } from "./ImportFlaggedRowsEditor";
+
+type StagedImportChunk = {
+  drafts: DraftPortfolioTransaction[];
+  ledger: PortfolioTransaction[];
+  portfolio: Portfolio;
+  from: number;
+  to: number;
+};
 
 function applyOversellToRow(
   row: DraftPortfolioTransaction,
@@ -118,6 +144,7 @@ export function CurrentWatchImportModal({
   onCommit,
 }: {
   portfolio: Portfolio;
+  /** Active (shares > 0) tickers on other portfolios — workspace ticker budget. */
   existingTrackedTickers: string[];
   isKnownTicker: (ticker: string) => boolean;
   getMarkPrice: (ticker: string) => number;
@@ -129,7 +156,7 @@ export function CurrentWatchImportModal({
   onCommit: (
     input: CommitPortfolioBatchInput,
   ) => Promise<
-    | { status: "applied" }
+    | { status: "applied"; revision: number; portfolio: Portfolio }
     | { status: "conflict" }
     | { status: "failed"; error: PortfolioImportCommitError }
   >;
@@ -174,6 +201,20 @@ export function CurrentWatchImportModal({
   const [unsupportedTickers, setUnsupportedTickers] = useState<Set<string>>(
     () => new Set(),
   );
+  const [preparedCount, setPreparedCount] = useState(0);
+  const [chunksPrepared, setChunksPrepared] = useState(0);
+  const [savedCount, setSavedCount] = useState(0);
+  const [stagedChunks, setStagedChunks] = useState<StagedImportChunk[]>([]);
+  const [stagedBasePortfolio, setStagedBasePortfolio] = useState<Portfolio | null>(
+    null,
+  );
+  const [stagedBaseTransactions, setStagedBaseTransactions] = useState<
+    PortfolioTransaction[] | null
+  >(null);
+  const [chunkStartedAt, setChunkStartedAt] = useState<number | null>(null);
+  const [chunkElapsedSec, setChunkElapsedSec] = useState(0);
+  const [chunkRangeLabel, setChunkRangeLabel] = useState<string | null>(null);
+  const [finishingChunks, setFinishingChunks] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -225,6 +266,22 @@ export function CurrentWatchImportModal({
       if (timer != null) window.clearTimeout(timer);
     };
   }, [importApplied, portfolio.id]);
+
+  useEffect(() => {
+    if (chunkStartedAt == null) {
+      setChunkElapsedSec(0);
+      return;
+    }
+    const tick = () => {
+      setChunkElapsedSec(
+        Math.max(0, Math.floor((Date.now() - chunkStartedAt) / 1000)),
+      );
+    };
+    tick();
+    const timer = window.setInterval(tick, 250);
+    return () => window.clearInterval(timer);
+  }, [chunkStartedAt]);
+
   const [tickerValidationUnavailable, setTickerValidationUnavailable] =
     useState(false);
   const [tickerValidationPending, setTickerValidationPending] = useState(false);
@@ -262,6 +319,14 @@ export function CurrentWatchImportModal({
     setTickerValidationUnavailable(false);
     setTickerValidationPending(false);
     setExcludedFlaggedRows(false);
+    setPreparedCount(0);
+    setChunksPrepared(0);
+    setStagedChunks([]);
+    setStagedBasePortfolio(null);
+    setStagedBaseTransactions(null);
+    setChunkStartedAt(null);
+    setChunkRangeLabel(null);
+    setFinishingChunks(false);
     setFile(nextFile);
     const nextBatchId = batchId();
     setActiveBatchId(nextBatchId);
@@ -318,40 +383,55 @@ export function CurrentWatchImportModal({
     [draftTransactions, excludedIds],
   );
 
+  /** Rows not yet prepared in earlier chunks (keeps flags/duplicates honest). */
+  const remainingDraftTransactions = useMemo(() => {
+    if (preparedCount <= 0) return activeDraftTransactions;
+    return orderDraftTransactionsForImport(activeDraftTransactions).slice(
+      preparedCount,
+    );
+  }, [activeDraftTransactions, preparedCount]);
+
+  const previewBasePortfolio = stagedBasePortfolio ?? basePortfolio;
+  const previewBaseTransactions = stagedBaseTransactions ?? baseTransactions;
+
   const preview = useMemo(() => {
     if (!baseReady || !normalized || !mode) return null;
     if (
       mode === "append" &&
-      activeDraftTransactions.some((transaction) => transaction.ticker) &&
+      remainingDraftTransactions.some((transaction) => transaction.ticker) &&
       !cashTreatment
     ) return null;
     const replayBase =
       mode === "replace"
-        ? { ...basePortfolio, holdings: [], cashAvailable: 0 }
-        : basePortfolio;
+        ? { ...previewBasePortfolio, holdings: [], cashAvailable: 0 }
+        : previewBasePortfolio;
     return replayPortfolioTransactions({
       portfolio: replayBase,
       openingState,
-      transactions: activeDraftTransactions,
+      transactions: remainingDraftTransactions,
       existingFingerprints:
         mode === "append"
-          ? new Set(baseTransactions.flatMap((row) => (row.fingerprint ? [row.fingerprint] : [])))
+          ? new Set(
+              previewBaseTransactions.flatMap((row) =>
+                row.fingerprint ? [row.fingerprint] : [],
+              ),
+            )
           : new Set(),
-      existingTransactions: mode === "append" ? baseTransactions : [],
+      existingTransactions: mode === "append" ? previewBaseTransactions : [],
       markPrice: getMarkPrice,
       tradeCashTreatment: cashTreatment ?? "apply",
     });
   }, [
     normalized,
     mode,
-    basePortfolio,
+    previewBasePortfolio,
     replaceBasis,
     openingState,
-    baseTransactions,
+    previewBaseTransactions,
     baseReady,
     getMarkPrice,
     cashTreatment,
-    activeDraftTransactions,
+    remainingDraftTransactions,
   ]);
 
   const activePreviewTickers = useMemo(
@@ -413,18 +493,68 @@ export function CurrentWatchImportModal({
     isKnownTicker,
   ]);
 
-  const budgetBlockedTickers = useMemo(() => {
-    if (!preview) return new Set<string>();
-    const existing = new Set([
-      ...existingTrackedTickers.map((ticker) => ticker.toUpperCase()),
-    ]);
-    for (const holding of basePortfolio.holdings) {
-      existing.delete(holding.ticker.toUpperCase());
-    }
-    const incoming = activePreviewTickers.filter((ticker) => !existing.has(ticker));
-    const remaining = Math.max(0, 40 - existing.size);
-    return new Set(incoming.slice(remaining));
-  }, [preview, existingTrackedTickers, basePortfolio.holdings, activePreviewTickers]);
+  const resultingTickerCount = useMemo(() => {
+    if (!preview) return 0;
+    return resultingActiveTickerCount({
+      portfolioId: basePortfolio.id,
+      otherPortfolioActiveTickers: existingTrackedTickers,
+      resultingHoldings: preview.portfolio.holdings,
+    });
+  }, [preview, basePortfolio.id, existingTrackedTickers]);
+  const tickerLimitExceeded = resultingTickerCount > 40;
+
+  const chunkEligibleTransactions = useMemo(() => {
+    if (!preview) return remainingDraftTransactions;
+    if (!excludedFlaggedRows) return remainingDraftTransactions;
+    const blockedIds = new Set(preview.issues.map((issue) => issue.transactionId));
+    return remainingDraftTransactions.filter(
+      (row) =>
+        !blockedIds.has(row.id) &&
+        !(row.ticker && unsupportedTickers.has(row.ticker)),
+    );
+  }, [
+    remainingDraftTransactions,
+    excludedFlaggedRows,
+    preview,
+    unsupportedTickers,
+  ]);
+
+  const chunkPlan = useMemo(() => {
+    // Remaining drafts already exclude prepared rows; offset stays 0.
+    const plan = nextImportChunk(chunkEligibleTransactions, 0, chunksPrepared);
+    const inAppTotal = Math.min(
+      orderDraftTransactionsForImport(activeDraftTransactions).length,
+      IMPORT_IN_APP_ROW_CAP,
+    );
+    return {
+      ...plan,
+      inAppTotal,
+      remainingInApp: Math.max(0, inAppTotal - preparedCount),
+      canImportMore:
+        plan.chunk.length > 0 &&
+        chunksPrepared < 3 &&
+        preparedCount < inAppTotal,
+    };
+  }, [
+    chunkEligibleTransactions,
+    chunksPrepared,
+    activeDraftTransactions,
+    preparedCount,
+  ]);
+
+  const chunkedAppend = usesChunkedAppendImport(
+    mode,
+    normalized?.report.rowsRetained ?? 0,
+  );
+  const stagedRowCount = stagedChunks.reduce(
+    (total, chunk) => total + chunk.drafts.length,
+    0,
+  );
+  const chunkedReadyToFinish =
+    chunkedAppend &&
+    chunkPlan.inAppTotal > 0 &&
+    stagedChunks.length > 0 &&
+    savedCount + stagedRowCount >= chunkPlan.inAppTotal;
 
   const setupBlocked =
     !baseReady ||
@@ -441,17 +571,37 @@ export function CurrentWatchImportModal({
       (!openingAt || !confirmedTimeZone || !openingState));
   const normalizationIssues = normalized?.issues.length ?? 0;
   const replayIssues = preview?.issues.length ?? 0;
-  const flagged =
-    normalizationIssues +
-    replayIssues +
-    budgetBlockedTickers.size +
-    unsupportedTickers.size;
+  const resolvableFlagged =
+    normalizationIssues + replayIssues + unsupportedTickers.size;
+  const flagged = resolvableFlagged + (tickerLimitExceeded ? 1 : 0);
+  const duplicateFlaggedIds = useMemo(() => {
+    if (!preview) return [] as string[];
+    return preview.issues
+      .filter(
+        (issue) => issue.code === "duplicate" || issue.code === "overlap",
+      )
+      .map((issue) => issue.transactionId);
+  }, [preview]);
+
+  // Ticker-limit is not bypassed by Exclude All Flagged — that only skips row issues.
+  const reviewBlocked =
+    (resolvableFlagged > 0 && !excludedFlaggedRows) || tickerLimitExceeded;
   const commitDisabled =
     busy ||
     setupBlocked ||
     !preview ||
     activeDraftTransactions.length === 0 ||
-    (flagged > 0 && !excludedFlaggedRows);
+    reviewBlocked ||
+    chunkedAppend;
+  const chunkStageDisabled =
+    busy ||
+    finishingChunks ||
+    setupBlocked ||
+    !preview ||
+    !chunkedAppend ||
+    reviewBlocked ||
+    !chunkPlan.canImportMore ||
+    chunkPlan.chunk.length === 0;
 
   async function refreshAuthoritativeBase(message: string) {
     const refreshed = await onRefreshBase().catch(() => null);
@@ -470,74 +620,110 @@ export function CurrentWatchImportModal({
     return false;
   }
 
-  async function commit() {
-    if (commitDisabled || !normalized || !preview || !mode) return;
-    setBusy(true);
-    setError(null);
-    setErrorReassurance(null);
-    setSupportHint(null);
-    setCommitRowErrors([]);
-    const blockedIds = new Set(preview.issues.map((issue) => issue.transactionId));
-    const includedTransactions = excludedFlaggedRows
-      ? activeDraftTransactions.filter(
-          (row) =>
-            !blockedIds.has(row.id) &&
-            !(
-              row.ticker &&
-              (budgetBlockedTickers.has(row.ticker) ||
-                unsupportedTickers.has(row.ticker))
-            ),
-        )
-      : activeDraftTransactions;
+  function partialSaveReassurance(savedThrough: number): string {
+    if (savedThrough > 0) {
+      return `Saved ${savedThrough} row${savedThrough === 1 ? "" : "s"} earlier in this Finish. Remaining rows were not saved.`;
+    }
+    return "Your portfolio has not changed.";
+  }
+
+  async function commitLedger(
+    includedTransactions: DraftPortfolioTransaction[],
+    batchIdentity: string,
+    commitBase: {
+      portfolio: Portfolio;
+      transactions: PortfolioTransaction[];
+    } = { portfolio: basePortfolio, transactions: baseTransactions },
+    options: { savedThrough?: number } = {},
+  ) {
+    if (!normalized || !mode) {
+      return { status: "failed" as const };
+    }
+    const savedThrough = options.savedThrough ?? 0;
+    const rebatchedDrafts = includedTransactions.map((row) =>
+      rebatchDraftForCommit(row, batchIdentity),
+    );
     const finalPreview = replayPortfolioTransactions({
       portfolio: mode === "replace"
-        ? { ...basePortfolio, holdings: [], cashAvailable: 0 }
-        : basePortfolio,
+        ? { ...commitBase.portfolio, holdings: [], cashAvailable: 0 }
+        : commitBase.portfolio,
       openingState,
-      transactions: includedTransactions,
+      transactions: rebatchedDrafts,
       existingFingerprints:
         mode === "append"
-          ? new Set(baseTransactions.flatMap((row) => (row.fingerprint ? [row.fingerprint] : [])))
+          ? new Set(
+              commitBase.transactions.flatMap((row) =>
+                row.fingerprint ? [row.fingerprint] : [],
+              ),
+            )
           : new Set(),
-      existingTransactions: mode === "append" ? baseTransactions : [],
+      existingTransactions: mode === "append" ? commitBase.transactions : [],
       markPrice: getMarkPrice,
       tradeCashTreatment: cashTreatment ?? "apply",
     });
     if (finalPreview.issues.length > 0 || finalPreview.ledger.length === 0) {
-      setBusy(false);
-      setError("Resolve or explicitly exclude every flagged row before importing.");
-      return;
+      if (finalPreview.issues.length > 0) {
+        setCommitRowErrors(
+          finalPreview.issues.flatMap((issue) =>
+            issue.sourceRow != null
+              ? [{ row: issue.sourceRow, message: issue.message }]
+              : [],
+          ),
+        );
+        setError(
+          "This batch could not be saved. Review the flagged rows below, then Finish again.",
+        );
+      } else {
+        setCommitRowErrors([]);
+        setError("This batch produced no savable rows.");
+      }
+      setErrorReassurance(partialSaveReassurance(savedThrough));
+      setSupportHint(null);
+      return { status: "failed" as const };
+    }
+    const chunkTickerCount = resultingActiveTickerCount({
+      portfolioId: commitBase.portfolio.id,
+      otherPortfolioActiveTickers: existingTrackedTickers,
+      resultingHoldings: finalPreview.portfolio.holdings,
+    });
+    if (chunkTickerCount > 40) {
+      setError(
+        `Adding these holdings would create ${chunkTickerCount} active tickers, above the 40-ticker market-data limit. Remove tracked tickers or exclude some import rows, then retry.`,
+      );
+      setErrorReassurance(partialSaveReassurance(savedThrough));
+      return { status: "failed" as const };
     }
     const result = await onCommit({
-      portfolioId: basePortfolio.id,
-      expectedRevision: basePortfolio.revision ?? 0,
-      portfolio: finalPreview.portfolio,
-      transactions: finalPreview.ledger,
+      portfolioId: commitBase.portfolio.id,
+      expectedRevision: commitBase.portfolio.revision ?? 0,
+      portfolio: {
+        ...finalPreview.portfolio,
+        holdings: finalPreview.portfolio.holdings.filter(
+          (holding) => holding.shares > 0,
+        ),
+      },
+      transactions: rebatchLedgerForCommit(finalPreview.ledger, batchIdentity),
       batch: {
-        id: activeBatchId,
+        id: batchIdentity,
         mode,
         cashTreatment: mode === "append" ? cashTreatment ?? "apply" : "apply",
-        report: normalized.report,
+        report: {
+          ...normalized.report,
+          rowsRetained: finalPreview.ledger.length,
+        },
         replaceBasis: mode === "replace" ? (replaceBasis ?? undefined) : undefined,
         openingCash: openingState?.cash,
         openingAt: openingState?.asOf,
         openingTimeZone: openingState?.timeZone,
       },
     });
-    setBusy(false);
-    if (result.status === "applied") {
-      setFile(null);
-      setRawRows(null);
-      setImportApplied(true);
-      setDismissedReconstructionId(null);
-      setReconstructionStatus(
-        await loadLatestHistoricalReconstructionJob(portfolio.id),
-      );
-    } else if (result.status === "conflict") {
+    if (result.status === "conflict") {
       await refreshAuthoritativeBase(
         "The portfolio changed after this preview was prepared. We refreshed it; review the updated preview.",
       );
-    } else {
+      return result;
+    }
+    if (result.status === "failed") {
       const commitError = result.error;
       const stalePreview =
         commitError.code === "portfolio-cash-mismatch" ||
@@ -545,7 +731,7 @@ export function CurrentWatchImportModal({
         commitError.code === "average-cost-mismatch";
       if (stalePreview) {
         await refreshAuthoritativeBase(commitError.message);
-        return;
+        return result;
       }
       if (commitError.scope === "row" && commitError.context.sourceRow != null) {
         setCommitRowErrors([
@@ -559,14 +745,213 @@ export function CurrentWatchImportModal({
         setError(commitError.message);
       }
       const reassurance = portfolioImportCommitReassurance(commitError);
-      setErrorReassurance(reassurance || null);
+      setErrorReassurance(
+        savedThrough > 0
+          ? partialSaveReassurance(savedThrough)
+          : reassurance || null,
+      );
       setSupportHint(portfolioImportSupportHint(commitError));
+      return result;
     }
+    return {
+      status: "applied" as const,
+      preview: finalPreview,
+      revision: result.revision,
+      portfolio: result.portfolio,
+    };
+  }
+
+  async function commit() {
+    if (commitDisabled || !normalized || !preview || !mode || chunkedAppend) return;
+    setBusy(true);
+    setError(null);
+    setErrorReassurance(null);
+    setSupportHint(null);
+    setCommitRowErrors([]);
+    const blockedIds = new Set(preview.issues.map((issue) => issue.transactionId));
+    const includedTransactions = excludedFlaggedRows
+      ? activeDraftTransactions.filter(
+          (row) =>
+            !blockedIds.has(row.id) &&
+            !(row.ticker && unsupportedTickers.has(row.ticker)),
+        )
+      : activeDraftTransactions;
+    const result = await commitLedger(includedTransactions, activeBatchId);
+    setBusy(false);
+    if (result.status === "applied") {
+      setFile(null);
+      setRawRows(null);
+      setImportApplied(true);
+      setDismissedReconstructionId(null);
+      setReconstructionStatus(
+        await loadLatestHistoricalReconstructionJob(portfolio.id),
+      );
+    }
+  }
+
+  /** Prepare the next 100 rows locally — nothing is saved until Finish. */
+  async function stageNextChunk() {
+    if (chunkStageDisabled || !normalized || !preview || mode !== "append") return;
+    const { chunk, inAppTotal } = chunkPlan;
+    if (chunk.length === 0) return;
+    const from = preparedCount + 1;
+    const to = preparedCount + chunk.length;
+    setChunkRangeLabel(`${from}–${to}`);
+    setChunkStartedAt(Date.now());
+    setBusy(true);
+    setError(null);
+    setErrorReassurance(null);
+    setSupportHint(null);
+    setCommitRowErrors([]);
+    const stageBasePortfolio = stagedBasePortfolio ?? basePortfolio;
+    const stageBaseTransactions = stagedBaseTransactions ?? baseTransactions;
+    const stagedPreview = replayPortfolioTransactions({
+      portfolio: stageBasePortfolio,
+      openingState,
+      transactions: chunk,
+      existingFingerprints: new Set(
+        stageBaseTransactions.flatMap((row) =>
+          row.fingerprint ? [row.fingerprint] : [],
+        ),
+      ),
+      existingTransactions: stageBaseTransactions,
+      markPrice: getMarkPrice,
+      tradeCashTreatment: cashTreatment ?? "apply",
+    });
+    setChunkStartedAt(null);
+    setBusy(false);
+    if (stagedPreview.issues.length > 0 || stagedPreview.ledger.length === 0) {
+      setError("Resolve or explicitly exclude every flagged row before preparing the next batch.");
+      setErrorReassurance("Your portfolio has not changed.");
+      return;
+    }
+    const nextPrepared = preparedCount + chunk.length;
+    const nextChunks = chunksPrepared + 1;
+    setStagedChunks((current) => [
+      ...current,
+      {
+        drafts: chunk,
+        ledger: stagedPreview.ledger,
+        portfolio: stagedPreview.portfolio,
+        from,
+        to,
+      },
+    ]);
+    setStagedBasePortfolio(stagedPreview.portfolio);
+    setStagedBaseTransactions([
+      ...stageBaseTransactions,
+      ...stagedPreview.ledger,
+    ]);
+    setPreparedCount(nextPrepared);
+    setChunksPrepared(nextChunks);
+    setStatus(
+      preparedProgressCopy({
+        preparedCount: nextPrepared,
+        retainedCount: normalized.report.rowsRetained,
+        inAppTotal,
+      }),
+    );
+  }
+
+  /** Persist every prepared chunk, then close. Cancel before Finish saves nothing. */
+  async function finishChunkedImport() {
+    if (!chunkedReadyToFinish || !normalized || mode !== "append" || finishingChunks) {
+      return;
+    }
+    if (stagedChunks.length === 0) return;
+    setFinishingChunks(true);
+    setBusy(true);
+    setError(null);
+    setErrorReassurance(null);
+    setSupportHint(null);
+    setCommitRowErrors([]);
+    // Keep the same progressive book as staging — a mid-Finish server refresh
+    // can diverge and falsely flag the next chunk.
+    let runningPortfolio = basePortfolio;
+    let runningTransactions = baseTransactions;
+    let pending = [...stagedChunks];
+    let savedThrough = savedCount;
+    while (pending.length > 0) {
+      const staged = pending[0]!;
+      setChunkRangeLabel(`${staged.from}–${staged.to}`);
+      setChunkStartedAt(Date.now());
+      const chunkBatchId = batchId();
+      const result = await commitLedger(
+        staged.drafts,
+        chunkBatchId,
+        {
+          portfolio: runningPortfolio,
+          transactions: runningTransactions,
+        },
+        { savedThrough },
+      );
+      setChunkStartedAt(null);
+      if (result.status !== "applied") {
+        setStagedChunks(pending);
+        setSavedCount(savedThrough);
+        setFinishingChunks(false);
+        setBusy(false);
+        return;
+      }
+      pending = pending.slice(1);
+      savedThrough = staged.to;
+      runningPortfolio = {
+        ...result.portfolio,
+        holdings: result.portfolio.holdings.filter((holding) => holding.shares > 0),
+        revision: result.revision,
+      };
+      runningTransactions = [
+        ...runningTransactions,
+        ...result.preview.ledger,
+      ];
+      setBasePortfolio(runningPortfolio);
+      setBaseTransactions(runningTransactions);
+      setStagedBasePortfolio(runningPortfolio);
+      setStagedBaseTransactions(runningTransactions);
+      setStagedChunks(pending);
+      setSavedCount(savedThrough);
+      setStatus(
+        `Saved rows ${staged.from}–${staged.to}. ${savedThrough} of ${chunkPlan.inAppTotal} rows saved.`,
+      );
+    }
+    setBusy(false);
+    setFinishingChunks(false);
+    setStagedChunks([]);
+    setStagedBasePortfolio(null);
+    setStagedBaseTransactions(null);
+    setPreparedCount(0);
+    setChunksPrepared(0);
+    setSavedCount(0);
+    setFile(null);
+    setRawRows(null);
+    setImportApplied(true);
+    setDismissedReconstructionId(null);
+    setError(null);
+    setErrorReassurance(null);
+    setCommitRowErrors([]);
+    setReconstructionStatus(
+      await loadLatestHistoricalReconstructionJob(portfolio.id),
+    );
+    void onRefreshBase().catch(() => null);
+    onCancel();
+  }
+
+  function handleCancel() {
+    // Do not abandon an in-flight Finish (some chunks may already be saving).
+    if (finishingChunks) return;
+    // Unsaved staged chunks are client-only. Rows already saved by Finish stay.
+    setStagedChunks([]);
+    setStagedBasePortfolio(null);
+    setStagedBaseTransactions(null);
+    setPreparedCount(0);
+    setChunksPrepared(0);
+    setSavedCount(0);
+    onCancel();
   }
 
   const hasOtherImportFlags =
     normalizationIssues > 0 ||
-    budgetBlockedTickers.size > 0 ||
+    tickerLimitExceeded ||
     unsupportedTickers.size > 0 ||
     commitRowErrors.length > 0;
   const canConfirmEdits = canConfirmFlaggedImportEdits(
@@ -575,61 +960,195 @@ export function CurrentWatchImportModal({
     hasOtherImportFlags,
   );
 
+  const showFlaggedActions = !importApplied && resolvableFlagged > 0;
+  const showChunkActions = !importApplied && chunkedAppend && Boolean(normalized);
+  const showImportActionBar = showFlaggedActions || showChunkActions;
+  const overallProgressPct =
+    chunkPlan.inAppTotal > 0
+      ? Math.min(100, Math.round((preparedCount / chunkPlan.inAppTotal) * 100))
+      : 0;
+
   return (
     <ForgeTableModal
       title="Import portfolio transactions"
       titleId="current-watch-import-title"
-      onCancel={onCancel}
-      onDone={importApplied ? onCancel : () => void commit()}
-      doneLabel={importApplied ? "Close" : busy ? "Importing…" : "Import"}
-      doneDisabled={importApplied ? false : commitDisabled}
+      onCancel={handleCancel}
+      onDone={
+        importApplied
+          ? onCancel
+          : chunkedAppend
+            ? () => void finishChunkedImport()
+            : () => void commit()
+      }
+      doneLabel={
+        importApplied
+          ? "Close"
+          : finishingChunks
+            ? "Saving…"
+            : chunkedAppend
+              ? "Finish"
+              : busy
+                ? "Importing…"
+                : "Import"
+      }
+      doneIcon={
+        importApplied || chunkedAppend ? null : undefined
+      }
+      doneDisabled={
+        importApplied
+          ? false
+          : chunkedAppend
+            ? !chunkedReadyToFinish || busy || finishingChunks || reviewBlocked
+            : commitDisabled
+      }
       stableTabs={Boolean(preview && preview.issues.length > 0)}
       stableTabsTableMin={240}
       intro={importApplied
         ? "Your transactions are saved. Historical scoring continues safely in the background after this window closes."
         : "Your file stays on this device while we prepare the preview. We retain only Transaction Type, Ticker, Quantity, Fill Price, Amount (USD), Date / Time, and Time Zone."}
       actionBar={
-        !importApplied && flagged > 0 ? (
-          <>
-            <button
-              type="button"
-              className={
-                excludedFlaggedRows
-                  ? "btn btn--small watch-order-action is-active"
-                  : "btn btn--small watch-order-action watch-order-action--sell"
-              }
-              disabled={busy}
-              onClick={() => {
-                setPendingOversellById({});
-                setExcludedFlaggedRows((current) => !current);
-              }}
-            >
-              {excludedFlaggedRows ? (
-                <X aria-hidden weight="bold" />
-              ) : (
-                <Trash aria-hidden weight="regular" />
-              )}
-              {excludedFlaggedRows ? "Include Flagged" : "Exclude Flagged"}
-            </button>
-            <button
-              type="button"
-              className="btn btn--small watch-order-action"
-              disabled={!canConfirmEdits || busy}
-              onClick={() => {
-                if (!canConfirmEdits) return;
-                setExcludedFlaggedRows(false);
-                setDraftTransactions((current) =>
-                  current.map((row) => {
-                    const pending = pendingOversellById[row.id];
-                    return pending ? applyOversellToRow(row, pending) : row;
-                  }),
-                );
-                setPendingOversellById({});
-              }}
-            >
-              <CheckCircle aria-hidden weight="regular" /> Confirm Edits
-            </button>
-          </>
+        showImportActionBar ? (
+          <div className="watch-import-action-bar-inner">
+            {showChunkActions ? (
+              <div
+                className="watch-import-progress"
+                role="status"
+                aria-live="polite"
+              >
+                <div className="watch-import-progress-copy">
+                  {chunkStartedAt != null && chunkRangeLabel ? (
+                    <span>
+                      {finishingChunks ? "Saving" : "Preparing"} rows{" "}
+                      {chunkRangeLabel}… {chunkElapsedSec}s
+                    </span>
+                  ) : savedCount > 0 && stagedChunks.length > 0 ? (
+                    <span>
+                      {savedCount} of {chunkPlan.inAppTotal} rows saved. Finish
+                      to save the rest — Cancel keeps saved rows and discards
+                      the unsaved batches.
+                    </span>
+                  ) : preparedCount > 0 ? (
+                    <span>
+                      {preparedProgressCopy({
+                        preparedCount,
+                        retainedCount: normalized?.report.rowsRetained ?? 0,
+                        inAppTotal: chunkPlan.inAppTotal,
+                      })}
+                      {chunkedReadyToFinish
+                        ? " Finish to save — Cancel discards unsaved batches."
+                        : null}
+                    </span>
+                  ) : (
+                    <span>
+                      Prepare batches of 100 (up to {IMPORT_IN_APP_ROW_CAP}{" "}
+                      rows in-app). Nothing is saved until Finish.
+                    </span>
+                  )}
+                </div>
+                <div
+                  className="watch-import-progress-track"
+                  aria-hidden={chunkStartedAt == null && preparedCount === 0}
+                >
+                  <div
+                    className={
+                      chunkStartedAt != null
+                        ? "watch-import-progress-bar is-indeterminate"
+                        : "watch-import-progress-bar"
+                    }
+                    style={
+                      chunkStartedAt == null
+                        ? { width: `${overallProgressPct}%` }
+                        : undefined
+                    }
+                  />
+                </div>
+              </div>
+            ) : null}
+            <div className="watch-import-action-bar-buttons">
+              {showFlaggedActions ? (
+                <>
+                  <button
+                    type="button"
+                    className={
+                      excludedFlaggedRows
+                        ? "btn btn--small watch-order-action is-active"
+                        : "btn btn--small watch-order-action watch-order-action--sell"
+                    }
+                    disabled={busy}
+                    onClick={() => {
+                      setPendingOversellById({});
+                      setExcludedFlaggedRows((current) => !current);
+                    }}
+                  >
+                    {excludedFlaggedRows ? (
+                      <X aria-hidden weight="bold" />
+                    ) : (
+                      <Trash aria-hidden weight="regular" />
+                    )}
+                    {excludedFlaggedRows
+                      ? "Include All Flagged"
+                      : "Exclude All Flagged"}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn--small watch-order-action watch-order-action--sell"
+                    disabled={busy || duplicateFlaggedIds.length === 0}
+                    onClick={() => {
+                      if (duplicateFlaggedIds.length === 0) return;
+                      const duplicateIds = new Set(duplicateFlaggedIds);
+                      setExcludedFlaggedRows(false);
+                      setPendingOversellById((current) => {
+                        let changed = false;
+                        const next = { ...current };
+                        for (const id of duplicateIds) {
+                          if (id in next) {
+                            delete next[id];
+                            changed = true;
+                          }
+                        }
+                        return changed ? next : current;
+                      });
+                      setExcludedIds((current) => {
+                        const next = new Set(current);
+                        for (const id of duplicateIds) next.add(id);
+                        return next;
+                      });
+                    }}
+                  >
+                    <Copy aria-hidden weight="regular" /> Exclude All Duplicates
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn--small watch-order-action"
+                    disabled={!canConfirmEdits || busy}
+                    onClick={() => {
+                      if (!canConfirmEdits) return;
+                      setExcludedFlaggedRows(false);
+                      setDraftTransactions((current) =>
+                        current.map((row) => {
+                          const pending = pendingOversellById[row.id];
+                          return pending ? applyOversellToRow(row, pending) : row;
+                        }),
+                      );
+                      setPendingOversellById({});
+                    }}
+                  >
+                    <CheckCircle aria-hidden weight="regular" /> Confirm Edits
+                  </button>
+                </>
+              ) : null}
+              {showChunkActions ? (
+                <button
+                  type="button"
+                  className="btn btn--small watch-order-action btn--solid"
+                  disabled={chunkStageDisabled}
+                  onClick={() => void stageNextChunk()}
+                >
+                  {chunkActionLabel(chunkPlan.chunk.length)}
+                </button>
+              ) : null}
+            </div>
+          </div>
         ) : undefined
       }
     >
@@ -805,14 +1324,27 @@ export function CurrentWatchImportModal({
               <span>{normalized.report.ignoredColumnCount} extra columns stripped</span>
               <span>{normalized.report.normalizedCellCount} values normalized</span>
               <span>{normalized.report.fractionalRowCount} fractional rows</span>
+              <span>{activePreviewTickers.length} active tickers</span>
               <span>{flagged} flagged rows</span>
             </div>
+            {chunkedAppend ? (
+              <RowMessage tone="warning">
+                Large import ({normalized.report.rowsRetained} executed rows).
+                Use Import next 100 to prepare each batch (up to three /{" "}
+                {IMPORT_IN_APP_ROW_CAP} rows in-app), then Finish to save.
+                Cancel discards prepared batches without changing your
+                portfolio.
+                {normalized.report.rowsRetained > IMPORT_IN_APP_ROW_CAP
+                  ? ` Rows beyond ${IMPORT_IN_APP_ROW_CAP} must be split outside the app.`
+                  : null}
+              </RowMessage>
+            ) : null}
             {normalized.detectedFormat === "webull" ? (
               <p className="watch-import-note">Webull order format detected. Executed quantities are normalized from Filled, Avg Price, and Filled Time; unrelated columns remain local and are discarded.</p>
             ) : null}
             {preview && preview.issues.length > 0 ? (
               <ImportFlaggedRowsEditor
-                transactions={activeDraftTransactions}
+                transactions={remainingDraftTransactions}
                 issues={preview.issues}
                 canSuggestPreserveCash={
                   mode === "append" && cashTreatment === "apply"
@@ -871,7 +1403,7 @@ export function CurrentWatchImportModal({
             ) : null}
             {normalizationIssues > 0 ||
             commitRowErrors.length > 0 ||
-            budgetBlockedTickers.size > 0 ||
+            tickerLimitExceeded ||
             unsupportedTickers.size > 0 ? (
               <div className="watch-import-issues">
                 {[
@@ -893,11 +1425,14 @@ export function CurrentWatchImportModal({
                       <RowMessage tone={issue.tone}>{issue.message}</RowMessage>
                     </div>
                   ))}
-                {budgetBlockedTickers.size > 0 ? (
+                {tickerLimitExceeded ? (
                   <div className="watch-import-issue">
                     <span>Budget</span>
                     <RowMessage tone="error">
-                      Exclude {Array.from(budgetBlockedTickers).join(", ")} or remove other tracked tickers to stay within the 40-ticker market-data limit.
+                      Adding these holdings would create {resultingTickerCount}{" "}
+                      active tickers, above the 40-ticker market-data limit.
+                      Remove tracked tickers on other portfolios or exclude some
+                      import rows, then retry.
                     </RowMessage>
                   </div>
                 ) : null}

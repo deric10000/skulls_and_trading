@@ -6706,7 +6706,7 @@ select.forge-cell-input {
 }
 
 /* Secondary action strip pinned above Cancel / primary Done. Import uses
-   this for Confirm Edits + Exclude Flagged while the body scrolls above. */
+   this for Confirm Edits + Exclude All Flagged while the body scrolls above. */
 .forge-table-action-bar {
   display: flex;
   align-items: center;
@@ -6725,6 +6725,62 @@ select.forge-cell-input {
   align-items: center;
   justify-content: center;
   gap: 4px;
+}
+
+.watch-import-action-bar-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--space-2);
+  width: 100%;
+}
+
+.watch-import-action-bar-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+.watch-import-progress {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  width: 100%;
+}
+
+.watch-import-progress-copy {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.watch-import-progress-track {
+  height: 6px;
+  border-radius: 999px;
+  background: rgb(148 163 184 / 0.16);
+  overflow: hidden;
+}
+
+.watch-import-progress-bar {
+  height: 100%;
+  width: 0;
+  border-radius: inherit;
+  background: var(--info);
+  transition: width 160ms ease;
+}
+
+.watch-import-progress-bar.is-indeterminate {
+  width: 36%;
+  animation: watch-import-progress-slide 1.2s ease-in-out infinite;
+}
+
+@keyframes watch-import-progress-slide {
+  0% {
+    transform: translateX(-120%);
+  }
+  100% {
+    transform: translateX(320%);
+  }
 }
 
 .forge-table-actions {

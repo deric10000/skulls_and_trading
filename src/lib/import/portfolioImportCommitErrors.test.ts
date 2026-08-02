@@ -19,6 +19,7 @@ describe("portfolioImportCommitErrorFromUnknown", () => {
       ["portfolio_average_cost_mismatch", "average-cost-mismatch"],
       ["ticker_limit_exceeded", "ticker-limit"],
       ["invalid_batch", "invalid-batch"],
+      ["invalid_transaction_count", "batch-too-large"],
       ["invalid_opening_boundary", "invalid-date-timezone"],
       ["historical_reconstruction_enqueue_failed", "reconstruction-enqueue-failed"],
     ];
@@ -102,5 +103,17 @@ describe("portfolioImportCommitErrorFromUnknown", () => {
     });
     expect(error.code).toBe("network-unavailable");
     expect(error.message).toContain("temporarily unavailable");
+  });
+
+  it("maps statement timeouts to an actionable split-batch message", () => {
+    const error = portfolioImportCommitErrorFromUnknown({
+      code: "57014",
+      message: "canceling statement due to statement timeout",
+    });
+    expect(error.code).toBe("batch-too-large");
+    expect(error.message).toContain("too large to save in one step");
+    expect(error.message).toContain("under 100");
+    expect(error.message).toContain("Your portfolio has not changed");
+    expect(error.message).not.toMatch(/57014|canceling statement/i);
   });
 });

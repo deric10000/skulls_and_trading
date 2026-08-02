@@ -3090,9 +3090,13 @@ export function WatchlistWidget({
             portfolio={selectedSource}
             existingTrackedTickers={Array.from(
               new Set(
-                portfolios.flatMap((source) =>
-                  source.holdings.map((holding) => holding.ticker),
-                ),
+                portfolios
+                  .filter((source) => source.id !== selectedSource.id)
+                  .flatMap((source) =>
+                    source.holdings
+                      .filter((holding) => holding.shares > 0)
+                      .map((holding) => holding.ticker),
+                  ),
               ),
             )}
             isKnownTicker={(ticker) => Boolean(dataSource.getTickerInfo(ticker))}
