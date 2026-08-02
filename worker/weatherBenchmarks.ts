@@ -1,4 +1,5 @@
 import { atrPct, ema, rsi, sma, type OhlcvBar } from "./indicators";
+import { isMarketPullOpen } from "./marketPullWindow";
 
 export const SECTOR_SPDR_SYMBOLS = [
   "XLE",
@@ -306,32 +307,9 @@ export interface PublishedWeatherBenchmarks {
 const HOUR_MS = 60 * 60_000;
 export const WEATHER_BENCHMARK_YAHOO_RESERVE = 2;
 
-function easternCycleParts(time: number): {
-  weekday: string;
-  minutes: number;
-} {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: "America/New_York",
-    weekday: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  }).formatToParts(new Date(time));
-  const get = (type: string) =>
-    parts.find((part) => part.type === type)?.value ?? "";
-  return {
-    weekday: get("weekday"),
-    minutes: (Number(get("hour")) % 24) * 60 + Number(get("minute")),
-  };
-}
-
-/** Same Sunday 20:00 ET → Friday 20:00 ET market-week policy as marketCycle. */
+/** Same Sunday 20:00 ET → Friday 20:00 ET policy as marketPullWindow. */
 export function isExpectedWeatherCycle(time: number): boolean {
-  const { weekday, minutes } = easternCycleParts(time);
-  if (weekday === "Sat") return false;
-  if (weekday === "Sun") return minutes >= 20 * 60;
-  if (weekday === "Fri") return minutes <= 20 * 60;
-  return true;
+  return isMarketPullOpen(time);
 }
 
 /** Count scheduled hourly cycles, excluding the source cycle itself. */

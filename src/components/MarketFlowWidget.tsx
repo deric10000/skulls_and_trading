@@ -218,17 +218,25 @@ export function MarketFlowWidget({
   const scheduleLastLabel = lastWeatherAt
     ? formatCheckTime(lastWeatherAt)
     : "Waiting on first cycle";
-  const scheduleNextLabel = nextCycleResolution.overdue
-    ? `Delayed — retrying (${weatherCountdown})`
-    : `${formatCheckTime(nextWeatherAt)} (${weatherCountdown})`;
+  const scheduleNextLabel = nextCycleResolution.marketClosed
+    ? `Market Closed — next ${formatCheckTime(nextWeatherAt)} (${weatherCountdown})`
+    : nextCycleResolution.overdue
+      ? `Delayed — retrying (${weatherCountdown})`
+      : `${formatCheckTime(nextWeatherAt)} (${weatherCountdown})`;
 
-  // When the published next-cycle time is already past, keep the schedule toast
-  // visible so a stuck 0:00 countdown is not hidden behind a collapsed Timer.
+  // Keep the schedule toast open when the next pull is overdue inside an open
+  // window, or when the market window is closed (weekend / after-hours).
   useEffect(() => {
-    if (!nextCycleResolution.overdue || !scheduleToastCollapsed) return;
+    const holdOpen =
+      nextCycleResolution.overdue || nextCycleResolution.marketClosed;
+    if (!holdOpen || !scheduleToastCollapsed) return;
     writeWeatherScheduleCollapsed(false);
     setScheduleToastCollapsed(false);
-  }, [nextCycleResolution.overdue, scheduleToastCollapsed]);
+  }, [
+    nextCycleResolution.overdue,
+    nextCycleResolution.marketClosed,
+    scheduleToastCollapsed,
+  ]);
 
   function setScheduleCollapsed(collapsed: boolean) {
     writeWeatherScheduleCollapsed(collapsed);

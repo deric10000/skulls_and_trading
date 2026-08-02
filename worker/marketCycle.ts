@@ -12,6 +12,10 @@ import {
   type ConvictionCycleReference,
 } from "./convictionDispatch";
 import {
+  isMarketPullOpen,
+  nextMarketPullAt,
+} from "./marketPullWindow";
+import {
   derivePublishedWeatherBenchmarks,
   deriveWeatherSymbolObservables,
   planWeatherBenchmarkFetch,
@@ -406,24 +410,6 @@ function etDayKey(time: number): string {
   const get = (type: string) =>
     parts.find((part) => part.type === type)?.value ?? "";
   return `${get("year")}-${get("month")}-${get("day")}`;
-}
-
-function isMarketWeek(time: number): boolean {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: "America/New_York",
-    weekday: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  }).formatToParts(new Date(time));
-  const get = (type: string) =>
-    parts.find((part) => part.type === type)?.value ?? "";
-  const weekday = get("weekday");
-  const minutes = Number(get("hour")) * 60 + Number(get("minute"));
-  if (weekday === "Sat") return false;
-  if (weekday === "Sun") return minutes >= 20 * 60;
-  if (weekday === "Fri") return minutes <= 20 * 60;
-  return true;
 }
 
 async function mapWithConcurrency<T>(
@@ -1275,7 +1261,7 @@ async function publishCycle(
       ...(weatherShard ? [weatherShard.completedAt] : []),
     ].sort().at(-1)!,
     publishedAt: new Date(now).toISOString(),
-    nextCycleAt: new Date(hourBoundary(now) + HOUR_MS).toISOString(),
+    nextCycleAt: nextMarketPullAt(now),
     symbols: manifest.symbols,
     quotes: Object.assign({}, ...techShards.map((shard) => shard.quotes)),
     fundamentals: Object.assign(
@@ -1353,7 +1339,7 @@ async function runScheduledMarketCycleInner(
   scheduledTime: number,
 ): Promise<void> {
   const invocationStartedAt = Date.now();
-  if (!isMarketWeek(scheduledTime)) return;
+  if (!isMarketPullOpen(scheduledTime)) return;
   const boundary = hourBoundary(scheduledTime);
   const minute = new Date(scheduledTime).getUTCMinutes();
 

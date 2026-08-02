@@ -208,22 +208,64 @@ describe("hasUsableLiveQuote", () => {
 
 describe("resolveNextCycleEtaAt", () => {
   it("keeps a future published nextCycleAt", () => {
+    // Friday 09:20 ET — pull window open
     const now = Date.parse("2026-07-31T13:20:00.000Z");
     expect(
       resolveNextCycleEtaAt("2026-07-31T14:00:00.000Z", now),
     ).toEqual({
       etaAt: "2026-07-31T14:00:00.000Z",
       overdue: false,
+      marketClosed: false,
     });
   });
 
-  it("falls back when published nextCycleAt is already past", () => {
+  it("marks overdue inside an open window when published nextCycleAt is past", () => {
+    // Friday 09:20 ET — pull window open
     const now = Date.parse("2026-07-31T13:20:00.000Z");
     expect(
       resolveNextCycleEtaAt("2026-07-31T10:00:00.000Z", now),
     ).toEqual({
       etaAt: synthesizeNextCycleEtaAt(now),
       overdue: true,
+      marketClosed: false,
+    });
+  });
+
+  it("uses Sunday overnight open instead of hourly retry when closed", () => {
+    // Sunday 15:00 ET — pull window closed
+    const now = Date.parse("2026-08-02T19:00:00.000Z");
+    expect(
+      resolveNextCycleEtaAt("2026-08-01T01:00:00.000Z", now),
+    ).toEqual({
+      etaAt: synthesizeNextCycleEtaAt(now),
+      overdue: false,
+      marketClosed: true,
+    });
+    expect(synthesizeNextCycleEtaAt(now)).toBe("2026-08-03T00:00:00.000Z");
+  });
+
+  it("rejects a future hourly nextCycleAt that falls outside the pull window", () => {
+    // Sunday 12:58 ET — closed; published next is Sunday 13:28 ET (stale +1h)
+    const now = Date.parse("2026-08-02T16:58:00.000Z");
+    const staleHourly = "2026-08-02T17:28:00.000Z";
+    expect(
+      resolveNextCycleEtaAt(staleHourly, now),
+    ).toEqual({
+      etaAt: "2026-08-03T00:00:00.000Z",
+      overdue: false,
+      marketClosed: true,
+    });
+  });
+
+  it("keeps a future published nextCycleAt that lands on overnight open", () => {
+    // Saturday noon ET — closed; Worker already published Sun 20:00 ET
+    const now = Date.parse("2026-08-01T16:00:00.000Z");
+    expect(
+      resolveNextCycleEtaAt("2026-08-03T00:00:00.000Z", now),
+    ).toEqual({
+      etaAt: "2026-08-03T00:00:00.000Z",
+      overdue: false,
+      marketClosed: true,
     });
   });
 });
