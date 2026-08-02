@@ -243,4 +243,29 @@ describe("resolveNextCycleEtaAt", () => {
     });
     expect(synthesizeNextCycleEtaAt(now)).toBe("2026-08-03T00:00:00.000Z");
   });
+
+  it("rejects a future hourly nextCycleAt that falls outside the pull window", () => {
+    // Sunday 12:58 ET — closed; published next is Sunday 13:28 ET (stale +1h)
+    const now = Date.parse("2026-08-02T16:58:00.000Z");
+    const staleHourly = "2026-08-02T17:28:00.000Z";
+    expect(
+      resolveNextCycleEtaAt(staleHourly, now),
+    ).toEqual({
+      etaAt: "2026-08-03T00:00:00.000Z",
+      overdue: false,
+      marketClosed: true,
+    });
+  });
+
+  it("keeps a future published nextCycleAt that lands on overnight open", () => {
+    // Saturday noon ET — closed; Worker already published Sun 20:00 ET
+    const now = Date.parse("2026-08-01T16:00:00.000Z");
+    expect(
+      resolveNextCycleEtaAt("2026-08-03T00:00:00.000Z", now),
+    ).toEqual({
+      etaAt: "2026-08-03T00:00:00.000Z",
+      overdue: false,
+      marketClosed: true,
+    });
+  });
 });

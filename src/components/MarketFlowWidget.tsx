@@ -219,7 +219,7 @@ export function MarketFlowWidget({
     ? formatCheckTime(lastWeatherAt)
     : "Waiting on first cycle";
   const scheduleNextLabel = nextCycleResolution.marketClosed
-    ? `Market closed — next ${formatCheckTime(nextWeatherAt)} (${weatherCountdown})`
+    ? `Market Closed — next ${formatCheckTime(nextWeatherAt)} (${weatherCountdown})`
     : nextCycleResolution.overdue
       ? `Delayed — retrying (${weatherCountdown})`
       : `${formatCheckTime(nextWeatherAt)} (${weatherCountdown})`;

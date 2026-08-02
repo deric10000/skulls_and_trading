@@ -392,10 +392,10 @@ export function synthesizeNextCycleEtaAt(nowMs: number = Date.now()): string {
 }
 
 /**
- * Prefer a future published `nextCycleAt`; if missing/past, fall back to the
- * next eligible pull. `overdue` is only true inside an open pull window
- * (Worker should be sharding); outside the window use `marketClosed` instead
- * of implying an hourly retry.
+ * Prefer a future published `nextCycleAt` only when that instant is still
+ * inside the ET pull window. Stale hourly targets (e.g. Sunday afternoon
+ * +1h from a seeded/legacy cycle) must not win over Sun 20:00 ET overnight.
+ * `overdue` is only true inside an open window; outside use `marketClosed`.
  */
 export function resolveNextCycleEtaAt(
   nextCycleAt: string | null | undefined,
@@ -403,7 +403,11 @@ export function resolveNextCycleEtaAt(
 ): { etaAt: string; overdue: boolean; marketClosed: boolean } {
   const marketClosed = !isMarketPullOpen(nowMs);
   const cycleMs = nextCycleAt ? Date.parse(nextCycleAt) : NaN;
-  if (Number.isFinite(cycleMs) && cycleMs > nowMs) {
+  const publishedIsEligible =
+    Number.isFinite(cycleMs) &&
+    cycleMs > nowMs &&
+    isMarketPullOpen(cycleMs);
+  if (publishedIsEligible) {
     return { etaAt: nextCycleAt!, overdue: false, marketClosed };
   }
   return {
