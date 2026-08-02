@@ -41,6 +41,8 @@ export interface HistoricalTransactionRow {
   shares_after: number | string | null;
   cash_before: number | string | null;
   cash_after: number | string | null;
+  /** Durable import flag: sell closed shares never accounted in this book. */
+  untracked_close?: boolean | null;
 }
 
 export interface HistoricalStrategyVersionRow {
@@ -101,8 +103,17 @@ function replayStateMatches(
   const shares = portfolio.holdings.find(
     (holding) => holding.ticker === transaction.ticker,
   )?.shares ?? 0;
-  return cashMatches &&
-    Math.abs(shares - numberValue(transaction.shares_before)) < 0.0000005;
+  const sharesBefore = numberValue(transaction.shares_before);
+  if (
+    transaction.untracked_close === true &&
+    transaction.transaction_type === "sell" &&
+    sharesBefore > shares &&
+    shares >= 0
+  ) {
+    // Intentional brokerage close from a zero/under-accounted holding.
+    return cashMatches;
+  }
+  return cashMatches && Math.abs(shares - sharesBefore) < 0.0000005;
 }
 
 function activeAt(start: string, end: string | null, atMs: number): boolean {

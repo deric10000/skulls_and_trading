@@ -190,11 +190,13 @@ retained rows use in-app chunking (`portfolioImportChunks.ts`): chronological
 slices of 100 staged locally via **Import next 100** (max three / 300 rows),
 then **Finish** persists every staged chunk against the same progressive book
 used while staging (no mid-Finish server refresh — that can diverge and false-
-flag later chunks). Each chunk is rebatched to a fresh `batchId:row:N`.
-**Cancel** discards unsaved staging; rows already saved by a partial Finish
-remain. Progress shows elapsed while preparing/saving and
-`X of Y rows ready` / saved after each stage. Full-file Import is disabled on
-that path; rows beyond 300 must be split outside the app. Preview reports active-ticker count; the 40-ticker
+flag later chunks). Each chunk keeps a stage-time `batchId` (reused on Finish
+retry for idempotency) and rebatches to `batchId:row:N`. Chunk progress is
+id-stable with Exclude All Flagged suppression. **Cancel** discards unsaved
+staging; rows already saved by a partial Finish remain. Progress shows elapsed
+while preparing/saving and `X of Y rows ready` / saved after each stage.
+Full-file Import is disabled on that path; rows beyond 300 must be split
+outside the app. Preview reports active-ticker count; the 40-ticker
 ceiling counts only holdings with shares > 0 across the workspace (closed
 symbols do not consume the budget). The commit RPC validates distinct time
 zones once and allows up to 120s per chunk. Raw SQL, stack traces, and

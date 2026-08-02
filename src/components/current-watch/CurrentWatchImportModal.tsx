@@ -42,11 +42,12 @@ import { HistoricalReconstructionToast } from "./HistoricalReconstructionToast";
 import {
   IMPORT_IN_APP_ROW_CAP,
   chunkActionLabel,
+  importUniverseForChunking,
   nextImportChunk,
-  orderDraftTransactionsForImport,
   preparedProgressCopy,
   rebatchDraftForCommit,
   rebatchLedgerForCommit,
+  remainingDraftsById,
   resultingActiveTickerCount,
   usesChunkedAppendImport,
 } from "../../lib/import/portfolioImportChunks";
@@ -62,6 +63,8 @@ type StagedImportChunk = {
   portfolio: Portfolio;
   from: number;
   to: number;
+  /** Stable commit identity — reused on Finish retry for server idempotency. */
+  batchId: string;
 };
 
 function applyOversellToRow(
@@ -201,9 +204,11 @@ export function CurrentWatchImportModal({
   const [unsupportedTickers, setUnsupportedTickers] = useState<Set<string>>(
     () => new Set(),
   );
-  const [preparedCount, setPreparedCount] = useState(0);
   const [chunksPrepared, setChunksPrepared] = useState(0);
   const [savedCount, setSavedCount] = useState(0);
+  const [suppressedFlaggedIds, setSuppressedFlaggedIds] = useState<Set<string>>(
+    () => new Set(),
+  );
   const [stagedChunks, setStagedChunks] = useState<StagedImportChunk[]>([]);
   const [stagedBasePortfolio, setStagedBasePortfolio] = useState<Portfolio | null>(
     null,
@@ -303,6 +308,7 @@ export function CurrentWatchImportModal({
     setTickerValidationUnavailable(false);
     setUnsupportedTickers(new Set());
     setExcludedFlaggedRows(false);
+    setSuppressedFlaggedIds(new Set());
   }
 
   async function chooseFile(nextFile: File | null) {
@@ -319,8 +325,9 @@ export function CurrentWatchImportModal({
     setTickerValidationUnavailable(false);
     setTickerValidationPending(false);
     setExcludedFlaggedRows(false);
-    setPreparedCount(0);
+    setSuppressedFlaggedIds(new Set());
     setChunksPrepared(0);
+    setSavedCount(0);
     setStagedChunks([]);
     setStagedBasePortfolio(null);
     setStagedBaseTransactions(null);
@@ -383,13 +390,42 @@ export function CurrentWatchImportModal({
     [draftTransactions, excludedIds],
   );
 
-  /** Rows not yet prepared in earlier chunks (keeps flags/duplicates honest). */
-  const remainingDraftTransactions = useMemo(() => {
-    if (preparedCount <= 0) return activeDraftTransactions;
-    return orderDraftTransactionsForImport(activeDraftTransactions).slice(
-      preparedCount,
-    );
-  }, [activeDraftTransactions, preparedCount]);
+  const stagedDraftIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const chunk of stagedChunks) {
+      for (const draft of chunk.drafts) ids.add(draft.id);
+    }
+    return ids;
+  }, [stagedChunks]);
+
+  const preparedCount = stagedDraftIds.size;
+
+  /** Commit universe after Exclude All Flagged suppression (id-stable). */
+  const importUniverse = useMemo(
+    () =>
+      importUniverseForChunking(
+        activeDraftTransactions,
+        excludedFlaggedRows ? suppressedFlaggedIds : new Set(),
+      ),
+    [activeDraftTransactions, excludedFlaggedRows, suppressedFlaggedIds],
+  );
+
+  /**
+   * Unstaged active rows for preview/flags. Includes suppressed flagged rows so
+   * the table still shows what Exclude All Flagged is skipping.
+   */
+  const remainingDraftTransactions = useMemo(
+    () => remainingDraftsById(
+      importUniverseForChunking(activeDraftTransactions),
+      stagedDraftIds,
+    ),
+    [activeDraftTransactions, stagedDraftIds],
+  );
+
+  const remainingImportableTransactions = useMemo(
+    () => remainingDraftsById(importUniverse, stagedDraftIds),
+    [importUniverse, stagedDraftIds],
+  );
 
   const previewBasePortfolio = stagedBasePortfolio ?? basePortfolio;
   const previewBaseTransactions = stagedBaseTransactions ?? baseTransactions;
@@ -503,29 +539,10 @@ export function CurrentWatchImportModal({
   }, [preview, basePortfolio.id, existingTrackedTickers]);
   const tickerLimitExceeded = resultingTickerCount > 40;
 
-  const chunkEligibleTransactions = useMemo(() => {
-    if (!preview) return remainingDraftTransactions;
-    if (!excludedFlaggedRows) return remainingDraftTransactions;
-    const blockedIds = new Set(preview.issues.map((issue) => issue.transactionId));
-    return remainingDraftTransactions.filter(
-      (row) =>
-        !blockedIds.has(row.id) &&
-        !(row.ticker && unsupportedTickers.has(row.ticker)),
-    );
-  }, [
-    remainingDraftTransactions,
-    excludedFlaggedRows,
-    preview,
-    unsupportedTickers,
-  ]);
-
   const chunkPlan = useMemo(() => {
-    // Remaining drafts already exclude prepared rows; offset stays 0.
-    const plan = nextImportChunk(chunkEligibleTransactions, 0, chunksPrepared);
-    const inAppTotal = Math.min(
-      orderDraftTransactionsForImport(activeDraftTransactions).length,
-      IMPORT_IN_APP_ROW_CAP,
-    );
+    // Remaining importable rows already exclude staged + suppressed ids.
+    const plan = nextImportChunk(remainingImportableTransactions, 0, chunksPrepared);
+    const inAppTotal = Math.min(importUniverse.length, IMPORT_IN_APP_ROW_CAP);
     return {
       ...plan,
       inAppTotal,
@@ -536,9 +553,9 @@ export function CurrentWatchImportModal({
         preparedCount < inAppTotal,
     };
   }, [
-    chunkEligibleTransactions,
+    remainingImportableTransactions,
     chunksPrepared,
-    activeDraftTransactions,
+    importUniverse.length,
     preparedCount,
   ]);
 
@@ -827,6 +844,7 @@ export function CurrentWatchImportModal({
     }
     const nextPrepared = preparedCount + chunk.length;
     const nextChunks = chunksPrepared + 1;
+    const chunkBatchId = batchId();
     setStagedChunks((current) => [
       ...current,
       {
@@ -835,6 +853,7 @@ export function CurrentWatchImportModal({
         portfolio: stagedPreview.portfolio,
         from,
         to,
+        batchId: chunkBatchId,
       },
     ]);
     setStagedBasePortfolio(stagedPreview.portfolio);
@@ -842,7 +861,6 @@ export function CurrentWatchImportModal({
       ...stageBaseTransactions,
       ...stagedPreview.ledger,
     ]);
-    setPreparedCount(nextPrepared);
     setChunksPrepared(nextChunks);
     setStatus(
       preparedProgressCopy({
@@ -875,10 +893,9 @@ export function CurrentWatchImportModal({
       const staged = pending[0]!;
       setChunkRangeLabel(`${staged.from}–${staged.to}`);
       setChunkStartedAt(Date.now());
-      const chunkBatchId = batchId();
       const result = await commitLedger(
         staged.drafts,
-        chunkBatchId,
+        staged.batchId,
         {
           portfolio: runningPortfolio,
           transactions: runningTransactions,
@@ -919,9 +936,10 @@ export function CurrentWatchImportModal({
     setStagedChunks([]);
     setStagedBasePortfolio(null);
     setStagedBaseTransactions(null);
-    setPreparedCount(0);
     setChunksPrepared(0);
     setSavedCount(0);
+    setSuppressedFlaggedIds(new Set());
+    setExcludedFlaggedRows(false);
     setFile(null);
     setRawRows(null);
     setImportApplied(true);
@@ -943,9 +961,10 @@ export function CurrentWatchImportModal({
     setStagedChunks([]);
     setStagedBasePortfolio(null);
     setStagedBaseTransactions(null);
-    setPreparedCount(0);
     setChunksPrepared(0);
     setSavedCount(0);
+    setSuppressedFlaggedIds(new Set());
+    setExcludedFlaggedRows(false);
     onCancel();
   }
 
@@ -1077,7 +1096,24 @@ export function CurrentWatchImportModal({
                     disabled={busy}
                     onClick={() => {
                       setPendingOversellById({});
-                      setExcludedFlaggedRows((current) => !current);
+                      setExcludedFlaggedRows((current) => {
+                        if (current) {
+                          setSuppressedFlaggedIds(new Set());
+                          return false;
+                        }
+                        const suppressed = new Set(
+                          (preview?.issues ?? []).map(
+                            (issue) => issue.transactionId,
+                          ),
+                        );
+                        for (const row of remainingDraftTransactions) {
+                          if (row.ticker && unsupportedTickers.has(row.ticker)) {
+                            suppressed.add(row.id);
+                          }
+                        }
+                        setSuppressedFlaggedIds(suppressed);
+                        return true;
+                      });
                     }}
                   >
                     {excludedFlaggedRows ? (
@@ -1097,6 +1133,7 @@ export function CurrentWatchImportModal({
                       if (duplicateFlaggedIds.length === 0) return;
                       const duplicateIds = new Set(duplicateFlaggedIds);
                       setExcludedFlaggedRows(false);
+                      setSuppressedFlaggedIds(new Set());
                       setPendingOversellById((current) => {
                         let changed = false;
                         const next = { ...current };
@@ -1124,6 +1161,7 @@ export function CurrentWatchImportModal({
                     onClick={() => {
                       if (!canConfirmEdits) return;
                       setExcludedFlaggedRows(false);
+                      setSuppressedFlaggedIds(new Set());
                       setDraftTransactions((current) =>
                         current.map((row) => {
                           const pending = pendingOversellById[row.id];

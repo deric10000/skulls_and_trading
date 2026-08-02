@@ -112,6 +112,68 @@ describe("historical transaction reconstruction", () => {
     expect(fetchCycle).not.toHaveBeenCalled();
   });
 
+  it("honors durable untrackedClose sells without poisoning later rows", async () => {
+    const fetchCycle = vi.fn(async () => ({
+      schemaVersion: 1 as const,
+      complete: true as const,
+      cycleKey: "market:cycle:complete:20260730T150000000Z",
+      cycleAsOf: "2026-07-30T15:00:00.000Z",
+      quotes: {
+        ACHR: { lastPrice: 10, asOf: "2026-07-30T15:00:00.000Z", source: "test" },
+        AAPL: { lastPrice: 99, asOf: "2026-07-30T15:00:00.000Z", source: "test" },
+      },
+      fundamentals: { ACHR: {}, AAPL: {} },
+      technicals: { ACHR: {}, AAPL: {} },
+      byTimeframe: { ACHR: {}, AAPL: {} },
+      context: { asOf: "2026-07-30T15:00:00.000Z" },
+    }) as never);
+    const result = await reconstructHistoricalChunk({
+      job: job(),
+      transactions: [
+        {
+          id: "import-1:row:1",
+          portfolio_id: portfolio.id,
+          kind: "qty",
+          transaction_type: "sell",
+          ticker: "ACHR",
+          quantity: 5,
+          fill_price: 8,
+          filled_at: "2026-07-30T14:30:00.000Z",
+          shares_before: 5,
+          shares_after: 0,
+          cash_before: 1_000,
+          cash_after: 1_000,
+          untracked_close: true,
+        },
+        buy({
+          id: "import-1:row:2",
+          filled_at: "2026-07-30T15:30:00.000Z",
+        }),
+      ],
+      versions: [{
+        id: "strategy-1:v1",
+        strategy_id: strategy.id,
+        effective_from: "2026-07-25T12:00:00.000Z",
+        effective_to: null,
+        snapshot: strategy,
+      }],
+      applications: [{
+        strategy_id: strategy.id,
+        portfolio_id: portfolio.id,
+        applied_at: "2026-07-25T12:00:00.000Z",
+        removed_at: null,
+      }],
+      tickerApplications: [],
+      fetchCycle,
+    });
+    expect(result.results[0]?.reason).not.toBe("portfolio_replay_mismatch");
+    expect(result.workingPortfolio.historicalReplayReliable).not.toBe(false);
+    expect(result.results[1]).toMatchObject({
+      status: "scored",
+      strategyIds: [strategy.id],
+    });
+  });
+
   it("does not score when durable before-values disagree with replay state", async () => {
     const fetchCycle = vi.fn();
     const result = await reconstructHistoricalChunk({

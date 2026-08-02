@@ -28,7 +28,9 @@ before strategy application is `unscored`. A transaction outside the seven-day
 window is `skipped` but is still replayed so later portfolio state remains
 deterministic. If a persisted before-value does not match the replayed state,
 that row and its dependent remainder are `incomplete` rather than scored from
-an uncertain portfolio basis.
+an uncertain portfolio basis. Intentional import `untracked_close` sells (brokerage
+lots never accounted in this book) are durable on `portfolio_transactions` and
+do not trip that mismatch path.
 
 Cash deposits and withdrawals need effective strategy attribution but no market
 cycle. They retain their existing cash-flow classification.

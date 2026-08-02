@@ -200,12 +200,15 @@ flagged rows. Append imports with **>100** retained rows disable full-file
 Import and require the action-bar **Import next 100** / **Import remaining N**
 path to **stage** 100-row chronological chunks locally (max 3 / 300 in-app).
 Footer primary is **Finish** (`doneIcon={null}`), disabled until all in-app
-rows are prepared; Finish then persists staged chunks against the progressive
-staged book (no mid-Finish server refresh), rebatching each chunk to a fresh
-`batchId:row:N`, then closes. **Cancel** discards unsaved staged batches and
-must not call the commit RPC (already-saved partial Finish rows stay).
-`.watch-import-progress` shows elapsed while preparing/saving and
-`X of Y rows ready` / saved after each stage.
+eligible rows are prepared; Finish then persists staged chunks against the
+progressive staged book (no mid-Finish server refresh), rebatching each chunk
+with a **stage-time** `batchId` reused on retry for server idempotency, then
+closes. Chunk remaining/progress is id-stable against the Exclude All Flagged
+suppression set (never `slice(preparedCount)` on a wider list). **Cancel**
+discards unsaved staged batches and must not call the commit RPC
+(already-saved partial Finish rows stay). `.watch-import-progress` shows
+elapsed while preparing/saving and `X of Y rows ready` / saved after each
+stage.
 Readable embedded zones and U.S. date formats normalize without
 asking users to edit files. Append Buy/Sell imports require a second stacked
 Radio choice with no default: apply trade cash flow against current cash, or
