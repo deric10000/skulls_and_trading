@@ -105,8 +105,8 @@ describe("reviewCurrentWatchTimeline", () => {
     });
     expect(pending.cash).toMatchObject({
       side: "deposit",
-      cashBefore: 880,
-      cashAfter: 1380,
+      cashBefore: 1000,
+      cashAfter: 1500,
       deltaCash: 500,
     });
   });
@@ -141,6 +141,94 @@ describe("reviewCurrentWatchTimeline", () => {
     expect(reviewed.cash).toMatchObject({ cashBefore: 0, cashAfter: 500 });
     expect(reviewed.orders[0]).toMatchObject({ cashBefore: 500, cashAfter: 300 });
     expect(reviewed.finalCash).toBe(300);
+  });
+
+  it("funds same-timestamp buys from a deposit (cash before qty on ties)", () => {
+    const at = "2026-08-02T15:30:00.000Z";
+    const reviewed = reviewCurrentWatchTimeline({
+      startingCash: 0,
+      cash: {
+        side: "deposit",
+        cashBefore: 0,
+        cashAfter: 150_000,
+        deltaCash: 150_000,
+        filledAt: at,
+        timeZone: "America/New_York",
+      },
+      orders: [
+        {
+          ticker: "AMD",
+          side: "buy",
+          deltaShares: 110,
+          sharesBefore: 0,
+          sharesAfter: 110,
+          fillPrice: 476.15,
+          filledAt: at,
+          timeZone: "America/New_York",
+        },
+        {
+          ticker: "MO",
+          side: "buy",
+          deltaShares: 50,
+          sharesBefore: 0,
+          sharesAfter: 50,
+          fillPrice: 68.33,
+          filledAt: at,
+          timeZone: "America/New_York",
+        },
+      ],
+    });
+    expect("error" in reviewed).toBe(false);
+    if ("error" in reviewed) return;
+
+    const empty = {
+      id: "new-book",
+      label: "New",
+      type: "portfolio" as const,
+      revision: 0,
+      cashAvailable: 0,
+      holdings: [],
+    };
+    const prepared = buildCurrentWatchEditCommit({
+      portfolio: empty,
+      alignment: {
+        byTicker: {},
+        byBucket: {},
+        portfolio: {
+          conviction: 0,
+          status: "No Strategy",
+          resolved: resolveStatus(0, [], { hasStrategy: false }),
+        },
+      },
+      appliedStrategyIds: [],
+      getLastPrice: (ticker) => (ticker === "AMD" ? 476.15 : 68.33),
+      orders: reviewed.orders,
+      cash: reviewed.cash,
+      finalCash: reviewed.finalCash,
+      nextId: (prefix) => `${prefix}-1-1`,
+    });
+
+    expect(prepared.transactions.map((tx) => tx.kind)).toEqual([
+      "cash",
+      "qty",
+      "qty",
+    ]);
+    expect(prepared.transactions[0]).toMatchObject({
+      kind: "cash",
+      cashBefore: 0,
+      cashAfter: 150_000,
+    });
+    expect(prepared.transactions[1]).toMatchObject({
+      ticker: "AMD",
+      cashBefore: 150_000,
+      cashAfter: 97_623.5,
+    });
+    expect(prepared.transactions[2]).toMatchObject({
+      ticker: "MO",
+      cashBefore: 97_623.5,
+      cashAfter: 94_207,
+    });
+    expect(prepared.portfolio.cashAvailable).toBe(94_207);
   });
 });
 
