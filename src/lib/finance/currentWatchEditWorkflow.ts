@@ -14,6 +14,7 @@ import {
   CurrentWatchCommitError,
 } from "../userStore/currentWatchEditStore";
 import { buildCurrentWatchEditCommit } from "./currentWatchEditCommit";
+import { compareCurrentWatchTimelineEvents } from "./currentWatchTimelineOrder";
 
 function money(value: number): number {
   return Math.round((value + Number.EPSILON) * 100) / 100;
@@ -90,7 +91,9 @@ export function buildCurrentWatchPendingReview(input: {
     })
     .sort((left, right) => left.ticker.localeCompare(right.ticker));
   if (Math.abs(input.cashOffset) < 0.005) return { orders, cash: null };
-  const cashBefore = money(input.cashBaseline + input.qtyImpact);
+  // Same-timestamp reviews apply cash before qty (see timeline order helper),
+  // so deposit/withdraw display against starting cash — not post-trade cash.
+  const cashBefore = money(input.cashBaseline);
   const cashAfter = money(cashBefore + input.cashOffset);
   return {
     orders,
@@ -154,12 +157,24 @@ export function reviewCurrentWatchTimeline(input: {
   let cashAfter = timelineCash;
   const reviewed = new Map<number, PendingQtyOrder>();
   const timeline = [
-    ...input.orders.map((order, index) => ({ kind: "qty" as const, order, index })),
-    ...(input.cash ? [{ kind: "cash" as const, cash: input.cash, index: -1 }] : []),
+    ...input.orders.map((order, index) => ({
+      kind: "qty" as const,
+      filledAt: order.filledAt,
+      order,
+      index,
+    })),
+    ...(input.cash
+      ? [{
+          kind: "cash" as const,
+          filledAt: input.cash.filledAt,
+          cash: input.cash,
+          index: -1,
+        }]
+      : []),
   ].sort((left, right) => {
-    const leftAt = left.kind === "qty" ? left.order.filledAt : left.cash.filledAt;
-    const rightAt = right.kind === "qty" ? right.order.filledAt : right.cash.filledAt;
-    return Date.parse(leftAt) - Date.parse(rightAt) || left.index - right.index;
+    const byKindTime = compareCurrentWatchTimelineEvents(left, right);
+    if (byKindTime !== 0) return byKindTime;
+    return left.index - right.index;
   });
   for (const event of timeline) {
     if (event.kind === "cash") {

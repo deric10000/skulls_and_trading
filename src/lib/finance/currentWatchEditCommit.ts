@@ -11,6 +11,7 @@ import {
   classifyQtyAction,
   zoneHintsFromStatuses,
 } from "./portfolioTransactions";
+import { compareCurrentWatchTimelineEvents } from "./currentWatchTimelineOrder";
 import { estimateFillTimestamp } from "./timestamps";
 
 function cents(value: number): number {
@@ -28,20 +29,22 @@ export function buildCurrentWatchEditCommit(input: {
   nextId: (prefix: string) => string;
 }): { portfolio: Portfolio; transactions: PortfolioTransaction[] } {
   const { portfolio } = input;
-  const orders = [...input.orders].sort(
-    (left, right) => Date.parse(left.filledAt) - Date.parse(right.filledAt),
+  const orders = [...input.orders].sort((left, right) =>
+    compareCurrentWatchTimelineEvents(
+      { filledAt: left.filledAt, kind: "qty" },
+      { filledAt: right.filledAt, kind: "qty" },
+    ),
   );
-  let runningCash = cents(portfolio.cashAvailable ?? 0);
-  const transactions: PortfolioTransaction[] = orders.map((order) => {
+  const qtyTransactions: PortfolioTransaction[] = orders.map((order) => {
     const holding = portfolio.holdings.find(
       (item) => item.ticker === order.ticker,
     );
     const live =
       input.alignment.byTicker[order.ticker.toUpperCase()] ??
       input.alignment.byTicker[order.ticker];
-    const cashBefore = order.cashBefore ?? runningCash;
     const tradeValue = cents(order.deltaShares * order.fillPrice);
-    runningCash =
+    const cashBefore = order.cashBefore ?? cents(portfolio.cashAvailable ?? 0);
+    const cashAfter =
       order.cashAfter ??
       cents(
         order.side === "sell"
@@ -64,7 +67,7 @@ export function buildCurrentWatchEditCommit(input: {
         Intl.DateTimeFormat().resolvedOptions().timeZone ||
         "UTC",
       cashBefore,
-      cashAfter: runningCash,
+      cashAfter,
       source: "mock",
       actionClass: classifyQtyAction({
         sharesBefore: order.sharesBefore,
@@ -80,27 +83,42 @@ export function buildCurrentWatchEditCommit(input: {
       ]),
     };
   });
-  if (input.cash && input.cash.cashAfter !== input.cash.cashBefore) {
-    transactions.push({
-      id: input.nextId("cash"),
-      kind: "cash",
-      portfolioId: portfolio.id,
-      cashBefore: input.cash.cashBefore,
-      cashAfter: input.cash.cashAfter,
-      deltaCash: input.cash.deltaCash,
-      filledAt: input.cash.filledAt,
-      timeZone:
-        input.cash.timeZone ||
-        Intl.DateTimeFormat().resolvedOptions().timeZone ||
-        "UTC",
-      source: "mock",
-      actionClass: classifyCashAction({
-        cashBefore: input.cash.cashBefore,
-        cashAfter: input.cash.cashAfter,
-      }),
-      strategyIds: input.appliedStrategyIds,
-    });
-  }
+  const cashTransaction: PortfolioTransaction | null =
+    input.cash && input.cash.cashAfter !== input.cash.cashBefore
+      ? {
+          id: input.nextId("cash"),
+          kind: "cash",
+          portfolioId: portfolio.id,
+          cashBefore: input.cash.cashBefore,
+          cashAfter: input.cash.cashAfter,
+          deltaCash: input.cash.deltaCash,
+          filledAt: input.cash.filledAt,
+          timeZone:
+            input.cash.timeZone ||
+            Intl.DateTimeFormat().resolvedOptions().timeZone ||
+            "UTC",
+          source: "mock",
+          actionClass: classifyCashAction({
+            cashBefore: input.cash.cashBefore,
+            cashAfter: input.cash.cashAfter,
+          }),
+          strategyIds: input.appliedStrategyIds,
+        }
+      : null;
+  // Emit in the same order the server replays (filledAt, cash-before-qty ties).
+  const transactions = [
+    ...qtyTransactions.map((tx) => ({ kind: "qty" as const, tx })),
+    ...(cashTransaction
+      ? [{ kind: "cash" as const, tx: cashTransaction }]
+      : []),
+  ]
+    .sort((left, right) =>
+      compareCurrentWatchTimelineEvents(
+        { filledAt: left.tx.filledAt, kind: left.kind },
+        { filledAt: right.tx.filledAt, kind: right.kind },
+      ),
+    )
+    .map((entry) => entry.tx);
 
   let holdings = portfolio.holdings.map((holding) => ({
     ...holding,
