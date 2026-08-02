@@ -208,22 +208,39 @@ describe("hasUsableLiveQuote", () => {
 
 describe("resolveNextCycleEtaAt", () => {
   it("keeps a future published nextCycleAt", () => {
+    // Friday 09:20 ET — pull window open
     const now = Date.parse("2026-07-31T13:20:00.000Z");
     expect(
       resolveNextCycleEtaAt("2026-07-31T14:00:00.000Z", now),
     ).toEqual({
       etaAt: "2026-07-31T14:00:00.000Z",
       overdue: false,
+      marketClosed: false,
     });
   });
 
-  it("falls back when published nextCycleAt is already past", () => {
+  it("marks overdue inside an open window when published nextCycleAt is past", () => {
+    // Friday 09:20 ET — pull window open
     const now = Date.parse("2026-07-31T13:20:00.000Z");
     expect(
       resolveNextCycleEtaAt("2026-07-31T10:00:00.000Z", now),
     ).toEqual({
       etaAt: synthesizeNextCycleEtaAt(now),
       overdue: true,
+      marketClosed: false,
     });
+  });
+
+  it("uses Sunday overnight open instead of hourly retry when closed", () => {
+    // Sunday 15:00 ET — pull window closed
+    const now = Date.parse("2026-08-02T19:00:00.000Z");
+    expect(
+      resolveNextCycleEtaAt("2026-08-01T01:00:00.000Z", now),
+    ).toEqual({
+      etaAt: synthesizeNextCycleEtaAt(now),
+      overdue: false,
+      marketClosed: true,
+    });
+    expect(synthesizeNextCycleEtaAt(now)).toBe("2026-08-03T00:00:00.000Z");
   });
 });

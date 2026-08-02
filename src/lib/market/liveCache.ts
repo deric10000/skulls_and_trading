@@ -19,6 +19,7 @@ import type {
 import { sanitizeFundamentals } from "../forge/metricSanity";
 import { mapYahooTaxonomy } from "../weather/yahooTaxonomy";
 import { reportTaxonomyGap } from "../userStore/taxonomyGaps";
+import { isMarketPullOpen, nextMarketPullAt } from "./marketPullWindow";
 
 export type ProviderId = "yahoo" | "finnhub" | "fred" | "stooq";
 
@@ -382,31 +383,33 @@ export function hasMappedWeatherTaxonomy(ticker: string): boolean {
 
 /**
  * Countdown target for Weather pending UI: soft-queue eta while an in-session
- * hydrate is running/queued; else published `nextCycleAt`; else the next UTC
- * hour boundary (same clock the Worker uses when no cycle is cached yet).
+ * hydrate is running/queued; else published `nextCycleAt`; else the next
+ * market-pull instant (hour boundary while open, else Sun 20:00 ET overnight).
  * Always returns an ISO string while awaiting — never leave the UI without mm:ss.
  */
 export function synthesizeNextCycleEtaAt(nowMs: number = Date.now()): string {
-  const hourMs = 60 * 60_000;
-  const next = Math.floor(nowMs / hourMs) * hourMs + hourMs;
-  return new Date(next).toISOString();
+  return nextMarketPullAt(nowMs);
 }
 
 /**
- * Prefer a future published `nextCycleAt`; if it is missing or already past
- * (stale published cycle / delayed Worker), fall back to the next UTC hour.
+ * Prefer a future published `nextCycleAt`; if missing/past, fall back to the
+ * next eligible pull. `overdue` is only true inside an open pull window
+ * (Worker should be sharding); outside the window use `marketClosed` instead
+ * of implying an hourly retry.
  */
 export function resolveNextCycleEtaAt(
   nextCycleAt: string | null | undefined,
   nowMs: number = Date.now(),
-): { etaAt: string; overdue: boolean } {
+): { etaAt: string; overdue: boolean; marketClosed: boolean } {
+  const marketClosed = !isMarketPullOpen(nowMs);
   const cycleMs = nextCycleAt ? Date.parse(nextCycleAt) : NaN;
   if (Number.isFinite(cycleMs) && cycleMs > nowMs) {
-    return { etaAt: nextCycleAt!, overdue: false };
+    return { etaAt: nextCycleAt!, overdue: false, marketClosed };
   }
   return {
     etaAt: synthesizeNextCycleEtaAt(nowMs),
-    overdue: Number.isFinite(cycleMs) && cycleMs <= nowMs,
+    overdue: !marketClosed && Number.isFinite(cycleMs) && cycleMs <= nowMs,
+    marketClosed,
   };
 }
 
