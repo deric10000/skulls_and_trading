@@ -30,6 +30,27 @@ export function inAppEligibleDrafts(
   return capped.slice(Math.max(0, importedCount));
 }
 
+/**
+ * Chronological rows eligible for chunked staging/Finish after optional
+ * Exclude All Flagged suppression. Remaining work is by id, never by count
+ * slice against a wider list (that desyncs when suppressed rows sit earlier).
+ */
+export function importUniverseForChunking(
+  transactions: DraftPortfolioTransaction[],
+  suppressedIds: ReadonlySet<string> = new Set(),
+): DraftPortfolioTransaction[] {
+  const ordered = orderDraftTransactionsForImport(transactions);
+  if (suppressedIds.size === 0) return ordered;
+  return ordered.filter((row) => !suppressedIds.has(row.id));
+}
+
+export function remainingDraftsById(
+  universe: DraftPortfolioTransaction[],
+  stagedIds: ReadonlySet<string>,
+): DraftPortfolioTransaction[] {
+  return universe.filter((row) => !stagedIds.has(row.id));
+}
+
 export function nextImportChunk(
   transactions: DraftPortfolioTransaction[],
   importedCount: number,

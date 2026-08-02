@@ -34,6 +34,7 @@ interface PortfolioTransactionRow {
   reconstruction_cycle_key?: string | null;
   reconstruction_cycle_as_of?: string | null;
   reconstructed_at?: string | null;
+  untracked_close?: boolean | null;
 }
 
 function reconstructionStamp(row: PortfolioTransactionRow) {
@@ -75,6 +76,7 @@ function transactionFromRow(row: PortfolioTransactionRow): PortfolioTransaction 
       importBatchId: row.import_batch_id ?? undefined,
       fingerprint: row.fingerprint,
       timeZone: row.time_zone,
+      ...(row.untracked_close ? { untrackedClose: true } : {}),
       ...reconstructionStamp(row),
     };
   }
@@ -109,7 +111,7 @@ export async function loadNormalizedPortfolioTransactions(
   const primary = await getSupabase()
     .from("portfolio_transactions")
     .select(
-      "id,portfolio_id,kind,transaction_type,ticker,quantity,fill_price,amount,filled_at,time_zone,source,import_batch_id,fingerprint,shares_before,shares_after,cash_before,cash_after,action_class,strategy_ids,zone_hints,reconstruction_status,reconstruction_reason,reconstruction_cycle_key,reconstruction_cycle_as_of,reconstructed_at",
+      "id,portfolio_id,kind,transaction_type,ticker,quantity,fill_price,amount,filled_at,time_zone,source,import_batch_id,fingerprint,shares_before,shares_after,cash_before,cash_after,action_class,strategy_ids,zone_hints,untracked_close,reconstruction_status,reconstruction_reason,reconstruction_cycle_key,reconstruction_cycle_as_of,reconstructed_at",
     )
     .eq("user_id", userId)
     .is("archived_at", null)

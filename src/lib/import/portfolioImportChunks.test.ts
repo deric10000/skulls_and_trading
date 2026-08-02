@@ -5,11 +5,13 @@ import {
   IMPORT_IN_APP_ROW_CAP,
   chunkActionLabel,
   inAppEligibleDrafts,
+  importUniverseForChunking,
   nextImportChunk,
   orderDraftTransactionsForImport,
   preparedProgressCopy,
   rebatchDraftForCommit,
   rebatchLedgerForCommit,
+  remainingDraftsById,
   resultingActiveTickerCount,
   usesChunkedAppendImport,
 } from "./portfolioImportChunks";
@@ -142,6 +144,29 @@ describe("portfolioImportChunks", () => {
     expect(usesChunkedAppendImport("append", 100)).toBe(false);
     expect(usesChunkedAppendImport("append", 101)).toBe(true);
     expect(usesChunkedAppendImport("replace", 293)).toBe(false);
+  });
+
+  it("keeps chunk remaining-by-id aligned when earlier flagged rows are suppressed", () => {
+    const rows = Array.from({ length: 105 }, (_, index) =>
+      draft(
+        `r${index}`,
+        new Date(Date.UTC(2026, 0, 1) + index * 60_000).toISOString(),
+        index + 1,
+      ),
+    );
+    const suppressed = new Set(["r0"]);
+    const universe = importUniverseForChunking(rows, suppressed);
+    expect(universe).toHaveLength(104);
+    expect(universe[0]?.id).toBe("r1");
+    const first = nextImportChunk(universe, 0, 0);
+    expect(first.chunk).toHaveLength(100);
+    expect(first.chunk[0]?.id).toBe("r1");
+    expect(first.chunk[99]?.id).toBe("r100");
+    const stagedIds = new Set(first.chunk.map((row) => row.id));
+    const remaining = remainingDraftsById(universe, stagedIds);
+    expect(remaining.map((row) => row.id)).toEqual(["r101", "r102", "r103", "r104"]);
+    const inAppTotal = Math.min(universe.length, IMPORT_IN_APP_ROW_CAP);
+    expect(stagedIds.size + remaining.length).toBe(inAppTotal);
   });
 
   it("counts only shares > 0 across workspace for ticker limit", () => {
