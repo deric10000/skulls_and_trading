@@ -57,4 +57,11 @@ describe("marketPullWindow", () => {
       "2026-08-03T15:00:00.000Z",
     );
   });
+
+  it("maps Friday close edge to Sunday overnight without an hourly fallback", () => {
+    // Fri 20:00 ET — still open for this minute; next hour is closed → Sun 20:00
+    expect(nextMarketPullAt(Date.parse("2026-08-01T00:00:00.000Z"))).toBe(
+      "2026-08-03T00:00:00.000Z",
+    );
+  });
 });
