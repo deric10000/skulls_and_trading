@@ -35,6 +35,7 @@ export function ForgeTableModal({
   totalValue,
   totalWarn = false,
   caution,
+  actionBar,
   alternateView = null,
   children,
 }: {
@@ -69,6 +70,12 @@ export function ForgeTableModal({
   totalValue?: ReactNode;
   totalWarn?: boolean;
   caution?: ReactNode;
+  /**
+   * Optional secondary action strip pinned above Cancel / primary Done
+   * (e.g. import Confirm Edits + Exclude Flagged). Keep chrome shared —
+   * put modal-specific buttons in this slot, not a parallel footer.
+   */
+  actionBar?: ReactNode;
   /**
    * When set, replaces the intro / table / footer (e.g. "Add from library"
    * picker). Title bar stays so Cancel via X / backdrop still works.
@@ -147,6 +154,10 @@ export function ForgeTableModal({
               </div>
             ) : null}
             {caution}
+
+            {actionBar != null ? (
+              <div className="forge-table-action-bar">{actionBar}</div>
+            ) : null}
 
             <div className="forge-table-actions">
               <button

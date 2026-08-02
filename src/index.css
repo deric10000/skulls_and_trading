@@ -3420,13 +3420,15 @@ span.radio {
   margin-top: var(--space-2);
 }
 
-.watch-import-cash-choice .watch-import-radio-row > span {
+.watch-import-cash-choice .watch-import-radio-row > span,
+.watch-import-oversell-choice .watch-import-radio-row > span {
   display: flex;
   flex-direction: column;
   gap: 0.1rem;
 }
 
-.watch-import-cash-choice .watch-import-radio-row small {
+.watch-import-cash-choice .watch-import-radio-row small,
+.watch-import-oversell-choice .watch-import-radio-row small {
   color: var(--text-muted);
   font-size: 0.78rem;
   font-weight: 400;
@@ -3519,6 +3521,49 @@ span.radio {
 .watch-import-issue > span:first-child {
   color: var(--warning);
   font-weight: 600;
+}
+
+.watch-import-issue .row-message {
+  margin: 0;
+  font-size: inherit;
+}
+
+.watch-import-batch-error {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.watch-import-support-hint {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+}
+
+.watch-import-flagged-table {
+  margin-top: var(--space-3);
+}
+
+.watch-import-flagged-table .watch-order-row-messages {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  align-items: flex-start;
+}
+
+.watch-import-inline-field {
+  display: block;
+  min-width: 0;
+}
+
+.watch-import-oversell-choice {
+  width: 100%;
+}
+
+.watch-import-qty-left {
+  display: grid;
+  gap: var(--space-1);
+  padding-left: calc(1.25rem + var(--space-2));
 }
 
 @media (max-width: 767px) {
@@ -6658,6 +6703,28 @@ select.forge-cell-input {
   padding: 0.4rem var(--space-3) 0;
   font-size: 0.76rem;
   color: var(--warning);
+}
+
+/* Secondary action strip pinned above Cancel / primary Done. Import uses
+   this for Confirm Edits + Exclude Flagged while the body scrolls above. */
+.forge-table-action-bar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  flex-shrink: 0;
+  padding: var(--space-2) var(--space-3) 0;
+  border-top: 1px solid var(--border-soft);
+  background: var(--surface-1);
+}
+
+.forge-table-action-bar .btn {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
 }
 
 .forge-table-actions {

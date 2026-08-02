@@ -176,6 +176,19 @@ and duplicate-batch behavior.
 6. monitor RPC failures, rejection counts, payload size, and worker timeouts
    without logging user cells or filenames.
 
+## Import commit error contract
+
+`commit_portfolio_transaction_batch` remains the financial authority. Failures
+raise stable exception names (`insufficient_cash`, `invalid_trade_cash_math`,
+`oversell`, `portfolio_revision_conflict`, …) with an optional JSON DETAIL that
+may include only safe fields: `code`, `sourceRow`, `ticker`, `transactionType`,
+`filledAt`, cash/share amounts, and ticker-limit counts. The client maps those
+codes through `portfolioImportCommitErrors.ts` into user-facing copy. Raw SQL,
+stack traces, and unconstrained database prose never reach the modal. Preserve-
+cash commits require this migration; until it is applied, preserve-mode cash
+math rejects with a schema-update-required message while the portfolio stays
+unchanged.
+
 Rollback is client-first: hide import/recovery entry points and leave additive
 tables intact. Revert reads to the legacy ledger only if needed. Do not drop
 normalized tables or archives during rollback; that destroys recovery data.

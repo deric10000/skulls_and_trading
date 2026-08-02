@@ -3,6 +3,8 @@ import type { Portfolio, PortfolioTransaction } from "../../types";
 import {
   IMPORT_FILE_BYTES,
   replayPortfolioTransactions,
+  roundQuantity,
+  type DraftPortfolioTransaction,
   type PortfolioOpeningState,
   type TradeCashTreatment,
 } from "../../lib/finance/currentWatchTransactions";
@@ -13,17 +15,67 @@ import {
   type ImportCell,
   type NormalizeImportResult,
 } from "../../lib/import/portfolioImport";
+import {
+  portfolioImportCommitReassurance,
+  portfolioImportSupportHint,
+  type PortfolioImportCommitError,
+} from "../../lib/import/portfolioImportCommitErrors";
 import type { CommitPortfolioBatchInput } from "../../lib/userStore/portfolioLedger";
 import { fetchMarketQuotes } from "../../lib/market/client";
 import { Dropdown } from "../Dropdown";
 import { ForgeTableModal } from "../forge/ForgeTableModal";
-import { CaretDown, DownloadSimple, Plus, X } from "../../lib/icons";
+import { CaretDown, CheckCircle, DownloadSimple, Trash, X } from "../../lib/icons";
 import { Radio } from "../Radio";
+import { RowMessage } from "../RowMessage";
 import {
   loadLatestHistoricalReconstructionJob,
   type HistoricalReconstructionJobSummary,
 } from "../../lib/userStore/historicalReconstructionStore";
 import { HistoricalReconstructionToast } from "./HistoricalReconstructionToast";
+import {
+  ImportFlaggedRowsEditor,
+  canConfirmFlaggedImportEdits,
+  type PendingOversellChoice,
+} from "./ImportFlaggedRowsEditor";
+
+function applyOversellToRow(
+  row: DraftPortfolioTransaction,
+  resolution: PendingOversellChoice,
+): DraftPortfolioTransaction {
+  if (resolution.resolution === "close-to-zero") {
+    if (resolution.heldShares > 0) {
+      return {
+        ...row,
+        quantity: resolution.heldShares,
+        oversellResolution: "close-to-zero",
+        oversellPolicy: "clamp-to-held",
+        targetSharesAfter: 0,
+      };
+    }
+    return {
+      ...row,
+      oversellResolution: "close-to-zero",
+      oversellPolicy: undefined,
+      targetSharesAfter: 0,
+    };
+  }
+  const sharesAfter = resolution.sharesAfter ?? 0;
+  if (resolution.heldShares > 0) {
+    return {
+      ...row,
+      quantity: roundQuantity(resolution.heldShares - sharesAfter),
+      oversellResolution: "set-qty-left",
+      oversellPolicy: undefined,
+      targetSharesAfter: sharesAfter,
+    };
+  }
+  return {
+    ...row,
+    oversellResolution: "set-qty-left",
+    oversellPolicy: undefined,
+    targetSharesAfter: sharesAfter,
+  };
+}
 
 const TIME_ZONES = [
   { value: "America/New_York", label: "Eastern Time (ET)" },
@@ -76,7 +128,11 @@ export function CurrentWatchImportModal({
   onCancel: () => void;
   onCommit: (
     input: CommitPortfolioBatchInput,
-  ) => Promise<"applied" | "conflict" | "failed">;
+  ) => Promise<
+    | { status: "applied" }
+    | { status: "conflict" }
+    | { status: "failed"; error: PortfolioImportCommitError }
+  >;
 }) {
   const [basePortfolio, setBasePortfolio] = useState(portfolio);
   const [baseTransactions, setBaseTransactions] = useState<PortfolioTransaction[]>([]);
@@ -88,12 +144,24 @@ export function CurrentWatchImportModal({
   const [file, setFile] = useState<File | null>(null);
   const [rawRows, setRawRows] = useState<ImportCell[][] | null>(null);
   const [normalized, setNormalized] = useState<NormalizeImportResult | null>(null);
+  const [draftTransactions, setDraftTransactions] = useState<
+    DraftPortfolioTransaction[]
+  >([]);
+  const [excludedIds, setExcludedIds] = useState<Set<string>>(() => new Set());
   const [confirmedTimeZone, setConfirmedTimeZone] = useState("");
   const [openingCash, setOpeningCash] = useState("0");
   const [openingAt, setOpeningAt] = useState("");
   const [excludedFlaggedRows, setExcludedFlaggedRows] = useState(false);
+  const [pendingOversellById, setPendingOversellById] = useState<
+    Record<string, PendingOversellChoice>
+  >({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [errorReassurance, setErrorReassurance] = useState<string | null>(null);
+  const [supportHint, setSupportHint] = useState<string | null>(null);
+  const [commitRowErrors, setCommitRowErrors] = useState<
+    Array<{ row: number; message: string }>
+  >([]);
   const [status, setStatus] = useState<string | null>(null);
   const [showFileRequirements, setShowFileRequirements] = useState(false);
   const [activeBatchId, setActiveBatchId] = useState(batchId);
@@ -173,6 +241,8 @@ export function CurrentWatchImportModal({
       confirmedTimeZone: zone || undefined,
     });
     setNormalized(result);
+    setDraftTransactions(result.transactions);
+    setExcludedIds(new Set());
     setTickerValidationUnavailable(false);
     setUnsupportedTickers(new Set());
     setExcludedFlaggedRows(false);
@@ -180,8 +250,13 @@ export function CurrentWatchImportModal({
 
   async function chooseFile(nextFile: File | null) {
     setError(null);
+    setErrorReassurance(null);
+    setSupportHint(null);
+    setCommitRowErrors([]);
     setStatus(null);
     setNormalized(null);
+    setDraftTransactions([]);
+    setExcludedIds(new Set());
     setRawRows(null);
     setUnsupportedTickers(new Set());
     setTickerValidationUnavailable(false);
@@ -238,11 +313,16 @@ export function CurrentWatchImportModal({
     return undefined;
   }, [mode, replaceBasis, openingAt, confirmedTimeZone, openingCash]);
 
+  const activeDraftTransactions = useMemo(
+    () => draftTransactions.filter((row) => !excludedIds.has(row.id)),
+    [draftTransactions, excludedIds],
+  );
+
   const preview = useMemo(() => {
     if (!baseReady || !normalized || !mode) return null;
     if (
       mode === "append" &&
-      normalized.transactions.some((transaction) => transaction.ticker) &&
+      activeDraftTransactions.some((transaction) => transaction.ticker) &&
       !cashTreatment
     ) return null;
     const replayBase =
@@ -252,7 +332,7 @@ export function CurrentWatchImportModal({
     return replayPortfolioTransactions({
       portfolio: replayBase,
       openingState,
-      transactions: normalized.transactions,
+      transactions: activeDraftTransactions,
       existingFingerprints:
         mode === "append"
           ? new Set(baseTransactions.flatMap((row) => (row.fingerprint ? [row.fingerprint] : [])))
@@ -271,6 +351,7 @@ export function CurrentWatchImportModal({
     baseReady,
     getMarkPrice,
     cashTreatment,
+    activeDraftTransactions,
   ]);
 
   const activePreviewTickers = useMemo(
@@ -348,7 +429,9 @@ export function CurrentWatchImportModal({
   const setupBlocked =
     !baseReady ||
     !mode ||
-    (mode === "append" && Boolean(normalized?.transactions.some((row) => row.ticker)) && !cashTreatment) ||
+    (mode === "append" &&
+      Boolean(activeDraftTransactions.some((row) => row.ticker)) &&
+      !cashTreatment) ||
     tickerValidationPending ||
     tickerValidationUnavailable ||
     !normalized ||
@@ -363,15 +446,40 @@ export function CurrentWatchImportModal({
     replayIssues +
     budgetBlockedTickers.size +
     unsupportedTickers.size;
-  const commitDisabled = busy || setupBlocked || !preview || (flagged > 0 && !excludedFlaggedRows);
+  const commitDisabled =
+    busy ||
+    setupBlocked ||
+    !preview ||
+    activeDraftTransactions.length === 0 ||
+    (flagged > 0 && !excludedFlaggedRows);
+
+  async function refreshAuthoritativeBase(message: string) {
+    const refreshed = await onRefreshBase().catch(() => null);
+    if (refreshed) {
+      setBasePortfolio(refreshed.portfolio);
+      setBaseTransactions(refreshed.transactions);
+      setActiveBatchId(batchId());
+      setError(message);
+      setErrorReassurance("Your portfolio has not changed.");
+      return true;
+    }
+    setError(
+      "The saved portfolio could not be refreshed. Close and reopen the import to review the latest portfolio.",
+    );
+    setErrorReassurance("Your portfolio has not changed.");
+    return false;
+  }
 
   async function commit() {
     if (commitDisabled || !normalized || !preview || !mode) return;
     setBusy(true);
     setError(null);
+    setErrorReassurance(null);
+    setSupportHint(null);
+    setCommitRowErrors([]);
     const blockedIds = new Set(preview.issues.map((issue) => issue.transactionId));
     const includedTransactions = excludedFlaggedRows
-      ? normalized.transactions.filter(
+      ? activeDraftTransactions.filter(
           (row) =>
             !blockedIds.has(row.id) &&
             !(
@@ -380,7 +488,7 @@ export function CurrentWatchImportModal({
                 unsupportedTickers.has(row.ticker))
             ),
         )
-      : normalized.transactions;
+      : activeDraftTransactions;
     const finalPreview = replayPortfolioTransactions({
       portfolio: mode === "replace"
         ? { ...basePortfolio, holdings: [], cashAvailable: 0 }
@@ -417,7 +525,7 @@ export function CurrentWatchImportModal({
       },
     });
     setBusy(false);
-    if (result === "applied") {
+    if (result.status === "applied") {
       setFile(null);
       setRawRows(null);
       setImportApplied(true);
@@ -425,20 +533,47 @@ export function CurrentWatchImportModal({
       setReconstructionStatus(
         await loadLatestHistoricalReconstructionJob(portfolio.id),
       );
-    } else if (result === "conflict") {
-      const refreshed = await onRefreshBase().catch(() => null);
-      if (refreshed) {
-        setBasePortfolio(refreshed.portfolio);
-        setBaseTransactions(refreshed.transactions);
-        setActiveBatchId(batchId());
-        setError("This portfolio changed in another session. The preview has been refreshed against the latest saved portfolio; review it again before importing.");
-      } else {
-        setError("This portfolio changed in another session. Close and reopen the import to review the latest saved portfolio.");
-      }
+    } else if (result.status === "conflict") {
+      await refreshAuthoritativeBase(
+        "The portfolio changed after this preview was prepared. We refreshed it; review the updated preview.",
+      );
     } else {
-      setError("The import was not saved. Your portfolio has not changed.");
+      const commitError = result.error;
+      const stalePreview =
+        commitError.code === "portfolio-cash-mismatch" ||
+        commitError.code === "holdings-mismatch" ||
+        commitError.code === "average-cost-mismatch";
+      if (stalePreview) {
+        await refreshAuthoritativeBase(commitError.message);
+        return;
+      }
+      if (commitError.scope === "row" && commitError.context.sourceRow != null) {
+        setCommitRowErrors([
+          {
+            row: commitError.context.sourceRow,
+            message: commitError.message,
+          },
+        ]);
+        setError(null);
+      } else {
+        setError(commitError.message);
+      }
+      const reassurance = portfolioImportCommitReassurance(commitError);
+      setErrorReassurance(reassurance || null);
+      setSupportHint(portfolioImportSupportHint(commitError));
     }
   }
+
+  const hasOtherImportFlags =
+    normalizationIssues > 0 ||
+    budgetBlockedTickers.size > 0 ||
+    unsupportedTickers.size > 0 ||
+    commitRowErrors.length > 0;
+  const canConfirmEdits = canConfirmFlaggedImportEdits(
+    preview?.issues ?? [],
+    pendingOversellById,
+    hasOtherImportFlags,
+  );
 
   return (
     <ForgeTableModal
@@ -448,9 +583,55 @@ export function CurrentWatchImportModal({
       onDone={importApplied ? onCancel : () => void commit()}
       doneLabel={importApplied ? "Close" : busy ? "Importing…" : "Import"}
       doneDisabled={importApplied ? false : commitDisabled}
+      stableTabs={Boolean(preview && preview.issues.length > 0)}
+      stableTabsTableMin={240}
       intro={importApplied
         ? "Your transactions are saved. Historical scoring continues safely in the background after this window closes."
         : "Your file stays on this device while we prepare the preview. We retain only Transaction Type, Ticker, Quantity, Fill Price, Amount (USD), Date / Time, and Time Zone."}
+      actionBar={
+        !importApplied && flagged > 0 ? (
+          <>
+            <button
+              type="button"
+              className={
+                excludedFlaggedRows
+                  ? "btn btn--small watch-order-action is-active"
+                  : "btn btn--small watch-order-action watch-order-action--sell"
+              }
+              disabled={busy}
+              onClick={() => {
+                setPendingOversellById({});
+                setExcludedFlaggedRows((current) => !current);
+              }}
+            >
+              {excludedFlaggedRows ? (
+                <X aria-hidden weight="bold" />
+              ) : (
+                <Trash aria-hidden weight="regular" />
+              )}
+              {excludedFlaggedRows ? "Include Flagged" : "Exclude Flagged"}
+            </button>
+            <button
+              type="button"
+              className="btn btn--small watch-order-action"
+              disabled={!canConfirmEdits || busy}
+              onClick={() => {
+                if (!canConfirmEdits) return;
+                setExcludedFlaggedRows(false);
+                setDraftTransactions((current) =>
+                  current.map((row) => {
+                    const pending = pendingOversellById[row.id];
+                    return pending ? applyOversellToRow(row, pending) : row;
+                  }),
+                );
+                setPendingOversellById({});
+              }}
+            >
+              <CheckCircle aria-hidden weight="regular" /> Confirm Edits
+            </button>
+          </>
+        ) : undefined
+      }
     >
       {importApplied ? (
         <div className="watch-import-flow">
@@ -629,38 +810,112 @@ export function CurrentWatchImportModal({
             {normalized.detectedFormat === "webull" ? (
               <p className="watch-import-note">Webull order format detected. Executed quantities are normalized from Filled, Avg Price, and Filled Time; unrelated columns remain local and are discarded.</p>
             ) : null}
-            {flagged > 0 ? (
+            {preview && preview.issues.length > 0 ? (
+              <ImportFlaggedRowsEditor
+                transactions={activeDraftTransactions}
+                issues={preview.issues}
+                canSuggestPreserveCash={
+                  mode === "append" && cashTreatment === "apply"
+                }
+                pendingOversellById={pendingOversellById}
+                onPendingOversellChange={(transactionId, pending) => {
+                  setExcludedFlaggedRows(false);
+                  setPendingOversellById((current) => {
+                    if (pending == null) {
+                      if (!(transactionId in current)) return current;
+                      const next = { ...current };
+                      delete next[transactionId];
+                      return next;
+                    }
+                    return { ...current, [transactionId]: pending };
+                  });
+                }}
+                onChange={(transactionId, patch) => {
+                  setExcludedFlaggedRows(false);
+                  if (
+                    "oversellResolution" in patch &&
+                    patch.oversellResolution === undefined
+                  ) {
+                    setPendingOversellById((current) => {
+                      if (!(transactionId in current)) return current;
+                      const next = { ...current };
+                      delete next[transactionId];
+                      return next;
+                    });
+                  }
+                  setDraftTransactions((current) =>
+                    current.map((row) =>
+                      row.id === transactionId ? { ...row, ...patch } : row,
+                    ),
+                  );
+                }}
+                onExclude={(transactionId) => {
+                  setExcludedFlaggedRows(false);
+                  setPendingOversellById((current) => {
+                    if (!(transactionId in current)) return current;
+                    const next = { ...current };
+                    delete next[transactionId];
+                    return next;
+                  });
+                  setExcludedIds((current) => {
+                    const next = new Set(current);
+                    next.add(transactionId);
+                    return next;
+                  });
+                }}
+                onSwitchToPreserveCash={() => {
+                  setExcludedFlaggedRows(false);
+                  setCashTreatment("preserve");
+                }}
+              />
+            ) : null}
+            {normalizationIssues > 0 ||
+            commitRowErrors.length > 0 ||
+            budgetBlockedTickers.size > 0 ||
+            unsupportedTickers.size > 0 ? (
               <div className="watch-import-issues">
-                {[...normalized.issues.map((issue) => ({ row: issue.row, message: issue.message })), ...(preview?.issues ?? []).map((issue) => ({ row: issue.sourceRow ?? 0, message: issue.message }))].slice(0, 20).map((issue, index) => (
-                  <div key={`${issue.row}-${index}`} className="watch-import-issue"><span>Row {issue.row || "—"}</span><span>{issue.message}</span></div>
-                ))}
+                {[
+                  ...normalized.issues.map((issue) => ({
+                    row: issue.row,
+                    message: issue.message,
+                    tone: "warning" as const,
+                  })),
+                  ...commitRowErrors.map((issue) => ({
+                    row: issue.row,
+                    message: issue.message,
+                    tone: "error" as const,
+                  })),
+                ]
+                  .slice(0, 20)
+                  .map((issue, index) => (
+                    <div key={`${issue.row}-${index}`} className="watch-import-issue">
+                      <span>Row {issue.row || "—"}</span>
+                      <RowMessage tone={issue.tone}>{issue.message}</RowMessage>
+                    </div>
+                  ))}
                 {budgetBlockedTickers.size > 0 ? (
                   <div className="watch-import-issue">
                     <span>Budget</span>
-                    <span>
+                    <RowMessage tone="error">
                       Exclude {Array.from(budgetBlockedTickers).join(", ")} or remove other tracked tickers to stay within the 40-ticker market-data limit.
-                    </span>
+                    </RowMessage>
                   </div>
                 ) : null}
                 {unsupportedTickers.size > 0 ? (
                   <div className="watch-import-issue">
                     <span>Ticker</span>
-                    <span>
-                      No market data was found for {Array.from(unsupportedTickers).join(", ")}. Review the symbols or explicitly exclude their rows.
-                    </span>
+                    <RowMessage tone="error">
+                      No market data was found for {Array.from(unsupportedTickers).join(", ")}. Review the symbols or exclude those rows with the trash action above.
+                    </RowMessage>
                   </div>
                 ) : null}
-                <button type="button" className={excludedFlaggedRows ? "btn btn--small btn--ghost is-active" : "btn btn--small btn--ghost"} onClick={() => setExcludedFlaggedRows((current) => !current)}>
-                  {excludedFlaggedRows ? <X aria-hidden /> : <Plus aria-hidden />}
-                  {excludedFlaggedRows ? "Include flagged rows again" : "Exclude flagged rows and regenerate preview"}
-                </button>
               </div>
             ) : null}
           </section>
         ) : null}
         {tickerValidationUnavailable ? (
           <div className="forge-error watch-import-file-row" role="alert">
-            <span>Ticker verification is temporarily unavailable. Your import remains blocked until the symbols can be checked.</span>
+            <span>Ticker verification is temporarily unavailable. Retry the check.</span>
             <button
               type="button"
               className="btn btn--small btn--ghost"
@@ -674,7 +929,20 @@ export function CurrentWatchImportModal({
           </div>
         ) : null}
         {status ? <p role="status">{status}</p> : null}
-        {error ? <p className="forge-error" role="alert">{error}</p> : null}
+        {error ? (
+          <div className="watch-import-batch-error" role="alert">
+            <RowMessage tone="error">{error}</RowMessage>
+            {errorReassurance ? (
+              <RowMessage tone="warning">{errorReassurance}</RowMessage>
+            ) : null}
+            {supportHint ? (
+              <p className="watch-import-support-hint">{supportHint}</p>
+            ) : null}
+          </div>
+        ) : null}
+        {!error && errorReassurance && commitRowErrors.length > 0 ? (
+          <RowMessage tone="warning">{errorReassurance}</RowMessage>
+        ) : null}
       </div>
       )}
     </ForgeTableModal>

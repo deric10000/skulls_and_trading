@@ -313,6 +313,12 @@ export interface ShareFillEvent extends HistoricalReconstructionStamp {
   /** Cash sequence stamps used by normalized replay validation. */
   cashBefore?: number;
   cashAfter?: number;
+  /**
+   * Import-only: sell closes shares that were not yet accounted in this
+   * portfolio timeline (brokerage-held / missing earlier buys). Server trusts
+   * the client share sequence for this row when set.
+   */
+  untrackedClose?: boolean;
 }
 
 /** Cash edit recorded from Current Watch portfolio edit mode. */

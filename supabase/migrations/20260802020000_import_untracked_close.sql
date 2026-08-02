@@ -1,3 +1,9 @@
+-- Allow import sells to close brokerage lots that were never accounted in
+-- this portfolio timeline when the client marks untrackedClose=true.
+-- Fix PL/pgSQL ambiguity introduced when the cash-treatment commit wrapped
+-- the insert select: alias `tx` collided with declare variable `tx`, so every
+-- preserve/apply import failed with an unexpected database error.
+-- Forward-only; prior migration already applied.
 -- Broker-shaped imports remain additive and backward-compatible. Old clients
 -- default to applying trade cash flow; append imports may explicitly preserve
 -- current cash while still recording exact executed quantity history.
@@ -224,7 +230,35 @@ begin
         (running_average_costs->>(tx->>'ticker'))::numeric,
         0
       );
-      if round((tx->>'sharesBefore')::numeric, 6) <> current_shares then
+      -- Import-only: brokerage sells may close lots never accounted in this
+      -- portfolio yet. When untrackedClose is true, trust the client sequence
+      -- if share math is internally consistent and does not go negative.
+      if coalesce((tx->>'untrackedClose')::boolean, false)
+        and tx->>'side' = 'sell'
+        and round((tx->>'sharesBefore')::numeric, 6) > current_shares then
+        if round((tx->>'sharesAfter')::numeric, 6) < 0
+          or round((tx->>'sharesBefore')::numeric, 6)
+            <> round(
+              (tx->>'sharesAfter')::numeric + (tx->>'deltaShares')::numeric,
+              6
+            )
+        then
+          perform public.raise_portfolio_import_error(
+            'invalid_share_math',
+            jsonb_build_object(
+              'code', 'invalid_share_math',
+              'sourceRow', source_row,
+              'ticker', tx->>'ticker',
+              'transactionType', tx->>'side'
+            )
+          );
+        end if;
+        current_shares := round((tx->>'sharesBefore')::numeric, 6);
+        current_average_cost := coalesce(
+          nullif((tx->>'fillPrice')::numeric, 0),
+          current_average_cost
+        );
+      elsif round((tx->>'sharesBefore')::numeric, 6) <> current_shares then
         perform public.raise_portfolio_import_error(
           'share_sequence_conflict',
           jsonb_build_object(
@@ -514,45 +548,45 @@ begin
       action_class, strategy_ids, zone_hints
     )
     select
-      tx->>'id', caller, p_portfolio_id, tx->>'kind',
-      case when tx->>'kind' = 'qty' then tx->>'side'
-        when (tx->>'deltaCash')::numeric > 0 then 'deposit' else 'withdrawal' end,
-      nullif(tx->>'ticker', ''), nullif(tx->>'deltaShares', '')::numeric,
-      nullif(tx->>'fillPrice', '')::numeric,
-      case when tx->>'kind' = 'cash' then abs((tx->>'deltaCash')::numeric) end,
-      (tx->>'filledAt')::timestamptz, tx->>'timeZone', 'import', batch_id,
+      tx_row->>'id', caller, p_portfolio_id, tx_row->>'kind',
+      case when tx_row->>'kind' = 'qty' then tx_row->>'side'
+        when (tx_row->>'deltaCash')::numeric > 0 then 'deposit' else 'withdrawal' end,
+      nullif(tx_row->>'ticker', ''), nullif(tx_row->>'deltaShares', '')::numeric,
+      nullif(tx_row->>'fillPrice', '')::numeric,
+      case when tx_row->>'kind' = 'cash' then abs((tx_row->>'deltaCash')::numeric) end,
+      (tx_row->>'filledAt')::timestamptz, tx_row->>'timeZone', 'import', batch_id,
       concat_ws(
         '|',
         p_portfolio_id,
-        case when tx->>'kind' = 'qty' then tx->>'side'
-          when (tx->>'deltaCash')::numeric > 0 then 'deposit' else 'withdrawal' end,
-        coalesce(tx->>'ticker', ''),
+        case when tx_row->>'kind' = 'qty' then tx_row->>'side'
+          when (tx_row->>'deltaCash')::numeric > 0 then 'deposit' else 'withdrawal' end,
+        coalesce(tx_row->>'ticker', ''),
         trim(trailing '.' from trim(trailing '0' from
-          round(coalesce(nullif(tx->>'deltaShares', '')::numeric, 0), 6)::text)),
+          round(coalesce(nullif(tx_row->>'deltaShares', '')::numeric, 0), 6)::text)),
         to_char(
-          round(coalesce(nullif(tx->>'fillPrice', '')::numeric, 0), 2),
+          round(coalesce(nullif(tx_row->>'fillPrice', '')::numeric, 0), 2),
           'FM99999999999999999990.00'
         ),
         to_char(
-          round(case when tx->>'kind' = 'cash'
-            then abs((tx->>'deltaCash')::numeric) else 0 end, 2),
+          round(case when tx_row->>'kind' = 'cash'
+            then abs((tx_row->>'deltaCash')::numeric) else 0 end, 2),
           'FM99999999999999999990.00'
         ),
         to_char(
-          (tx->>'filledAt')::timestamptz at time zone 'UTC',
+          (tx_row->>'filledAt')::timestamptz at time zone 'UTC',
           'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'
         )
       ),
-      nullif(tx->>'sharesBefore', '')::numeric,
-      nullif(tx->>'sharesAfter', '')::numeric, nullif(tx->>'cashBefore', '')::numeric,
-      nullif(tx->>'cashAfter', '')::numeric,
-      case when tx->>'kind' = 'cash'
-        then case when (tx->>'deltaCash')::numeric > 0 then 'deposit' else 'withdrawal' end
-        when tx->>'side' = 'sell' and (tx->>'sharesAfter')::numeric = 0 then 'go_to_cash'
-        when tx->>'side' = 'sell' then 'trim'
+      nullif(tx_row->>'sharesBefore', '')::numeric,
+      nullif(tx_row->>'sharesAfter', '')::numeric, nullif(tx_row->>'cashBefore', '')::numeric,
+      nullif(tx_row->>'cashAfter', '')::numeric,
+      case when tx_row->>'kind' = 'cash'
+        then case when (tx_row->>'deltaCash')::numeric > 0 then 'deposit' else 'withdrawal' end
+        when tx_row->>'side' = 'sell' and (tx_row->>'sharesAfter')::numeric = 0 then 'go_to_cash'
+        when tx_row->>'side' = 'sell' then 'trim'
         else 'add' end,
       '[]'::jsonb, '[]'::jsonb
-    from jsonb_array_elements(p_transactions) tx;
+    from jsonb_array_elements(p_transactions) as tx_row;
   exception
     when unique_violation then
       perform public.raise_portfolio_import_error(

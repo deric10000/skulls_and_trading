@@ -81,7 +81,7 @@ specific thing they ask for — never bundle in extra tweaks.
 | `Tooltip` / `InfoTip` | `src/components/Tooltip.tsx` | Desktop hover/focus reveal (portaled; stock `.tooltip*` only); mobile tap-to-toggle bottom sheet + close button (see "Tooltip standard" below). |
 | `ComingSoonOverlay` | `src/components/ComingSoonOverlay.tsx` | Full-viewport fixed scrim portaled to `document.body` (scroll locked) + panel matching `.modal-card` / Forge title+body type. **States:** (1) `coming-soon` (default) — filled HardHat (`--warning`) + Closed Beta trust copy; no close/actions; header stays above for TopNav; wraps page children as inert; adopters Dashboard, Ships, Captain Profile. (2) `legal` — filled Warning + disclaimer + primary “Accept and Continue”; `coming-soon-overlay--gate` until acknowledged. Ephemeral dismissible notice (old Helm “Review alignment”) is archived at `archived/DismissibleComingSoonNotice.tsx` — do not reintroduce without an adopter. Desktop/tablet: centered. Mobile: panel under `--app-header-h`. Do not one-off a parallel scrim/panel. |
 | `ActionFooter` | `src/components/ActionFooter.tsx` | Reports its own height as `--sticky-footer-h` (see App shell below) — don't remove without checking consumers. |
-| `ForgeTableModal` submission guard | `src/components/forge/ForgeTableModal.tsx` | `doneDisabled` is the shared blocking state for review flows whose final action is not safe yet (including Current Watch import/removal). Keep the existing shell and footer; do not create a parallel disabled-submit modal. |
+| `ForgeTableModal` submission guard | `src/components/forge/ForgeTableModal.tsx` | `doneDisabled` is the shared blocking state for review flows whose final action is not safe yet (including Current Watch import/removal). Optional `actionBar` pins secondary actions above Cancel / Done (import Confirm Edits + Exclude Flagged). Keep the existing shell and footer; do not create a parallel disabled-submit modal. |
 | `OnboardingModal` | `src/components/OnboardingModal.tsx` | First-login walkthrough modal ("Onboarding" — not the Helm). Reopenable on demand via `AppState.openOnboardingModal` — triggers: About page ghost **Onboarding** button and The Helm panel-head `MapTrifold` `.icon-btn`. Forge modal chrome + `MapTrifold` title icon + shared `Stepper` (accent) under the header. Steps live in the exported `ONBOARDING_STEPS` registry — entries flagged `underConstruction` (Dashboard, Captain Profile) stay hidden until ready; visible steps: Welcome, Strategies, Current Watch, Market Weather, Disclaimer. Guide steps follow the Welcome blueprint (gold `.eyebrow`, bold white `h1`, `.lede` paragraphs over the hero backdrop art in `.onboarding-canvas`); the Disclaimer step reuses the legal panel's `.coming-soon-head`/`.coming-soon-trust` look. Footer: `.strategy-footer.onboarding-actions` bar (plain classes, NOT the `ActionFooter` component — must not clobber `--sticky-footer-h`) with the stock `.weather-prevnext` toggle on **every** step — bounded, so Previous disables on the first step and Next on the last (shared `.weather-prevnext-btn:disabled` state). The primary **Acknowledge** button lives **in the Disclaimer step's body** (under the paragraph, `btn--primary btn--block`) so users can't fly past it from the footer; it fires `acknowledgeLegal()` + `dismissOnboardingModal()`. Desktop/tablet: the card is a fixed `min(90vh, 100%)` height so the footer toggle's hit area never moves between steps. X/backdrop dismisses without acknowledging — on first login `AuthedApp` then pops the standalone legal modal, so the disclaimer is never skippable; on a manual reopen (legal already cleared) X/backdrop just dismisses. Rendered when `AppState.onboardingModalOpen` = the first-login gate `needsOnboardingModal` (`user_state.flags.onboardingSeen`) **OR** a manual reopen (`openOnboardingModal`). Don't add a second first-run surface. |
 | `Stepper` | `src/components/Stepper.tsx` | The design's numbered progress stepper (26px discs, flexing connector lines, completed steps swap the number for a filled `CheckCircle`) — resurrected from the Forge's "Steps To Setup Your Strategy" strip; styling is the existing `.forge-stepper` block (`--info` blue / `--accent` gold index tones). `StepItem.active` marks the step in view (white semibold label, `aria-current="step"`); optional `onSelectStep` makes steps clickable jump targets (`.forge-step-btn` invisible button chrome). Mobile (< 768px): collapses to a single nowrap disc row showing only the active step's label, with shrunken connectors. Adopters: `OnboardingModal` (accent, clickable). Reuse it for any progress strip instead of hand-rolling one. |
 
@@ -200,7 +200,25 @@ asking users to edit files. Append Buy/Sell imports require a second stacked
 Radio choice with no default: apply trade cash flow against current cash, or
 preserve current cash while holdings/market value change. Deposits and
 withdrawals always affect cash. The 40-ticker limit applies to final active
-tracked holdings, not closed historical symbols.
+tracked holdings, not closed historical symbols. Flagged import rows reuse the
+Simulate batch transactions table pattern (`.watch-qty-order-table`) with
+inline ticker/qty/fill/date cells, stacked `RowMessage` errors under the row,
+and a trash exclude action. Oversell copy names the ticker and accounted
+shares. Every oversell (including zero accounted shares) gets a required stacked
+`Radio` list: (1) leave 0 shares after the sell or (2) set total qty left.
+Radio choices stay pending until **Confirm Edits** in the
+`ForgeTableModal` `actionBar` (pinned above Cancel / Import); do not apply
+qty/oversell patches on radio click. Confirm Edits uses compact
+`.watch-order-action` sizing and the default secondary `btn btn--small`
+chrome (same family as Forge **Duplicate**), and stays disabled until every
+remaining flagged replay issue is an oversell with a complete pending choice
+(non-oversell / normalize / budget / unsupported flags must be fixed or
+row-removed first). **Exclude Flagged** sits to its left (Trash;
+`.watch-order-action--sell`). Copy states import stays blocked until Confirm
+Edits or exclude. Zero-accounted resolutions may mark `untrackedClose`
+so brokerage sells can close lots never imported earlier. Apply-cash
+insufficient-cash rows may suggest switching to Keep current cash balance via a
+row action that selects that radio.
 Apple Numbers packages stay unsupported; the import surface must explicitly
 tell Numbers users to export the completed template as CSV or Excel (`.xlsx`)
 instead of leaving the native file disabled without explanation.

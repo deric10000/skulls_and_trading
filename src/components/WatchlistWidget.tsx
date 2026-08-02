@@ -1849,7 +1849,7 @@ export function WatchlistWidget({
     input: Parameters<typeof applyPortfolioTransactionBatch>[0],
   ) {
     const result = await applyPortfolioTransactionBatch(input);
-    if (result === "applied") {
+    if (result.status === "applied") {
       persistWatchEditMarks();
     }
     return result;

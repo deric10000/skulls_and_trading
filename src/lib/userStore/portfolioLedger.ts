@@ -1,9 +1,12 @@
 import type { Portfolio, PortfolioTransaction } from "../../types";
 import type { ImportSanitizationReport } from "../import/portfolioImport";
+import type { PortfolioImportCommitError } from "../import/portfolioImportCommitErrors";
 import { getSupabase } from "../auth/supabaseClient";
 import { roundQuantity } from "../finance/currentWatchTransactions";
 import type { TradeCashTreatment } from "../finance/currentWatchTransactions";
 import { serializeWorkspaceMutation } from "./workspaceMutationQueue";
+
+export type { PortfolioImportCommitError };
 
 interface PortfolioTransactionRow {
   id: string;
@@ -191,10 +194,24 @@ export async function commitPortfolioTransactionBatch(
       },
     );
     if (error) {
-      if (error.message.includes("portfolio_revision_conflict")) {
-        throw new Error("PORTFOLIO_REVISION_CONFLICT");
+      // Keep the typed error mapper off the signed-out/eager path; import only
+      // when a commit actually fails.
+      const {
+        PortfolioImportCommitError,
+        portfolioImportCommitErrorFromUnknown,
+      } = await import("../import/portfolioImportCommitErrors");
+      const mapped = portfolioImportCommitErrorFromUnknown(error, {
+        cashTreatment: input.batch.cashTreatment,
+      });
+      if (mapped.code === "revision-conflict") {
+        throw new PortfolioImportCommitError(
+          "revision-conflict",
+          mapped.message,
+          mapped.context,
+          "batch",
+        );
       }
-      throw new Error("IMPORT_COMMIT_FAILED");
+      throw mapped;
     }
     return Number(data);
   });

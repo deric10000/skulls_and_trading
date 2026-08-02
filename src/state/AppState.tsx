@@ -114,6 +114,7 @@ import {
   type UserFlags,
   type UserWorkspace,
 } from "../lib/userStore";
+import type { PortfolioImportCommitError } from "../lib/import/portfolioImportCommitErrors";
 import {
   archivePortfolioSource as persistPortfolioArchive,
   archivePortfolioTickerHistory as persistTickerHistoryArchive,
@@ -342,7 +343,11 @@ export interface AppStateValue {
   /** Atomically persist and publish a reviewed normalized import batch. */
   applyPortfolioTransactionBatch: (
     input: CommitPortfolioBatchInput,
-  ) => Promise<"applied" | "conflict" | "failed">;
+  ) => Promise<
+    | { status: "applied" }
+    | { status: "conflict" }
+    | { status: "failed"; error: PortfolioImportCommitError }
+  >;
   /** Read the durable portfolio + ledger used to build an import preview. */
   loadPortfolioImportBase: (portfolioId: string) => Promise<{
     portfolio: Portfolio;
@@ -1641,9 +1646,26 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const applyPortfolioTransactionBatch = useCallback(
     async (
       input: CommitPortfolioBatchInput,
-    ): Promise<"applied" | "conflict" | "failed"> => {
+    ): Promise<
+      | { status: "applied" }
+      | { status: "conflict" }
+      | { status: "failed"; error: PortfolioImportCommitError }
+    > => {
       try {
-        if (!userIdRef.current) return "failed";
+        if (!userIdRef.current) {
+          const { PortfolioImportCommitError } = await import(
+            "../lib/import/portfolioImportCommitErrors"
+          );
+          return {
+            status: "failed",
+            error: new PortfolioImportCommitError(
+              "session-expired",
+              "Your session expired before the import could be saved. Sign in again, then retry.",
+              {},
+              "batch",
+            ),
+          };
+        }
         const revision = await commitPortfolioTransactionBatch(
           input,
           userIdRef.current,
@@ -1676,12 +1698,22 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
             await loadPortfolioArchives(userIdRef.current),
           );
         }
-        return "applied";
+        return { status: "applied" };
       } catch (error) {
-        if (error instanceof Error && error.message === "PORTFOLIO_REVISION_CONFLICT") {
-          return "conflict";
+        const {
+          PortfolioImportCommitError,
+          portfolioImportCommitErrorFromUnknown,
+        } = await import("../lib/import/portfolioImportCommitErrors");
+        const mapped =
+          error instanceof PortfolioImportCommitError
+            ? error
+            : portfolioImportCommitErrorFromUnknown(error, {
+                cashTreatment: input.batch.cashTreatment,
+              });
+        if (mapped.code === "revision-conflict") {
+          return { status: "conflict" };
         }
-        return "failed";
+        return { status: "failed", error: mapped };
       }
     },
     [],

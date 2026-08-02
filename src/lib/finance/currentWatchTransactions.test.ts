@@ -186,6 +186,173 @@ describe("replayPortfolioTransactions", () => {
     expect(result.issues[0]?.code).toBe("overlap");
   });
 
+  it("names the ticker on oversell and insufficient-cash issues", () => {
+    const oversell = replayPortfolioTransactions({
+      portfolio,
+      transactions: [{
+        id: "sell",
+        type: "sell",
+        ticker: "XYZ",
+        quantity: 10,
+        fillPrice: 10,
+        filledAt: "2026-01-01T15:00:00.000Z",
+        timeZone: "UTC",
+        source: "import",
+        sourceRow: 4,
+      }],
+    });
+    expect(oversell.issues[0]).toMatchObject({
+      code: "oversell",
+      ticker: "XYZ",
+      availableShares: 0,
+      requiredShares: 10,
+    });
+    expect(oversell.issues[0]?.message).toContain("XYZ");
+
+    const cashShort = replayPortfolioTransactions({
+      portfolio: { ...portfolio, cashAvailable: 5 },
+      transactions: [{
+        id: "buy",
+        type: "buy",
+        ticker: "ABC",
+        quantity: 1,
+        fillPrice: 20,
+        filledAt: "2026-01-01T15:00:00.000Z",
+        timeZone: "UTC",
+        source: "import",
+      }],
+    });
+    expect(cashShort.issues[0]).toMatchObject({
+      code: "insufficient-cash",
+      ticker: "ABC",
+      availableCash: 5,
+      requiredCash: 20,
+    });
+    expect(cashShort.issues[0]?.message).toContain("ABC");
+  });
+
+  it("can clamp an oversell to the accounted position ending at zero", () => {
+    const result = replayPortfolioTransactions({
+      portfolio: {
+        ...portfolio,
+        holdings: [{
+          ticker: "XYZ",
+          shares: 3,
+          avgPrice: 10,
+          openPnlPct: 0,
+          conviction: 0,
+          status: "No Strategy",
+          reason: "",
+          strategyIds: [],
+        }],
+      },
+      transactions: [{
+        id: "sell",
+        type: "sell",
+        ticker: "XYZ",
+        quantity: 10,
+        fillPrice: 12,
+        filledAt: "2026-01-01T15:00:00.000Z",
+        timeZone: "UTC",
+        source: "import",
+        oversellResolution: "close-to-zero",
+      }],
+    });
+    expect(result.issues).toEqual([]);
+    expect(result.ledger[0]).toMatchObject({
+      kind: "qty",
+      ticker: "XYZ",
+      side: "sell",
+      deltaShares: 3,
+      sharesBefore: 3,
+      sharesAfter: 0,
+    });
+  });
+
+  it("can resolve an oversell to a chosen total qty left", () => {
+    const result = replayPortfolioTransactions({
+      portfolio: {
+        ...portfolio,
+        holdings: [{
+          ticker: "XYZ",
+          shares: 10,
+          avgPrice: 10,
+          openPnlPct: 0,
+          conviction: 0,
+          status: "No Strategy",
+          reason: "",
+          strategyIds: [],
+        }],
+      },
+      transactions: [{
+        id: "sell",
+        type: "sell",
+        ticker: "XYZ",
+        quantity: 50,
+        fillPrice: 12,
+        filledAt: "2026-01-01T15:00:00.000Z",
+        timeZone: "UTC",
+        source: "import",
+        oversellResolution: "set-qty-left",
+        targetSharesAfter: 2,
+      }],
+    });
+    expect(result.issues).toEqual([]);
+    expect(result.ledger[0]).toMatchObject({
+      kind: "qty",
+      deltaShares: 8,
+      sharesBefore: 10,
+      sharesAfter: 2,
+    });
+  });
+
+  it("does not invent shares when clamp-to-held has nothing accounted", () => {
+    const result = replayPortfolioTransactions({
+      portfolio,
+      transactions: [{
+        id: "sell",
+        type: "sell",
+        ticker: "XYZ",
+        quantity: 10,
+        fillPrice: 12,
+        filledAt: "2026-01-01T15:00:00.000Z",
+        timeZone: "UTC",
+        source: "import",
+        oversellPolicy: "clamp-to-held",
+      }],
+    });
+    expect(result.issues[0]?.code).toBe("oversell");
+    expect(result.ledger).toEqual([]);
+  });
+
+  it("can record a zero-accounted sell as an untracked close to zero", () => {
+    const result = replayPortfolioTransactions({
+      portfolio,
+      transactions: [{
+        id: "sell",
+        type: "sell",
+        ticker: "ACHR",
+        quantity: 1,
+        fillPrice: 7.44,
+        filledAt: "2026-01-01T15:00:00.000Z",
+        timeZone: "UTC",
+        source: "import",
+        oversellResolution: "close-to-zero",
+        targetSharesAfter: 0,
+      }],
+    });
+    expect(result.issues).toEqual([]);
+    expect(result.ledger[0]).toMatchObject({
+      kind: "qty",
+      ticker: "ACHR",
+      side: "sell",
+      deltaShares: 1,
+      sharesBefore: 1,
+      sharesAfter: 0,
+      untrackedClose: true,
+    });
+  });
+
   it("does not assign present-day strategies to imported history", () => {
     const result = replayPortfolioTransactions({
       portfolio: {
