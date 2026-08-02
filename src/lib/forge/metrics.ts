@@ -5,8 +5,8 @@ import type {
   RuleCategory,
   RuleChip,
   RuleOperator,
-} from "../../types";
-import { isLiveSupportedMetric } from "./liveCoverage";
+} from "../../types.ts";
+import { isLiveSupportedMetric } from "./liveCoverage.ts";
 
 /** Candle Times selectable on timeframed technical chips. */
 export const CANDLE_TIME_RANGES: CandleInterval[] = [

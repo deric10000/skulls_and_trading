@@ -128,6 +128,7 @@ this file in the same change with the reason.
 | `scoreStock` calls / benchmark run | 132 | 120 |
 | Cadence arithmetic p95 (2,000 boundaries) | 16.5 ms | 5.94 ms |
 | Edge scoring CPU (20 users × 40 symbols × 5 strategies) | 1,500 ms | 851.5 ms local |
+| Historical reconstruction CPU (20-row chunk) | 1,500 ms | 253.7 ms local |
 | Queue forwarding CPU p95 | 10 ms | 0.104 ms local |
 | Queue operations / day | <10,000 | 72 normal / 192 all-DLQ |
 

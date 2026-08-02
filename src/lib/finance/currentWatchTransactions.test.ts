@@ -78,6 +78,63 @@ describe("replayPortfolioTransactions", () => {
     expect(result.validTransactionIds).toEqual(["deposit"]);
   });
 
+  it("can preserve current cash while imported trades update holdings", () => {
+    const result = replayPortfolioTransactions({
+      portfolio: { ...portfolio, cashAvailable: 25 },
+      tradeCashTreatment: "preserve",
+      transactions: [
+        {
+          id: "buy",
+          type: "buy",
+          ticker: "XYZ",
+          quantity: 10,
+          fillPrice: 100,
+          filledAt: "2026-01-01T15:00:00.000Z",
+          timeZone: "UTC",
+          source: "import",
+        },
+        {
+          id: "sell",
+          type: "sell",
+          ticker: "XYZ",
+          quantity: 2,
+          fillPrice: 110,
+          filledAt: "2026-01-02T15:00:00.000Z",
+          timeZone: "UTC",
+          source: "import",
+        },
+      ],
+    });
+    expect(result.issues).toEqual([]);
+    expect(result.portfolio.cashAvailable).toBe(25);
+    expect(result.portfolio.holdings[0]).toMatchObject({
+      ticker: "XYZ",
+      shares: 8,
+      avgPrice: 100,
+    });
+    expect(result.ledger.map((row) => [row.cashBefore, row.cashAfter])).toEqual([
+      [25, 25],
+      [25, 25],
+    ]);
+  });
+
+  it("still applies explicit deposits when trade cash is preserved", () => {
+    const result = replayPortfolioTransactions({
+      portfolio: { ...portfolio, cashAvailable: 25 },
+      tradeCashTreatment: "preserve",
+      transactions: [{
+        id: "deposit",
+        type: "deposit",
+        amount: 100,
+        filledAt: "2026-01-01T15:00:00.000Z",
+        timeZone: "UTC",
+        source: "import",
+      }],
+    });
+    expect(result.issues).toEqual([]);
+    expect(result.portfolio.cashAvailable).toBe(125);
+  });
+
   it("flags exact duplicates without applying them", () => {
     const transaction = {
       id: "buy",

@@ -5,12 +5,56 @@ import type {
   Strategy,
 } from "../../types";
 import type { PortfolioAlignment } from "../forge/alignment";
-import type { CommitCurrentWatchEditResult } from "../userStore/currentWatchEditStore";
-import { commitCurrentWatchEdit } from "../userStore/currentWatchEditStore";
+import type {
+  CommitCurrentWatchEditResult,
+  CurrentWatchCommitFailureReason,
+} from "../userStore/currentWatchEditStore";
+import {
+  commitCurrentWatchEdit,
+  CurrentWatchCommitError,
+} from "../userStore/currentWatchEditStore";
 import { buildCurrentWatchEditCommit } from "./currentWatchEditCommit";
 
 function money(value: number): number {
   return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+
+export function cashDraftForBatch(
+  cash: PendingCashEdit | null,
+  cashBaseline: number,
+): { cash: PendingCashEdit | null; error: string | null } {
+  if (!cash) return { cash: null, error: null };
+  if (cash.side === "deposit" && cashBaseline <= 0.005) {
+    return { cash, error: null };
+  }
+  return {
+    cash: null,
+    error:
+      "Update or cancel the staged cash change before opening Batch Transactions.",
+  };
+}
+
+export function currentWatchCommitFailureMessage(
+  reason: CurrentWatchCommitFailureReason,
+): string {
+  switch (reason) {
+    case "schema-unavailable":
+      return "Current Watch saving is not installed in this environment. Apply the Current Watch database migrations, then reopen Edit Mode.";
+    case "session-expired":
+      return "Your sign-in session expired. Sign in again, then retry this update.";
+    case "portfolio-not-found":
+      return "This portfolio no longer exists in the saved account data. Refresh Current Watch and reopen Edit Mode.";
+    case "invalid-math":
+      return "The reviewed cash or share totals no longer match the saved portfolio. Cancel, reopen Edit Mode, and review the deposit and orders.";
+    case "invalid-data":
+      return "The server rejected a transaction value. Review the ticker, quantity, fill price, date/time, and time zone.";
+    case "ticker-limit":
+      return "This update would exceed the 40-ticker limit. Remove a tracked ticker, then try again.";
+    case "permission-denied":
+      return "Your account is not permitted to update this portfolio. Sign in to the correct account or contact the Admin Captain.";
+    case "save-unavailable":
+      return "The save service could not be reached. Check your connection and try again; your edits are still open.";
+  }
 }
 
 export function buildCurrentWatchPendingReview(input: {
@@ -173,7 +217,8 @@ export async function executeCurrentWatchEdit(input: {
       transactions: ReturnType<typeof buildCurrentWatchEditCommit>["transactions"];
       durable: CommitCurrentWatchEditResult;
     }
-  | { status: "conflict" | "failed" }
+  | { status: "conflict" }
+  | { status: "failed"; reason: CurrentWatchCommitFailureReason }
 > {
   const prepared = buildCurrentWatchEditCommit(input);
   if (!input.userId) {
@@ -200,9 +245,10 @@ export async function executeCurrentWatchEdit(input: {
     );
     return { status: "applied", ...prepared, durable };
   } catch (error) {
-    return error instanceof Error &&
-      error.message === "PORTFOLIO_REVISION_CONFLICT"
-      ? { status: "conflict" }
-      : { status: "failed" };
+    return error instanceof CurrentWatchCommitError
+      ? error.reason === "conflict"
+        ? { status: "conflict" }
+        : { status: "failed", reason: error.reason }
+      : { status: "failed", reason: "save-unavailable" };
   }
 }

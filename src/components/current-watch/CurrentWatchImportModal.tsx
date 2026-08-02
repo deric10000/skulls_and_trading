@@ -4,6 +4,7 @@ import {
   IMPORT_FILE_BYTES,
   replayPortfolioTransactions,
   type PortfolioOpeningState,
+  type TradeCashTreatment,
 } from "../../lib/finance/currentWatchTransactions";
 import {
   normalizeImportRows,
@@ -18,6 +19,11 @@ import { Dropdown } from "../Dropdown";
 import { ForgeTableModal } from "../forge/ForgeTableModal";
 import { CaretDown, DownloadSimple, Plus, X } from "../../lib/icons";
 import { Radio } from "../Radio";
+import {
+  loadLatestHistoricalReconstructionJob,
+  type HistoricalReconstructionJobSummary,
+} from "../../lib/userStore/historicalReconstructionStore";
+import { HistoricalReconstructionToast } from "./HistoricalReconstructionToast";
 
 const TIME_ZONES = [
   { value: "America/New_York", label: "Eastern Time (ET)" },
@@ -52,7 +58,6 @@ function downloadTemplate(): void {
 
 export function CurrentWatchImportModal({
   portfolio,
-  existingTransactions,
   existingTrackedTickers,
   isKnownTicker,
   getMarkPrice,
@@ -61,7 +66,6 @@ export function CurrentWatchImportModal({
   onCommit,
 }: {
   portfolio: Portfolio;
-  existingTransactions: PortfolioTransaction[];
   existingTrackedTickers: string[];
   isKnownTicker: (ticker: string) => boolean;
   getMarkPrice: (ticker: string) => number;
@@ -75,10 +79,11 @@ export function CurrentWatchImportModal({
   ) => Promise<"applied" | "conflict" | "failed">;
 }) {
   const [basePortfolio, setBasePortfolio] = useState(portfolio);
-  const [baseTransactions, setBaseTransactions] = useState(existingTransactions);
+  const [baseTransactions, setBaseTransactions] = useState<PortfolioTransaction[]>([]);
   const [baseReady, setBaseReady] = useState(false);
   const initialRefreshBase = useRef(onRefreshBase);
   const [mode, setMode] = useState<ImportMode | null>(null);
+  const [cashTreatment, setCashTreatment] = useState<TradeCashTreatment | null>(null);
   const [replaceBasis, setReplaceBasis] = useState<ReplaceBasis | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const [rawRows, setRawRows] = useState<ImportCell[][] | null>(null);
@@ -92,6 +97,12 @@ export function CurrentWatchImportModal({
   const [status, setStatus] = useState<string | null>(null);
   const [showFileRequirements, setShowFileRequirements] = useState(false);
   const [activeBatchId, setActiveBatchId] = useState(batchId);
+  const [importApplied, setImportApplied] = useState(false);
+  const [reconstructionStatus, setReconstructionStatus] =
+    useState<HistoricalReconstructionJobSummary | null>(null);
+  const [dismissedReconstructionId, setDismissedReconstructionId] =
+    useState<string | null>(null);
+  const refreshedReconstructionIdRef = useRef<string | null>(null);
   const [unsupportedTickers, setUnsupportedTickers] = useState<Set<string>>(
     () => new Set(),
   );
@@ -122,8 +133,34 @@ export function CurrentWatchImportModal({
       cancelled = true;
     };
   }, []);
+  useEffect(() => {
+    let cancelled = false;
+    let timer: number | undefined;
+    const refresh = async () => {
+      const next = await loadLatestHistoricalReconstructionJob(portfolio.id);
+      if (cancelled) return;
+      setReconstructionStatus(next);
+      if (next && ["queued", "running", "retrying"].includes(next.status)) {
+        timer = window.setTimeout(() => void refresh(), 30_000);
+      } else if (
+        next &&
+        ["complete", "incomplete", "failed"].includes(next.status) &&
+        refreshedReconstructionIdRef.current !== next.id
+      ) {
+        refreshedReconstructionIdRef.current = next.id;
+        await initialRefreshBase.current();
+      }
+    };
+    void refresh();
+    return () => {
+      cancelled = true;
+      if (timer != null) window.clearTimeout(timer);
+    };
+  }, [importApplied, portfolio.id]);
   const [tickerValidationUnavailable, setTickerValidationUnavailable] =
     useState(false);
+  const [tickerValidationPending, setTickerValidationPending] = useState(false);
+  const [tickerValidationRetry, setTickerValidationRetry] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   async function normalizeRows(
@@ -136,33 +173,8 @@ export function CurrentWatchImportModal({
       confirmedTimeZone: zone || undefined,
     });
     setNormalized(result);
-    const tickers = Array.from(
-      new Set(result.transactions.flatMap((row) => (row.ticker ? [row.ticker] : []))),
-    );
-    const unknown = tickers.filter(
-      (ticker) =>
-        !basePortfolio.holdings.some((holding) => holding.ticker === ticker) &&
-        !isKnownTicker(ticker),
-    );
-    if (unknown.length > 0) {
-      const response = await fetchMarketQuotes(unknown);
-      if (!response) {
-        setTickerValidationUnavailable(true);
-        setUnsupportedTickers(new Set());
-        return;
-      }
-      setTickerValidationUnavailable(false);
-      setUnsupportedTickers(
-        new Set(
-          unknown.filter(
-            (ticker) => !(response?.quotes[ticker]?.lastPrice > 0),
-          ),
-        ),
-      );
-    } else {
-      setTickerValidationUnavailable(false);
-      setUnsupportedTickers(new Set());
-    }
+    setTickerValidationUnavailable(false);
+    setUnsupportedTickers(new Set());
     setExcludedFlaggedRows(false);
   }
 
@@ -173,6 +185,7 @@ export function CurrentWatchImportModal({
     setRawRows(null);
     setUnsupportedTickers(new Set());
     setTickerValidationUnavailable(false);
+    setTickerValidationPending(false);
     setExcludedFlaggedRows(false);
     setFile(nextFile);
     const nextBatchId = batchId();
@@ -184,7 +197,11 @@ export function CurrentWatchImportModal({
     }
     const extension = nextFile.name.toLowerCase().split(".").pop();
     if (extension !== "csv" && extension !== "xlsx") {
-      setError("Only CSV and XLSX files are supported. XLS, XLSM, and encrypted files are not accepted.");
+      setError(
+        extension === "numbers"
+          ? "Apple Numbers files are not supported. Export the file from Numbers as CSV or Excel (.xlsx), then choose the exported file."
+          : "Only CSV and XLSX files are supported. XLS, XLSM, and encrypted files are not accepted.",
+      );
       return;
     }
     setBusy(true);
@@ -223,6 +240,11 @@ export function CurrentWatchImportModal({
 
   const preview = useMemo(() => {
     if (!baseReady || !normalized || !mode) return null;
+    if (
+      mode === "append" &&
+      normalized.transactions.some((transaction) => transaction.ticker) &&
+      !cashTreatment
+    ) return null;
     const replayBase =
       mode === "replace"
         ? { ...basePortfolio, holdings: [], cashAvailable: 0 }
@@ -237,6 +259,7 @@ export function CurrentWatchImportModal({
           : new Set(),
       existingTransactions: mode === "append" ? baseTransactions : [],
       markPrice: getMarkPrice,
+      tradeCashTreatment: cashTreatment ?? "apply",
     });
   }, [
     normalized,
@@ -247,31 +270,86 @@ export function CurrentWatchImportModal({
     baseTransactions,
     baseReady,
     getMarkPrice,
+    cashTreatment,
+  ]);
+
+  const activePreviewTickers = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          (preview?.portfolio.holdings ?? [])
+            .filter((holding) => holding.shares > 0)
+            .map((holding) => holding.ticker.toUpperCase()),
+        ),
+      ).sort(),
+    [preview],
+  );
+  const activePreviewTickerKey = activePreviewTickers.join("|");
+
+  useEffect(() => {
+    let cancelled = false;
+    const unknown = activePreviewTickers.filter(
+      (ticker) =>
+        !basePortfolio.holdings.some((holding) => holding.ticker === ticker) &&
+        !isKnownTicker(ticker),
+    );
+    if (!normalized || !preview || unknown.length === 0) {
+      setTickerValidationPending(false);
+      setTickerValidationUnavailable(false);
+      setUnsupportedTickers(new Set());
+      return () => {
+        cancelled = true;
+      };
+    }
+    setTickerValidationPending(true);
+    void fetchMarketQuotes(unknown)
+      .then((response) => {
+        if (cancelled) return;
+        if (!response) {
+          setTickerValidationUnavailable(true);
+          setUnsupportedTickers(new Set());
+          return;
+        }
+        setTickerValidationUnavailable(false);
+        setUnsupportedTickers(
+          new Set(
+            unknown.filter((ticker) => !(response.quotes[ticker]?.lastPrice > 0)),
+          ),
+        );
+      })
+      .finally(() => {
+        if (!cancelled) setTickerValidationPending(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    activePreviewTickerKey,
+    tickerValidationRetry,
+    normalized,
+    preview,
+    basePortfolio.holdings,
+    isKnownTicker,
   ]);
 
   const budgetBlockedTickers = useMemo(() => {
-    if (!normalized) return new Set<string>();
+    if (!preview) return new Set<string>();
     const existing = new Set([
       ...existingTrackedTickers.map((ticker) => ticker.toUpperCase()),
-      ...basePortfolio.holdings.map((holding) => holding.ticker.toUpperCase()),
     ]);
-    if (mode === "replace") {
-      for (const holding of basePortfolio.holdings) {
-        existing.delete(holding.ticker.toUpperCase());
-      }
+    for (const holding of basePortfolio.holdings) {
+      existing.delete(holding.ticker.toUpperCase());
     }
-    const incoming = Array.from(
-      new Set(
-        normalized.transactions.flatMap((row) => (row.ticker ? [row.ticker] : [])),
-      ),
-    ).filter((ticker) => !existing.has(ticker));
+    const incoming = activePreviewTickers.filter((ticker) => !existing.has(ticker));
     const remaining = Math.max(0, 40 - existing.size);
     return new Set(incoming.slice(remaining));
-  }, [normalized, existingTrackedTickers, basePortfolio, mode]);
+  }, [preview, existingTrackedTickers, basePortfolio.holdings, activePreviewTickers]);
 
   const setupBlocked =
     !baseReady ||
     !mode ||
+    (mode === "append" && Boolean(normalized?.transactions.some((row) => row.ticker)) && !cashTreatment) ||
+    tickerValidationPending ||
     tickerValidationUnavailable ||
     !normalized ||
     (mode === "replace" && !replaceBasis) ||
@@ -304,7 +382,9 @@ export function CurrentWatchImportModal({
         )
       : normalized.transactions;
     const finalPreview = replayPortfolioTransactions({
-      portfolio: mode === "replace" ? { ...basePortfolio, holdings: [], cashAvailable: 0 } : basePortfolio,
+      portfolio: mode === "replace"
+        ? { ...basePortfolio, holdings: [], cashAvailable: 0 }
+        : basePortfolio,
       openingState,
       transactions: includedTransactions,
       existingFingerprints:
@@ -313,6 +393,7 @@ export function CurrentWatchImportModal({
           : new Set(),
       existingTransactions: mode === "append" ? baseTransactions : [],
       markPrice: getMarkPrice,
+      tradeCashTreatment: cashTreatment ?? "apply",
     });
     if (finalPreview.issues.length > 0 || finalPreview.ledger.length === 0) {
       setBusy(false);
@@ -327,6 +408,7 @@ export function CurrentWatchImportModal({
       batch: {
         id: activeBatchId,
         mode,
+        cashTreatment: mode === "append" ? cashTreatment ?? "apply" : "apply",
         report: normalized.report,
         replaceBasis: mode === "replace" ? (replaceBasis ?? undefined) : undefined,
         openingCash: openingState?.cash,
@@ -338,7 +420,11 @@ export function CurrentWatchImportModal({
     if (result === "applied") {
       setFile(null);
       setRawRows(null);
-      onCancel();
+      setImportApplied(true);
+      setDismissedReconstructionId(null);
+      setReconstructionStatus(
+        await loadLatestHistoricalReconstructionJob(portfolio.id),
+      );
     } else if (result === "conflict") {
       const refreshed = await onRefreshBase().catch(() => null);
       if (refreshed) {
@@ -359,20 +445,45 @@ export function CurrentWatchImportModal({
       title="Import portfolio transactions"
       titleId="current-watch-import-title"
       onCancel={onCancel}
-      onDone={() => void commit()}
-      doneLabel={busy ? "Importing…" : "Import"}
-      doneDisabled={commitDisabled}
-      intro="Your file stays on this device while we prepare the preview. We retain only Transaction Type, Ticker, Quantity, Fill Price, Amount (USD), Date / Time, and Time Zone."
+      onDone={importApplied ? onCancel : () => void commit()}
+      doneLabel={importApplied ? "Close" : busy ? "Importing…" : "Import"}
+      doneDisabled={importApplied ? false : commitDisabled}
+      intro={importApplied
+        ? "Your transactions are saved. Historical scoring continues safely in the background after this window closes."
+        : "Your file stays on this device while we prepare the preview. We retain only Transaction Type, Ticker, Quantity, Fill Price, Amount (USD), Date / Time, and Time Zone."}
     >
+      {importApplied ? (
+        <div className="watch-import-flow">
+          <section className="watch-import-section">
+            <p role="status">Import complete. Leave this window open or reopen Import later to check historical-scoring progress.</p>
+          </section>
+          {reconstructionStatus &&
+          reconstructionStatus.id !== dismissedReconstructionId &&
+          reconstructionStatus.status !== "superseded" ? (
+            <HistoricalReconstructionToast
+              job={reconstructionStatus}
+              onDismiss={() => setDismissedReconstructionId(reconstructionStatus.id)}
+            />
+          ) : null}
+        </div>
+      ) : (
       <div className="watch-import-flow">
+        {reconstructionStatus &&
+        reconstructionStatus.id !== dismissedReconstructionId &&
+        reconstructionStatus.status !== "superseded" ? (
+          <HistoricalReconstructionToast
+            job={reconstructionStatus}
+            onDismiss={() => setDismissedReconstructionId(reconstructionStatus.id)}
+          />
+        ) : null}
         <section className="watch-import-section" aria-labelledby="import-mode-label">
           <span className="config-label forge-label" id="import-mode-label">Choose how to apply this import</span>
           <div className="watch-import-radio-list" role="radiogroup" aria-labelledby="import-mode-label">
-            <button type="button" className="watch-import-radio-row" role="radio" aria-checked={mode === "append"} onClick={() => setMode("append")}>
+            <button type="button" className="watch-import-radio-row" role="radio" aria-checked={mode === "append"} onClick={() => { setMode("append"); setCashTreatment(null); }}>
               <Radio decorative checked={mode === "append"} />
               <span>Add transactions to current portfolio</span>
             </button>
-            <button type="button" className="watch-import-radio-row" role="radio" aria-checked={mode === "replace"} onClick={() => setMode("replace")}>
+            <button type="button" className="watch-import-radio-row" role="radio" aria-checked={mode === "replace"} onClick={() => { setMode("replace"); setCashTreatment(null); }}>
               <Radio decorative checked={mode === "replace"} />
               <span>Replace portfolio from import</span>
             </button>
@@ -394,6 +505,29 @@ export function CurrentWatchImportModal({
               <label><span className="watch-field-label">Opening date / time</span><input className="input" type="datetime-local" value={openingAt} onChange={(event) => setOpeningAt(event.target.value)} /></label>
               <Dropdown id="opening-time-zone" label="Opening time zone" value={confirmedTimeZone} onChange={setConfirmedTimeZone} options={[{ value: "", label: "Confirm time zone…", disabled: true }, ...TIME_ZONES]} />
               <p className="watch-import-note">Opening positions can be represented as Buy rows at the opening timestamp. A future lot-level workflow can extend this without changing the ledger.</p>
+            </div>
+          ) : null}
+          {mode === "append" ? (
+            <div className="watch-import-cash-choice">
+              <span className="config-label forge-label" id="import-cash-treatment-label">
+                Choose how Buy and Sell orders affect cash
+              </span>
+              <div className="watch-import-radio-list" role="radiogroup" aria-labelledby="import-cash-treatment-label">
+                <button type="button" className="watch-import-radio-row" role="radio" aria-checked={cashTreatment === "apply"} onClick={() => setCashTreatment("apply")}>
+                  <Radio decorative checked={cashTreatment === "apply"} />
+                  <span>
+                    <strong>Apply transaction cash flow</strong>
+                    <small>Buys use available cash and sells add proceeds. The import stops if cash would fall below $0.</small>
+                  </span>
+                </button>
+                <button type="button" className="watch-import-radio-row" role="radio" aria-checked={cashTreatment === "preserve"} onClick={() => setCashTreatment("preserve")}>
+                  <Radio decorative checked={cashTreatment === "preserve"} />
+                  <span>
+                    <strong>Keep current cash balance</strong>
+                    <small>Buys and sells update holdings and market value without changing current cash. Deposits and withdrawals still apply.</small>
+                  </span>
+                </button>
+              </div>
             </div>
           ) : null}
         </section>
@@ -420,11 +554,12 @@ export function CurrentWatchImportModal({
                     <ul>
                       <li>Maximum file size: 5 MB.</li>
                       <li>Maximum data rows: 5,000.</li>
-                      <li>No more than 40 tickers per file.</li>
+                      <li>No more than 40 active tracked tickers after import. Closed historical symbols do not count toward this limit.</li>
                       <li>Exactly one worksheet per XLSX file or one table per CSV file.</li>
+                      <li>Apple Numbers files must first be exported as CSV or Excel (.xlsx).</li>
                       <li>No formulas, macros, external links, encrypted files, XLS, or XLSM.</li>
-                      <li>Strategy scoring for imported history is not available yet. Imported transactions are retained for later Dashboard analysis.</li>
-                      <li>Accepted columns: Transaction Type, Ticker, Quantity, Fill Price, Amount (USD; required for deposits and withdrawals), Date / Time, and Time Zone (ET/EST, CT/CST, MT/MST, PT/PST, Alaska, Hawaii, Arizona, or UTC).</li>
+                      <li>Transactions from the prior seven days are queued for historical strategy scoring after import. Older records remain available for later Dashboard analysis but are not scored.</li>
+                      <li>Accepted fields include Transaction Type, Ticker, Quantity, Fill Price, Amount (USD; required for deposits and withdrawals), Date / Time, and Time Zone (ET/EST, CT/CST, MT/MST, PT/PST, Alaska, Hawaii, Arizona, or UTC). Broker CSV headings such as Side, Symbol, Filled, Avg Price, Status, and Filled Time are normalized automatically.</li>
                       <li>Do not include names, account numbers, bank or routing details, addresses, or other personal information. Extra columns are stripped before anything is saved; the raw file is never uploaded.</li>
                     </ul>
                   </li>
@@ -451,6 +586,10 @@ export function CurrentWatchImportModal({
               Download template
             </button>
           </div>
+          <p className="watch-import-note">
+            Using Apple Numbers? Export the completed template as CSV or Excel
+            (.xlsx) before choosing the file.
+          </p>
         </section>
 
         {normalized?.requiresTimeZoneConfirmation ? (
@@ -481,11 +620,15 @@ export function CurrentWatchImportModal({
             <span className="config-label forge-label">Sanitized preview</span>
             <div className="watch-import-report" role="status">
               <span>{normalized.report.rowsRetained} retained</span>
+              {normalized.report.rowsSkipped > 0 ? <span>{normalized.report.rowsSkipped} unexecuted rows excluded</span> : null}
               <span>{normalized.report.ignoredColumnCount} extra columns stripped</span>
               <span>{normalized.report.normalizedCellCount} values normalized</span>
               <span>{normalized.report.fractionalRowCount} fractional rows</span>
               <span>{flagged} flagged rows</span>
             </div>
+            {normalized.detectedFormat === "webull" ? (
+              <p className="watch-import-note">Webull order format detected. Executed quantities are normalized from Filled, Avg Price, and Filled Time; unrelated columns remain local and are discarded.</p>
+            ) : null}
             {flagged > 0 ? (
               <div className="watch-import-issues">
                 {[...normalized.issues.map((issue) => ({ row: issue.row, message: issue.message })), ...(preview?.issues ?? []).map((issue) => ({ row: issue.sourceRow ?? 0, message: issue.message }))].slice(0, 20).map((issue, index) => (
@@ -523,9 +666,7 @@ export function CurrentWatchImportModal({
               className="btn btn--small btn--ghost"
               disabled={busy || !rawRows}
               onClick={() => {
-                if (!rawRows) return;
-                setBusy(true);
-                void normalizeRows(rawRows, confirmedTimeZone).finally(() => setBusy(false));
+                setTickerValidationRetry((current) => current + 1);
               }}
             >
               Retry ticker check
@@ -535,6 +676,7 @@ export function CurrentWatchImportModal({
         {status ? <p role="status">{status}</p> : null}
         {error ? <p className="forge-error" role="alert">{error}</p> : null}
       </div>
+      )}
     </ForgeTableModal>
   );
 }

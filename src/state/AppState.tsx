@@ -124,7 +124,10 @@ import {
   restorePortfolioTickerHistory as persistTickerHistoryRestore,
   type CommitPortfolioBatchInput,
 } from "../lib/userStore/portfolioLedger";
-import type { CommitCurrentWatchEditResult } from "../lib/userStore/currentWatchEditStore";
+import type {
+  CommitCurrentWatchEditResult,
+  CurrentWatchCommitFailureReason,
+} from "../lib/userStore/currentWatchEditStore";
 import {
   presentConvictionRun,
   type ConvictionErrorCategory,
@@ -333,7 +336,8 @@ export interface AppStateValue {
     historyRemovalTickers: string[];
   }) => Promise<
     | ({ status: "applied" } & CommitCurrentWatchEditResult)
-    | { status: "conflict" | "failed" }
+    | { status: "conflict" }
+    | { status: "failed"; reason: CurrentWatchCommitFailureReason }
   >;
   /** Atomically persist and publish a reviewed normalized import batch. */
   applyPortfolioTransactionBatch: (
@@ -1540,12 +1544,15 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       historyRemovalTickers: string[];
     }): Promise<
       | ({ status: "applied" } & CommitCurrentWatchEditResult)
-      | { status: "conflict" | "failed" }
+      | { status: "conflict" }
+      | { status: "failed"; reason: CurrentWatchCommitFailureReason }
     > => {
       const portfolio = portfoliosRef.current.find(
         (item) => item.id === input.portfolioId,
       );
-      if (!portfolio) return { status: "failed" };
+      if (!portfolio) {
+        return { status: "failed", reason: "portfolio-not-found" };
+      }
       const currentStrategies = strategiesRef.current;
       const applied = currentStrategies.filter((strategy) =>
         (strategy.appliedPortfolioIds ?? []).includes(input.portfolioId),
@@ -1695,6 +1702,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         : null;
     }
     const workspace = await loadUserWorkspaceSerialized(userIdRef.current);
+    setShareFills(workspace.shareFills);
+    shareFillsRef.current = workspace.shareFills;
     const portfolio = workspace.portfolios.find((item) => item.id === portfolioId);
     return portfolio
       ? {

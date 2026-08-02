@@ -1,4 +1,4 @@
-import type { Portfolio, Strategy } from "../../types";
+import type { Portfolio, Strategy } from "../../types.ts";
 
 /**
  * Every portfolio/watchlist whose holdings reference `strategyId` (via

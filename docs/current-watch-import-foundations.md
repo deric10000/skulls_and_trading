@@ -4,10 +4,10 @@
 
 This contract covers Checkpoints 1–5: temporal and transaction foundations,
 normalized persistence, Edit Mode controls, safe CSV/XLSX import, and recovery.
-Historical market reconstruction and back-scoring are outside this split.
-Imported transactions are retained for future analysis but are not counted as
-scored actions until that workflow binds each event to a published market cycle
-and effective strategy version.
+Checkpoint 6 is defined separately in
+`docs/current-watch-historical-reconstruction.md`. Imported transactions count
+as scored actions only after that workflow binds each event to an at-or-before
+market cycle and effective strategy/ticker assignment.
 
 ## Sources of truth
 
@@ -49,9 +49,18 @@ snapshot from landing after an import, manual update, or archive.
 
 ## Import privacy and lifecycle
 
-- Inputs: CSV/XLSX only, 5 MB, 5,000 data rows, 40 tickers, USD, exactly one
+- Inputs: CSV/XLSX only, 5 MB, 5,000 data rows, 40 final active tracked tickers,
+  USD, exactly one
   XLSX worksheet or one CSV table. Multi-sheet workbooks are rejected rather
-  than asking the user to choose a sheet.
+  than asking the user to choose a sheet. Native Apple Numbers packages are not
+  parsed; the UI directs Numbers users to export as CSV or Excel (`.xlsx`).
+- CSV input may use the standard template or a recognized broker-shaped header
+  set. Webull order exports map `Side`, `Symbol`, executed `Filled` quantity,
+  `Avg Price`, and `Filled Time` into the same normalized allowlist without
+  requiring the user to edit the file. Rows with no executed quantity are
+  excluded locally; a cancelled order with an executed partial fill retains
+  that executed portion. Broker name, order settings, placed time, and original
+  order-price columns are stripped and never persisted.
 - Parsing and workbook inspection run in a browser worker. The raw file is not
   uploaded or saved.
 - XLS, XLSM, encrypted/damaged files, macros, formulas, external workbook links,
@@ -63,6 +72,11 @@ snapshot from landing after an import, manual update, or archive.
   common U.S. regional names and abbreviations for Eastern, Central, Mountain,
   Arizona, Pacific, Alaska, Hawaii, Aleutian, and UTC, then stores the matching
   IANA zone so daylight-saving transitions can still be validated.
+- Date normalization accepts year-first and U.S. month-first dates, 24-hour or
+  AM/PM clocks, explicit UTC offsets, and embedded U.S. abbreviations such as
+  EST/EDT. A readable embedded zone needs no redundant confirmation. Only a
+  missing or unreadable zone asks the user to choose one; invalid dates receive
+  a date-specific error instead of a time-zone error.
 - Only sanitized tickers may reach the existing quote endpoint for verification.
   No filename, extra column, raw rejected value, or file content enters APIs,
   logs, analytics, or errors.
@@ -90,6 +104,15 @@ snapshot from landing after an import, manual update, or archive.
   shares then held, and withdrawals cannot exceed available cash.
 - Exact duplicates, same-time overlaps, unsupported symbols, ticker budget,
   invalid sequences, ambiguous time zones, and concurrent revisions are flagged.
+- The 40-ticker market-data budget applies to the final active tracked universe,
+  not every historical symbol in an import. Closed historical symbols remain in
+  the ledger without quote registration.
+- Append imports containing Buy/Sell rows require an explicit cash choice with
+  no default: **Apply transaction cash flow** subtracts buys/adds sells against
+  current cash and blocks a negative balance; **Keep current cash balance**
+  changes holdings/market value while quantity rows keep cash unchanged.
+  Explicit Deposit/Withdrawal rows always affect cash in both modes. The enum is
+  revalidated atomically by the server; older clients default to `apply`.
 - Default commit is all-or-none. Rows leave the preview only after the user
   explicitly chooses to exclude flagged rows and regenerate it.
 
@@ -105,8 +128,10 @@ snapshot from landing after an import, manual update, or archive.
   cannot re-arm snapshot restore; Cancel/Discard/review close are blocked while
   a commit is in flight; the in-flight commit promise is cleared when the
   session ends so a prior apply cannot skip restore on a later edit session.
-- Batch Transactions includes any staged manual cash deposit or withdrawal in
-  the same review; opening Batch cannot silently drop a dirty cash draft.
+- Batch Transactions carries a staged first deposit into the same review. A
+  later dirty cash edit must be updated or canceled before Batch opens, so the
+  batch flow cannot silently discard it; later deposits can instead be added
+  explicitly with the modal's Cash Deposit action.
 - Archived sources live outside active `portfolios`, excluding them structurally
   from cadence, provider registration, Weather, Forge, Helm, and scoring.
 - Portfolio/removal and replace-import archives expire after 30 days. A daily
@@ -115,15 +140,34 @@ snapshot from landing after an import, manual update, or archive.
 - Remove tracking and history is staged, undoable by Cancel, and archived for
   30 days after Update. The recovery toast can restore history without tracking.
 - Imported events use `source = import` and are excluded from current Plan
-  Adherence, actions, hold time, zone impact, and cash-flow scoring. Checkpoint 6
-  may include only successfully reconstructed events.
+  Adherence, actions, hold time, zone impact, and cash-flow scoring unless their
+  Checkpoint 6 reconstruction status is explicitly `scored`.
+- Backdated in-app events older than the active 15-minute session use the same
+  Checkpoint 6 boundary and remain pending until reconstructed. Current-session
+  reviewed events retain their immediate stamps.
 
 ## Migration and rollback
 
 This local implementation does not authorize a production migration. Rollout:
 
+**Data-safety manifest:** protected facts are the existing portfolio projection,
+cash, holdings, normalized/compatibility transaction history, custom/default
+strategy state, archives, and revisions. Supabase remains authoritative; the
+browser preview is a draft and market quote results are projections. The broker
+normalizer adds no persisted raw fields. The forward migration replaces only
+the atomic import function: old clients omit `cashTreatment` and retain the
+existing `apply` behavior; new preserve-cash commits require append mode and
+server-verified equal cash stamps on qty rows. No existing row is rewritten or
+deleted. Rollback is client-first/roll-forward: hide the new choices or deploy
+the prior client while retaining the compatible server function and all data.
+Production verification must compare portfolio cash/holdings/revisions and
+ledger identity before/after using a designated test account, including retry
+and duplicate-batch behavior.
+
 1. apply `20260731170000_current_watch_import_foundations.sql`, then
-   `20260801193000_atomic_current_watch_edits.sql`;
+   `20260801193000_atomic_current_watch_edits.sql`, then
+   `20260801213000_historical_reconstruction.sql`, then
+   `20260802001000_broker_import_cash_treatment.sql`;
 2. verify RLS with two isolated Beta accounts;
 3. verify direct table writes are denied and stale-revision, duplicate-batch,
    invalid-time-zone, and invalid-math payloads are rejected;

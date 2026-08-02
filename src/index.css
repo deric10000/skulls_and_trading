@@ -3108,7 +3108,16 @@ span.radio {
 
 .watch-order-add-actions {
   display: flex;
+  align-items: center;
+  flex: 0 0 auto;
   gap: var(--space-2);
+}
+
+.watch-order-action-divider {
+  width: 1px;
+  height: 22px;
+  flex: 0 0 auto;
+  background: var(--border-soft);
 }
 
 .watch-order-action {
@@ -3135,6 +3144,17 @@ span.radio {
 
 .watch-order-action--sell:hover:not(:disabled) {
   background: rgb(255 107 107 / 0.2);
+}
+
+@media (max-width: 767px) {
+  .forge-table-intro:has(.watch-order-add-actions) {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .watch-order-add-actions {
+    justify-content: flex-end;
+  }
 }
 
 .watch-order-ticker-row {
@@ -3166,6 +3186,17 @@ span.radio {
 }
 
 .watch-order-row-messages .row-message {
+  margin: 0;
+}
+
+.watch-order-submit-error {
+  flex: 0 0 auto;
+  padding: var(--space-2) var(--space-3);
+  border-top: 1px solid var(--forge-table-border);
+  background: var(--forge-table-row-alt);
+}
+
+.watch-order-submit-error .row-message {
   margin: 0;
 }
 
@@ -3380,6 +3411,26 @@ span.radio {
   flex-direction: column;
   align-items: flex-start;
   gap: var(--space-1);
+}
+
+.watch-import-cash-choice {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin-top: var(--space-2);
+}
+
+.watch-import-cash-choice .watch-import-radio-row > span {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.watch-import-cash-choice .watch-import-radio-row small {
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  font-weight: 400;
+  line-height: 1.4;
 }
 
 .watch-import-radio-row {

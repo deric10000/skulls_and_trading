@@ -157,8 +157,14 @@ The batch icon tooltip reads **Batch Transactions** and its modal title is
 **Review simulated changes**. While an Update commit is in flight, Cancel,
 Discard, and review X/backdrop dismiss are blocked; a durable apply marks the
 edit session committed so unmount restore cannot overwrite it, and the
-in-flight commit promise is cleared when the session ends. The batch modal keeps persistent guidance in a
-dark helper strip below the Buy/Sell toolbar: Buy may introduce a supported new
+in-flight commit promise is cleared when the session ends. Both transaction
+review variants expose **Cash Deposit · Buy · Sell** in the action toolbar;
+Cash Deposit and Buy use the positive treatment with the stock divider between
+them, and the cash action uses the Phosphor `CurrencyDollar` icon. Only a staged
+first deposit appears automatically in Batch Transactions; later batch
+deposits are explicit toolbar actions, while the normal Update review keeps its
+staged cash row. The batch modal keeps persistent guidance in a dark helper strip below
+the toolbar: Buy may introduce a supported new
 ticker through the established reversible add-to-portfolio path; Sell remains
 limited to current holdings. Typing must never insert helper copy later or
 shift the transaction rows. Validation belongs in a full-row message region
@@ -169,14 +175,35 @@ Strategy Forge table convention:
 the dedicated Actions cell is the final cell in every row. Import is a lazy
 `CurrentWatchImportModal` using
 `ForgeTableModal`; file inspection/parsing stays in its dedicated worker.
+Commit failures stay inside the open transaction modal and name the actionable
+cause (revision conflict, missing database migration, expired session,
+reconciliation mismatch, ticker limit, permission, or unreachable save
+service); never collapse these into a generic “review and try again” message.
 Current Watch ticker entry and simulated order ticker entry share
 `CurrentWatchTickerSearch` and the existing `.portfolio-ticker-suggestions`
-droplist; do not regress order entry to a native datalist. Import apply mode is
+droplist; typing is a search draft and does not become the order ticker until a
+result is selected or submitted. New transaction rows start with no ticker and
+no inherited fill price. Selection writes the exact result and resolves its
+current quote into Fill Price before confirmation; a later manual Fill Price
+edit remains the transaction price carried into Edit Mode and the final commit.
+Do not regress order entry to a native datalist. Import apply mode is
 a stacked `Radio` list and file selection is an explicit button plus local
 filename. Limits, accepted columns, scoring availability, and privacy live in
 one collapsed **File requirements** disclosure beside file selection. Reuse
 the stock `.watch-plan-section` disclosure; its expanded body is one unboxed
 semantic bullet list.
+Broker-shaped CSVs normalize locally into the same allowlist. Webull exports
+prefer executed `Filled`, `Avg Price`, and `Filled Time`, retain executed
+partial fills, and exclude rows with no execution; unrelated broker columns are
+stripped. Readable embedded zones and U.S. date formats normalize without
+asking users to edit files. Append Buy/Sell imports require a second stacked
+Radio choice with no default: apply trade cash flow against current cash, or
+preserve current cash while holdings/market value change. Deposits and
+withdrawals always affect cash. The 40-ticker limit applies to final active
+tracked holdings, not closed historical symbols.
+Apple Numbers packages stay unsupported; the import surface must explicitly
+tell Numbers users to export the completed template as CSV or Excel (`.xlsx`)
+instead of leaving the native file disabled without explanation.
 Archived sources remain in the same custom source droplist under an Archived
 group, show `Archived · Nd` (or `Removes today`), and render the existing watch
 read-only with Restore/Delete actions. Do not feed archived sources into active

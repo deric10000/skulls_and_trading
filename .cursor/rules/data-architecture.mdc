@@ -87,6 +87,17 @@ covered by that strategy's `appliedPortfolioIds` for the same source.
   history archives. Import/archive require a clean Edit Mode; import previews
   use a durable base and rebuild after revision conflict. Payloads remain
   ≤256 KiB. Unbounded histories belong in normalized RLS tables.
+- Broker-shaped CSVs normalize locally into the same import transaction
+  contract; never create a parallel broker ledger. Append qty imports explicitly
+  choose apply-cash-flow or preserve-current-cash, while cash rows always apply.
+  The server replays the selected math atomically. Market-data limits count the
+  final active holdings, not closed historical symbols.
+- Imported portfolio history and backdated in-app events are scored only through the leased Checkpoint 6
+  reconstruction path in `docs/current-watch-historical-reconstruction.md`.
+  It binds each eligible event to an at-or-before compressed scoring cycle plus
+  effective strategy/portfolio/ticker episodes. Missing evidence stays
+  incomplete; only `reconstruction_status='scored'` enters Helm/adherence math.
+  Jobs/results/history live in normalized RLS tables, never `user_state`.
 
 ## Going live (Pass 2 — FreeTier)
 
@@ -247,3 +258,7 @@ covered by that strategy's `appliedPortfolioIds` for the same source.
 
 - All data is static mock placeholder. Before introducing real/realistic
   personal or financial data, follow `.cursor/rules/security-hardening.mdc`.
+- Supabase/Cloudflare schema, storage, backfill, binding, and deployment changes
+  must also follow `.cursor/rules/production-data-safety.mdc`. Existing account
+  and financial facts must pass canonical before/after conservation checks;
+  row counts alone are not proof of preservation.

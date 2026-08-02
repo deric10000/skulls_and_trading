@@ -8,20 +8,20 @@ import type {
   TechnicalSnapshot,
   TimeframedIndicators,
   CandleInterval,
-} from "../../types";
-import { portfolioWeightPct } from "../finance/portfolioWeight";
+} from "../../types.ts";
+import { portfolioWeightPct } from "../finance/portfolioWeight.ts";
 import {
   evaluateZoneFlags,
   scoreStock,
   type MetricContext,
   type StockAlignment,
-} from "./scoring";
+} from "./scoring.ts";
 import {
   resolveAggregatedStatus,
   resolveStatus,
   type WeightedCategorySlice,
-} from "./status";
-import { shouldScoreTickerWithStrategy } from "./tickerStrategy";
+} from "./status.ts";
+import { shouldScoreTickerWithStrategy } from "./tickerStrategy.ts";
 
 export interface StrategyScopeTickerAlignment {
   ticker: string;

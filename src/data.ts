@@ -36,11 +36,11 @@ import type {
   TradingStyle,
   WatchlistItem,
   WeeklyReviewItem,
-} from "./types";
+} from "./types.ts";
 import {
   assertAppliedPortfoliosCoverHoldings,
   portfolioIdsReferencingStrategy,
-} from "./lib/forge/appliedPortfolios";
+} from "./lib/forge/appliedPortfolios.ts";
 
 // The market date mock snapshots and log timestamps reflect.
 export const MARKET_ASOF = "2026-07-07";

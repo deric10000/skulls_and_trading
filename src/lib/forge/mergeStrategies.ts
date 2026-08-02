@@ -1,7 +1,7 @@
-import { DEFAULT_CATEGORY_WEIGHTS } from "../../data";
-import type { CategoryWeights, RuleCategory, RuleChip, Strategy } from "../../types";
-import { isCategoryEnabled } from "./categoryEnabled";
-import { CATEGORY_ORDER } from "./metrics";
+import { DEFAULT_CATEGORY_WEIGHTS } from "../../data.ts";
+import type { CategoryWeights, RuleCategory, RuleChip, Strategy } from "../../types.ts";
+import { isCategoryEnabled } from "./categoryEnabled.ts";
+import { CATEGORY_ORDER } from "./metrics.ts";
 
 /**
  * Merge multiple applied strategies into one virtual strategy for scoring a ticker

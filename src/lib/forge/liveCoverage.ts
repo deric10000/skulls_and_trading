@@ -5,7 +5,7 @@
  * "excluded" note at the bottom for exactly why each one is out.
  */
 
-import type { MetricKey } from "../../types";
+import type { MetricKey } from "../../types.ts";
 
 /** Metrics FreeTier Worker paths can populate (Yahoo fundy/tech + FRED/macro). */
 export const LIVE_SUPPORTED_METRIC_KEYS = new Set<MetricKey>([

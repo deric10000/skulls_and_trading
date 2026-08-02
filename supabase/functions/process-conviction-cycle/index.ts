@@ -9,6 +9,15 @@ import {
 import { nextCheckBoundary } from "../_shared/cadence.ts";
 import { runIsolatedBatch } from "../_shared/isolatedBatch.ts";
 import {
+  HISTORICAL_CHUNK_SIZE,
+  reconstructHistoricalChunk,
+  type HistoricalJob,
+  type HistoricalStrategyEpisodeRow,
+  type HistoricalStrategyVersionRow,
+  type HistoricalTickerEpisodeRow,
+  type HistoricalTransactionRow,
+} from "../_shared/historicalReconstruction.ts";
+import {
   classifyPreflightFailure,
   incompleteCycleTickers,
   missingCycleSymbols,
@@ -20,6 +29,149 @@ interface CycleRequest {
   cycleKey?: unknown;
   cycleAsOf?: unknown;
   recovery?: unknown;
+  historicalOnly?: unknown;
+}
+
+async function fetchHistoricalCycle(
+  at: string,
+  symbols: string[],
+  marketCycleUrl: string,
+  secret: string,
+): Promise<CompleteMarketCycle | null> {
+  const configuredHistorical = Deno.env.get("HISTORICAL_MARKET_CYCLE_URL")?.trim();
+  const url = configuredHistorical
+    ? new URL(configuredHistorical)
+    : new URL(marketCycleUrl.replace(/\/market-cycle(?:\?.*)?$/, "/historical-market-cycle"));
+  url.searchParams.set("at", at);
+  if (symbols.length > 0) url.searchParams.set("symbols", symbols.join(","));
+  const response = await fetch(url, {
+    headers: { "x-internal-scoring-secret": secret },
+  });
+  if (response.status === 404) return null;
+  if (!response.ok) {
+    throw new Error(`Historical market cycle fetch failed (${response.status})`);
+  }
+  const cycle: unknown = await response.json();
+  if (!isCompleteCycle(cycle)) {
+    throw new Error("Worker returned invalid historical market evidence");
+  }
+  if (Date.parse(cycle.cycleAsOf) > Date.parse(at)) {
+    throw new Error("Historical market cycle is later than the transaction");
+  }
+  return cycle;
+}
+
+async function processHistoricalReconstruction(
+  supabase: ReturnType<typeof createClient>,
+  marketCycleUrl: string,
+  secret: string,
+): Promise<{ claimed: boolean; processed: number; hasMore: boolean }> {
+  const { data: claimedRows, error: claimError } = await supabase.rpc(
+    "claim_historical_reconstruction_job",
+    { p_lease_seconds: 180 },
+  );
+  if (claimError) {
+    if (claimError.code === "42883") return { claimed: false, processed: 0, hasMore: false };
+    throw new Error(`Historical job claim failed: ${claimError.message}`);
+  }
+  const job = ((claimedRows ?? []) as HistoricalJob[])[0];
+  if (!job) return { claimed: false, processed: 0, hasMore: false };
+  try {
+    const [chunkResponse, versionsResponse, applicationsResponse, tickerResponse] =
+      await Promise.all([
+        supabase.rpc("read_historical_reconstruction_chunk", {
+          p_user_id: job.user_id,
+          p_job_id: job.id,
+          p_limit: HISTORICAL_CHUNK_SIZE + 1,
+        }),
+        supabase
+          .from("strategy_versions")
+          .select("id,strategy_id,effective_from,effective_to,snapshot")
+          .eq("user_id", job.user_id)
+          .lte("effective_from", job.score_window_end)
+          .or(`effective_to.is.null,effective_to.gte.${job.score_window_start}`),
+        supabase
+          .from("strategy_portfolio_application_episodes")
+          .select("strategy_id,portfolio_id,applied_at,removed_at")
+          .eq("user_id", job.user_id)
+          .eq("portfolio_id", job.portfolio_id)
+          .lte("applied_at", job.score_window_end)
+          .or(`removed_at.is.null,removed_at.gte.${job.score_window_start}`),
+        supabase
+          .from("strategy_ticker_application_episodes")
+          .select("strategy_id,portfolio_id,ticker,applied_at,removed_at")
+          .eq("user_id", job.user_id)
+          .eq("portfolio_id", job.portfolio_id)
+          .lte("applied_at", job.score_window_end)
+          .or(`removed_at.is.null,removed_at.gte.${job.score_window_start}`),
+      ]);
+    for (const response of [chunkResponse, versionsResponse, applicationsResponse, tickerResponse]) {
+      if (response.error) throw new Error(response.error.message);
+    }
+    const fetched = (chunkResponse.data ?? []) as HistoricalTransactionRow[];
+    const hasMore = fetched.length > HISTORICAL_CHUNK_SIZE;
+    const transactions = fetched.slice(0, HISTORICAL_CHUNK_SIZE);
+    const cycleCache = new Map<string, Promise<CompleteMarketCycle | null>>();
+    const cachedHistoricalCycle = (at: string, symbols: string[]) => {
+      const hour = new Date(
+        Math.floor(Date.parse(at) / 3_600_000) * 3_600_000,
+      ).toISOString();
+      const key = `${hour}|${symbols.join(",")}`;
+      let pending = cycleCache.get(key);
+      if (!pending) {
+        pending = fetchHistoricalCycle(at, symbols, marketCycleUrl, secret);
+        cycleCache.set(key, pending);
+      }
+      return pending;
+    };
+    const rebuilt = await reconstructHistoricalChunk({
+      job,
+      transactions,
+      versions: (versionsResponse.data ?? []) as HistoricalStrategyVersionRow[],
+      applications: (applicationsResponse.data ?? []) as HistoricalStrategyEpisodeRow[],
+      tickerApplications: (tickerResponse.data ?? []) as HistoricalTickerEpisodeRow[],
+      fetchCycle: cachedHistoricalCycle,
+    });
+    const { error: completeError } = await supabase.rpc(
+      "complete_historical_reconstruction_chunk",
+      {
+        p_user_id: job.user_id,
+        p_job_id: job.id,
+        p_results: rebuilt.results,
+        p_working_portfolio: rebuilt.workingPortfolio,
+        p_has_more: hasMore,
+      },
+    );
+    if (completeError) throw new Error(completeError.message);
+    console.log(JSON.stringify({
+      event: "historical_reconstruction_chunk",
+      jobId: job.id,
+      processed: rebuilt.results.length,
+      hasMore,
+      outcome: "complete",
+    }));
+    return { claimed: true, processed: rebuilt.results.length, hasMore };
+  } catch (error) {
+    const category = error instanceof Error && error.message.includes("market cycle")
+      ? "market_cycle_fetch"
+      : "processing_failure";
+    const { error: retryError } = await supabase.rpc(
+      "retry_historical_reconstruction_job",
+      {
+      p_user_id: job.user_id,
+      p_job_id: job.id,
+      p_error_category: category,
+      },
+    );
+    console.error(JSON.stringify({
+      event: "historical_reconstruction_chunk",
+      jobId: job.id,
+      outcome: "retrying",
+      category,
+      retryRecorded: retryError == null,
+    }));
+    return { claimed: true, processed: 0, hasMore: true };
+  }
 }
 
 interface ClaimedRun {
@@ -159,13 +311,14 @@ Deno.serve(async (request: Request): Promise<Response> => {
       return json({ error: "Invalid JSON" }, 400);
     }
     const isRecovery = body.recovery === true;
+    const historicalOnly = body.historicalOnly === true;
     const validReference =
       body.version === 1 &&
       typeof body.cycleKey === "string" &&
       body.cycleKey.startsWith(CYCLE_KEY_PREFIX) &&
       typeof body.cycleAsOf === "string" &&
       !Number.isNaN(Date.parse(body.cycleAsOf));
-    if (!isRecovery && !validReference) {
+    if (!historicalOnly && !isRecovery && !validReference) {
       return json({ error: "Invalid cycle reference" }, 400);
     }
 
@@ -176,11 +329,19 @@ Deno.serve(async (request: Request): Promise<Response> => {
         auth: { persistSession: false, autoRefreshToken: false },
       },
     );
-    const cycle = await fetchCycle(
-      body,
-      configured("MARKET_CYCLE_URL"),
-      secret,
-    );
+    const marketCycleUrl = configured("MARKET_CYCLE_URL");
+    if (historicalOnly) {
+      const historical = await processHistoricalReconstruction(
+        supabase,
+        marketCycleUrl,
+        secret,
+      );
+      return json({ ok: true, historical });
+    }
+    // Historical work has its own recovery cadence. Keeping it out of live
+    // cycle requests prevents a large import from delaying conviction checks.
+    const historical = { claimed: false, processed: 0, hasMore: false };
+    const cycle = await fetchCycle(body, marketCycleUrl, secret);
 
     let completed = 0;
     let failed = 0;
@@ -440,7 +601,7 @@ Deno.serve(async (request: Request): Promise<Response> => {
       }),
     );
     return json(
-      { ok: failed === 0, cycleKey: cycle.cycleKey, completed, failed },
+      { ok: failed === 0, cycleKey: cycle.cycleKey, completed, failed, historical },
       failed === 0 ? 200 : 503,
     );
   } catch (error) {

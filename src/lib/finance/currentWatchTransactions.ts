@@ -13,6 +13,7 @@ export const IMPORT_TICKER_LIMIT = 40;
 export const IMPORT_FILE_BYTES = 5 * 1024 * 1024;
 
 export type DraftTransactionType = "buy" | "sell" | "deposit" | "withdrawal";
+export type TradeCashTreatment = "apply" | "preserve";
 
 export interface DraftPortfolioTransaction {
   id: string;
@@ -66,6 +67,8 @@ export interface ReplayOptions {
   existingFingerprints?: ReadonlySet<string>;
   existingTransactions?: PortfolioTransaction[];
   markPrice?: (ticker: string) => number;
+  /** Whether imported buy/sell cash flow changes the portfolio's current cash. */
+  tradeCashTreatment?: TradeCashTreatment;
 }
 
 export interface ReplayResult {
@@ -151,6 +154,7 @@ function issue(
  */
 export function replayPortfolioTransactions(options: ReplayOptions): ReplayResult {
   const { portfolio, openingState, existingFingerprints = new Set() } = options;
+  const tradeCashTreatment = options.tradeCashTreatment ?? "apply";
   const startingHoldings = openingState
     ? openingState.positions.map((position) => ({
         ...newHolding(position.ticker.trim().toUpperCase(), []),
@@ -263,7 +267,7 @@ export function replayPortfolioTransactions(options: ReplayOptions): ReplayResul
       continue;
     }
     const tradeValue = roundUsd(quantity * fillPrice);
-    if (side === "buy" && tradeValue > cash) {
+    if (tradeCashTreatment === "apply" && side === "buy" && tradeValue > cash) {
       issues.push(issue(transaction, "insufficient-cash", "Add a deposit or opening cash before this purchase."));
       continue;
     }
@@ -272,7 +276,9 @@ export function replayPortfolioTransactions(options: ReplayOptions): ReplayResul
       side === "buy" ? sharesBefore + quantity : sharesBefore - quantity,
     );
     const cashBefore = cash;
-    cash = roundUsd(side === "buy" ? cash - tradeValue : cash + tradeValue);
+    if (tradeCashTreatment === "apply") {
+      cash = roundUsd(side === "buy" ? cash - tradeValue : cash + tradeValue);
+    }
     const avgPrice = nextAverageCost({
       sharesBefore,
       avgBefore: current.avgPrice,

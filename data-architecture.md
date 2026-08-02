@@ -16,6 +16,16 @@ including them. Imported historical events remain unscored until the separate
 reconstruction pipeline can bind them to effective strategy versions and
 immutable market cycles.
 
+CSV ingestion normalizes the standard template and recognized broker-shaped
+headers into that same transaction contract. The Webull adapter is header-
+driven and local-only: executed quantity, average execution price, side,
+symbol, and filled time are retained; unexecuted rows and unrelated columns are
+discarded. Embedded U.S. zones and common U.S./ISO date forms resolve before
+review. Append imports explicitly choose whether qty trades apply cash flow or
+preserve the current cash balance; explicit cash rows always apply. The server
+revalidates the enum and exact cash/share sequence atomically. Historical
+symbols do not consume market-data capacity unless they remain active holdings.
+
 How mock data is modeled today and how it gets swapped for real-time market and
 brokerage data later. Pairs with the enforceable rule in
 `.cursor/rules/data-architecture.mdc` (this file is the long-form reference;
@@ -750,6 +760,22 @@ change. **Postgres is source of truth** (not `localStorage`).
 
 Legacy `src/lib/forge/persistence.ts` localStorage helpers remain for fixtures /
 offline only — do not use as SoT for Beta accounts.
+
+### Production storage evolution
+
+Supabase Postgres remains authoritative for authenticated user and financial
+facts. Cloudflare KV registries, cycle manifests, and browser state are
+rebuildable projections or caches; losing one must not lose a portfolio,
+transaction, custom strategy, history record, or other user-owned fact.
+
+All schema, function, RLS, backfill, Worker, queue, binding, storage, and
+deployment changes follow `docs/production-data-safety.md` and its enforceable
+rule. Use expand → idempotent/resumable migrate → separately approved contract;
+preserve unknown JSON fields and old/new runtime compatibility; prove protected
+facts with canonical before/after conservation checks. Keep timestamped
+migrations and the repository schema/bootstrap representation synchronized.
+Never use cache clearing, table dropping, broad JSON replacement, or whole-
+project restore as an ordinary rollback path.
 
 ### Cadence rules
 

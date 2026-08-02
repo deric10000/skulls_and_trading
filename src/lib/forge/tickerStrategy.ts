@@ -1,5 +1,5 @@
-import { DEFAULT_STRATEGIES } from "../../data";
-import type { Portfolio, PortfolioHolding, Strategy } from "../../types";
+import { DEFAULT_STRATEGIES } from "../../data.ts";
+import type { Portfolio, PortfolioHolding, Strategy } from "../../types.ts";
 
 export function holdingUsesStrategy(
   holding: { strategyIds?: string[] },
@@ -42,7 +42,7 @@ export {
   assertAppliedPortfoliosCoverHoldings,
   portfolioIdsReferencingStrategy,
   withPortfolioApplied,
-} from "./appliedPortfolios";
+} from "./appliedPortfolios.ts";
 
 export function strategiesForTicker(
   ticker: string,

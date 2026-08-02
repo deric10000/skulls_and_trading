@@ -16,16 +16,16 @@ import type {
   TechnicalSnapshot,
   TimeframedIndicators,
   TimeframedMetricKey,
-} from "../../types";
-import { DEFAULT_CATEGORY_WEIGHTS } from "../../data";
-import { isCategoryEnabled } from "./categoryEnabled";
-import { CATEGORY_ORDER, isTimeframedMetric, METRICS } from "./metrics";
+} from "../../types.ts";
+import { DEFAULT_CATEGORY_WEIGHTS } from "../../data.ts";
+import { isCategoryEnabled } from "./categoryEnabled.ts";
+import { CATEGORY_ORDER, isTimeframedMetric, METRICS } from "./metrics.ts";
 import {
   LAYER3_ZONE_ORDER,
   LAYER3_ZONES,
-} from "./layer3Zones";
-import { bandFromConviction, resolveStatus, type ResolveContext } from "./status";
-import { isSubHourTechnicalChip } from "./timeframeFloor";
+} from "./layer3Zones.ts";
+import { bandFromConviction, resolveStatus, type ResolveContext } from "./status.ts";
+import { isSubHourTechnicalChip } from "./timeframeFloor.ts";
 
 // ---------------------------------------------------------------------------
 // Strategy Forge scoring engine — pure functions, no I/O.

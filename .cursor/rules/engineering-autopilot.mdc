@@ -26,6 +26,11 @@ contracts, architecture references, or performance policies are at least Level
 2. Treat them as Level 3 when they change an actual security, data, persistence,
 scoring, historical-integrity, deployment, or production contract.
 
+Any Supabase, Cloudflare, migration, backfill, persistent-storage, or production
+data change must also read and follow `docs/production-data-safety.md` and
+`.cursor/rules/production-data-safety.mdc`. Preservation evidence is a release
+gate, not an optional rollback note.
+
 Use its document-routing table to load only the canonical references relevant
 to the active task. Do not duplicate their long-form guidance into plans or
 rules.

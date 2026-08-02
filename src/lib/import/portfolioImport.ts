@@ -1,6 +1,5 @@
 import {
   IMPORT_ROW_LIMIT,
-  IMPORT_TICKER_LIMIT,
   roundQuantity,
   roundUsd,
   type DraftPortfolioTransaction,
@@ -25,6 +24,7 @@ export interface ImportReviewIssue {
 export interface ImportSanitizationReport {
   rowsReceived: number;
   rowsRetained: number;
+  rowsSkipped: number;
   ignoredColumnCount: number;
   invalidRowCount: number;
   normalizedCellCount: number;
@@ -39,6 +39,7 @@ export interface NormalizeImportResult {
   report: ImportSanitizationReport;
   requiresTimeZoneConfirmation: boolean;
   detectedTimeZones: string[];
+  detectedFormat: "standard" | "webull" | "generic";
 }
 
 type Field =
@@ -48,16 +49,24 @@ type Field =
   | "fillPrice"
   | "amount"
   | "filledAt"
-  | "timeZone";
+  | "timeZone"
+  | "status";
 
 const FIELD_ALIASES: Record<Field, ReadonlySet<string>> = {
   type: new Set(["transaction type", "type", "action", "side"]),
   ticker: new Set(["ticker", "ticker symbol", "symbol"]),
-  quantity: new Set(["quantity", "qty", "shares"]),
-  fillPrice: new Set(["fill price", "price", "execution price"]),
+  quantity: new Set(["quantity", "qty", "shares", "filled"]),
+  fillPrice: new Set(["fill price", "price", "execution price", "avg price", "average price"]),
   amount: new Set(["amount", "cash amount", "usd amount"]),
-  filledAt: new Set(["date time", "datetime", "date/time", "filled at", "date"]),
+  filledAt: new Set(["date time", "datetime", "date/time", "filled at", "filled time", "date"]),
   timeZone: new Set(["time zone", "timezone", "tz"]),
+  status: new Set(["status", "order status"]),
+};
+
+const HEADER_PRIORITY: Partial<Record<Field, Record<string, number>>> = {
+  fillPrice: { "avg price": 3, "average price": 3, "fill price": 2, "execution price": 2, price: 1 },
+  quantity: { filled: 3, quantity: 2, qty: 2, shares: 2 },
+  filledAt: { "filled time": 3, "filled at": 3, "date time": 2, datetime: 2, "date/time": 2, date: 1 },
 };
 
 const TRANSACTION_TYPES: Record<string, DraftTransactionType> = {
@@ -172,19 +181,54 @@ function isIanaTimeZone(value: string): boolean {
   }
 }
 
+function splitEmbeddedTimeZone(value: string): {
+  dateTime: string;
+  timeZone: string;
+  hadZoneToken: boolean;
+} {
+  const trimmed = value.trim();
+  const match = trimmed.match(/\s+([A-Za-z]{2,8}|(?:America|Pacific)\/[A-Za-z_]+)$/);
+  if (!match || /^(am|pm)$/i.test(match[1])) {
+    return { dateTime: trimmed, timeZone: "", hadZoneToken: false };
+  }
+  const candidate = normalizeImportTimeZone(match[1]);
+  return {
+    dateTime: trimmed.slice(0, match.index).trim(),
+    timeZone: isIanaTimeZone(candidate) ? candidate : "",
+    hadZoneToken: true,
+  };
+}
+
 function localParts(value: string): number[] | null {
-  const match = value.trim().match(
-    /^(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?$/,
+  const yearFirst = value.trim().match(
+    /^(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)?)?$/i,
   );
+  const usFirst = value.trim().match(
+    /^(\d{1,2})[/-](\d{1,2})[/-](\d{4})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)?)?$/i,
+  );
+  const match = yearFirst ?? usFirst;
   if (!match) return null;
-  return [
-    Number(match[1]),
-    Number(match[2]),
-    Number(match[3]),
-    Number(match[4] ?? 0),
-    Number(match[5] ?? 0),
-    Number(match[6] ?? 0),
-  ];
+  const year = Number(yearFirst ? match[1] : match[3]);
+  const month = Number(yearFirst ? match[2] : match[1]);
+  const day = Number(yearFirst ? match[3] : match[2]);
+  let hour = Number(match[4] ?? 0);
+  const minute = Number(match[5] ?? 0);
+  const second = Number(match[6] ?? 0);
+  const meridiem = match[7]?.toUpperCase();
+  if (meridiem) {
+    if (hour < 1 || hour > 12) return null;
+    hour = hour % 12 + (meridiem === "PM" ? 12 : 0);
+  }
+  if (
+    month < 1 || month > 12 || day < 1 || hour > 23 || minute > 59 || second > 59
+  ) return null;
+  const calendarCheck = new Date(Date.UTC(year, month - 1, day));
+  if (
+    calendarCheck.getUTCFullYear() !== year ||
+    calendarCheck.getUTCMonth() !== month - 1 ||
+    calendarCheck.getUTCDate() !== day
+  ) return null;
+  return [year, month, day, hour, minute, second];
 }
 
 /** Convert unambiguous wall-clock components in an IANA zone to a UTC instant. */
@@ -266,10 +310,12 @@ export function resolveImportDateTime(
       ambiguous: false,
     };
   }
-  const parts = localParts(raw);
-  if (!parts || !timeZone || !isIanaTimeZone(timeZone)) {
+  const { dateTime } = splitEmbeddedTimeZone(raw);
+  if (!timeZone || !isIanaTimeZone(timeZone)) {
     return { iso: null, ambiguous: true };
   }
+  const parts = localParts(dateTime);
+  if (!parts) return { iso: null, ambiguous: false };
   return zonedPartsToIso(parts, timeZone);
 }
 
@@ -317,12 +363,32 @@ export function normalizeImportRows(
 ): NormalizeImportResult {
   const header = rows[0] ?? [];
   const columns = new Map<Field, number>();
-  let ignoredColumnCount = 0;
+  const columnPriorities = new Map<Field, number>();
   header.forEach((value, index) => {
     const field = fieldForHeader(value);
-    if (field && !columns.has(field)) columns.set(field, index);
-    else ignoredColumnCount += 1;
+    if (!field) return;
+    const priority = HEADER_PRIORITY[field]?.[normalizedHeader(value)] ?? 1;
+    if (priority > (columnPriorities.get(field) ?? -1)) {
+      columns.set(field, index);
+      columnPriorities.set(field, priority);
+    }
   });
+  const selectedColumns = new Set(columns.values());
+  const ignoredColumnCount = header.reduce<number>(
+    (count, _value, index) => count + (selectedColumns.has(index) ? 0 : 1),
+    0,
+  );
+  const normalizedHeaders = new Set(header.map(normalizedHeader));
+  const detectedFormat =
+    ["symbol", "side", "status", "filled", "avg price", "filled time"].every((name) =>
+      normalizedHeaders.has(name)
+    )
+      ? "webull"
+      : PORTFOLIO_IMPORT_TEMPLATE_HEADERS.every((name) =>
+          normalizedHeaders.has(normalizedHeader(name))
+        )
+        ? "standard"
+        : "generic";
   const populatedRows = rows
     .slice(1)
     .map((row, index) => ({ row, rowNumber: index + 2 }))
@@ -339,9 +405,11 @@ export function normalizeImportRows(
       }],
       requiresTimeZoneConfirmation: false,
       detectedTimeZones: [],
+      detectedFormat,
       report: {
         rowsReceived: populatedRows.length,
         rowsRetained: 0,
+        rowsSkipped: 0,
         ignoredColumnCount,
         invalidRowCount: 1,
         normalizedCellCount: 0,
@@ -358,6 +426,7 @@ export function normalizeImportRows(
   let normalizedCellCount = 0;
   let fractionalRowCount = 0;
   let ambiguousTimeZoneCount = 0;
+  let rowsSkipped = 0;
 
   const cell = (row: ImportCell[], field: Field) => {
     const index = columns.get(field);
@@ -372,9 +441,24 @@ export function normalizeImportRows(
       return;
     }
     if (rawType !== type) normalizedCellCount += 1;
+    const rowStatus = String(cell(row, "status") ?? "").trim().toLowerCase();
+    if (
+      columns.has("status") &&
+      type !== "deposit" &&
+      type !== "withdrawal" &&
+      !["filled", "completed", "executed"].includes(rowStatus) &&
+      !(Number(numberFromCell(cell(row, "quantity"))) > 0)
+    ) {
+      rowsSkipped += 1;
+      return;
+    }
     const rowZone = normalizeImportTimeZone(cell(row, "timeZone"));
-    const timeZone = rowZone || options.confirmedTimeZone || "";
-    if (rowZone) detectedTimeZones.add(rowZone);
+    const rawFilledAt = cell(row, "filledAt");
+    const rawFilledAtText = String(rawFilledAt ?? "").trim();
+    const embedded = splitEmbeddedTimeZone(rawFilledAtText);
+    const hasExplicitOffset = /([zZ]|[+-]\d{2}:?\d{2})$/.test(rawFilledAtText);
+    const timeZone = rowZone || embedded.timeZone || (hasExplicitOffset ? "UTC" : "") || options.confirmedTimeZone || "";
+    if (timeZone) detectedTimeZones.add(timeZone);
     if (!timeZone) {
       issues.push({
         row: rowNumber,
@@ -384,7 +468,7 @@ export function normalizeImportRows(
       ambiguousTimeZoneCount += 1;
       return;
     }
-    const date = resolveImportDateTime(cell(row, "filledAt"), timeZone);
+    const date = resolveImportDateTime(rawFilledAt, timeZone);
     if (!date.iso) {
       issues.push({
         row: rowNumber,
@@ -450,22 +534,16 @@ export function normalizeImportRows(
   const tickers = new Set(
     transactions.flatMap((transaction) => (transaction.ticker ? [transaction.ticker] : [])),
   );
-  if (tickers.size > IMPORT_TICKER_LIMIT) {
-    issues.push({
-      row: 1,
-      code: "invalid-ticker",
-      message: `This import contains ${tickers.size} tickers; the current limit is ${IMPORT_TICKER_LIMIT}.`,
-    });
-  }
-
   return {
     transactions,
     issues,
     requiresTimeZoneConfirmation: ambiguousTimeZoneCount > 0,
     detectedTimeZones: [...detectedTimeZones],
+    detectedFormat,
     report: {
       rowsReceived: populatedRows.length,
       rowsRetained: transactions.length,
+      rowsSkipped,
       ignoredColumnCount,
       invalidRowCount: issues.length,
       normalizedCellCount,

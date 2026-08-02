@@ -1,4 +1,4 @@
-import { useState, type ComponentType } from "react";
+import { useRef, useState, type ComponentType } from "react";
 import type {
   PendingCashEdit,
   PendingQtyOrder,
@@ -16,7 +16,7 @@ import {
   toDatetimeLocalValue,
 } from "../../lib/finance/timestamps";
 import { formatPrice } from "../../lib/format";
-import { Trash } from "../../lib/icons";
+import { CurrencyDollar, Trash } from "../../lib/icons";
 import { Tooltip } from "../Tooltip";
 import { ForgeTableModal } from "../forge/ForgeTableModal";
 import { RowMessage } from "../RowMessage";
@@ -34,30 +34,42 @@ export function CurrentWatchOrderReviewModal({
   holdings,
   tickerOptions,
   TickerSearch,
-  getMarkPrice,
+  resolveMarkPrice,
   searchTickers,
   onChange,
   onCancel,
   onConfirm,
   onAdd,
+  onAddCash,
   onAddTicker,
 }: {
   review: PendingEditReview;
   holdings: PortfolioHolding[];
   tickerOptions: Pick<WatchlistItem, "ticker" | "name">[];
   TickerSearch: ComponentType<CurrentWatchTickerSearchProps>;
-  getMarkPrice: (ticker: string) => number;
+  resolveMarkPrice: (ticker: string) => Promise<number>;
   searchTickers: (query: string) => Promise<CurrentWatchTickerSearchProps["suggestions"]>;
-  onChange: (review: PendingEditReview) => void;
+  onChange: (
+    update:
+      | PendingEditReview
+      | ((current: PendingEditReview) => PendingEditReview),
+  ) => void;
   onCancel: () => void;
-  onConfirm: () => void | Promise<void>;
+  onConfirm: () => Promise<string | null>;
   onAdd: (side: "buy" | "sell") => void;
+  onAddCash: () => void;
   onAddTicker: (
     ticker: string,
   ) => "added" | "exists" | "no-data" | "budget";
 }) {
   const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [tickerErrors, setTickerErrors] = useState<Record<number, string>>({});
+  const [tickerDrafts, setTickerDrafts] = useState<Record<number, string>>({});
+  const [resolvingPriceRows, setResolvingPriceRows] = useState<Set<number>>(
+    () => new Set(),
+  );
+  const priceRequestRef = useRef<Record<number, number>>({});
   const [quantityDrafts, setQuantityDrafts] = useState<Record<string, string>>(
     {},
   );
@@ -85,20 +97,30 @@ export function CurrentWatchOrderReviewModal({
       order.sharesAfter < 0 ||
       (order.side === "sell" && order.deltaShares > order.sharesBefore),
   ) || duplicateTickers.size > 0;
+  const hasInvalidCash = Boolean(
+    review.cash &&
+      (!(Math.abs(review.cash.deltaCash) >= 0.01) || review.cash.cashAfter < 0),
+  );
+  const hasUncommittedTickerDraft = review.orders.some(
+    (order, index) =>
+      (tickerDrafts[index] ?? order.ticker).trim().toUpperCase() !==
+      order.ticker,
+  );
 
   function updateOrder(
     index: number,
     update: (order: PendingQtyOrder) => PendingQtyOrder,
   ) {
-    onChange({
-      ...review,
-      orders: review.orders.map((order, rowIndex) =>
+    setSubmitError(null);
+    onChange((current) => ({
+      ...current,
+      orders: current.orders.map((order, rowIndex) =>
         rowIndex === index ? update(order) : order,
       ),
-    });
+    }));
   }
 
-  function updateOrderTicker(index: number, ticker: string) {
+  function updateOrderTicker(index: number, ticker: string, markPrice: number) {
     setQuantityDrafts((current) => {
       const next = { ...current };
       delete next[`${index}:delta`];
@@ -115,11 +137,11 @@ export function CurrentWatchOrderReviewModal({
         row.side === "buy"
           ? roundQuantity(sharesBefore + row.deltaShares)
           : roundQuantity(Math.max(0, sharesBefore - row.deltaShares)),
-      fillPrice: roundMoney(getMarkPrice(ticker) || row.fillPrice),
+      fillPrice: roundMoney(markPrice),
     }));
   }
 
-  function commitOrderTicker(index: number, ticker: string) {
+  async function commitOrderTicker(index: number, ticker: string) {
     const normalized = ticker.trim().toUpperCase();
     const order = review.orders[index];
     if (!order || !normalized) return;
@@ -144,12 +166,34 @@ export function CurrentWatchOrderReviewModal({
         return;
       }
     }
+    setTickerDrafts((current) => ({ ...current, [index]: normalized }));
     setTickerErrors((current) => {
       const next = { ...current };
       delete next[index];
       return next;
     });
-    updateOrderTicker(index, normalized);
+    setResolvingPriceRows((current) => new Set(current).add(index));
+    const requestId = (priceRequestRef.current[index] ?? 0) + 1;
+    priceRequestRef.current[index] = requestId;
+    let markPrice = 0;
+    try {
+      markPrice = await resolveMarkPrice(normalized);
+    } catch {
+      markPrice = 0;
+    }
+    if (priceRequestRef.current[index] !== requestId) return;
+    setResolvingPriceRows((current) => {
+      const next = new Set(current);
+      next.delete(index);
+      return next;
+    });
+    updateOrderTicker(index, normalized, markPrice);
+    if (!(markPrice > 0)) {
+      setTickerErrors((current) => ({
+        ...current,
+        [index]: `Current price is unavailable for ${normalized}. Enter a fill price to continue.`,
+      }));
+    }
   }
 
   return (
@@ -169,19 +213,44 @@ export function CurrentWatchOrderReviewModal({
       onDone={() => {
         if (submitting) return;
         setSubmitting(true);
-        void Promise.resolve(onConfirm()).finally(() => setSubmitting(false));
+        setSubmitError(null);
+        void onConfirm()
+          .then(setSubmitError)
+          .catch(() =>
+            setSubmitError("Changes weren’t saved. Review them and try again."),
+          )
+          .finally(() => setSubmitting(false));
       }}
       doneLabel={submitting ? "Saving…" : "Confirm"}
-      doneDisabled={submitting || (review.orders.length === 0 && !review.cash) || hasInvalidOrder}
+      doneDisabled={submitting || resolvingPriceRows.size > 0 || hasUncommittedTickerDraft || (review.orders.length === 0 && !review.cash) || hasInvalidOrder || hasInvalidCash}
       intro="Set the date and time for each simulated buy, sell, deposit, or withdrawal. Adjust fill prices before confirming."
       stableTabs={review.isBatch}
       stableTabsTableMin={240}
       addAction={
         <div className="watch-order-add-actions">
-          <button type="button" className="btn btn--small watch-order-action watch-order-action--buy" onClick={() => onAdd("buy")}>
+          <button
+            type="button"
+            className="btn btn--small watch-order-action watch-order-action--buy"
+            onClick={() => {
+              setSubmitError(null);
+              onAddCash();
+            }}
+            disabled={Boolean(review.cash)}
+          >
+            <CurrencyDollar aria-hidden weight="regular" />
+            Cash Deposit
+          </button>
+          <span className="watch-order-action-divider" aria-hidden />
+          <button type="button" className="btn btn--small watch-order-action watch-order-action--buy" onClick={() => {
+            setSubmitError(null);
+            onAdd("buy");
+          }}>
             Buy
           </button>
-          <button type="button" className="btn btn--small watch-order-action watch-order-action--sell" onClick={() => onAdd("sell")}>
+          <button type="button" className="btn btn--small watch-order-action watch-order-action--sell" onClick={() => {
+            setSubmitError(null);
+            onAdd("sell");
+          }}>
             Sell
           </button>
         </div>
@@ -208,10 +277,10 @@ export function CurrentWatchOrderReviewModal({
                   <TickerSearch
                     id={`watch-order-ticker-${index}`}
                     label={`${order.side === "buy" ? "Buy" : "Sell"} order ticker`}
-                    value={order.ticker}
+                    value={tickerDrafts[index] ?? order.ticker}
                     maxLength={10}
                     suggestions={tickerOptions.filter((option) => {
-                      const query = order.ticker.trim().toUpperCase();
+                      const query = (tickerDrafts[index] ?? order.ticker).trim().toUpperCase();
                       return (
                         query.length === 0 ||
                         option.ticker.includes(query) ||
@@ -220,15 +289,26 @@ export function CurrentWatchOrderReviewModal({
                     }).map((option) => ({ symbol: option.ticker, name: option.name }))}
                     search={order.side === "buy" ? searchTickers : undefined}
                     onValueChange={(ticker) => {
+                      setSubmitError(null);
+                      priceRequestRef.current[index] =
+                        (priceRequestRef.current[index] ?? 0) + 1;
+                      setResolvingPriceRows((current) => {
+                        const next = new Set(current);
+                        next.delete(index);
+                        return next;
+                      });
                       setTickerErrors((current) => {
                         const next = { ...current };
                         delete next[index];
                         return next;
                       });
-                      updateOrderTicker(index, ticker);
+                      setTickerDrafts((current) => ({
+                        ...current,
+                        [index]: ticker,
+                      }));
                     }}
-                    onSelect={(ticker) => commitOrderTicker(index, ticker)}
-                    onSubmit={(ticker) => commitOrderTicker(index, ticker)}
+                    onSelect={(ticker) => void commitOrderTicker(index, ticker)}
+                    onSubmit={(ticker) => void commitOrderTicker(index, ticker)}
                   />
                 </div>
               </div>
@@ -333,6 +413,13 @@ export function CurrentWatchOrderReviewModal({
                 onChange={(event) => {
                   const price = Number.parseFloat(event.target.value);
                   if (!Number.isFinite(price) || price < 0) return;
+                  if (price > 0) {
+                    setTickerErrors((current) => {
+                      const next = { ...current };
+                      delete next[index];
+                      return next;
+                    });
+                  }
                   updateOrder(index, (row) => ({ ...row, fillPrice: roundMoney(price) }));
                 }}
               />
@@ -381,7 +468,19 @@ export function CurrentWatchOrderReviewModal({
                     className="icon-btn icon-btn--danger"
                     aria-label={`Remove ${order.ticker || "transaction"} row`}
                     onClick={() => {
+                      setSubmitError(null);
+                      priceRequestRef.current = {};
+                      setResolvingPriceRows(new Set());
                       setTickerErrors({});
+                      setTickerDrafts((current) =>
+                        Object.fromEntries(
+                          Object.entries(current).flatMap(([rawIndex, value]) => {
+                            const rowIndex = Number(rawIndex);
+                            if (rowIndex === index) return [];
+                            return [[rowIndex > index ? rowIndex - 1 : rowIndex, value]];
+                          }),
+                        ),
+                      );
                       setQuantityDrafts({});
                       setFractionalRows((current) =>
                         new Set(
@@ -442,7 +541,28 @@ export function CurrentWatchOrderReviewModal({
             </div>
             <div className="forge-table-cell" role="cell">
               <span className="watch-field-label">Amount</span>
-              <span className="watch-figure watch-figure--strong">{formatPrice(Math.abs(review.cash.deltaCash))}</span>
+              <input
+                type="number"
+                className="input watch-qty-input"
+                min={0.01}
+                step={0.01}
+                value={Math.abs(review.cash.deltaCash) || ""}
+                onChange={(event) => {
+                  const amount = roundMoney(Number.parseFloat(event.target.value));
+                  if (!review.cash || !Number.isFinite(amount) || amount < 0) return;
+                  const deltaCash = review.cash.side === "deposit" ? amount : -amount;
+                  onChange({
+                    ...review,
+                    cash: {
+                      ...review.cash,
+                      deltaCash,
+                      cashAfter: roundMoney(review.cash.cashBefore + deltaCash),
+                    },
+                  });
+                  setSubmitError(null);
+                }}
+                aria-label={`${review.cash.side === "deposit" ? "Deposit" : "Withdrawal"} amount`}
+              />
             </div>
             <div className="forge-table-cell" role="cell">
               <span className="watch-field-label">Before</span>
@@ -471,10 +591,26 @@ export function CurrentWatchOrderReviewModal({
             <div
               className="forge-table-cell forge-table-cell--actions"
               role="cell"
-              aria-hidden="true"
             >
               <span className="watch-field-label">Actions</span>
+              <div className="watch-order-row-actions">
+                <Tooltip desktopOnly body="Delete transaction">
+                  <button
+                    type="button"
+                    className="icon-btn icon-btn--danger"
+                    aria-label={`Remove cash ${review.cash.side} row`}
+                    onClick={() => onChange({ ...review, cash: null })}
+                  >
+                    <Trash aria-hidden weight="regular" />
+                  </button>
+                </Tooltip>
+              </div>
             </div>
+          </div>
+        ) : null}
+        {submitError ? (
+          <div className="watch-order-submit-error" role="alert">
+            <RowMessage tone="error">{submitError}</RowMessage>
           </div>
         ) : null}
       </div>

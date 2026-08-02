@@ -32,6 +32,8 @@ const FUNDY_MANIFEST_PREFIX = "market:fundy:manifest:";
 const FUNDY_SHARD_PREFIX = "market:fundy:shard:";
 const PUBLISHED_CYCLE_KEY = "market:cycle:published";
 const PUBLISHED_CYCLE_REFERENCE_KEY = "market:cycle:published:key";
+const HISTORICAL_SCORING_PREFIX = "market:cycle:scoring:";
+const HISTORICAL_SCORING_INDEX_KEY = "market:cycle:scoring:index";
 export const MAX_SYMBOLS_PER_USER = 40;
 export const MAX_GLOBAL_SYMBOLS = 800;
 export const SHARD_SIZE = 30;
@@ -41,6 +43,8 @@ export const SHARD_MINUTES_PER_PHASE = 29;
 const MAX_CONCURRENCY = 6;
 const HOUR_MS = 60 * 60_000;
 const SHARD_TTL_SECONDS = 3 * 24 * 60 * 60;
+/** Seven scoring days plus a weekend/holiday lookup and retry cushion. */
+const HISTORICAL_SCORING_TTL_SECONDS = 10 * 24 * 60 * 60;
 
 export type RegistryWriteMode = "add" | "remove" | "replace";
 
@@ -188,17 +192,93 @@ export interface MarketCyclePayload {
   errors: string[];
 }
 
+interface HistoricalScoringCycle {
+  schemaVersion: 1;
+  complete: true;
+  cycleKey: string;
+  cycleAsOf: string;
+  quotes: MarketCyclePayload["quotes"];
+  fundamentals: MarketCyclePayload["fundamentals"];
+  technicals: MarketCyclePayload["technicals"];
+  byTimeframe: MarketCyclePayload["byTimeframe"];
+  context: MarketCyclePayload["context"];
+}
+
+interface HistoricalScoringIndexEntry {
+  key: string;
+  cycleKey: string;
+  cycleAsOf: string;
+}
+
+async function gzipJson(value: unknown): Promise<ArrayBuffer> {
+  const input = new Blob([JSON.stringify(value)]).stream();
+  return new Response(input.pipeThrough(new CompressionStream("gzip"))).arrayBuffer();
+}
+
+async function gunzipJson<T>(value: ArrayBuffer): Promise<T> {
+  const input = new Blob([value]).stream();
+  const text = await new Response(
+    input.pipeThrough(new DecompressionStream("gzip")),
+  ).text();
+  return JSON.parse(text) as T;
+}
+
+async function archiveHistoricalScoringCycle(
+  cache: KVNamespace,
+  payload: MarketCyclePayload,
+): Promise<void> {
+  const key = `${HISTORICAL_SCORING_PREFIX}${keyTime(payload.cycleAsOf)}`;
+  const cycle: HistoricalScoringCycle = {
+    schemaVersion: 1,
+    complete: true,
+    cycleKey: payload.cycleKey,
+    cycleAsOf: payload.cycleAsOf,
+    quotes: payload.quotes,
+    fundamentals: payload.fundamentals,
+    technicals: payload.technicals,
+    byTimeframe: payload.byTimeframe,
+    context: payload.context,
+  };
+  const now = Date.now();
+  const cutoff = now - HISTORICAL_SCORING_TTL_SECONDS * 1_000;
+  const prior =
+    (await cache.get<HistoricalScoringIndexEntry[]>(
+      HISTORICAL_SCORING_INDEX_KEY,
+      "json",
+    )) ?? [];
+  const entries = [
+    ...prior.filter(
+      (entry) => entry.key !== key && Date.parse(entry.cycleAsOf) >= cutoff,
+    ),
+    { key, cycleKey: payload.cycleKey, cycleAsOf: payload.cycleAsOf },
+  ]
+    .sort((left, right) => Date.parse(left.cycleAsOf) - Date.parse(right.cycleAsOf))
+    .slice(-300);
+  await Promise.all([
+    cache.put(key, await gzipJson(cycle), {
+      expirationTtl: HISTORICAL_SCORING_TTL_SECONDS,
+      metadata: { encoding: "gzip", schemaVersion: 1 },
+    }),
+    cache.put(HISTORICAL_SCORING_INDEX_KEY, JSON.stringify(entries)),
+  ]);
+}
+
 export async function commitPublishedCycle(
   env: Pick<MarketCycleEnv, "MARKET_CACHE" | "CONVICTION_CYCLE_QUEUE">,
   payload: MarketCyclePayload,
   immutableAlreadyExists: boolean,
 ): Promise<void> {
   const serialized = JSON.stringify(payload);
-  if (!immutableAlreadyExists) {
-    await env.MARKET_CACHE.put(payload.cycleKey, serialized, {
-      expirationTtl: SHARD_TTL_SECONDS,
-    });
-  }
+  await Promise.all([
+    immutableAlreadyExists
+      ? Promise.resolve()
+      : env.MARKET_CACHE.put(payload.cycleKey, serialized, {
+          expirationTtl: SHARD_TTL_SECONDS,
+        }),
+    // Idempotently retry the compact archive even when the complete live key
+    // survived a prior partial publish attempt.
+    archiveHistoricalScoringCycle(env.MARKET_CACHE, payload),
+  ]);
   await Promise.all([
     env.MARKET_CACHE.put(PUBLISHED_CYCLE_KEY, serialized),
     env.MARKET_CACHE.put(PUBLISHED_CYCLE_REFERENCE_KEY, payload.cycleKey),
@@ -211,6 +291,78 @@ export async function commitPublishedCycle(
     },
     { contentType: "json" },
   );
+}
+
+function filterHistoricalCycle(
+  cycle: HistoricalScoringCycle,
+  requestedSymbols: string[],
+): HistoricalScoringCycle {
+  if (requestedSymbols.length === 0) return cycle;
+  const allowed = new Set(requestedSymbols);
+  const filter = <T>(values: Record<string, T>): Record<string, T> =>
+    Object.fromEntries(
+      Object.entries(values).filter(([symbol]) => allowed.has(symbol)),
+    );
+  return {
+    ...cycle,
+    quotes: filter(cycle.quotes),
+    fundamentals: filter(cycle.fundamentals),
+    technicals: filter(cycle.technicals),
+    byTimeframe: filter(cycle.byTimeframe),
+  };
+}
+
+/** Internal evidence lookup: newest immutable cycle at or before the event. */
+export async function readHistoricalScoringCycle(
+  request: Request,
+  cache: KVNamespace,
+  secret: string | undefined,
+): Promise<Response> {
+  const supplied = request.headers.get("x-internal-scoring-secret") ?? "";
+  if (!secret || !(await secretEqual(supplied, secret))) {
+    return json({ error: "Unauthorized" }, 401);
+  }
+  const url = new URL(request.url);
+  const at = url.searchParams.get("at");
+  const atMs = at ? Date.parse(at) : NaN;
+  if (!Number.isFinite(atMs)) return json({ error: "Invalid timestamp" }, 400);
+  const symbols = normalizeSymbols(
+    (url.searchParams.get("symbols") ?? "").split(","),
+  ).slice(0, MAX_SYMBOLS_PER_USER);
+  const index =
+    (await cache.get<HistoricalScoringIndexEntry[]>(
+      HISTORICAL_SCORING_INDEX_KEY,
+      "json",
+    )) ?? [];
+  const selected = [...index]
+    .filter((entry) => Date.parse(entry.cycleAsOf) <= atMs)
+    .sort((left, right) => Date.parse(right.cycleAsOf) - Date.parse(left.cycleAsOf))[0];
+  if (!selected || atMs - Date.parse(selected.cycleAsOf) > 96 * HOUR_MS) {
+    return json({ cycle: null, state: "unavailable" }, 404);
+  }
+  const compressed = await cache.get(selected.key, "arrayBuffer");
+  if (!compressed) return json({ cycle: null, state: "expired" }, 404);
+  try {
+    const cycle = await gunzipJson<HistoricalScoringCycle>(compressed);
+    return json(filterHistoricalCycle(cycle, symbols));
+  } catch {
+    return json({ cycle: null, state: "invalid" }, 500);
+  }
+}
+
+async function secretEqual(left: string, right: string): Promise<boolean> {
+  const encoder = new TextEncoder();
+  const [leftHash, rightHash] = await Promise.all([
+    crypto.subtle.digest("SHA-256", encoder.encode(left)),
+    crypto.subtle.digest("SHA-256", encoder.encode(right)),
+  ]);
+  const a = new Uint8Array(leftHash);
+  const b = new Uint8Array(rightHash);
+  let mismatch = a.length ^ b.length;
+  for (let index = 0; index < Math.max(a.length, b.length); index += 1) {
+    mismatch |= (a[index] ?? 0) ^ (b[index] ?? 0);
+  }
+  return mismatch === 0;
 }
 
 function json(body: unknown, status = 200): Response {
